@@ -1,0 +1,47 @@
+// ---------------------------------------------------------------------------------------------------------------------
+// Tether-ISPC by Harry Denholm, ishani.org 2020
+// https://github.com/ishani/Tether-ISPC
+// ---------------------------------------------------------------------------------------------------------------------
+// defines shared across ISPC and serial mode
+//
+
+#pragma once
+
+// ------------------------------------------------------------------------------------------------
+// familiar constants C_...
+
+#define C_FLT_EPSILON    ( 1.192092896e-07f        ) // smallest such that 1.0+FLT_EPSILON != 1.0
+#define C_FLT_MAX        ( 3.402823466e+38f        ) // max value
+#define C_FLT_MIN        ( 1.175494351e-38f        ) // min normalized positive value
+
+#define C_UINT32_MAX     0xffffffff
+#define C_UINT64_MAX     0xffffffffffffffffULL
+
+
+#define C_E              ( 2.71828182845904523536f ) // e
+#define C_LOG2E          ( 1.44269504088896340736f ) // log2(e)
+#define C_LOG10E         ( 0.43429448190325182765f ) // log10(e)
+#define C_LN2            ( 0.69314718055994530941f ) // ln(2)
+#define C_LN10           ( 2.30258509299404568402f ) // ln(10)
+#define C_PI             ( 3.14159265358979323846f ) // pi
+#define C_TWO_PI         ( 6.28318530717958647692f ) // pi * 2
+
+#define C_HALF_PI        ( 1.57079632679489661923f ) // pi/2
+#define C_QUARTER_PI     ( 0.78539816339744830961f ) // pi/4
+#define C_1_OVER_PI      ( 0.31830988618379067153f ) // 1/pi
+#define C_1_OVER_TWO_PI  ( 0.15915494309189533576f ) // 1/(pi * 2)
+#define C_2_OVER_PI      ( 0.63661977236758134307f ) // 2/pi
+#define C_2_OVER_SQRTPI  ( 1.12837916709551257390f ) // 2/sqrt(pi)
+#define C_SQRT2          ( 1.41421356237309504880f ) // sqrt(2)
+#define C_1_OVER_SQRT2   ( 0.70710678118654752440f ) // 1/sqrt(2)
+
+
+#define _HUGE_ENUF       1e+300
+#define C_INFINITY       ( (float)(_HUGE_ENUF * _HUGE_ENUF) )
+#define C_NAN            ( (float)(C_INFINITY * 0.0f) )
+
+
+
+
+#define PACK_COL32(R,G,B,A) ( ((uint32_t)(R)<<0) | ((uint32_t)(G)<<8) | ((uint32_t)(B)<<16) | ((uint32_t)(A)<<24) )
+

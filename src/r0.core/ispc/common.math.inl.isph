@@ -1,0 +1,213 @@
+// ---------------------------------------------------------------------------------------------------------------------
+// Tether-ISPC by Harry Denholm, ishani.org 2020
+// https://github.com/ishani/Tether-ISPC
+// ---------------------------------------------------------------------------------------------------------------------
+// collection of basic mathematics and vector functions
+//
+// includes reference from https://github.com/zigguratvertigo/hlsl-to-ispc
+// Copyright (c) 2017 Colin Barre-Brisebois
+//
+
+#if !defined( _tether_decl )
+#error this inl file should only be included via common.isph
+#endif
+
+#ifdef TETHER_COMPILE_SERIAL
+#define STDN    std:: 
+#else
+#define STDN
+#endif
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+
+#if _TETHER_ARG_1
+
+// single float expansion constructors
+_tether_decl float2 Float2( const _tether_arg1_decl float x) { ispc_construct( _tether_var float2 r, { x, x } );       return r; }
+_tether_decl float3 Float3( const _tether_arg1_decl float x) { ispc_construct( _tether_var float3 r, { x, x, x } );    return r; }
+_tether_decl float4 Float4( const _tether_arg1_decl float x) { ispc_construct( _tether_var float4 r, { x, x, x, x } ); return r; }
+
+
+// produce single-input functions that call a chosen intrinsic function on each channel
+
+#define _PER_CHANNEL_IMPL( _PCFN ) \
+    _tether_decl float2 _PCFN( _tether_arg1(float2) f) { ispc_construct( _tether_var float2 r, { STDN _PCFN(f.x), STDN _PCFN(f.y) } );                                    return r; } \
+    _tether_decl float3 _PCFN( _tether_arg1(float3) f) { ispc_construct( _tether_var float3 r, { STDN _PCFN(f.x), STDN _PCFN(f.y), STDN _PCFN(f.z) } );                   return r; } \
+    _tether_decl float4 _PCFN( _tether_arg1(float4) f) { ispc_construct( _tether_var float4 r, { STDN _PCFN(f.x), STDN _PCFN(f.y), STDN _PCFN(f.z), STDN _PCFN(f.w) } );  return r; }
+
+_PER_CHANNEL_IMPL(abs);
+_PER_CHANNEL_IMPL(acos);
+_PER_CHANNEL_IMPL(asin);
+_PER_CHANNEL_IMPL(atan);
+_PER_CHANNEL_IMPL(ceil);
+_PER_CHANNEL_IMPL(floor);
+_PER_CHANNEL_IMPL(cos);
+_PER_CHANNEL_IMPL(sin);
+_PER_CHANNEL_IMPL(exp);
+_PER_CHANNEL_IMPL(rcp);
+_PER_CHANNEL_IMPL(round);
+_PER_CHANNEL_IMPL(sqrt);
+_PER_CHANNEL_IMPL(rsqrt);
+
+#ifndef TETHER_COMPILE_SERIAL 
+_tether_decl float  log10( _tether_arg1(float) f) { return (log(f) / log(10.0f)); }
+_tether_decl float   log2( _tether_arg1(float) f) { return (log(f) / log(2.0f)); }
+#endif // !TETHER_COMPILE_SERIAL
+
+_PER_CHANNEL_IMPL(log);
+_PER_CHANNEL_IMPL(log10);
+_PER_CHANNEL_IMPL(log2);
+
+#ifdef TETHER_COMPILE_SERIAL
+namespace std {
+#endif // TETHER_COMPILE_SERIAL
+
+_tether_decl float pow2( _tether_arg1(float) x) { return x * x; }
+_tether_decl float pow3( _tether_arg1(float) x) { return x * x * x; }
+_tether_decl float pow4( _tether_arg1(float) x) { return x * x * x * x; }
+_tether_decl float pow8( _tether_arg1(float) x) { return x * x * x * x * x * x * x * x; }
+
+#ifdef TETHER_COMPILE_SERIAL
+} // namespace std
+#endif // TETHER_COMPILE_SERIAL
+
+_PER_CHANNEL_IMPL(pow2);
+_PER_CHANNEL_IMPL(pow3);
+_PER_CHANNEL_IMPL(pow4);
+_PER_CHANNEL_IMPL(pow8);
+
+#undef _PER_CHANNEL_IMPL
+
+// sum, ie. dot( v, 1 )
+_tether_decl float sum( _tether_arg1(float2) a ) { return a.x + a.y; }
+_tether_decl float sum( _tether_arg1(float3) a ) { return a.x + a.y + a.z; }
+_tether_decl float sum( _tether_arg1(float4) a ) { return a.x + a.y + a.z + a.w; }
+
+#endif // _TETHER_ARG_1
+
+// ---------------------------------------------------------------------------------------------------------------------
+
+#if _TETHER_ARG_2
+
+// max
+_tether_decl float2 max( _tether_arg1(float2) a, _tether_arg2(float2) b) { ispc_construct( _tether_var float2 r, { _fmax(a.x, b.x), _fmax(a.y, b.y) } );                                     return r; }
+_tether_decl float3 max( _tether_arg1(float3) a, _tether_arg2(float3) b) { ispc_construct( _tether_var float3 r, { _fmax(a.x, b.x), _fmax(a.y, b.y), _fmax(a.z, b.z) } );                    return r; }
+_tether_decl float4 max( _tether_arg1(float4) a, _tether_arg2(float4) b) { ispc_construct( _tether_var float4 r, { _fmax(a.x, b.x), _fmax(a.y, b.y), _fmax(a.z, b.z), _fmax(a.w, b.w) } );   return r; }
+
+// min
+_tether_decl float2 min( _tether_arg1(float2) a, _tether_arg2(float2) b) { ispc_construct( _tether_var float2 r, { _fmin(a.x, b.x), _fmin(a.y, b.y) } );                                     return r; }
+_tether_decl float3 min( _tether_arg1(float3) a, _tether_arg2(float3) b) { ispc_construct( _tether_var float3 r, { _fmin(a.x, b.x), _fmin(a.y, b.y), _fmin(a.z, b.z) } );                    return r; }
+_tether_decl float4 min( _tether_arg1(float4) a, _tether_arg2(float4) b) { ispc_construct( _tether_var float4 r, { _fmin(a.x, b.x), _fmin(a.y, b.y), _fmin(a.z, b.z), _fmin(a.w, b.w) } );   return r; }
+
+// step
+_tether_decl  float step(  _tether_arg1(float) edge,  _tether_arg2(float) v) { return v >= edge ? 1.0f : 0.0f; }
+_tether_decl float2 step( _tether_arg1(float2) edge, _tether_arg2(float2) v) { ispc_construct( _tether_var float2 r, { step(edge.x, v.x), step(edge.y, v.y) } );                                          return r; }
+_tether_decl float3 step( _tether_arg1(float3) edge, _tether_arg2(float3) v) { ispc_construct( _tether_var float3 r, { step(edge.x, v.x), step(edge.y, v.y), step(edge.z, v.z) } );                       return r; }
+_tether_decl float4 step( _tether_arg1(float4) edge, _tether_arg2(float4) v) { ispc_construct( _tether_var float4 r, { step(edge.x, v.x), step(edge.y, v.y), step(edge.z, v.z), step(edge.w, v.w) } );    return r; }
+
+// dot
+_tether_decl float dot( _tether_arg1(float2) a, _tether_arg2(float2) b) { return a.x*b.x + a.y*b.y; }
+_tether_decl float dot( _tether_arg1(float3) a, _tether_arg2(float3) b) { return a.x*b.x + a.y*b.y + a.z*b.z; }
+_tether_decl float dot( _tether_arg1(float4) a, _tether_arg2(float4) b) { return a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w; }
+
+
+// distance
+_tether_decl float distance( _tether_arg1(float)  a, _tether_arg2(float)  b) { return STDN abs(a - b); }
+_tether_decl float distance( _tether_arg1(float2) a, _tether_arg2(float2) b) { return STDN sqrt(dot(a, b)); }
+_tether_decl float distance( _tether_arg1(float3) a, _tether_arg2(float3) b) { return STDN sqrt(dot(a, b)); }
+_tether_decl float distance( _tether_arg1(float4) a, _tether_arg2(float4) b) { return STDN sqrt(dot(a, b)); }
+
+// cross
+_tether_decl float3 cross( _tether_arg1(float3) a,  _tether_arg2(float3) b )
+{
+    ispc_construct( _tether_var float3 r, {
+        a.y * b.z - a.z * b.y,
+        a.z * b.x - a.x * b.z,
+        a.x * b.y - a.y * b.x
+    });
+    return r;
+}
+
+#endif // _TETHER_ARG_2
+
+// ---------------------------------------------------------------------------------------------------------------------
+
+#if _TETHER_ARG_3
+
+// lerp
+_tether_decl float  lerp( _tether_arg1_float   a, _tether_arg2_float   b, _tether_arg3_float s) { return a + s * ( b - a ); }
+_tether_decl float2 lerp( _tether_arg1(float2) a, _tether_arg2(float2) b, _tether_arg3_float s) { ispc_construct( _tether_var float2 r, { lerp(a.x, b.x, s), lerp(a.y, b.y, s) } );                                       return r; }
+_tether_decl float3 lerp( _tether_arg1(float3) a, _tether_arg2(float3) b, _tether_arg3_float s) { ispc_construct( _tether_var float3 r, { lerp(a.x, b.x, s), lerp(a.y, b.y, s), lerp(a.z, b.z, s) } );                    return r; }
+_tether_decl float4 lerp( _tether_arg1(float4) a, _tether_arg2(float4) b, _tether_arg3_float s) { ispc_construct( _tether_var float4 r, { lerp(a.x, b.x, s), lerp(a.y, b.y, s), lerp(a.z, b.z, s), lerp(a.w, b.w, s) } ); return r; }
+
+#if _TETHER_ARG_0
+
+// clamp
+_tether_decl float2 clamp( _tether_arg1(float2) f, _tether_arg2(float) minVal, _tether_arg3(float) maxVal) { ispc_construct( _tether_var float2 r, { clamp(f.x, minVal, maxVal), clamp(f.y, minVal, maxVal) } );                                                           return r; }
+_tether_decl float3 clamp( _tether_arg1(float3) f, _tether_arg2(float) minVal, _tether_arg3(float) maxVal) { ispc_construct( _tether_var float3 r, { clamp(f.x, minVal, maxVal), clamp(f.y, minVal, maxVal), clamp(f.z, minVal, maxVal) } );                               return r; }
+_tether_decl float4 clamp( _tether_arg1(float4) f, _tether_arg2(float) minVal, _tether_arg3(float) maxVal) { ispc_construct( _tether_var float4 r, { clamp(f.x, minVal, maxVal), clamp(f.y, minVal, maxVal), clamp(f.z, minVal, maxVal), clamp(f.w, minVal, maxVal) } );   return r; }
+
+#endif // _TETHER_ARG_0
+
+// mad
+_tether_decl float  mad( _tether_arg1_float   a, _tether_arg2_float   b, _tether_arg3_float   s) { return a * b + s; }
+_tether_decl float2 mad( _tether_arg1(float2) a, _tether_arg2(float2) b, _tether_arg3(float2) s) { return a * b + s; }
+_tether_decl float3 mad( _tether_arg1(float3) a, _tether_arg2(float3) b, _tether_arg3(float3) s) { return a * b + s; }
+_tether_decl float4 mad( _tether_arg1(float4) a, _tether_arg2(float4) b, _tether_arg3(float4) s) { return a * b + s; }
+
+#endif // _TETHER_ARG_3
+
+// ---------------------------------------------------------------------------------------------------------------------
+
+#if _TETHER_ARG_1
+
+// single-float variants of step, eg step< v3, v1 > 
+_tether_decl float3 step( _tether_arg1_float edge, _tether_arg2(float3) v) { ispc_construct( _tether_var float3 r, { step(edge, v.x), step(edge, v.y), step(edge, v.z) } ); return r; }
+_tether_decl float3 step( _tether_arg1(float3) edge, _tether_arg2_float v) { ispc_construct( _tether_var float3 r, { step(edge.x, v), step(edge.y, v), step(edge.z, v) } ); return r; }
+
+// frac
+_tether_decl float  frac( _tether_arg1_float   p) { return p - STDN floor(p); }
+_tether_decl float2 frac( _tether_arg1(float2) p) { return p - floor(p); }
+_tether_decl float3 frac( _tether_arg1(float3) p) { return p - floor(p); }
+_tether_decl float4 frac( _tether_arg1(float4) p) { return p - floor(p); }
+
+// length
+_tether_decl float length( _tether_arg1(float2) p) { return STDN sqrt(dot(p, p)); }
+_tether_decl float length( _tether_arg1(float3) p) { return STDN sqrt(dot(p, p)); }
+_tether_decl float length( _tether_arg1(float4) p) { return STDN sqrt(dot(p, p)); }
+
+// normalize and return
+_tether_decl float2 normalized( _tether_arg1(float2) v) { return v * STDN rsqrt( dot(v, v) ); }
+_tether_decl float3 normalized( _tether_arg1(float3) v) { return v * STDN rsqrt( dot(v, v) ); }
+_tether_decl float4 normalized( _tether_arg1(float4) v) { return v * STDN rsqrt( dot(v, v) ); }
+
+#if _TETHER_ARG_0
+
+// normalize in-place
+static inline void normalize( _tether_var float2 &v) { _tether_var float r = STDN rsqrt( dot(v, v) ); v = v * r; }
+static inline void normalize( _tether_var float3 &v) { _tether_var float r = STDN rsqrt( dot(v, v) ); v = v * r; }
+static inline void normalize( _tether_var float4 &v) { _tether_var float r = STDN rsqrt( dot(v, v) ); v = v * r; }
+
+#endif // _TETHER_ARG_0
+
+// saturate
+_tether_decl float  saturate( _tether_arg1_float   f) { return clamp(f, 0.0f, 1.0f); }
+_tether_decl float2 saturate( _tether_arg1(float2) f) { ispc_construct( _tether_var float2 r, { clamp(f.x, 0.0f, 1.0f), clamp(f.y, 0.0f, 1.0f) } );                                                   return r; }
+_tether_decl float3 saturate( _tether_arg1(float3) f) { ispc_construct( _tether_var float3 r, { clamp(f.x, 0.0f, 1.0f), clamp(f.y, 0.0f, 1.0f), clamp(f.z, 0.0f, 1.0f) } );                           return r; }
+_tether_decl float4 saturate( _tether_arg1(float4) f) { ispc_construct( _tether_var float4 r, { clamp(f.x, 0.0f, 1.0f), clamp(f.y, 0.0f, 1.0f), clamp(f.z, 0.0f, 1.0f), clamp(f.w, 0.0f, 1.0f) } );   return r; }
+
+// sign
+_tether_decl float  sign( _tether_arg1_float   f) { return f < 0 ? -1.0f : 1.0f; }
+_tether_decl float2 sign( _tether_arg1(float2) f) { ispc_construct( _tether_var float2 r, { f.x < 0 ? -1.0f : 1.0f, f.y < 0 ? -1.0f : 1.0f } );                                                  return r; }
+_tether_decl float3 sign( _tether_arg1(float3) f) { ispc_construct( _tether_var float3 r, { f.x < 0 ? -1.0f : 1.0f, f.y < 0 ? -1.0f : 1.0f, f.z < 0 ? -1.0f : 1.0f } );                          return r; }
+_tether_decl float4 sign( _tether_arg1(float4) f) { ispc_construct( _tether_var float4 r, { f.x < 0 ? -1.0f : 1.0f, f.y < 0 ? -1.0f : 1.0f, f.z < 0 ? -1.0f : 1.0f, f.w < 0 ? -1.0f : 1.0f } );  return r; }
+
+_tether_decl float tricycle( _tether_arg1_float phase )
+{
+    _tether_var float zO = frac( phase );
+    _tether_var float rV = ( zO <= 0.5f ) ? zO : (1.0f - zO);
+    return rV * 2.0;
+}
+
+#endif // _TETHER_ARG_1

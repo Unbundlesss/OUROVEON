@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <PropertyPageSchema Include="$(MSBuildThisFileDirectory)$(MSBuildThisFileName).xml" />
+    <AvailableItemName Include="ISPC">
+      <Targets>_ISPC</Targets>
+      <Targets>_ISPC_Preflight</Targets>
+    </AvailableItemName>
+  </ItemGroup>
+
+  <UsingTask
+    TaskName="ISPC"
+    TaskFactory="XamlTaskFactory"
+    AssemblyName="Microsoft.Build.Tasks.v4.0">
+    <Task>$(MSBuildThisFileDirectory)$(MSBuildThisFileName).xml</Task>
+  </UsingTask>
+
+  <!-- Find all ISPC headers, add them as a dependency - 
+       this is overkill, but overbuilding when any isph header changes is better than missing changes 
+
+       .. my msbuild ignorance led me to do the header gathering as a 'preflight' target that is run before the main
+       compile target, couldn't figure out how to express the generic header search otherwise -->
+  <Target
+    Name="_ISPC_Preflight" 
+    BeforeTargets="_ISPC" 
+    AfterTargets="$(ISPCAfterTargets)" 
+    Condition="'@(ISPC)' != ''" 
+    DependsOnTargets="$(ISPCDependsOn);ComputeISPCOutput" >
+
+    <!--
+    <Message
+      Importance="High"
+      Text="Gathering ISPH dependencies ..." />
+    -->
+
+    <ItemGroup>
+      <ISPCHeader Include="$(SolutionDir)%(ISPC.RelativeDir)*.isph" />
+    </ItemGroup>
+    <PropertyGroup>
+      <ISPCHeaders>@(ISPCHeader)</ISPCHeaders>
+    </PropertyGroup>
+
+  </Target>
+
+  <Target
+    Name="_ISPC"
+    BeforeTargets="$(ISPCBeforeTargets)"
+    AfterTargets="_ISPC_Preflight"
+    Condition="'@(ISPC)' != ''"
+    DependsOnTargets="$(ISPCDependsOn);ComputeISPCOutput"
+    Outputs="%(ISPC.ObjectFileName);%(ISPC.HeaderFile)"
+    Inputs="%(ISPC.Identity);%(ISPC.AdditionalDependencies);$(MSBuildProjectFile);$(ISPCHeaders)">
+
+    <ItemGroup
+      Condition="'@(SelectedFiles)' != ''">
+      <ISPC
+        Remove="@(ISPC)"
+        Condition="'%(Identity)' != '@(SelectedFiles)'" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ISPC_tlog
+        Include="%(ISPC.ObjectFileName);%(ISPC.HeaderFile)"
+        Condition="'%(ISPC.ObjectFileName);%(ISPC.HeaderFile)' != '' and '%(ISPC.ExcludedFromBuild)' != 'true'">
+        <Source>%(Fullpath)</Source>
+      </ISPC_tlog>
+    </ItemGroup>
+
+    <Message
+      Importance="High"
+      Text="%(ISPC.ExecutionDescription)" />
+
+    <!-- emit the header+obj output paths into the 'write' tlog -->
+    <WriteLinesToFile
+      Condition="'@(ISPC_tlog)' != '' and '%(ISPC_tlog.ExcludedFromBuild)' != 'true'"
+      File="$(TLogLocation)ISPC.write.1.tlog"
+      Lines="^%(ISPC_tlog.Source);@(ISPC_tlog-&gt;'%(Fullpath)')" />
+
+    <!-- emit our header-search overkill into the 'read' tlog, to try and play along correctly -->
+    <WriteLinesToFile
+      Condition="'@(ISPC_tlog)' != '' and '%(ISPC_tlog.ExcludedFromBuild)' != 'true'"
+      File="$(TLogLocation)ISPC.read.1.tlog"
+      Lines="^%(ISPC_tlog.Source);$(ISPCHeaders)" />
+
+    <ISPC
+      Condition="'@(ISPC)' != '' and '%(ISPC.ExcludedFromBuild)' != 'true'"
+      
+      StandardOutputImportance="High"
+      StandardErrorImportance="High"
+      EchoOff="true"
+
+      CommandLineTemplate="%(ISPC.CommandLineTemplate)"
+      GenerateDebugInformation="%(ISPC.GenerateDebugInformation)"
+      DisableFMA="%(ISPC.DisableFMA)"
+      Assertions="%(ISPC.Assertions)"
+      AlignedLoads="%(ISPC.AlignedLoads)"
+      ForceAligned="%(ISPC.ForceAligned)"
+      FastMath="%(ISPC.FastMath)"
+      DisableLoopUnroll="%(ISPC.DisableLoopUnroll)"
+      EnableVectorcall="%(ISPC.EnableVectorcall)"
+      PIC="%(ISPC.PIC)"
+      WarningsAsErrors="%(ISPC.WarningsAsErrors)"
+      AddInstrumentation="%(ISPC.AddInstrumentation)"
+      NoWarnings="%(ISPC.NoWarnings)"
+      ObjectFileName="%(ISPC.ObjectFileName)"
+      PreprocessorDefinitions="%(ISPC.PreprocessorDefinitions)"
+      IncludePaths="%(ISPC.IncludePaths)"
+      HeaderFile="%(ISPC.HeaderFile)"
+      Architecture="%(ISPC.Architecture)"
+      OS="%(ISPC.OS)"
+      CPU="%(ISPC.CPU)"
+      TargetISA="%(ISPC.TargetISA)"
+      WarningLevel="%(ISPC.WarningLevel)"
+      MathLibrary="%(ISPC.MathLibrary)"
+      Opt="%(ISPC.Opt)"
+      AdditionalOptions="%(ISPC.AdditionalOptions)"
+      Inputs="%(ISPC.Identity)" />
+  </Target>
+
+  <PropertyGroup>
+    <ComputeLinkInputsTargets>$(ComputeLinkInputsTargets);ComputeISPCOutput;</ComputeLinkInputsTargets>
+    <ComputeLibInputsTargets>$(ComputeLibInputsTargets);ComputeISPCOutput;</ComputeLibInputsTargets>
+  </PropertyGroup>
+
+  <Target
+    Name="ComputeISPCOutput"
+    Condition="'@(ISPC)' != ''">
+    <ItemGroup>
+      <ISPCDirsToMake
+        Condition="'@(ISPC)' != '' and '%(ISPC.ExcludedFromBuild)' != 'true'"
+        Include="%(ISPC.ObjectFileName);%(ISPC.HeaderFile)" />
+      <Link
+        Include="%(ISPCDirsToMake.Identity)"
+        Condition="'%(Extension)'=='.obj' or '%(Extension)'=='.res' or '%(Extension)'=='.rsc' or '%(Extension)'=='.lib'" />
+      <Lib
+        Include="%(ISPCDirsToMake.Identity)"
+        Condition="'%(Extension)'=='.obj' or '%(Extension)'=='.res' or '%(Extension)'=='.rsc' or '%(Extension)'=='.lib'" />
+      <ImpLib
+        Include="%(ISPCDirsToMake.Identity)"
+        Condition="'%(Extension)'=='.obj' or '%(Extension)'=='.res' or '%(Extension)'=='.rsc' or '%(Extension)'=='.lib'" />
+    </ItemGroup>
+    <MakeDir
+      Directories="@(ISPCDirsToMake-&gt;'%(RootDir)%(Directory)')" />
+  </Target>
+</Project>

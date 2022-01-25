@@ -1,0 +1,35 @@
+//   _______ _______ ______ _______ ___ ___ _______ _______ _______ 
+//  |       |   |   |   __ \       |   |   |    ___|       |    |  |
+//  |   -   |   |   |      <   -   |   |   |    ___|   -   |       |
+//  |_______|_______|___|__|_______|\_____/|_______|_______|__|____|
+//  ishani.org 2022              e.t.c.                  MIT License
+//
+//  
+//
+
+#pragma once
+
+#include "config/base.h"
+
+namespace config {
+
+struct Data : public Base
+{
+    // data routing
+    static constexpr auto StoragePath       = IPathProvider::PathFor::SharedConfig;
+    static constexpr auto StorageFilename   = "data.json";
+
+    std::string     storageRoot;        // where to store the global cache & per-app outputs
+
+
+    template<class Archive>
+    void serialize( Archive& archive )
+    {
+        archive( CEREAL_NVP( storageRoot )
+        );
+    }
+};
+using DataOptional = std::optional< Data >;
+
+} // namespace config
+

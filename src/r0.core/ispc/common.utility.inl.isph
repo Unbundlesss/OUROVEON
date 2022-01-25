@@ -1,0 +1,220 @@
+// ---------------------------------------------------------------------------------------------------------------------
+// Tether-ISPC by Harry Denholm, ishani.org 2020
+// https://github.com/ishani/Tether-ISPC
+// ---------------------------------------------------------------------------------------------------------------------
+// various bits and pieces
+//
+
+#if !defined( _tether_decl )
+#error this inl file should only be included via common.isph
+#endif
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+
+#if _TETHER_ARG_3
+
+#define _SS_REMAP(_ftype)       const _tether_var _ftype t = saturate( (f - minValue) / (maxValue - minValue) )
+#define _SS_SMOOTH(_expType)    return t * t * (_expType(3.0f) - _expType(2.0f) * t);
+#define _SS_SMOOTHER(_expType)  return t * t * t * (t * (t * _expType(6.0f) - _expType(15.0f)) + _expType(10.0f));
+
+_tether_decl float smoothstep( _tether_arg1_float minValue, _tether_arg2_float maxValue, _tether_arg3_float f )
+{
+    _SS_REMAP(float);
+    _SS_SMOOTH((float));
+}
+_tether_decl float2 smoothstep( _tether_arg1(float2) minValue, _tether_arg2(float2) maxValue, _tether_arg3(float2) f )
+{
+    _SS_REMAP(float2);
+    _SS_SMOOTH(Float2);
+}
+_tether_decl float3 smoothstep( _tether_arg1(float3) minValue, _tether_arg2(float3) maxValue, _tether_arg3(float3) f )
+{
+    _SS_REMAP(float3);
+    _SS_SMOOTH(Float3);
+}
+_tether_decl float4 smoothstep( _tether_arg1(float4) minValue, _tether_arg2(float4) maxValue, _tether_arg3(float4) f )
+{
+    _SS_REMAP(float4);
+    _SS_SMOOTH(Float4);
+}
+
+_tether_decl float smootherstep( _tether_arg1_float minValue, _tether_arg2_float maxValue, _tether_arg3_float f )
+{
+    _SS_REMAP(float);
+    _SS_SMOOTHER((float));
+}
+_tether_decl float2 smootherstep( _tether_arg1(float2) minValue, _tether_arg2(float2) maxValue, _tether_arg3(float2) f )
+{
+    _SS_REMAP(float2);
+    _SS_SMOOTHER(Float2);
+}
+_tether_decl float3 smootherstep( _tether_arg1(float3) minValue, _tether_arg2(float3) maxValue, _tether_arg3(float3) f )
+{
+    _SS_REMAP(float3);
+    _SS_SMOOTHER(Float3);
+}
+_tether_decl float4 smootherstep( _tether_arg1(float4) minValue, _tether_arg2(float4) maxValue, _tether_arg3(float4) f )
+{
+    _SS_REMAP(float4);
+    _SS_SMOOTHER(Float4);
+}
+
+#undef _SS_SMOOTHER
+#undef _SS_SMOOTH
+#undef _SS_REMAP
+
+#endif // _TETHER_ARG_3
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+// cosine gradient by Inigo Quilez 
+// https://www.shadertoy.com/view/ll2GD3
+//
+
+#if _TETHER_ARG_2
+
+_tether_decl float3 cosineGradient(
+    _tether_arg1(float) t,
+    _tether_arg2(float3) a,
+    _tether_arg2(float3) b,
+    _tether_arg2(float3) c,
+    _tether_arg2(float3) d )
+{
+    _tether_var float _two_pi = C_TWO_PI;
+    return a + b * cos( ( c * t + d ) * _two_pi );
+}
+
+#endif // _TETHER_ARG_2
+
+#if _TETHER_ARG_1
+
+_tether_decl float3 cosineGradientRainbow( _tether_arg1(float) t )
+{
+    ispc_construct( _tether_var static const float3 f3_pt5, { 0.5f,  0.5f, 0.5f  } );
+    ispc_construct( _tether_var static const float3 f3_one, { 1.0f,  1.0f, 1.0f  } );
+    ispc_construct( _tether_var static const float3 f3_mix, { 0.0f, 0.33f, 0.67f } );
+
+    return cosineGradient( t, f3_pt5, f3_pt5, f3_one, f3_mix );
+}
+
+_tether_decl float3 cosineGradientOrangeBlue( _tether_arg1(float) t )
+{
+    ispc_construct( _tether_var static const float3 f3_pt5, { 0.5f,  0.5f, 0.5f  } );
+    ispc_construct( _tether_var static const float3 f3_row3, { 0.8f, 0.8f, 0.5f  } );
+    ispc_construct( _tether_var static const float3 f3_row4, { 0.0f, 0.2f, 0.5f } );
+
+    return cosineGradient( t, f3_pt5, f3_pt5, f3_row3, f3_row4 );
+}
+
+
+#endif // _TETHER_ARG_1
+
+
+// ------------------------------------------------------------------------------------------------
+// pack 4 u8 components into a rgba8 u32
+
+#if _TETHER_ARG_1
+
+_tether_decl uint32_t rgbFloatToU32( _tether_arg1(float3) col )
+{
+    _tether_var float3 scaledUp = saturate(col) * 255.0f;
+    _tether_var int3   asInts = ispc_convert( int3, scaledUp );
+
+    return PACK_COL32( asInts.x, asInts.y, asInts.z, 255 );
+}
+
+_tether_decl uint32_t rgbaFloatToU32( _tether_arg1(float4) col )
+{
+    _tether_var float4 scaledUp = saturate(col) * 255.0f;
+    _tether_var int4   asInts = ispc_convert( int4, scaledUp );
+
+    return PACK_COL32( asInts.x, asInts.y, asInts.z, asInts.w );
+}
+
+_tether_decl uint32_t bgrFloatToU32( _tether_arg1(float3) col )
+{
+    _tether_var float3 scaledUp = saturate(col) * 255.0f;
+    _tether_var int3   asInts = ispc_convert( int3, scaledUp );
+
+    return PACK_COL32( asInts.z, asInts.y, asInts.x, 255 );
+}
+
+_tether_decl uint32_t bgraFloatToU32( _tether_arg1(float4) col )
+{
+    _tether_var float4 scaledUp = saturate(col) * 255.0f;
+    _tether_var int4   asInts = ispc_convert( int4, scaledUp );
+
+    return PACK_COL32( asInts.z, asInts.y, asInts.x, asInts.w );
+}
+
+
+// for colourLerp later
+_tether_decl float rgbGetSat(_tether_arg1(float3) c)
+{
+    _tether_var float mi = _fmin( _fmin(c.x, c.y), c.z );
+    _tether_var float ma = _fmax( _fmax(c.x, c.y), c.z );
+
+    return (ma - mi) / (ma + 1e-7f);
+}
+
+#endif // _TETHER_ARG_1
+
+#if _TETHER_ARG_3
+
+_tether_decl float3 hsvToRgb( _tether_arg1_float hue, _tether_arg2_float sat, _tether_arg3_float value )
+{
+    ispc_construct( _tether_var static const float3 f3_one, { 1.0f, 1.0f, 1.0f } );
+
+    ispc_construct( _tether_var const float3 hsv, {
+        hue + 1.0f,
+        hue + 2.0f / 3.0f,
+        hue + 1.0f / 3.0f
+    });
+
+    _tether_var const float3 frac_hsv = ( frac(hsv) * 6.0f ) - 3.0f;
+
+    _tether_var const float3 abs_hsv = abs( frac_hsv );
+
+    _tether_var const float3 sat_xyz = saturate( abs_hsv - 1.0f );
+
+    _tether_var float3 out = lerp( f3_one, sat_xyz, sat ) * value;
+
+    return out;
+}
+
+
+
+// improved rgb lerp by nmz, https://www.shadertoy.com/view/lsdGzN
+
+_tether_decl float3 colourLerp( _tether_arg1(float3) a, _tether_arg2(float3) b, _tether_arg3_float x )
+{
+    ispc_construct( _tether_var static const float3 f3_singular, { 1e-6f, 0.0f, 0.0f } );
+
+    // interpolated base color (with singularity fix)
+    _tether_var float3 ic = lerp(a, b, x) + f3_singular;
+
+    // saturation difference from ideal scenario
+    _tether_var float sd = STDN abs( rgbGetSat(ic) - lerp(rgbGetSat(a), rgbGetSat(b), x) );
+    
+    // displacement direction
+    ispc_construct( _tether_var const float3 dir_un, {
+        2.0f * ic.x - ic.y - ic.z, 
+        2.0f * ic.y - ic.x - ic.z, 
+        2.0f * ic.z - ic.y - ic.x 
+    });
+    _tether_var const float3 dir = normalized(dir_un);
+
+    // simple Lighntess
+    _tether_var float lgt = sum( ic );
+    
+    // extra scaling factor for the displacement
+    _tether_var float ff = dot( dir, normalized(ic) );
+    
+    // displace the color
+    return saturate( ic + dir * ( sd * ff * lgt * 1.5f ) );
+}
+
+
+
+#endif // _TETHER_ARG_3

@@ -1,0 +1,16 @@
+// Microsoft Visual C++ generated resource script.
+//
+#include "pony.res.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+#include "windows.h"
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Icon
+//
+
+// Icon with lowest ID value placed first to ensure application icon
+// remains consistent on all systems.
+IDI_APP                 ICON                    "pony.app.ico"

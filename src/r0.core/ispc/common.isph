@@ -1,0 +1,245 @@
+#pragma once
+
+// ------------------------------------------------------------------------------------------------
+// base macros
+
+#include "common.macro.inl.isph"
+
+
+// ------------------------------------------------------------------------------------------------
+// shim for the most annoying global scope intruders in history
+
+#define _fmax               max
+#define _fmin               min
+
+// ------------------------------------------------------------------------------------------------
+// std integer types from ISPC internal types
+
+typedef int8               int8_t;
+typedef int16              int16_t;
+typedef int                int32_t;
+typedef int64              int64_t;
+typedef unsigned int8      uint8_t;
+typedef unsigned int16     uint16_t;
+typedef unsigned int       uint32_t;
+typedef unsigned int64     uint64_t;
+
+// ------------------------------------------------------------------------------------------------
+// vector aliases
+
+typedef float<2>           float2;
+typedef float<3>           float3;
+typedef float<4>           float4;
+typedef int32_t<2>         int2;
+typedef int32_t<3>         int3;
+typedef int32_t<4>         int4;
+typedef uint32_t<2>        uint2;
+typedef uint32_t<3>        uint3;
+typedef uint32_t<4>        uint4;
+typedef bool<2>            bool2;
+typedef bool<3>            bool3;
+typedef bool<4>            bool4;
+
+struct float2x2          { float2  row[2]; };
+struct float3x3          { float3  row[3]; };
+struct float4x4          { float4  row[4]; };
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+
+#define tiled_iteration_xy( _type, _width, _height )    \
+            foreach_tiled( y = 0 ... _height,           \
+                           x = 0 ... _width )
+
+// ---------------------------------------------------------------------------------------------------------------------
+// ISPC and C++ differ in their construction syntax, so to provide the ability to compile in serial mode seamlessly, we
+// wrap up initialisation with a macro that can be adjusted to adapt accordingly; similarly, initializer-list construction
+// of float2/3/4 requires explicit type specification in C++ serial mode 
+//
+// ispc_construct( static const uniform Plane plane, { _ctf3{ 0.0f, -0.5f, 0.0f }, _ctf3{ 0.f, 1.f, 0.f } } );
+//
+
+#define _ctf2
+#define _ctf3
+#define _ctf4
+
+#define ispc_construct( _decl, ... )            _decl = __VA_ARGS__
+#define ispc_construct_struct( _decl, ... )     _decl = { __VA_ARGS__ }
+#define ispc_convert( _toType, _var )           _var
+
+#define ispc_construct_float3_single( _decl, _value )    _decl = { _value, _value, _value }
+#define ispc_construct_float4_single( _decl, _value )    _decl = { _value, _value, _value, _value }
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+// the library of common functions is included numerous times with various combinations of uniform/varying parameter
+// declarations, hopefully covering every practical combination and producing all the declarations required to use
+// them in any scenario
+//
+
+#define _tether_arg1(_t)        const _tether_arg1_decl _t&
+#define _tether_arg2(_t)        const _tether_arg2_decl _t&
+#define _tether_arg3(_t)        const _tether_arg3_decl _t&
+
+#define _tether_arg1_float      const _tether_arg1_decl float
+#define _tether_arg2_float      const _tether_arg2_decl float
+#define _tether_arg3_float      const _tether_arg3_decl float
+
+#define _tether_arg1_double     const _tether_arg1_decl double
+#define _tether_arg2_double     const _tether_arg2_decl double
+#define _tether_arg3_double     const _tether_arg3_decl double
+
+// =====================================================================================================================
+
+#define _TETHER_ONE_PASS   1
+#define _TETHER_ARG_0      1
+#define _TETHER_ARG_1      1
+#define _TETHER_ARG_2      1
+#define _TETHER_ARG_3      1
+
+#define _tether_decl        static inline uniform
+#define _tether_var         uniform
+#define _tether_arg1_decl   uniform
+#define _tether_arg2_decl   uniform
+#define _tether_arg3_decl   uniform
+
+#include "common.math.inl.isph"
+#include "common.utility.inl.isph"
+
+#undef _tether_decl
+#undef _tether_var 
+#undef _tether_arg1_decl
+#undef _tether_arg2_decl
+#undef _tether_arg3_decl
+
+#undef  _TETHER_ONE_PASS
+#define _TETHER_ONE_PASS   0
+
+// ---------------------------------------------------------------------------------------------------------------------
+
+#define _tether_decl        static inline
+#define _tether_var         
+#define _tether_arg1_decl   
+#define _tether_arg2_decl   
+#define _tether_arg3_decl   
+
+#include "common.math.inl.isph"
+#include "common.utility.inl.isph"
+
+#undef _tether_decl
+#undef _tether_var 
+#undef _tether_arg1_decl
+#undef _tether_arg2_decl
+#undef _tether_arg3_decl
+
+// =====================================================================================================================
+
+#undef  _TETHER_ARG_1
+#define _TETHER_ARG_1      0
+
+#define _tether_decl        static inline
+#define _tether_var         
+#define _tether_arg1_decl   uniform
+#define _tether_arg2_decl   
+#define _tether_arg3_decl   
+
+#include "common.math.inl.isph"
+#include "common.utility.inl.isph"
+
+#undef _tether_decl
+#undef _tether_var 
+#undef _tether_arg1_decl
+#undef _tether_arg2_decl
+#undef _tether_arg3_decl
+
+// ---------------------------------------------------------------------------------------------------------------------
+
+#define _tether_decl        static inline
+#define _tether_var         
+#define _tether_arg1_decl   
+#define _tether_arg2_decl   uniform
+#define _tether_arg3_decl   
+
+#include "common.math.inl.isph"
+#include "common.utility.inl.isph"
+
+#undef _tether_decl
+#undef _tether_var 
+#undef _tether_arg1_decl
+#undef _tether_arg2_decl
+#undef _tether_arg3_decl
+
+// =====================================================================================================================
+
+#undef  _TETHER_ARG_1
+#undef  _TETHER_ARG_2
+#undef  _TETHER_ARG_3
+#define _TETHER_ARG_1      0
+#define _TETHER_ARG_2      0
+#define _TETHER_ARG_3      1
+
+#define _tether_decl        static inline
+#define _tether_var         
+#define _tether_arg1_decl   
+#define _tether_arg2_decl   
+#define _tether_arg3_decl   uniform
+
+#include "common.math.inl.isph"
+#include "common.utility.inl.isph"
+
+#undef _tether_decl
+#undef _tether_var 
+#undef _tether_arg1_decl
+#undef _tether_arg2_decl
+#undef _tether_arg3_decl
+
+// ---------------------------------------------------------------------------------------------------------------------
+
+#define _tether_decl        static inline
+#define _tether_var         
+#define _tether_arg1_decl   uniform
+#define _tether_arg2_decl   
+#define _tether_arg3_decl   uniform
+
+#include "common.math.inl.isph"
+#include "common.utility.inl.isph"
+
+#undef _tether_decl
+#undef _tether_var 
+#undef _tether_arg1_decl
+#undef _tether_arg2_decl
+#undef _tether_arg3_decl
+
+// ---------------------------------------------------------------------------------------------------------------------
+
+#define _tether_decl        static inline
+#define _tether_var         
+#define _tether_arg1_decl   
+#define _tether_arg2_decl   uniform
+#define _tether_arg3_decl   uniform
+
+#include "common.math.inl.isph"
+#include "common.utility.inl.isph"
+
+#undef _tether_decl
+#undef _tether_var 
+#undef _tether_arg1_decl
+#undef _tether_arg2_decl
+#undef _tether_arg3_decl
+
+// ---------------------------------------------------------------------------------------------------------------------
+
+#define _tether_decl        static inline
+#define _tether_var         
+#define _tether_arg1_decl   uniform
+#define _tether_arg2_decl   uniform
+#define _tether_arg3_decl   
+
+#include "common.math.inl.isph"
+#include "common.utility.inl.isph"
+
+#undef _tether_decl
+#undef _tether_var 
+#undef _tether_arg1_decl
+#undef _tether_arg2_decl
+#undef _tether_arg3_decl

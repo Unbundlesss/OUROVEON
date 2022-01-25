@@ -1,0 +1,8 @@
+{
+    "userAgentApp":         "Ouroveon/",
+    "userAgentDb":          "CouchbaseLite/1.3",
+
+    "jamSentinelPollRateInSeconds": 5,
+
+    "certBundleRelative":   "cert\\curl-ca-bundle.crt"
+}

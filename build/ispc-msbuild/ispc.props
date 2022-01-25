@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup
+    Condition="'$(ISPCBeforeTargets)' == '' and '$(ISPCAfterTargets)' == '' and '$(ConfigurationType)' != 'Makefile'">
+    <ISPCBeforeTargets>ClCompile</ISPCBeforeTargets>
+    <ISPCAfterTargets>CustomBuild</ISPCAfterTargets>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ISPCDependsOn
+      Condition="'$(ConfigurationType)' != 'Makefile'">_SelectedFiles;$(ISPCDependsOn)</ISPCDependsOn>
+  </PropertyGroup>
+  <PropertyGroup>
+      <CompilerName>ispc-1.16.0</CompilerName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ISPC>
+      <GenerateDebugInformation>False</GenerateDebugInformation>
+      <GenerateDebugInformation Condition="'$(Configuration)'=='Debug'">True</GenerateDebugInformation>
+      <Assertions>true</Assertions>
+      <AlignedLoads>False</AlignedLoads>
+      <PIC>False</PIC>
+      <WarningsAsErrors>False</WarningsAsErrors>
+      <NoWarnings>False</NoWarnings>
+
+      <ObjectFileName>$(IntDir)%(Filename).ispc.obj</ObjectFileName>
+      <ObjectFileName Condition="'$(Platform)'=='ARM'">$(IntDir)%(Filename).ispc.o</ObjectFileName>
+
+      <HeaderFile>%(RelativeDir).gen/%(Filename)_ispc.gen.h</HeaderFile>
+
+<!--  left as 'host default'
+      <Architecture>x64</Architecture> 
+      <CPU>x86-64</CPU>
+      <TargetISA>host</TargetISA>
+-->
+      <WarningLevel>1</WarningLevel>
+      <MathLibrary>default</MathLibrary>
+      <Opt>speed</Opt>
+      <Opt Condition="'$(Configuration)'=='Debug'">disabled</Opt>
+      <CommandLineTemplate>$(MSBuildThisFileDirectory)../$(CompilerName)/bin/ispc.exe [AllOptions] [AdditionalOptions] [Inputs]</CommandLineTemplate>
+      <ExecutionDescription>ISPC Compiling : %(Filename)%(Extension) ...</ExecutionDescription>
+    </ISPC>
+  </ItemDefinitionGroup>
+</Project>
