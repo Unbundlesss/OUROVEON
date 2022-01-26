@@ -6,7 +6,7 @@ Experimental audio projects built to interact with data from [Endlesss](https://
 
 #### NOTE
 
-These are experimental toys, not (yet) finished products. That said, a lot of love, care and real-world testing has been put into their development - just do be aware that functionality and UI is subject to change rapidly and randomly as the potentials are explored!
+These are experimental toys, not finished products (yet). That said, a lot of love, care and real-world testing has been put into their development - just do be aware that functionality and UI is subject to change rapidly and randomly as the potentials are explored!
 
 <br>
 <br>
@@ -15,7 +15,7 @@ These are experimental toys, not (yet) finished products. That said, a lot of lo
 
 Beyond standard shared components like UI, profiling and logging functionality, the application framework provides a handful of specialised components and utilities, such as
 
-* **Endlesss SDK** - a robust set of data types, audio processing, asynchronous network management as well as a toolbox of additional utilities (such )
+* **Endlesss SDK** - a robust set of data types, audio processing, asynchronous network management as well as a toolbox of additional utilities (such as offline caching, an sqlite3-based jam archival database system)
 
 * **Discord Direct** - native low-level connection via the Discord bot interface to stream high-quality, stereo application audio out to a voice channel
 
