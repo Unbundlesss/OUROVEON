@@ -1096,6 +1096,7 @@ int BeamApp::EntrypointOuro()
 
     while ( MainLoopBegin() )
     {
+        m_endlesssExchange.clear();
         mixEngine.mainThreadUpdate( GImGui->IO.DeltaTime, m_endlesssExchange );
 
         // run modal jam browser window if it's open
@@ -1112,7 +1113,6 @@ int BeamApp::EntrypointOuro()
         // update exchange buffers
         auto currentRiffPtr = mixEngine.m_riffCurrent;
 
-        m_endlesssExchange.clear();
         m_endlesssExchange.m_live = currentRiffPtr != nullptr;
         if ( m_endlesssExchange.m_live )
         {
