@@ -195,7 +195,8 @@ void Preview::update(
             if ( samplesUntilNextSegment > 0 )
                 renderCurrentRiff( 0, samplesUntilNextSegment, samplePosition );
 
-            dequeNextRiff();
+            if ( riffEnqueued )
+                dequeNextRiff();
 
             // in the case where we paused playback, write silence from the current offset
             if ( m_riffCurrent == nullptr )
