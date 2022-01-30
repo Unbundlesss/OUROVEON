@@ -291,7 +291,7 @@ int OuroApp::EntrypointGUI()
 
                                 // temporarily create a StoragePaths instance so that we can then create the subdirectories / validate their state
                                 m_storagePaths = StoragePaths( m_configData.value(), GetAppCacheName() );
-                                if ( !tryCreateAndValidateStoragePaths( m_storagePaths.value() ) )
+                                if ( !m_storagePaths->tryToCreateAndValidate() )
                                 {
                                     popupErrorMessageToDisplay = fmt::format( "Unable to create or validate storage directories (check log)" );
                                 }

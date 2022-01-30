@@ -20,9 +20,28 @@
 #include "endlesss/cache.stems.h"
 #include "endlesss/toolkit.exchange.h"
 
+// ---------------------------------------------------------------------------------------------------------------------
+// on Windows, declare and enable use of the global memory IPC object for pushing Exchange data out to external apps
+#if OURO_PLATFORM_WIN
 
+#include "win32/ipc.h"
+#define OURO_EXCHANGE_IPC   1
+
+namespace endlesss {
+using ExchangeIPC = win32::GlobalSharedMemory< endlesss::Exchange >;
+} //namespace endlesss
+
+#else // OURO_PLATFORM_WIN
+
+#define OURO_EXCHANGE_IPC   0
+
+#endif
+
+
+// ---------------------------------------------------------------------------------------------------------------------
 namespace app {
 
+// #HDD todo, move this somewhere, add accessors etc
 struct StoragePaths
 {
     StoragePaths() = delete;
@@ -32,6 +51,10 @@ struct StoragePaths
     fs::path     cacheApp;       // config::data::storageRoot / cache / app name
 
     fs::path     outputApp;      // config::data::storageRoot / output / app name
+
+    // utility to try and ensure the populated paths exist, (try to) create them if they don't;
+    // returns false if this process fails, logs out all the attempts
+    bool tryToCreateAndValidate() const;
 };
 
 
@@ -46,7 +69,8 @@ struct ICoreServices
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-// abstract application base class that implements basic services but no UI; for that, see CoreGUI
+// application base class that implements basic services for headless use
+//
 struct Core : public config::IPathProvider,
               public ICoreServices
 {
@@ -84,7 +108,10 @@ protected:
 #endif
     }
 
-    bool tryCreateAndValidateStoragePaths( const StoragePaths& storagePaths ) const;
+
+    // call to transmit or broadcast the currently populated endlesss::Exchange block if such methods are enabled
+    // followed by clearing it ready for re-populating
+    void emitAndClearExchangeData();
 
 
     fs::path                                m_sharedConfigPath;             // R/W path for config shared between apps
@@ -106,14 +133,21 @@ protected:
     // the cached jam metadata - public names et al
     endlesss::cache::Jams                   m_jamLibrary;
 
-    // the global live-instance stem cache, used to make riffs live
+    // the global live-instance stem cache, used to populate riffs when preparing for playback
     endlesss::cache::Stems                  m_stemCache;
 
     // standard state exchange data, filled when possible with the current playback state
     endlesss::Exchange                      m_endlesssExchange;
 
+#if OURO_EXCHANGE_IPC
+    // constantly-updated globally-shared data block
+    endlesss::ExchangeIPC                   m_endlesssExchangeIPC;
+    uint32_t                                m_endlesssExchangeWriteCounter = 1;
+#endif
+
     // the interface to portaudio, make noise go bang
     app::AudioModule                        m_mdAudio;
+
 
 public:
 
@@ -141,6 +175,8 @@ namespace module { struct Frontend; }
 using FrontendModule = std::unique_ptr<module::Frontend>;
 
 // ---------------------------------------------------------------------------------------------------------------------
+// next layer up from Core is a Core app with a UI; bringing GL and ImGUI into the mix
+//
 struct CoreGUI : public Core
 {
     struct PerfData
@@ -176,6 +212,8 @@ protected:
     PerfData                m_perfData;
     app::FrontendModule     m_mdFrontEnd;       // UI canvas management
 
+
+    // #HDD TODO refactor 
     // call inside app main loop to perform pre/post core functions (eg. checking for exit, submitting rendering)
     bool MainLoopBegin( bool withDockSpace = true, bool withDefaultMenu = true );
     virtual void MainMenuCustom() {}

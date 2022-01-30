@@ -26,7 +26,7 @@
 
 
 #define OUROVEON_LORE           "LORE"
-#define OUROVEON_LORE_VERSION   "0.6.0-alpha"
+#define OUROVEON_LORE_VERSION   "0.6.1-alpha"
 
 inline const char* getGlErrorText( GLenum err )
 {
@@ -992,6 +992,9 @@ int LoreApp::EntrypointOuro()
 
     while ( MainLoopBegin() )
     {
+        // process and blank out Exchange data ready to re-write it
+        emitAndClearExchangeData();
+
         // run modal jam browser window if it's open
         bool selectNewJamToSyncWithModalBrowser = false;
         const char* modalJamBrowserTitle = "Select Jam To Sync";
@@ -1061,16 +1064,13 @@ int LoreApp::EntrypointOuro()
         // for rendering state from the current riff;
         // take a shared ptr copy here, just in case the riff is swapped out mid-tick
         endlesss::live::RiffPtr currentRiffPtr = m_nowPlayingRiff;
+
+        // pour current riff into Exchange block
+        endlesss::Exchange::fillDetailsFromRiff( m_endlesssExchange, currentRiffPtr, m_currentViewedJamName.c_str() );
+
+
+
         const auto currentRiff = currentRiffPtr.get();
-
-        m_endlesssExchange.clear();
-        m_endlesssExchange.m_live = currentRiffPtr != nullptr;
-        if ( m_endlesssExchange.m_live )
-        {
-            endlesss::Exchange::populatePartialFromRiffPtr( currentRiffPtr, m_endlesssExchange );
-            strncpy( m_endlesssExchange.m_jamName, m_currentViewedJamName.c_str(), endlesss::Exchange::MaxJamName - 1 );
-        }
-
 
         // note if the warehouse is running ops, if not then disable new-task buttons
         const bool warehouseIsPaused = warehouse.workerIsPaused();
@@ -1311,7 +1311,7 @@ int LoreApp::EntrypointOuro()
             {
                 if ( ImGui::BeginTable( label, 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg ) )
                 {
-                    ImGui::TableSetupColumn( "Load",        ImGuiTableColumnFlags_WidthFixed, 40.0f );
+                    ImGui::TableSetupColumn( "View",        ImGuiTableColumnFlags_WidthFixed, 32.0f );
                     ImGui::TableSetupColumn( "Jam Name",    ImGuiTableColumnFlags_WidthFixed, 320.0f );
                     ImGui::TableSetupColumn( "Sync",        ImGuiTableColumnFlags_WidthFixed, 32.0f );
                     ImGui::TableSetupColumn( "Riffs",       ImGuiTableColumnFlags_WidthFixed, 120.0f );
@@ -1330,6 +1330,7 @@ int LoreApp::EntrypointOuro()
                 ImGui::PopStyleColor();
                 ImGui::EndTable();
             }
+            static ImVec2 buttonSizeMidTable( 33.0f, 24.0f );
 
             if ( ImGui::BeginChild( "##data_child" ) )
             {
@@ -1346,8 +1347,9 @@ int LoreApp::EntrypointOuro()
                         ImGui::PushID( (int32_t)jI );
 
                         ImGui::TableNextColumn();
+                        
                         ImGui::BeginDisabledControls( isJamInFlux );
-                        if ( ImGui::Button( ICON_FA_EYE, ImVec2( 30.0f, 22.0f ) ) )
+                        if ( ImGui::PrecisionButton( ICON_FA_EYE, buttonSizeMidTable, 1.0f ) )
                         {
                             // change which jam we're viewing, reset active riff hover in the process as this will invalidate it
                             m_currentViewedJam          = m_warehouseContentsReport.m_jamCouchIDs[jI];
@@ -1360,28 +1362,26 @@ int LoreApp::EntrypointOuro()
 
                         ImGui::TableNextColumn(); 
                         
+                        ImGui::Dummy( ImVec2( 0.0f, 1.0f ) );
                         ImGui::TextDisabled( "ID" );
-                        if ( ImGui::IsItemHovered() )
-                        {
-                            ImGui::BeginTooltip();
-                            ImGui::PushTextWrapPos( ImGui::GetFontSize() * 35.0f );
-                            ImGui::TextUnformatted( m_warehouseContentsReport.m_jamCouchIDs[jI].c_str() );
-                            ImGui::PopTextWrapPos();
-                            ImGui::EndTooltip();
-                        }
+                        ImGui::CompactTooltip( m_warehouseContentsReport.m_jamCouchIDs[jI].c_str() );
                         ImGui::SameLine();
-
                         ImGui::TextUnformatted( m_warehouseContentsReportJamTitles[jI].c_str() );
 
+
                         ImGui::TableNextColumn();
+
+
                         ImGui::BeginDisabledControls( isJamInFlux );
-                        if ( ImGui::Button( ICON_FA_SYNC, ImVec2( 28.0f, 22.0f ) ) )
+                        if ( ImGui::PrecisionButton( ICON_FA_SYNC, buttonSizeMidTable, 1.0f ) )
                         {
                             warehouse.addJamSnapshot( m_warehouseContentsReport.m_jamCouchIDs[jI] );
                         }
                         ImGui::EndDisabledControls( isJamInFlux );
 
-                        ImGui::TableNextColumn(); 
+
+                        ImGui::TableNextColumn();
+                        ImGui::Dummy( ImVec2( 0.0f, 1.0f ) );
                         {
                             const auto unpopulated = m_warehouseContentsReport.m_unpopulatedRiffs[jI];
                             const auto populated   = m_warehouseContentsReport.m_populatedRiffs[jI];
@@ -1391,7 +1391,9 @@ int LoreApp::EntrypointOuro()
                             else
                                 ImGui::Text( "%" PRIi64, populated);
                         }
+
                         ImGui::TableNextColumn();
+                        ImGui::Dummy( ImVec2( 0.0f, 1.0f ) );
                         {
                             const auto unpopulated = m_warehouseContentsReport.m_unpopulatedStems[jI];
                             const auto populated   = m_warehouseContentsReport.m_populatedStems[jI];
@@ -1404,7 +1406,7 @@ int LoreApp::EntrypointOuro()
 
                         ImGui::TableNextColumn();
                         ImGui::BeginDisabledControls( !m_enableDbJamDeletion || isJamInFlux );
-                        if ( ImGui::Button( ICON_FA_TRASH, ImVec2( 28.0f, 22.0f ) ) )
+                        if ( ImGui::PrecisionButton( ICON_FA_TRASH, buttonSizeMidTable ) )
                         {
                             warehouse.requestJamPurge( m_warehouseContentsReport.m_jamCouchIDs[jI] );
                         }

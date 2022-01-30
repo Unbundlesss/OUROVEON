@@ -43,6 +43,35 @@ StoragePaths::StoragePaths( const config::Data& configData, const char* appName 
     outputApp   = ( fs::path( configData.storageRoot ) / "output" ) / appName;
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+bool StoragePaths::tryToCreateAndValidate() const
+{
+    blog::core( "  storage paths :" );
+
+    blog::core( "      app cache : {}", cacheApp.string() );
+    if ( filesys::ensureDirectoryExists( cacheApp ) == false )
+    {
+        blog::error::core( "unable to create or find storage directory" );
+        return false;
+    }
+
+    blog::core( "   common cache : {}", cacheCommon.string() );
+    if ( filesys::ensureDirectoryExists( cacheCommon ) == false )
+    {
+        blog::error::core( "unable to create or find storage directory" );
+        return false;
+    }
+
+    blog::core( "     app output : {}", outputApp.string() );
+    if ( filesys::ensureDirectoryExists( outputApp ) == false )
+    {
+        blog::error::core( "unable to create or find storage directory" );
+        return false;
+    }
+
+    return true;
+}
+
 
 // ---------------------------------------------------------------------------------------------------------------------
 Core::Core()
@@ -72,7 +101,7 @@ int Core::Run()
     blog::core( "Hello from OUROVEON {} [{}]", GetAppNameWithVersion(), getOuroveonPlatform() );
 
     // big and wide
-    blog::core( "taskflow {} with {} worker threads", tf::version(), m_taskExecutor.num_workers() );
+    blog::core( "launched taskflow {} with {} worker threads", tf::version(), m_taskExecutor.num_workers() );
 
 
     // we load configuration data from the known system config directory
@@ -88,7 +117,7 @@ int Core::Run()
 
     // ensure all core directories exist or we can't continue
     {
-        blog::core( "ensuring paths are available ..." );
+        blog::core( "ensuring core paths are viable ..." );
         if ( filesys::ensureDirectoryExists( m_sharedConfigPath ) == false )
         {
             blog::error::core( "unable to create or find shared config directory, aborting\n[{}]", m_sharedConfigPath.string() );
@@ -142,10 +171,10 @@ int Core::Run()
     }
 
     // resolve cert bundle from the shared data path
-    fs::path certPath = ( m_sharedDataPath / fs::path( m_configEndlessAPI.certBundleRelative ) );
+    const auto certPath = ( m_sharedDataPath / fs::path( m_configEndlessAPI.certBundleRelative ) );
     if ( !fs::exists( certPath ) )
     {
-        blog::error::cfg( "Cannot find CA root certificates file [{}]", certPath.string() );
+        blog::error::cfg( "Cannot find CA root certificates file [{}], required for networking", certPath.string() );
         return -2;
     }
     // rewrite config option with the full path
@@ -167,7 +196,23 @@ int Core::Run()
     vst::ScopedInitialiseVSTHosting scopedVST;
 #endif // OURO_PLATFORM_WIN
 
-    // create our wrapper around PA; this doesn't connect to a device, just does enumeration
+#if OURO_EXCHANGE_IPC
+    // create shared buffer for exchanging data with other apps
+    if ( !m_endlesssExchangeIPC.init(
+        endlesss::Exchange::GlobalMapppingNameW,
+        endlesss::Exchange::GlobalMutexNameW,
+        win32::details::IPC::Access::Write ) )
+    {
+        blog::error::core( "Failed to open global memory for data exchange; feature disabled" );
+    }
+    else
+    {
+        blog::core( "Broadcasting data exchange on [{}]", endlesss::Exchange::GlobalMapppingNameA );
+    }
+#endif // OURO_EXCHANGE_IPC
+
+
+    // create our wrapper around PA; this doesn't connect to a device, just does initial startup & enumeration
     m_mdAudio = std::make_unique<app::module::Audio>();
     if ( !m_mdAudio->create( *this ) )
     {
@@ -192,32 +237,15 @@ void Core::waitForConsoleKey()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-bool Core::tryCreateAndValidateStoragePaths( const StoragePaths& storagePaths ) const
+void Core::emitAndClearExchangeData()
 {
-    blog::core( "  storage paths :" );
+#if OURO_EXCHANGE_IPC
+    if ( m_endlesssExchangeIPC.canWrite() )
+        m_endlesssExchangeIPC.writeType( m_endlesssExchange );
+#endif // OURO_EXCHANGE_IPC
 
-    blog::core( "      app cache : {}", storagePaths.cacheApp.string() );
-    if ( filesys::ensureDirectoryExists( storagePaths.cacheApp ) == false )
-    {
-        blog::error::core( "unable to create or find storage directory" );
-        return false;
-    }
-
-    blog::core( "   common cache : {}", storagePaths.cacheCommon.string() );
-    if ( filesys::ensureDirectoryExists( storagePaths.cacheCommon ) == false )
-    {
-        blog::error::core( "unable to create or find storage directory" );
-        return false;
-    }
-
-    blog::core( "     app output : {}", storagePaths.outputApp.string() );
-    if ( filesys::ensureDirectoryExists( storagePaths.outputApp ) == false )
-    {
-        blog::error::core( "unable to create or find storage directory" );
-        return false;
-    }
-
-    return true;
+    m_endlesssExchange.clear();
+    m_endlesssExchange.m_dataWriteCounter = m_endlesssExchangeWriteCounter++;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

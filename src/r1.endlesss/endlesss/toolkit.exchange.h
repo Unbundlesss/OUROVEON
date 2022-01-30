@@ -15,13 +15,16 @@ namespace live { struct Riff; using RiffPtr = std::shared_ptr<Riff>; }
 // ---------------------------------------------------------------------------------------------------------------------
 struct Exchange
 {
-    static void populatePartialFromRiffPtr( const live::RiffPtr& riff, Exchange& data );
+    // fill in the riff-level details from a live pointer (or mark us as "not live" if the pointer is null)
+    static void fillDetailsFromRiff( Exchange& data, const live::RiffPtr& riff, const char* jamName );
+
 
     #define _PPCAT_NX(A, B) A ## B
     #define _PPCAT(A, B)    _PPCAT_NX(A, B)
     #define _GLOBAL_NAME "Ouroveon_EXCH"
 
     // standard global names to use for local IPC exchange of this data
+    // this is what you need if you're writing tools to hook into
     static constexpr auto GlobalMapppingNameA   = _GLOBAL_NAME;
     static constexpr auto GlobalMapppingNameW   = _PPCAT( L, _GLOBAL_NAME );
     static constexpr auto GlobalMutexNameA      =  "Global\\Mutex_" _GLOBAL_NAME;
@@ -34,45 +37,60 @@ struct Exchange
     static constexpr size_t MaxJamName          = 32;    // who knows
     static constexpr size_t MaxJammerName       = 32;    // no idea, probably less; also .. utf8??
 
+    // flags to set to denote what fields can be considered valid
+    enum
+    {
+        DataFlags_Empty      = 0,
+        DataFlags_Riff       = 1 << 0,          // [R ] .. 
+        DataFlags_Playback   = 1 << 1           // [ P] ..
+    };
 
-    Exchange() { clear(); }
+    Exchange()  { clear(); }
     ~Exchange() { clear(); }
 
     inline void clear()
     {
+        // POD
         memset( this, 0, sizeof( Exchange ) );
     }
 
-    uint32_t    m_live;                         // >0 means the rest of this structure is valid
-    uint64_t    m_timestamp;                    // sys_clock seconds timestamp
+    inline bool hasNoData() const       { return ( m_dataflags == DataFlags_Empty ); }
+    inline bool hasRiffData() const     { return ( m_dataflags & DataFlags_Riff     ) == DataFlags_Riff;     }
+    inline bool hasPlaybackData() const { return ( m_dataflags & DataFlags_Playback ) == DataFlags_Playback; }
 
-    char        m_jamName[MaxJamName];          // which jam we jammin
-    uint64_t    m_riffHash;                     // u64 hash derived from original riff couch ID as some kind of UID
 
-    uint32_t    m_riffRoot;                     // 
-    uint32_t    m_riffScale;                    // 
-    float       m_riffBPM;                      // 
-    uint32_t    m_riffBeatSegmentCount;         // number of ---- ---- ---- ---- bar segments computed for the riff timing values
-    uint32_t    m_riffBeatSegmentActive;        // .. and which one is currently live, based on playback time
+    uint32_t    m_dataflags;                    //      DataFlags_## declaring what of the following should be valid
+    uint32_t    m_dataWriteCounter;             //      incremented from 0 each time block is updated so external apps
+                                                //          can have some reference as to when data has changed or not
 
-    float       m_stemPulse[8];                 // data per stem, some from endlesss, some computed live
-    float       m_stemEnergy[8];
-    float       m_stemGain[8];
-    uint32_t    m_stemColour[8];
+    char        m_jamName[MaxJamName];          // [R ] which jam we jammin
+    uint64_t    m_riffHash;                     // [R ] u64 hash derived from original riff couch ID as some kind of UID
 
-    float       m_consensusBeat;                // if a number of stems are all reporting beats at the same time, 
-                                                // we emphasise the fact by tracking a 'consensus beat' value which
-                                                // is pulsed and decayed at the same rate as the stems
+    uint64_t    m_riffTimestamp;                // [R ] sys_clock seconds timestamp of riff submission
+    uint32_t    m_riffRoot;                     // [R ]
+    uint32_t    m_riffScale;                    // [R ]
+    float       m_riffBPM;                      // [R ]
+    uint32_t    m_riffBeatSegmentCount;         // [R ] number of ---- ---- ---- ---- bar segments computed for the riff timing values
+    uint32_t    m_riffBeatSegmentActive;        // [ P] .. and which one is currently live, based on playback time
 
-    float       m_riffTransition;               // 0..1 how far through a transition to a new riff we are
+    float       m_stemPulse[8];                 // [ P] data per stem, some from endlesss, some computed live
+    float       m_stemEnergy[8];                // [ P] 
+    float       m_stemGain[8];                  // [ P] 
+    uint32_t    m_stemColour[8];                // [ P] 
+
+    float       m_consensusBeat;                // [ P] if a number of stems are all reporting beats at the same time, 
+                                                //          we emphasise the fact by tracking a 'consensus beat' value which
+                                                //          is pulsed and decayed at the same rate as the stems
+
+    float       m_riffTransition;               // [ P] 0..1 how far through a transition to a new riff we are
 
     // #HDD TODO encode notion of being in transition to entirely new jam
 
 private:
-    uint32_t    m_jammerNameValidBits;
+    uint32_t    m_jammerNameValidBits;          // [R ] bit per jammer name indicating one is present
     // this is gross but marshalling multidim string arrays to C# is sketchy, so here we are
     // use set/getJammerName
-    char        m_jammerName1[MaxJammerName];
+    char        m_jammerName1[MaxJammerName];   // [R ] 
     char        m_jammerName2[MaxJammerName];
     char        m_jammerName3[MaxJammerName];
     char        m_jammerName4[MaxJammerName];

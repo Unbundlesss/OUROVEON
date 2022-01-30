@@ -279,14 +279,14 @@ struct Bot::State
     std::string generateNowPlayingSummary() const
     {
         const auto& exchangeData = m_appCoreServices.getEndlesssExchange();
-        if ( m_voiceState == Bot::VoiceState::Joined && exchangeData.m_live )
+        if ( m_voiceState == Bot::VoiceState::Joined && exchangeData.hasRiffData() )
         {
             std::string pastRiff = "";
 
-            if ( exchangeData.m_timestamp > 0 )
+            if ( exchangeData.m_riffTimestamp > 0 )
             {
                 const auto riffTimeDelta = base::spacetime::calculateDeltaFromNow(
-                    base::spacetime::InSeconds( std::chrono::seconds{ exchangeData.m_timestamp } ) ).asPastTenseString( 3 );
+                    base::spacetime::InSeconds( std::chrono::seconds{ exchangeData.m_riffTimestamp } ) ).asPastTenseString( 3 );
 
                 pastRiff = fmt::format( " ( riff recorded {} )", riffTimeDelta );
             }

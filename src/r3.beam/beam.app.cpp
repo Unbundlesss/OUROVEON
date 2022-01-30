@@ -16,7 +16,6 @@
 #include "discord/discord.bot.ui.h"
 
 #include "effect/vst2/host.h"
-#include "win32/ipc.h"
 
 #include "endlesss/all.h"
 
@@ -31,7 +30,7 @@
 #endif 
 
 #define OUROVEON_BEAM           "BEAM"
-#define OUROVEON_BEAM_VERSION   "0.6.0-alpha"
+#define OUROVEON_BEAM_VERSION   "0.6.1-alpha"
 
 using namespace std::chrono_literals;
 
@@ -938,7 +937,6 @@ struct MixTransition : public Fx::Provider
 // ---------------------------------------------------------------------------------------------------------------------
 struct BeamApp : public app::OuroApp
 {
-    using ExchangeIPC = win32::GlobalSharedMemory< endlesss::Exchange >;
 
     BeamApp()
         : app::OuroApp()
@@ -986,8 +984,6 @@ protected:
     Fx::DataBus                             m_dataBus;
     Fx::VstStack                            m_vstStack;
 
-    // constantly-updated globally-shared data block
-    ExchangeIPC                             m_exchangeIPC;
 
     std::chrono::time_point<std::chrono::steady_clock>   m_lastAutoMemoryReclaimationTime;
 
@@ -1006,18 +1002,6 @@ int BeamApp::EntrypointOuro()
 
 
 
-    // create shared buffer for exchanging data with other apps
-    if ( !m_exchangeIPC.init( 
-        endlesss::Exchange::GlobalMapppingNameW,
-        endlesss::Exchange::GlobalMutexNameW,
-        win32::details::IPC::Access::Write ) )
-    {
-        blog::error::api( "Failed to open global memory for data exchange; feature disabled" );
-    }
-    else
-    {
-        blog::api( "Broadcasting data exchange on [{}]", endlesss::Exchange::GlobalMapppingNameA );
-    }
 
 
     // create and install the mixer engine
@@ -1096,7 +1080,9 @@ int BeamApp::EntrypointOuro()
 
     while ( MainLoopBegin() )
     {
-        m_endlesssExchange.clear();
+        // process and blank out Exchange data ready to re-write it
+        emitAndClearExchangeData();
+
         mixEngine.mainThreadUpdate( GImGui->IO.DeltaTime, m_endlesssExchange );
 
         // run modal jam browser window if it's open
@@ -1110,24 +1096,15 @@ int BeamApp::EntrypointOuro()
         );
 
 
-        // update exchange buffers
         auto currentRiffPtr = mixEngine.m_riffCurrent;
 
-        m_endlesssExchange.m_live = currentRiffPtr != nullptr;
-        if ( m_endlesssExchange.m_live )
+        // update exchange buffers 
         {
-            const auto* currentRiff = currentRiffPtr.get();
-
-            endlesss::Exchange::populatePartialFromRiffPtr( currentRiffPtr, m_endlesssExchange );
-            strncpy( m_endlesssExchange.m_jamName, unpackedJamNames[m_jamChoiceIndex], endlesss::Exchange::MaxJamName - 1 );
+            endlesss::Exchange::fillDetailsFromRiff( m_endlesssExchange, currentRiffPtr, unpackedJamNames[m_jamChoiceIndex] );
 
             m_endlesssExchange.m_riffBeatSegmentActive = mixEngine.m_riffPlaybackBarSegment;
             m_endlesssExchange.m_riffTransition        = mixEngine.m_transitionValue;
         }
-
-        if ( m_exchangeIPC.canWrite() )
-            m_exchangeIPC.writeType( m_endlesssExchange );
-
 
         ImGuiPerformanceTracker();
 

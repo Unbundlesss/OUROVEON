@@ -15,21 +15,31 @@
 
 namespace endlesss {
 
-void Exchange::populatePartialFromRiffPtr( const live::RiffPtr& riff, Exchange& data )
+void Exchange::fillDetailsFromRiff( Exchange& data, const live::RiffPtr& riff, const char* jamName )
 {
     const auto* currentRiff = riff.get();
+    if ( currentRiff != nullptr )
+    {
+        data.m_dataflags |= DataFlags_Riff;
+    }
+    else
+    {
+        data.m_dataflags  = DataFlags_Empty;
+        return;
+    }
+
+    strncpy( data.m_jamName, jamName, endlesss::Exchange::MaxJamName - 1 );
+
+    const uint64_t currentRiffHash = currentRiff->getCIDHash().getID();
+    data.m_riffHash = currentRiffHash;
 
     {
-        data.m_timestamp              = currentRiff->m_stTimestamp.time_since_epoch().count();
-
+        data.m_riffTimestamp          = currentRiff->m_stTimestamp.time_since_epoch().count();
         data.m_riffRoot               = currentRiff->m_riffData.riff.root;
         data.m_riffScale              = currentRiff->m_riffData.riff.scale;
         data.m_riffBPM                = currentRiff->m_timingDetails.m_bpm;
         data.m_riffBeatSegmentCount   = currentRiff->m_timingDetails.m_quarterBeats;
     }
-
-    const uint64_t currentRiffHash = currentRiff->getCIDHash().getID();
-    data.m_riffHash = currentRiffHash;
 
     for ( size_t sI = 0; sI < 8; sI++ )
     {
@@ -37,7 +47,7 @@ void Exchange::populatePartialFromRiffPtr( const live::RiffPtr& riff, Exchange& 
         if ( stem != nullptr )
         {
             data.m_stemColour[sI] = stem->m_colourU32;
-            data.m_stemGain[sI] = currentRiff->m_stemGains[sI];
+            data.m_stemGain[sI]   = currentRiff->m_stemGains[sI];
 
             data.setJammerName( sI, stem->m_data.user.c_str() );
         }
