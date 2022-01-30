@@ -95,7 +95,7 @@ void ApplyOuroveonImGuiStyle()
 }
 
 static constexpr char const* cImGuiFontFixed    = "../../shared/fonts/FiraCode-Regular.ttf";
-static constexpr char const* cImGuiFontAwesome  = "../../shared/fonts/" FONT_ICON_FILE_NAME_FAS;
+static constexpr char const* cImGuiFontAwesome  = "../../shared/fonts/icons/" FONT_ICON_FILE_NAME_FAS;
 static constexpr char const* cImGuiFontTitle    = "../../shared/fonts/stentiga.ttf";
 static constexpr char const* cImGuiFontMedium   = "../../shared/fonts/Oswald-Light.ttf";
 static constexpr char const* cImGuiFontBanner   = "../../shared/fonts/JosefinSans-Regular.ttf";
@@ -230,7 +230,18 @@ bool Frontend::create( const app::Core& appCore )
             io.ConfigWindowsMoveFromTitleBarOnly  = true;
             io.ConfigDockingWithShift             = true;
 
-            m_fontFixed = io.Fonts->AddFontFromFileTTF( cImGuiFontFixed, 16.0f );
+            {
+                static const ImWchar fontRange[] =
+                {
+                    0x0020, 0x017E, // Extended Latin 
+                    0x0370, 0x052F, // Greek and Cyrillic
+                    0x2580, 0x25F7, // Fira console shapes
+                    0xEE00, 0xEE0B, // Fira progress bits
+                    0,
+                };
+
+                m_fontFixed = io.Fonts->AddFontFromFileTTF( cImGuiFontFixed, 16.0f, nullptr, fontRange );
+            }
 
             // embed FontAwesome glyphs into default font so we can use them without switching
             {
