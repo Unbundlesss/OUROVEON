@@ -1,0 +1,21 @@
+{
+    "FontFace" : "Trebuchet MS",
+    "FontSize" : 14.0,
+    "Configs" : 
+    [
+        {
+            "HexColour" : "#FD971F",
+            "Formatting" : "%jamName% | %root% %scale% | %riffBPM% BPM",
+            "FileTarget" : "now_playing_1.txt"
+        },
+        {
+            "HexColour" : "#75715E",
+            "Formatting" : "%time_long%",
+            "FileTarget" : "now_playing_2.txt"
+        },
+        {
+            "Formatting" : "%unique_jammers_upper%",
+            "FileTarget" : "now_playing_4.txt"
+        }
+    ]
+}
