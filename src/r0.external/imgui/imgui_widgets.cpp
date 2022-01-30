@@ -715,6 +715,45 @@ bool ImGui::SmallButton(const char* label)
     return pressed;
 }
 
+bool ImGui::PrecisionButton( const char* label, const ImVec2& size, const float adjust_x, const float adjust_y )
+{
+    ImGuiWindow* window = GetCurrentWindow();
+    if ( window->SkipItems )
+        return false;
+
+    ImGuiContext& g = *GImGui;
+    const ImGuiStyle& style = g.Style;
+    const ImGuiID id = window->GetID( label );
+    const ImVec2 label_size = CalcTextSize( label, NULL, true );
+
+    ImVec2 pos = window->DC.CursorPos;
+
+    const ImRect bb( pos, pos + size );
+    ItemSize( size, 0 );
+    if ( !ItemAdd( bb, id ) )
+        return false;
+
+    ImGuiButtonFlags flags = ImGuiButtonFlags_None;
+    if ( window->DC.ItemFlags & ImGuiItemFlags_ButtonRepeat )
+        flags |= ImGuiButtonFlags_Repeat;
+    bool hovered, held;
+    bool pressed = ButtonBehavior( bb, id, &hovered, &held, flags );
+
+    static const ImVec2 outerPad( 1.0f, 1.0f );
+    const ImVec2 adjust( adjust_x, adjust_y );
+
+    // Render
+    const ImU32 col = GetColorU32( (held && hovered) ? ImGuiCol_ButtonActive : hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button );
+    RenderNavHighlight( bb, id );
+    RenderFrame( bb.Min + outerPad, bb.Max - outerPad, col, true, style.FrameRounding );
+    RenderTextClipped( bb.Min + adjust, bb.Max + adjust, label, NULL, &label_size, style.ButtonTextAlign, &bb );
+
+
+    IMGUI_TEST_ENGINE_ITEM_INFO( id, label, window->DC.LastItemStatusFlags );
+    return pressed;
+
+}
+
 // #HDD
 bool ImGui::IconButton( const char* label )
 {
@@ -755,7 +794,6 @@ bool ImGui::IconButton( const char* label )
 
     IMGUI_TEST_ENGINE_ITEM_INFO( id, label, window->DC.LastItemStatusFlags );
     return pressed;
-
 }
 
 // Tip: use ImGui::PushID()/PopID() to push indices or pointers in the ID stack.
