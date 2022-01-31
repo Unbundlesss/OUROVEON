@@ -22,7 +22,7 @@ namespace antenna
         public UInt64   riffTimestamp { get; }
         public UInt32   riffRoot { get; }
         public UInt32   riffScale { get; }
-        public float    riffBPM { get; }
+        public float    riffBPM { get; set; }
         public UInt32   riffBeatSegmentCount { get; }
         public UInt32   riffBeatSegmentActive { get; }
 

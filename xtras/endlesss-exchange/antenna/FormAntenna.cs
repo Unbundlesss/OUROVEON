@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Reflection;
 using System.Threading;
 using System.Windows.Forms;
@@ -40,21 +41,32 @@ namespace antenna
             {
                 var outputLabel = new System.Windows.Forms.Label();
 
-                outputLabel.AutoSize = true;
-                outputLabel.Font = new System.Drawing.Font( configs.FontFace, configs.FontSize, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)) );
-                outputLabel.ForeColor = System.Drawing.Color.Gainsboro;
-                outputLabel.Location = new System.Drawing.Point( 3, 0 );
-                outputLabel.Name = $"hwLabel{controlID}";
-                outputLabel.TabIndex = controlID;
-                outputLabel.Text = "";
+                // check for font/size overrides per config line
+                var labelFontFace = configs.FontFace;
+                if ( !string.IsNullOrEmpty( c.FontFace ) )
+                    labelFontFace = c.FontFace;
+
+                var labelFontSize = configs.FontSize;
+                if ( c.FontSize > 0 )
+                    labelFontSize = c.FontSize;
+
+                var labelFontBold = configs.FontBold.GetValueOrDefault();
+                if ( c.FontBold.HasValue )
+                    labelFontBold = c.FontBold.Value;
+
+                outputLabel.AutoSize    = true;
+                outputLabel.Font        = new System.Drawing.Font( labelFontFace, labelFontSize, labelFontBold ? FontStyle.Bold : FontStyle.Regular, GraphicsUnit.Point );
+                outputLabel.Padding     = new Padding( 0, c.PaddingTop, 0, 0 );
+                outputLabel.Name        = $"hwLabel{controlID}";
+                outputLabel.TabIndex    = controlID;
                 hwFlow.Controls.Add( outputLabel );
 
-                var defaultColour = "#EEEEEE";
+                var defaultColour = "#EEEEEE"; // eeeeee!
                 if ( !string.IsNullOrEmpty( c.HexColour ) )
                     defaultColour = c.HexColour;
 
+                // create a binding between the incoming config data and its on-screen rep
                 var outputConfig = new ConfigOnUI( outputLabel, defaultColour );
-
                 ConfigsAndUI.Add( c, outputConfig );
 
                 controlID++;
@@ -93,6 +105,8 @@ namespace antenna
 
         private void Execute( EndlesssExchangeData metadata )
         {
+            metadata.riffBPM = (float)Math.Round( metadata.riffBPM, 2 );
+
             // compute some string reps from data
             DateTime riffTime = UnixTimeStampToDateTime( metadata.riffTimestamp );
             DynamicReplacements["%time_short%"] = riffTime.ToString( "yyyy-MM-dd" );
@@ -146,7 +160,9 @@ namespace antenna
                     result = result.Replace( replacement.Key, replacement.Value );
                 }
 
-                System.IO.File.WriteAllText( cui.Key.FileTarget, result );
+                if ( !string.IsNullOrEmpty( cui.Key.FileTarget ) )
+                    System.IO.File.WriteAllText( cui.Key.FileTarget, result );
+
                 cui.Value.Enqueue( result );
             }
         }
@@ -162,10 +178,17 @@ namespace antenna
 
             runReadThread = Antenna.IsBound();
             new Thread( () => AntennaReadThread() ) { IsBackground = true }.Start();
+
+            if ( runReadThread )
+            {
+                hwLaunchMessage.Dispose();
+                hwLaunchMessage = null;
+            }
         }
 
         private void FormAntenna_FormClosing( object sender, FormClosingEventArgs e )
         {
+            runReadThread = false;
             Antenna.Unbind();
         }
 

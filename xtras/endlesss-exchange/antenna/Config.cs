@@ -10,19 +10,36 @@ namespace antenna
     [Serializable]
     public class OutputConfig
     {
+        // optional per-line font modifiers
+        public string FontFace { get; set; }
+        public float FontSize { get; set; }
+        public bool? FontBold { get; set; }
+
+        // offset from line above, default to 0
+        public int PaddingTop { get; set; }
+
+        // optional colour in #AABBCC form
         public string HexColour { get; set; }
+
+        // %replacement% : %string%
         public string Formatting { get; set; }
+
+        // optional file name to write changes into
         public string FileTarget { get; set; }
     }
 
     [Serializable]
     public class OutputConfigs
     {
+        // global font choices
         public string FontFace { get; set; }
         public float FontSize { get; set; }
+        public bool? FontBold { get; set; }
+
         public List<OutputConfig> Configs { get; set; }
     }
 
+    // wrapper around a line of displayed data on the UI; handles fading in out on message change
     public class ConfigOnUI
     {
         enum DisplayState
