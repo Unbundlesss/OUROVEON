@@ -9,7 +9,7 @@
 
 #include "pch.h"
 
-#include "base/spacetime.h"
+#include "spacetime/chronicle.h"
 
 #include "config/frontend.h"
 #include "config/data.h"
@@ -21,8 +21,6 @@
 #include "app/module.frontend.fonts.h"
 
 #include "endlesss/all.h"
-
-#include "gl/shader.h"
 
 #include "platform_folders.h"
 
@@ -141,7 +139,7 @@ int OuroApp::EntrypointGUI()
     bool successfulBreakFromLoop = false;
 
     // configuration preflight
-    while ( MainLoopBegin(false, false) )
+    while ( beginInterfaceLayout(CoreGUI::ViewportMode::BasicViewport) )
     {
         std::string popupErrorMessageToDisplay;
 
@@ -365,12 +363,12 @@ int OuroApp::EntrypointGUI()
                         ImGui::Indent( perBlockIndent );
                         {
                             auto t = date::make_zoned( timezoneUTC, std::chrono::system_clock::now() );
-                            auto tf = date::format( base::spacetime::defaultDisplayTimeFormatTZ, t );
+                            auto tf = date::format( spacetime::defaultDisplayTimeFormatTZ, t );
                             ImGui::Text( "SERVER | %-24s %s", timezoneUTC->name().c_str(), tf.c_str() );
                         }
                         {
                             auto t = date::make_zoned( timezoneLocal, std::chrono::system_clock::now() );
-                            auto tf = date::format( base::spacetime::defaultDisplayTimeFormatTZ, t );
+                            auto tf = date::format( spacetime::defaultDisplayTimeFormatTZ, t );
                             ImGui::Text( " LOCAL | %-24s %s", timezoneLocal->name().c_str(), tf.c_str() );
                         }
 
@@ -503,7 +501,7 @@ int OuroApp::EntrypointGUI()
                         const auto authExpiryUnixTime = endlesssAuth.expires / 1000;
 
                         uint32_t expireDays, expireHours, expireMins, expireSecs;
-                        endlesssAuthExpired = !base::spacetime::datestampUnixExpiryFromNow( authExpiryUnixTime, expireDays, expireHours, expireMins, expireSecs );
+                        endlesssAuthExpired = !spacetime::datestampUnixExpiryFromNow( authExpiryUnixTime, expireDays, expireHours, expireMins, expireSecs );
 
                         if ( endlesssAuthExpired )
                         {
@@ -552,7 +550,7 @@ int OuroApp::EntrypointGUI()
                             {
                                 auto dataClient = std::make_unique< httplib::SSLClient >( "api.endlesss.fm" );
 
-                                dataClient->set_ca_cert_path( m_configEndlessAPI.certBundleRelative.c_str() );
+                                dataClient->set_ca_cert_path( m_configEndlesssAPI.certBundleRelative.c_str() );
                                 dataClient->enable_server_certificate_verification( true );
 
                                 auto authBody = fmt::format( R"({{ "username" : "{}", "password" : "{}" }})", localLoginName, localLoginPass );
@@ -583,7 +581,7 @@ int OuroApp::EntrypointGUI()
                         {
                             if ( !m_apiNetworkConfiguration.has_value() )
                             {
-                                m_apiNetworkConfiguration = endlesss::api::NetConfiguration( m_configEndlessAPI, endlesssAuth, m_sharedDataPath );
+                                m_apiNetworkConfiguration = endlesss::api::NetConfiguration( m_configEndlesssAPI, endlesssAuth, m_sharedDataPath );
                             }
 
                             const bool jamsAreUpdating = (asyncFetchState == endlesss::cache::Jams::AsyncFetchState::Working);
@@ -602,7 +600,7 @@ int OuroApp::EntrypointGUI()
                                             asyncState      = status;
 
                                             if ( state == endlesss::cache::Jams::AsyncFetchState::Success )
-                                                m_jamLibrary.save( m_sharedConfigPath );
+                                                m_jamLibrary.save( *this );
                                         });
                                     m_taskExecutor.run( taskFlow );
                                 }
@@ -698,7 +696,7 @@ int OuroApp::EntrypointGUI()
         }
 
 
-        MainLoopEnd( nullptr, nullptr );
+        submitInterfaceLayout();
 
         if ( successfulBreakFromLoop )
             break;
@@ -722,10 +720,14 @@ int OuroApp::EntrypointGUI()
     if ( m_mdFrontEnd->wasQuitRequested() )
         return 0;
 
+    // boot stem cache now we have paths & audio configured
+    if ( !m_stemCache.initialise( m_storagePaths->cacheCommon, m_mdAudio->getSampleRate() ) )
+        return -1;
+
     return EntrypointOuro();
 }
 
-
+/*
 // ---------------------------------------------------------------------------------------------------------------------
 // standard modal UI to paw through the jams available to our account, picking one if you please
 //
@@ -743,7 +745,7 @@ void OuroApp::modalJamBrowser(
     if ( ImGui::BeginPopupModal( title, nullptr, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize ) )
     {
         static ImGuiTextFilter jamNameFilter;
-        static int32_t jamSortOption = endlesss::cache::Jams::eIterateSortDefault;
+        static int32_t jamSortOption = endlesss::cache::Jams::eIterateSortByTime;
 
         bool shouldClosePopup = false;
 
@@ -828,90 +830,6 @@ void OuroApp::modalJamBrowser(
     }
     ImGui::PopStyleColor();
 }
-
-// ---------------------------------------------------------------------------------------------------------------------
-void OuroApp::ImGui_AppHeader()
-{
-    ImGui::PushFont( m_mdFrontEnd->getFont( app::module::Frontend::FontChoice::LargeLogo ) );
-    ImGui::TextUnformatted( GetAppName() );
-    ImGui::PopFont();
-}
-
-// ---------------------------------------------------------------------------------------------------------------------
-void OuroApp::ImGui_DiskRecorder( rec::IRecordable& recordable )
-{
-    const ImVec2 commonButtonSize = ImVec2( 26.0f, ImGui::GetFrameHeight() );
-
-    static constexpr std::array< const char*, 5 > animProgress{
-        "[_.~\"~] ",
-        "[~_.~\"] ",
-        "[\"~_.~] ",
-        "[~\"~_.] ",
-        "[.~\"~_] "
-    };
-
-    ImGui::PushID( recordable.getRecorderName() );
-
-    const bool recodingInProgress = recordable.isRecording();
-
-    // recorder may be in a state of flux; if so, display what it's telling us
-    if ( recodingInProgress &&
-         recordable.getFluxState() != nullptr )
-    {
-        {
-            ImGui::Scoped::ToggleButton toggled( true, true );
-            if ( ImGui::Button( ICON_FA_HOURGLASS_HALF, commonButtonSize ) )
-            {
-                recordable.stopRecording();
-            }
-        }
-
-        ImGui::SameLine( 0.0f, 4.0f );
-        ImGui::PushItemWidth( ImGui::GetContentRegionAvail().x );
-        ImGui::TextUnformatted( recordable.getFluxState() );
-        ImGui::PopItemWidth();
-    }
-    // otherwise it will be recording or not, so handle those default states
-    else
-    {
-        if ( !recodingInProgress )
-        {
-            bool beginRecording = false;
-
-            beginRecording |= ImGui::Button( ICON_FA_HDD, commonButtonSize );
-
-            ImGui::SameLine( 0.0f, 4.0f );
-            beginRecording |= ImGui::Button( recordable.getRecorderName(), ImVec2( ImGui::GetContentRegionAvail().x, 0.0f ) );
-
-            if ( beginRecording )
-            {
-                const auto timestampPrefix = base::spacetime::createPrefixTimestampForFile();
-                recordable.beginRecording( m_storagePaths->outputApp.string(), timestampPrefix );
-            }
-        }
-        else
-        {
-            static int32_t animCycle = 0;
-            animCycle++;
-
-            const uint64_t bytesRecorded = recordable.getRecordingDataUsage();
-            const auto humanisedBytes = base::humaniseByteSize( animProgress[(animCycle / 8) % 5], bytesRecorded );
-
-            {
-                ImGui::Scoped::ToggleButton toggled( true, true );
-                if ( ImGui::Button( ICON_FA_HDD, commonButtonSize ) )
-                {
-                    recordable.stopRecording();
-                }
-            }
-            ImGui::SameLine( 0.0f, 4.0f );
-            ImGui::PushItemWidth( ImGui::GetContentRegionAvail().x );
-            ImGui::TextUnformatted( humanisedBytes.c_str() );
-            ImGui::PopItemWidth();
-        }
-    }
-
-    ImGui::PopID();
-}
+*/
 
 } // namespace app

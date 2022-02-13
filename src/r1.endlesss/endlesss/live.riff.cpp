@@ -8,7 +8,7 @@
 //
 
 #include "pch.h"
-#include "base/spacetime.h"
+#include "spacetime/chronicle.h"
 
 #include "endlesss/live.riff.h"
 #include "endlesss/live.stem.h"
@@ -213,10 +213,10 @@ void Riff::fetch( const api::NetConfiguration& ncfg, endlesss::cache::Stems& ste
             m_timingDetails.m_longestStemInBars = std::max( m_timingDetails.m_longestStemInBars, m_timingDetails.m_barCount / repeats );
         }
 
-        m_stTimestamp = base::spacetime::InSeconds{ std::chrono::seconds{ theRiff.creationTimeUnix } };
+        m_stTimestamp = spacetime::InSeconds{ std::chrono::seconds{ theRiff.creationTimeUnix } };
 
         // preformat some state for UI display
-        m_uiTimestamp = base::spacetime::datestampStringFromUnix( theRiff.creationTimeUnix );
+        m_uiTimestamp = spacetime::datestampStringFromUnix( theRiff.creationTimeUnix );
 
         m_uiIdentity = theRiff.user;
         m_uiDetails = fmt::format( "{} {} | {:.1f} BPM | {} / 4 | {}[]:{}x | {:.1f}s",

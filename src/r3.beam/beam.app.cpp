@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "base/utils.h"
+#include "spacetime/moment.h"
 
 #include "config/data.h"
 
@@ -9,6 +10,9 @@
 #include "app/module.frontend.fonts.h"
 
 #include "app/ouro.h"
+
+#include "ux/diskrecorder.h"
+#include "ux/cache.jams.browser.h"
 
 #include "ssp/wav.h"
 #include "ssp/flac.h"
@@ -22,15 +26,13 @@
 #include "beam.fx.vst.h"
 #include "beam.fx.databus.h"
 
-#include "gl/shader.h"
-
 #define MIX_ISPC 1
 #if MIX_ISPC
 #include "ispc/.gen/mix_ispc.gen.h"
 #endif 
 
 #define OUROVEON_BEAM           "BEAM"
-#define OUROVEON_BEAM_VERSION   "0.6.1-alpha"
+#define OUROVEON_BEAM_VERSION   OURO_FRAMEWORK_VERSION "-alpha"
 
 using namespace std::chrono_literals;
 
@@ -937,14 +939,10 @@ struct MixTransition : public Fx::Provider
 // ---------------------------------------------------------------------------------------------------------------------
 struct BeamApp : public app::OuroApp
 {
-
     BeamApp()
         : app::OuroApp()
-        , m_jamChoiceIndex( 0 )
     {
         Fx::Providers::registerDefaults( m_dataBus.m_providerFactory, m_dataBus.m_providerNames );
-
-        m_lastAutoMemoryReclaimationTime = std::chrono::high_resolution_clock::now();
 
         m_discordBotUI = std::make_unique<discord::BotWithUI>( *this, m_configDiscord );
     }
@@ -956,24 +954,29 @@ struct BeamApp : public app::OuroApp
     int EntrypointOuro() override;
 
 
-    // return the Jam CID selected by the modalJamBrowser() UI
-    inline const endlesss::types::JamCouchID& getChosenJamDbID() const { return m_jamLibrary.getDatabaseID( m_jamChoiceIndex ); }
-
     inline void runAutomaticMemoryReclaim()
     {
-        auto currentTime        = std::chrono::high_resolution_clock::now();
-        auto currentDuration    = std::chrono::duration_cast<std::chrono::milliseconds>( currentTime - m_lastAutoMemoryReclaimationTime );
+        const auto memoryReclaimPeriod = 120 * 1000;
 
-        if ( currentDuration.count() > 120 * 1000 )
+        if ( m_lastAutoMemoryReclaimationMoment.deltaMs().count() > memoryReclaimPeriod )
         {
             m_stemCache.prune();
-            m_lastAutoMemoryReclaimationTime = currentTime;
+            m_lastAutoMemoryReclaimationMoment.restart();
         }
     }
 
 protected:
 
-    size_t                                  m_jamChoiceIndex;
+    void customMainMenu()
+    {
+    }
+
+    void customStatusBar()
+    {
+    }
+
+
+    endlesss::types::JamCouchID             m_trackedJamCouchID;
 
     MixEngine::ProgressionConfiguration     m_mixProgressionConfig;
     MixEngine::ProgressionConfiguration     m_mixProgressionConfigCommitted;
@@ -984,8 +987,7 @@ protected:
     Fx::DataBus                             m_dataBus;
     Fx::VstStack                            m_vstStack;
 
-
-    std::chrono::time_point<std::chrono::steady_clock>   m_lastAutoMemoryReclaimationTime;
+    spacetime::Moment                       m_lastAutoMemoryReclaimationMoment;
 
     std::unique_ptr< discord::BotWithUI >   m_discordBotUI;
 };
@@ -994,16 +996,6 @@ protected:
 // ---------------------------------------------------------------------------------------------------------------------
 int BeamApp::EntrypointOuro()
 {
-    std::vector< const char* > unpackedJamNames;
-    m_jamLibrary.unpackJamNames( unpackedJamNames );
-
-    if ( !m_stemCache.initialise( m_storagePaths->cacheCommon, m_mdAudio->getSampleRate() ) )
-        return -1;
-
-
-
-
-
     // create and install the mixer engine
     MixEngine mixEngine( m_mdAudio );
     m_mdAudio->blockUntil( m_mdAudio->installMixer( &mixEngine ) );
@@ -1076,9 +1068,18 @@ int BeamApp::EntrypointOuro()
     };
 
 
+    ux::UniversalJamBrowserBehaviour jamBrowserBehaviour;
+    jamBrowserBehaviour.fnOnSelected = [this]( const endlesss::types::JamCouchID& newJamCID )
+    {
+        m_trackedJamCouchID = newJamCID;
+    };
+
+
     // == MAIN LOOP ====================================================================================================
 
-    while ( MainLoopBegin() )
+    const auto callbackMainMenu = std::bind( &BeamApp::customMainMenu, this );
+    const auto callbackStatusBar = std::bind( &BeamApp::customStatusBar, this );
+    while ( beginInterfaceLayout( app::CoreGUI::ViewportMode::DockingViewport, callbackMainMenu, callbackStatusBar ) )
     {
         // process and blank out Exchange data ready to re-write it
         emitAndClearExchangeData();
@@ -1088,19 +1089,28 @@ int BeamApp::EntrypointOuro()
         // run modal jam browser window if it's open
         bool modalDisplayJamBrowser = false;
         const char* modalJamBrowserTitle = "Jam Browser";
-        modalJamBrowser(
-            modalJamBrowserTitle,
-            m_jamLibrary, 
-            [this]() { return m_jamLibrary.getDatabaseID( m_jamChoiceIndex ); },
-            [this]( const endlesss::types::JamCouchID& newJamCID ) { m_jamLibrary.getIndexForDatabaseID( newJamCID, m_jamChoiceIndex ); }
-        );
+        ux::modalUniversalJamBrowser( modalJamBrowserTitle, m_jamLibrary, jamBrowserBehaviour );
 
+
+        // #HDD just do this on tracked choice change, doesn't need to be every frame
+        endlesss::cache::Jams::Data trackedJamData;
+        if ( m_trackedJamCouchID.empty() )
+        {
+            trackedJamData.m_displayName = "[ none selected ]";
+        }
+        else
+        {
+            if ( !m_jamLibrary.loadDataForDatabaseID( m_trackedJamCouchID, trackedJamData ) )
+            {
+                trackedJamData.m_displayName = "[ error ]";
+            }
+        }
 
         auto currentRiffPtr = mixEngine.m_riffCurrent;
 
         // update exchange buffers 
         {
-            endlesss::Exchange::fillDetailsFromRiff( m_endlesssExchange, currentRiffPtr, unpackedJamNames[m_jamChoiceIndex] );
+            endlesss::Exchange::fillDetailsFromRiff( m_endlesssExchange, currentRiffPtr, trackedJamData.m_displayName.c_str() );
 
             m_endlesssExchange.m_riffBeatSegmentActive = mixEngine.m_riffPlaybackBarSegment;
             m_endlesssExchange.m_riffTransition        = mixEngine.m_transitionValue;
@@ -1121,8 +1131,6 @@ int BeamApp::EntrypointOuro()
             ImGui::Begin( "System" );
 
             const auto panelRegionAvailable = ImGui::GetContentRegionAvail();
-
-            ImGui_AppHeader();
 
             // expose volume control
             {
@@ -1148,12 +1156,13 @@ int BeamApp::EntrypointOuro()
             ImGui::SeparatorBreak();
             ImGui::TextUnformatted( "Disk Recorders" );
             {
-                ImGui_DiskRecorder( *m_mdAudio );
-                ImGui_DiskRecorder(  mixEngine );
+                ux::widget::DiskRecorder( *m_mdAudio, m_storagePaths->outputApp );
+                ux::widget::DiskRecorder(  mixEngine, m_storagePaths->outputApp );
             }
 
             ImGui::SeparatorBreak();
             {
+                const bool hasSelectedJam       = !m_trackedJamCouchID.empty();
                 const bool isTracking           = jamSentinel.isTrackerRunning();
                 const bool isTrackerBroken      = jamSentinel.isTrackerBroken();
                 const float chunkyButtonHeight  = 40.0f;
@@ -1165,7 +1174,7 @@ int BeamApp::EntrypointOuro()
                 {
                     ImGui::TextColored( 
                         isTracking ? ImGui::GetStyleColorVec4( ImGuiCol_PlotHistogram ) : ImGui::GetStyleColorVec4( ImGuiCol_SliderGrabActive ),
-                        unpackedJamNames[m_jamChoiceIndex] );
+                        trackedJamData.m_displayName.c_str() );
 
                     ImGui::Spacing();
                 }
@@ -1178,13 +1187,14 @@ int BeamApp::EntrypointOuro()
                     ImGui::EndDisabledControls( isTracking );
                 }
 
+                ImGui::BeginDisabledControls( !hasSelectedJam );
                 if ( isTracking )
                 {
                     if ( isTrackerBroken )
                     {
                         if ( ImGui::Button( ICON_FA_EXCLAMATION_TRIANGLE " Tracker Failed", ImVec2( panelRegionAvailable.x, chunkyButtonHeight ) ) )
                         {
-                            jamSentinel.startTracking( riffChangeCallback, { getChosenJamDbID(), unpackedJamNames[m_jamChoiceIndex] } );
+                            jamSentinel.startTracking( riffChangeCallback, { m_trackedJamCouchID, trackedJamData.m_displayName } );
                         }
                     }
                     else
@@ -1200,9 +1210,10 @@ int BeamApp::EntrypointOuro()
                 {
                     if ( ImGui::Button( ICON_FA_PLAY_CIRCLE " Begin Tracking ", ImVec2( panelRegionAvailable.x, chunkyButtonHeight ) ) )
                     {
-                        jamSentinel.startTracking( riffChangeCallback, { getChosenJamDbID(), unpackedJamNames[m_jamChoiceIndex] } );
+                        jamSentinel.startTracking( riffChangeCallback, { m_trackedJamCouchID, trackedJamData.m_displayName } );
                     }
                 }
+                ImGui::EndDisabledControls( !hasSelectedJam );
             }
 
             ImGui::SeparatorBreak();
@@ -1218,8 +1229,13 @@ int BeamApp::EntrypointOuro()
             ImGui::Begin( "Progression Settings" );
             const auto panelRegionAvailable = ImGui::GetContentRegionAvail();
 
-            ImGui::Columns( 2, nullptr, true );
-            ImGui::SetColumnWidth( 0, panelRegionAvailable.x * 0.5f );
+            const bool splitIntoColumns = ( panelRegionAvailable.x > 500.0f );
+
+            if ( splitIntoColumns )
+            {
+                ImGui::Columns( 2, nullptr, true );
+                ImGui::SetColumnWidth( 0, panelRegionAvailable.x * 0.5f );
+            }
             {
                 ImGui::TextUnformatted( ICON_FA_RANDOM " Riff Blending" );
                 ImGui::Spacing();
@@ -1243,7 +1259,10 @@ int BeamApp::EntrypointOuro()
                 }
                 ImGui::EndDisabledControls( progressionIsUpToDate );
             }
-            ImGui::NextColumn();
+            if ( splitIntoColumns )
+                ImGui::NextColumn();
+            else
+                ImGui::SeparatorBreak();
             {
                 ImGui::TextUnformatted( ICON_FA_STREAM " Repetition Compression" );
                 ImGui::Spacing();
@@ -1447,7 +1466,7 @@ int BeamApp::EntrypointOuro()
 
         runAutomaticMemoryReclaim();
 
-        MainLoopEnd( nullptr, nullptr );
+        submitInterfaceLayout();
     }
 
     m_discordBotUI.reset();

@@ -4,16 +4,13 @@
 //  |_______|_______|___|__|_______|\_____/|_______|_______|__|____|
 //  ishani.org 2022              e.t.c.                  MIT License
 //
-// ASIO homebrew SDK
+//  
 //
 
 #pragma once
 
-#include <string>
-#include <functional>
+namespace gl {
 
-namespace asio {
+const char* enumToString( const uint32_t value );
 
-using LogFunction = std::function<void( const std::string& logMsg )>;
-
-} // namespace asio
+} // namespace gl

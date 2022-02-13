@@ -10,21 +10,26 @@
 // no gods no masters
 #define _CRT_SECURE_NO_WARNINGS
 
+#define OURO_FRAMEWORK_VERSION    "0.6.2"
+
 // std
-#include <array>
 #include <bitset>
 #include <cassert>
 #include <chrono>
 #include <cinttypes>
 #include <cstdio>
-#include <deque>
 #include <fstream>
-#include <mutex>
 #include <optional>
 #include <regex>
+#include <array>
+#include <deque>
+#include <vector>
 #include <unordered_map>
 #include <unordered_set>
-#include <vector>
+#include <mutex>
+#include <semaphore>
+#include <barrier>
+#include <latch>
 
 // github.com/HowardHinnant/date
 #include "date/date.h"
@@ -133,7 +138,7 @@ namespace detail {
         }
 
 ADD_BLOG( core,     0xFD971F,    "CORE" )
-ADD_BLOG( gl,       0xb05279,    "  GL" )
+ADD_BLOG( gfx,      0xb05279,    " GFX" )
 ADD_BLOG( app,      0xA6E22E,    " APP" )
 ADD_BLOG( perf,     0xAEEF1A,    "PERF" )
 ADD_BLOG( cfg,      0xe6a637,    " CFG" )
@@ -167,7 +172,8 @@ ADD_BLOG( stem,     0xe65ea9,    "STEM" )
 
 // imgui
 #define IM_VEC4_CLASS_EXTRA                                                                                                                             \
-        friend inline ImVec4 operator*( const float lhs, const ImVec4& rhs ) { return ImVec4( rhs.x * lhs, rhs.y * lhs, rhs.z * lhs, rhs.w * lhs ); }    \
+        ImVec4(const std::array< float, 4 >& arf)  { x = arf[0]; y = arf[1]; z = arf[2]; w = arf[3]; }                                                  \
+        friend inline ImVec4 operator*( const float lhs, const ImVec4& rhs ) { return ImVec4( rhs.x * lhs, rhs.y * lhs, rhs.z * lhs, rhs.w * lhs ); }   \
         inline ImVec4 operator*( const float rhs ) const { return ImVec4( this->x * rhs, this->y * rhs, this->z * rhs, this->w * rhs ); }               \
         inline ImVec4 operator+( const ImVec4& rhs ) const { return ImVec4( this->x + rhs.x, this->y + rhs.y, this->z + rhs.z, this->w + rhs.w ); }     \
         inline ImVec4 operator*( const ImVec4& rhs ) const { return ImVec4( this->x * rhs.x, this->y * rhs.y, this->z * rhs.z, this->w * rhs.w ); }     \

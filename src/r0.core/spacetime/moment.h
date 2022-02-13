@@ -8,26 +8,20 @@
 
 #pragma once
 
-namespace perf {
+namespace spacetime {
 
-struct TimingPoint
+struct Moment
 {
     using HighResTimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
 
-    TimingPoint( const char* context )
-        : m_startTime( now() )
-        , m_context( context )
-        , m_running( true )
+    Moment()
+        : m_initialTime( now() )
     {
     }
 
-    ~TimingPoint()
+    inline void restart()
     {
-        if ( m_running )
-        {
-            const auto duration = stop();
-            blog::perf( "{} took {}", m_context, duration);
-        }
+        m_initialTime = now();
     }
 
     inline static HighResTimePoint now()
@@ -35,18 +29,38 @@ struct TimingPoint
         return std::chrono::high_resolution_clock::now();
     }
 
-    inline std::chrono::milliseconds stop()
+    inline std::chrono::milliseconds deltaMs()
     {
-        auto endTime = now();
-        m_running = false;
-        return std::chrono::duration_cast<std::chrono::milliseconds>(endTime - m_startTime);
+        return std::chrono::duration_cast<std::chrono::milliseconds>(now() - m_initialTime);
     }
 
+protected:
+    HighResTimePoint    m_initialTime;
+};
 
-    HighResTimePoint    m_startTime;
+struct ScopedTimer : public Moment
+{
+    ScopedTimer( const char* context )
+        : Moment()
+        , m_context( context )
+        , m_running( true )
+    {
+    }
+
+    ~ScopedTimer();
+
+    inline std::chrono::milliseconds stop()
+    {
+        const auto delta = deltaMs();
+        m_running = false;
+        return delta;
+    }
+
+    void stage( const char* name );
+
+private:
     std::string         m_context;
     bool                m_running;
 };
 
-
-} // namespace perf
+} // namespace spacetime

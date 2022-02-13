@@ -256,7 +256,7 @@ void Preview::imgui( const app::StoragePaths& storagePaths )
         if ( currentRiffIsValid )
         {
             // compute a time delta so we can format how long ago this riff was subbed
-            const auto riffTimeDelta = base::spacetime::calculateDeltaFromNow( currentRiff->m_stTimestamp );
+            const auto riffTimeDelta = spacetime::calculateDeltaFromNow( currentRiff->m_stTimestamp );
 
             // print the stats
             ImGui::TextUnformatted( currentRiff->m_uiDetails.c_str() );

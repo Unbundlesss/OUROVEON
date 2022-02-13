@@ -9,6 +9,8 @@
 
 #include "pch.h"
 
+#if OURO_PLATFORM_WIN
+
 #include "win32/errors.h"
 
 namespace win32 {
@@ -290,3 +292,5 @@ const char* GetStringFromWM( uint32_t wmcode )
 }
 
 } // namespace win32
+
+#endif // OURO_PLATFORM_WIN

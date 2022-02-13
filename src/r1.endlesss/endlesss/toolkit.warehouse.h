@@ -9,7 +9,7 @@
 
 #pragma once
 
-#include "base/spacetime.h"
+#include "spacetime/chronicle.h"
 #include "endlesss/ids.h"
 
 namespace app { struct StoragePaths; }
@@ -51,7 +51,7 @@ struct Warehouse
 
         // per-riff information
         std::vector< types::RiffCouchID >           m_ids;
-        std::vector< base::spacetime::InSeconds >   m_timestamps;
+        std::vector< spacetime::InSeconds >         m_timestamps;
         std::vector< uint64_t >                     m_userhash;
         std::vector< uint32_t >                     m_roots;
         std::vector< uint32_t >                     m_scales;
@@ -61,7 +61,8 @@ struct Warehouse
         std::vector< int32_t >                      m_deltaSeconds;
         std::vector< int8_t >                       m_deltaStem;
     };
-    using JamSliceCallback = std::function<void( const types::JamCouchID& jamCouchID, const JamSlice& resultSlice )>;
+    using JamSlicePtr = std::unique_ptr<JamSlice>;
+    using JamSliceCallback = std::function<void( const types::JamCouchID& jamCouchID, JamSlicePtr&& resultSlice )>;
 
 
     struct ITask;
@@ -79,8 +80,8 @@ struct Warehouse
     void setCallbackContentsReport( const ContentsReportCallback& cb );
 
     void syncFromJamCache( const cache::Jams& jamCache );
-
-    void addJamSnapshot( const types::JamCouchID& jamCouchID );
+    
+    void addOrUpdateJamSnapshot( const types::JamCouchID& jamCouchID );
 
     void addJamSliceRequest( const types::JamCouchID& jamCouchID, const JamSliceCallback& callbackOnCompletion );
 

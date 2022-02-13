@@ -8,8 +8,9 @@
 //
 
 #include "pch.h"
+#include "base/instrumentation.h"
 #include "math/rng.h"
-#include "base/spacetime.h"
+#include "spacetime/chronicle.h"
 
 #include "endlesss/core.types.h"
 #include "endlesss/cache.jams.h"
@@ -39,6 +40,7 @@ struct Warehouse::ITask
     virtual bool usesNetwork() const { return false; }
     virtual bool forceContentReport() const { return false; }
 
+    virtual const char* getTag() = 0;
     virtual std::string Describe() = 0;
     virtual bool Work( TaskQueue& currentTasks ) = 0;
 };
@@ -53,9 +55,6 @@ struct Warehouse::INetworkTask : Warehouse::ITask
 
     virtual bool usesNetwork() const { return true; }
     const api::NetConfiguration& m_netConfig;
-
-    virtual std::string Describe() = 0;
-    virtual bool Work( TaskQueue& currentTasks ) = 0;
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -70,6 +69,7 @@ struct ContentsReportTask : Warehouse::ITask
 
     Warehouse::ContentsReportCallback m_reportCallback;
 
+    virtual const char* getTag() { return Tag; }
     virtual std::string Describe() { return std::move( fmt::format( "[{}] creating database contents report", Tag ) ); }
     virtual bool Work( TaskQueue& currentTasks ) override;
 };
@@ -88,6 +88,7 @@ struct JamSliceTask : Warehouse::ITask
     types::JamCouchID               m_jamCID;
     Warehouse::JamSliceCallback     m_reportCallback;
 
+    virtual const char* getTag() { return Tag; }
     virtual std::string Describe() { return std::move( fmt::format( "[{}] extracting jam data for [{}]", Tag, m_jamCID.value() ) ); }
     virtual bool Work( TaskQueue& currentTasks ) override;
 };
@@ -107,6 +108,7 @@ struct JamSnapshotTask : Warehouse::INetworkTask
 
     types::JamCouchID m_jamCID;
 
+    virtual const char* getTag() { return Tag; }
     virtual std::string Describe() { return std::move( fmt::format( "[{}] fetching Jam snapshot of [{}]", Tag, m_jamCID ) ); }
     virtual bool Work( TaskQueue& currentTasks ) override;
 };
@@ -126,6 +128,7 @@ struct JamPurgeTask : Warehouse::INetworkTask
 
     types::JamCouchID m_jamCID;
 
+    virtual const char* getTag() { return Tag; }
     virtual std::string Describe() { return std::move( fmt::format( "[{}] deleting all records for [{}]", Tag, m_jamCID ) ); }
     virtual bool Work( TaskQueue& currentTasks ) override;
 };
@@ -145,6 +148,7 @@ struct GetRiffDataTask : Warehouse::INetworkTask
     types::JamCouchID                 m_jamCID;
     std::vector< types::RiffCouchID > m_riffCIDs;
 
+    virtual const char* getTag() { return Tag; }
     virtual std::string Describe() { return std::move( fmt::format( "[{}] pulling {} riff details", Tag, m_riffCIDs.size() ) ); }
     virtual bool Work( TaskQueue& currentTasks ) override;
 };
@@ -163,6 +167,7 @@ struct GetStemData : Warehouse::INetworkTask
     types::JamCouchID                 m_jamCID;
     std::vector< types::StemCouchID > m_stemCIDs;
 
+    virtual const char* getTag() { return Tag; }
     virtual std::string Describe() { return std::move( fmt::format( "[{}] pulling {} stem details", Tag, m_stemCIDs.size() ) ); }
     virtual bool Work( TaskQueue& currentTasks ) override;
 };
@@ -176,6 +181,8 @@ struct Warehouse::TaskSchedule
 
 namespace sql {
 
+#define DEPRECATE_INDEX     R"( DROP INDEX IF EXISTS )"
+
 // ---------------------------------------------------------------------------------------------------------------------
 namespace jams {
 
@@ -186,7 +193,9 @@ namespace jams {
             PRIMARY KEY("JamCID")
         );)";
     static constexpr char createIndex_0[] = R"(
-        CREATE UNIQUE INDEX IF NOT EXISTS "IndexJam"       ON "Jams" ( "JamCID" );)";
+        CREATE UNIQUE INDEX IF NOT EXISTS "Jams_IndexJam"       ON "Jams" ( "JamCID" );)";
+
+    static constexpr char deprecated_0[] = { DEPRECATE_INDEX "IndexJam" };
 
     // -----------------------------------------------------------------------------------------------------------------
     void runInit()
@@ -194,6 +203,9 @@ namespace jams {
         Warehouse::SqlDB::query<createTable>();
 
         Warehouse::SqlDB::query<createIndex_0>();
+
+        // deprecate
+        Warehouse::SqlDB::query<deprecated_0>();
     }
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -262,17 +274,24 @@ namespace riffs {
             FROM Riffs where RiffCID is ?1;
         )";
     static constexpr char createIndex_0[] = R"(
-        CREATE UNIQUE INDEX IF NOT EXISTS "IndexRiff"       ON "Riffs" ( "RiffCID" );)";
+        CREATE UNIQUE INDEX IF NOT EXISTS "Riff_IndexRiff"       ON "Riffs" ( "RiffCID" );)";
     static constexpr char createIndex_1[] = R"(
-        CREATE INDEX        IF NOT EXISTS "IndexOwner"      ON "Riffs" ( "OwnerJamCID" );)";
+        CREATE INDEX        IF NOT EXISTS "Riff_IndexOwner"      ON "Riffs" ( "OwnerJamCID" );)";
     static constexpr char createIndex_2[] = R"(
-        CREATE INDEX        IF NOT EXISTS "IndexTime"       ON "Riffs" ( "CreationTime" DESC );)";
+        CREATE INDEX        IF NOT EXISTS "Riff_IndexTime"       ON "Riffs" ( "CreationTime" DESC );)";
     static constexpr char createIndex_3[] = R"(
-        CREATE INDEX        IF NOT EXISTS "IndexUser"       ON "Riffs" ( "UserName" );)";
+        CREATE INDEX        IF NOT EXISTS "Riff_IndexUser"       ON "Riffs" ( "UserName" );)";
     static constexpr char createIndex_4[] = R"(
-        CREATE INDEX        IF NOT EXISTS "IndexBPM"        ON "Riffs" ( "BPMrnd" );)";
+        CREATE INDEX        IF NOT EXISTS "Riff_IndexBPM"        ON "Riffs" ( "BPMrnd" );)";
     static constexpr char createIndex_5[] = R"(
-        CREATE INDEX        IF NOT EXISTS "IndexStems"      ON "Riffs" ( "StemCID_1", "StemCID_2", "StemCID_3", "StemCID_4", "StemCID_5", "StemCID_6", "StemCID_7", "StemCID_8" );)";
+        CREATE INDEX        IF NOT EXISTS "Riff_IndexStems"      ON "Riffs" ( "StemCID_1", "StemCID_2", "StemCID_3", "StemCID_4", "StemCID_5", "StemCID_6", "StemCID_7", "StemCID_8" );)";
+
+    static constexpr char deprecated_0[] = { DEPRECATE_INDEX "IndexRiff" };
+    static constexpr char deprecated_1[] = { DEPRECATE_INDEX "IndexOwner" };
+    static constexpr char deprecated_2[] = { DEPRECATE_INDEX "IndexTime" };
+    static constexpr char deprecated_3[] = { DEPRECATE_INDEX "IndexUser" };
+    static constexpr char deprecated_4[] = { DEPRECATE_INDEX "IndexBPM" };
+    static constexpr char deprecated_5[] = { DEPRECATE_INDEX "IndexStems" };
 
     // -----------------------------------------------------------------------------------------------------------------
     void runInit()
@@ -285,6 +304,14 @@ namespace riffs {
         Warehouse::SqlDB::query<createIndex_3>();
         Warehouse::SqlDB::query<createIndex_4>();
         Warehouse::SqlDB::query<createIndex_5>();
+
+        // deprecate
+        Warehouse::SqlDB::query<deprecated_0>();
+        Warehouse::SqlDB::query<deprecated_1>();
+        Warehouse::SqlDB::query<deprecated_2>();
+        Warehouse::SqlDB::query<deprecated_3>();
+        Warehouse::SqlDB::query<deprecated_4>();
+        Warehouse::SqlDB::query<deprecated_5>();
     }
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -500,15 +527,23 @@ namespace stems {
             FROM Stems where StemCID is ?1;
         )";
     static constexpr char createIndex_0[] = R"(
-        CREATE UNIQUE INDEX IF NOT EXISTS "IndexStem"       ON "Stems" ( "StemCID" );)";
+        CREATE UNIQUE INDEX IF NOT EXISTS "Stems_IndexStem"       ON "Stems" ( "StemCID" );)";
     static constexpr char createIndex_1[] = R"(
-        CREATE INDEX        IF NOT EXISTS "IndexPreset"     ON "Stems" ( "PresetName" );)";
+        CREATE INDEX        IF NOT EXISTS "Stems_IndexPreset"     ON "Stems" ( "PresetName" );)";
     static constexpr char createIndex_2[] = R"(
-        CREATE INDEX        IF NOT EXISTS "IndexTime"       ON "Stems" ( "CreationTime" DESC );)";
+        CREATE INDEX        IF NOT EXISTS "Stems_IndexTime"       ON "Stems" ( "CreationTime" DESC );)";
     static constexpr char createIndex_3[] = R"(
-        CREATE INDEX        IF NOT EXISTS "IndexUser"       ON "Stems" ( "CreatorUserName" );)";
+        CREATE INDEX        IF NOT EXISTS "Stems_IndexUser"       ON "Stems" ( "CreatorUserName" );)";
     static constexpr char createIndex_4[] = R"(
-        CREATE INDEX        IF NOT EXISTS "IndexBPM"        ON "Stems" ( "BPMrnd" );)";
+        CREATE INDEX        IF NOT EXISTS "Stems_IndexBPM"        ON "Stems" ( "BPMrnd" );)";
+    static constexpr char createIndex_5[] = R"(
+        CREATE INDEX        IF NOT EXISTS "Stems_IndexOwner"      ON "Stems" ( "OwnerJamCID" );)";
+
+    static constexpr char deprecated_0[] = { DEPRECATE_INDEX "IndexStem" };
+    static constexpr char deprecated_1[] = { DEPRECATE_INDEX "IndexPreset" };
+    static constexpr char deprecated_2[] = { DEPRECATE_INDEX "IndexTime" };
+    static constexpr char deprecated_3[] = { DEPRECATE_INDEX "IndexUser" };
+    static constexpr char deprecated_4[] = { DEPRECATE_INDEX "IndexBPM" };
 
     // -----------------------------------------------------------------------------------------------------------------
     void runInit()
@@ -520,6 +555,14 @@ namespace stems {
         Warehouse::SqlDB::query<createIndex_2>();
         Warehouse::SqlDB::query<createIndex_3>();
         Warehouse::SqlDB::query<createIndex_4>();
+        Warehouse::SqlDB::query<createIndex_5>();
+
+        // deprecate
+        Warehouse::SqlDB::query<deprecated_0>();
+        Warehouse::SqlDB::query<deprecated_1>();
+        Warehouse::SqlDB::query<deprecated_2>();
+        Warehouse::SqlDB::query<deprecated_3>();
+        Warehouse::SqlDB::query<deprecated_4>();
     }
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -635,7 +678,7 @@ namespace ledger {
     {
         MISSING_OGG         = 1,            // ogg data vanished; this is mostly due to the broken beta that went out
         DAMAGED_REFERENCE   = 2,            // sometimes chat messages (?!) or other riffs (??) seem to have been stored as stem CouchIDs 
-        REMOVED_ID          = 3             // just .. gone. couch ID no long
+        REMOVED_ID          = 3             // just .. gone. couch ID not found. unrecoverable
     };
 
     static constexpr char createStemTable[] = R"(
@@ -646,7 +689,9 @@ namespace ledger {
             PRIMARY KEY("StemCID")
         );)";
     static constexpr char createStemIndex_0[] = R"(
-        CREATE UNIQUE INDEX IF NOT EXISTS "IndexStem"       ON "StemLedger" ( "StemCID" );)";
+        CREATE UNIQUE INDEX IF NOT EXISTS "Ledger_IndexStem"       ON "StemLedger" ( "StemCID" );)";
+
+    static constexpr char deprecated_0[] = { DEPRECATE_INDEX "IndexStem" };
 
     // -----------------------------------------------------------------------------------------------------------------
     void runInit()
@@ -654,6 +699,9 @@ namespace ledger {
         Warehouse::SqlDB::query<createStemTable>();
 
         Warehouse::SqlDB::query<createStemIndex_0>();
+
+        // deprecate
+        Warehouse::SqlDB::query<deprecated_0>();
     }
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -690,6 +738,11 @@ Warehouse::Warehouse( const app::StoragePaths& storagePaths, const api::NetConfi
 
     m_workerThreadAlive = true;
     m_workerThread      = std::make_unique<std::thread>( &Warehouse::threadWorker, this );
+
+#if OURO_PLATFORM_WIN
+    ::SetThreadPriority( m_workerThread->native_handle(), THREAD_PRIORITY_BELOW_NORMAL );
+#endif 
+
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -697,8 +750,11 @@ Warehouse::~Warehouse()
 {
     m_workerThreadAlive = false;
 
-    static constexpr char sqlOptimize[] = R"(pragma optimize)";
-    SqlDB::query<sqlOptimize>();
+    {
+        spacetime::ScopedTimer stemTiming( "warehouse [optimize]" );
+        static constexpr char sqlOptimize[] = R"(pragma optimize)";
+        SqlDB::query<sqlOptimize>();
+    }
 
     m_workerThread->join();
     m_workerThread.reset();
@@ -721,24 +777,19 @@ void Warehouse::setCallbackContentsReport( const ContentsReportCallback& cb )
 // ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::syncFromJamCache( const cache::Jams& jamCache )
 {
-    const auto jamCount = jamCache.getJamCount();
-    for ( auto jamI = 0; jamI < jamCount; jamI++ )
-    {
-        const auto& jamID = jamCache.getDatabaseID( jamI );
-        const auto& jamName = jamCache.getDisplayName( jamI );
+    jamCache.iterateAllJams( []( const cache::Jams::Data& jamData )
+        {
+            static constexpr char _insertOrUpdateJamData[] = R"(
+                INSERT OR IGNORE INTO jams( JamCID, PublicName ) VALUES( ?1, ?2 );
+            )";
 
-        static constexpr char _insertOrUpdateJamData[] = R"(
-            INSERT OR IGNORE INTO jams( JamCID, PublicName ) VALUES( ?1, ?2 );
-        )";
-
-        Warehouse::SqlDB::query<_insertOrUpdateJamData>( jamID.value(), jamName );
-    }
+            Warehouse::SqlDB::query<_insertOrUpdateJamData>( jamData.m_jamCID.value(), jamData.m_displayName );
+        });
 }
 
 
-
 // ---------------------------------------------------------------------------------------------------------------------
-void Warehouse::addJamSnapshot( const types::JamCouchID& jamCouchID )
+void Warehouse::addOrUpdateJamSnapshot( const types::JamCouchID& jamCouchID )
 {
     m_taskSchedule->m_taskQueue.enqueue( std::make_unique<JamSnapshotTask>( m_netConfig, jamCouchID ) );
 }
@@ -791,6 +842,7 @@ void Warehouse::workerTogglePause()
 void Warehouse::threadWorker()
 {
     blog::api( "Warehouse::threadWorker start" );
+    base::instr::setThreadName( OURO_THREAD_PREFIX "Warehouse::Work" );
 
     math::RNG32 rng;
 
@@ -833,7 +885,12 @@ void Warehouse::threadWorker()
 
     while ( m_workerThreadAlive )
     {
-        std::this_thread::sleep_for( std::chrono::milliseconds( rng.genInt32(250, 1000) ) );
+        // #HDD refactor how this thread works;
+        //      we should be sleeping it until we know there's potential work and controlling any rate-limiting
+        //      by virtue of what tasks are running rather than a generic top-level wait
+        //      (as this also interferes with local requests like generating jam-slices)
+        //
+        std::this_thread::sleep_for( std::chrono::milliseconds( rng.genInt32(250, 700) ) );
 
         checkLockAndInstallNewCallbacks();
 
@@ -850,16 +907,20 @@ void Warehouse::threadWorker()
             if ( m_cbWorkUpdate )
                 m_cbWorkUpdate( true, nextTask->Describe() );
 
-            blog::api( nextTask->Describe() );
-            const bool taskOk = nextTask->Work( m_taskSchedule->m_taskQueue );
-
-            if ( !taskOk )
+            const auto taskDescription = nextTask->Describe();
+            blog::api( taskDescription );
             {
-                if ( m_cbWorkUpdate )
-                    m_cbWorkUpdate( false, "Paused due to task error" );
+                base::instr::ScopedEvent se( "TASK", nextTask->getTag(), base::instr::PresetColour::Indigo );
 
-                m_workerThreadPaused = true;
-                continue;
+                const bool taskOk = nextTask->Work( m_taskSchedule->m_taskQueue );
+                if ( !taskOk )
+                {
+                    if ( m_cbWorkUpdate )
+                        m_cbWorkUpdate( false, "Paused due to task error" );
+
+                    m_workerThreadPaused = true;
+                    continue;
+                }
             }
 
             if ( nextTask->forceContentReport() )
@@ -870,6 +931,8 @@ void Warehouse::threadWorker()
         {
             // scour for empty riffs
             {
+                base::instr::ScopedEvent se( "FILL", "Riffs", base::instr::PresetColour::Red );
+
                 types::JamCouchID owningJamCID;
                 types::RiffCouchID emptyRiffCID;
                 if ( sql::riffs::findUnpopulated( owningJamCID, emptyRiffCID ) )
@@ -896,6 +959,8 @@ void Warehouse::threadWorker()
             }
             // .. and then stems
             {
+                base::instr::ScopedEvent se( "FILL", "Stems", base::instr::PresetColour::Orange );
+
                 types::JamCouchID owningJamCID;
                 types::StemCouchID emptyStemCID;
                 if ( sql::stems::findUnpopulated( owningJamCID, emptyStemCID ) )
@@ -1265,10 +1330,12 @@ bool GetStemData::Work( TaskQueue& currentTasks )
 // ---------------------------------------------------------------------------------------------------------------------
 bool JamSliceTask::Work( TaskQueue& currentTasks )
 {
+    spacetime::ScopedTimer stemTiming( "JamSliceTask::Work" );
+
     const int64_t riffCount = sql::riffs::countPopulated( m_jamCID, true );
 
-    Warehouse::JamSlice resultSlice;
-    resultSlice.reserve( riffCount );
+    auto resultSlice = std::make_unique<Warehouse::JamSlice>();
+    resultSlice->reserve( riffCount );
 
     static constexpr char _sqlExtractRiffBits[] = R"(
             select RiffCID,CreationTime,UserName,Root,Scale,BPMrnd,StemCID_1,StemCID_2,StemCID_3,StemCID_4,StemCID_5,StemCID_6,StemCID_7,StemCID_8 
@@ -1291,9 +1358,9 @@ bool JamSliceTask::Work( TaskQueue& currentTasks )
     robin_hood::unordered_flat_set< std::string_view > previousStemIDs;
     previousStemIDs.reserve( 8 );
 
-    base::spacetime::InSeconds previousRiffTimestamp;
-    int8_t                     previousActiveStems = 0;
-    bool                       firstRiffInSequence = true;
+    spacetime::InSeconds previousRiffTimestamp;
+    int8_t               previousActiveStems = 0;
+    bool                 firstRiffInSequence = true;
 
     while ( query( riffCID,
                    timestamp,
@@ -1312,14 +1379,14 @@ bool JamSliceTask::Work( TaskQueue& currentTasks )
     {
         const uint64_t hashedUsername = CityHash64( username.data(), username.length() );
 
-        const auto contextTimestamp = base::spacetime::InSeconds{ std::chrono::seconds{ timestamp } };
+        const auto contextTimestamp = spacetime::InSeconds{ std::chrono::seconds{ timestamp } };
 
-        resultSlice.m_ids.emplace_back( riffCID );
-        resultSlice.m_timestamps.emplace_back( contextTimestamp );
-        resultSlice.m_userhash.emplace_back( hashedUsername );
-        resultSlice.m_roots.emplace_back( root );
-        resultSlice.m_scales.emplace_back( scale );
-        resultSlice.m_bpms.emplace_back( bpmrnd );
+        resultSlice->m_ids.emplace_back( riffCID );
+        resultSlice->m_timestamps.emplace_back( contextTimestamp );
+        resultSlice->m_userhash.emplace_back( hashedUsername );
+        resultSlice->m_roots.emplace_back( root );
+        resultSlice->m_scales.emplace_back( scale );
+        resultSlice->m_bpms.emplace_back( bpmrnd );
 
         int8_t liveStems = 0;
         int32_t newStems = 0;
@@ -1334,14 +1401,14 @@ bool JamSliceTask::Work( TaskQueue& currentTasks )
         // first riff reports no deltas
         if ( firstRiffInSequence )
         {
-            resultSlice.m_deltaSeconds.push_back( 0 );
-            resultSlice.m_deltaStem.push_back( 0 );
+            resultSlice->m_deltaSeconds.push_back( 0 );
+            resultSlice->m_deltaStem.push_back( 0 );
         }
         // compute deltas from last riff
         else
         {
-            resultSlice.m_deltaSeconds.push_back( (int32_t) (contextTimestamp - previousRiffTimestamp).count() );
-            resultSlice.m_deltaStem.push_back( std::max( newStems, std::abs(liveStems - previousActiveStems) ) );
+            resultSlice->m_deltaSeconds.push_back( (int32_t) (contextTimestamp - previousRiffTimestamp).count() );
+            resultSlice->m_deltaStem.push_back( std::max( newStems, std::abs(liveStems - previousActiveStems) ) );
         }
         firstRiffInSequence = false;
 
@@ -1356,28 +1423,63 @@ bool JamSliceTask::Work( TaskQueue& currentTasks )
     }
 
     if ( m_reportCallback )
-        m_reportCallback( m_jamCID, resultSlice );
+        m_reportCallback( m_jamCID, std::move(resultSlice) );
 
     return true;
 }
 
+
 // ---------------------------------------------------------------------------------------------------------------------
 bool ContentsReportTask::Work( TaskQueue& currentTasks )
 {
+    spacetime::ScopedTimer stemTiming( "ContentsReportTask::Work" );
+
+    // gather unified set of empty/not-empty counts from steams and riffs in a single blast
+    static constexpr char gatherPopulations[] = R"(
+    SELECT a.OwnerJamCID, a.FilledRiffs, a.EmptyRiffs, b.FilledStems, b.EmptyStems
+        FROM 
+        (
+            SELECT Riffs.OwnerJamCID,
+                count(case when Riffs.CreationTime is null then 1 end) as EmptyRiffs,
+                count(case when Riffs.CreationTime is not null then 1 end) as FilledRiffs
+            FROM Riffs
+            GROUP BY Riffs.OwnerJamCID
+        ) as a
+        JOIN
+        (
+            SELECT Stems.OwnerJamCID,
+                count(case when Stems.CreationTime is null then 1 end) as EmptyStems,
+                count(case when Stems.CreationTime is not null then 1 end) as FilledStems
+            FROM Stems
+            GROUP BY Stems.OwnerJamCID
+        ) as b
+        ON a.OwnerJamCID = b.OwnerJamCID
+    )";
+
     Warehouse::ContentsReport reportResult;
 
-    std::vector<types::JamCouchID> uniqueJamCIDs;
-    sql::riffs::findUniqueJamIDs( uniqueJamCIDs );
+
+    auto query = Warehouse::SqlDB::query<gatherPopulations>();
     
-    for ( const auto& jamCID : uniqueJamCIDs )
+    std::string_view jamCID;
+    int64_t totalPopulatedRiffs;
+    int64_t totalUnpopulatedRiffs;
+    int64_t totalPopulatedStems;
+    int64_t totalUnpopulatedStems;
+
+    while ( query( jamCID,
+                   totalPopulatedRiffs,
+                   totalUnpopulatedRiffs,
+                   totalPopulatedStems,
+                   totalUnpopulatedStems ) )
     {
         reportResult.m_jamCouchIDs.emplace_back( jamCID );
 
-        reportResult.m_populatedRiffs.emplace_back( sql::riffs::countPopulated( jamCID, true ) );
-        reportResult.m_unpopulatedRiffs.emplace_back( sql::riffs::countPopulated( jamCID, false ) );
+        reportResult.m_populatedRiffs.emplace_back( totalPopulatedRiffs );
+        reportResult.m_unpopulatedRiffs.emplace_back( totalUnpopulatedRiffs );
 
-        reportResult.m_populatedStems.emplace_back( sql::stems::countPopulated( jamCID, true ) );
-        reportResult.m_unpopulatedStems.emplace_back( sql::stems::countPopulated( jamCID, false ) );
+        reportResult.m_populatedStems.emplace_back( totalPopulatedStems );
+        reportResult.m_unpopulatedStems.emplace_back( totalUnpopulatedStems );
     }
 
     if ( m_reportCallback )

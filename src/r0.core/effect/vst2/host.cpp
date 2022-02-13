@@ -12,6 +12,8 @@
 #include "nlohmann/json.hpp"
 
 #include "base/utils.h"
+#include "base/instrumentation.h"
+
 #include "effect/vst2/host.h"
 
 // enable to dump out what the input and output pin properties are
@@ -540,6 +542,8 @@ void Instance::Data::runOnVstThread()
         m_product = m_product.substr( 0, m_product.size() - 4 );
     }
 
+    base::instr::setThreadName( fmt::format( OURO_THREAD_PREFIX "VST::{}", m_product ).c_str() );
+
 
     m_vstThreadInitComplete = true;
 
@@ -880,7 +884,7 @@ bool Instance::deserialize( const std::string& data )
                 if ( paramLookup != m_data->m_paramIndexMapS2I.end() )
                 {
                     // floats are stores as hex strings, parse back to uint32
-                    const uint32_t floatAsHex = std::stol( std::string( kvEntry.value() ), nullptr, 16 );
+                    const uint32_t floatAsHex = std::stoul( std::string( kvEntry.value() ), nullptr, 16 );
 
                     // .. and then copy back into their true form
                     float newValue;

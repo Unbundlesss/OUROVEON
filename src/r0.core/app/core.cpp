@@ -8,7 +8,8 @@
 //
 
 #include "pch.h"
-#include <conio.h>
+
+#include "base/instrumentation.h"
 
 #include "config/base.h"
 #include "config/frontend.h"
@@ -16,6 +17,7 @@
 
 #include "app/core.h"
 #include "app/module.frontend.h"
+#include "app/module.frontend.fonts.h"
 #include "app/module.audio.h"
 
 #include "filesys/fsutil.h"
@@ -26,6 +28,7 @@
 #if OURO_PLATFORM_WIN
 #include "win32/utils.h"
 #include <ios>
+#include <conio.h>
 #endif 
 
 #if OURO_FEATURE_VST24
@@ -77,6 +80,7 @@ bool StoragePaths::tryToCreateAndValidate() const
 Core::Core()
     : m_taskExecutor( std::clamp( std::thread::hardware_concurrency(), 2U, 8U ) )
 {
+    base::instr::setThreadName( OURO_THREAD_PREFIX "$::main-thread" );
 }
 
 Core::~Core()
@@ -160,7 +164,7 @@ int Core::Run()
     blog::core( "initial Endlesss setup ..." );
 
     // try and load the API config bundle
-    const auto apiLoadResult = config::load( *this, m_configEndlessAPI );
+    const auto apiLoadResult = config::load( *this, m_configEndlesssAPI );
     if ( apiLoadResult != config::LoadResult::Success )
     {
         // can't continue without the API config
@@ -170,23 +174,24 @@ int Core::Run()
         return -2;
     }
 
+
     // resolve cert bundle from the shared data path
-    const auto certPath = ( m_sharedDataPath / fs::path( m_configEndlessAPI.certBundleRelative ) );
+    const auto certPath = ( m_sharedDataPath / fs::path( m_configEndlesssAPI.certBundleRelative ) );
     if ( !fs::exists( certPath ) )
     {
         blog::error::cfg( "Cannot find CA root certificates file [{}], required for networking", certPath.string() );
         return -2;
     }
     // rewrite config option with the full path
-    m_configEndlessAPI.certBundleRelative = certPath.string();
+    m_configEndlesssAPI.certBundleRelative = certPath.string();
 
     // drop the app name, version and platform into the user agent string
-    m_configEndlessAPI.userAgentApp += fmt::format( "{} ({})", GetAppNameWithVersion(), getOuroveonPlatform() );
-    m_configEndlessAPI.userAgentDb  += fmt::format( " ({})", GetAppNameWithVersion(), getOuroveonPlatform() );
+    m_configEndlesssAPI.userAgentApp += fmt::format( "{} ({})", GetAppNameWithVersion(), getOuroveonPlatform() );
+    m_configEndlesssAPI.userAgentDb  += fmt::format( " ({})", GetAppNameWithVersion(), getOuroveonPlatform() );
 
 
     // load the jam cache data (or try to)
-    m_jamLibrary.load( m_sharedConfigPath );
+    m_jamLibrary.load( *this );
 
 
 
@@ -282,9 +287,12 @@ int CoreGUI::Entrypoint()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-bool CoreGUI::MainLoopBegin( bool withDockSpace /*= true*/, bool withDefaultMenu /*= true*/ )
+bool CoreGUI::beginInterfaceLayout(
+    const ViewportMode viewportMode,
+    const MainLoopCallback& mainMenuCallback /*= nullptr*/,
+    const MainLoopCallback& statusBarCallback /*= nullptr*/ )
 {
-    // crap hack that i'll fix later, but resetting/loading new layouts has to happen before layout is underway
+    // crap hack that I'll fix later (i wont), but resetting/loading new layouts has to happen before layout is underway
     static bool doResetBeforeTick = false;
     if ( doResetBeforeTick )
     {
@@ -292,26 +300,28 @@ bool CoreGUI::MainLoopBegin( bool withDockSpace /*= true*/, bool withDefaultMenu
         doResetBeforeTick = false;
     }
 
+    // tick the presentation layer, begin a new imgui Frame
     if ( m_mdFrontEnd->appTick() )
         return false;
 
-    m_perfData.m_startTime = std::chrono::high_resolution_clock::now();
+    m_perfData.m_moment.restart();
 
-    if ( withDockSpace )
+    // inject dock space if we're expecting to lay the imgui out with docking
+    if ( viewportMode == ViewportMode::DockingViewport )
         ImGui::DockSpaceOverViewport( ImGui::GetMainViewport() );
 
     static bool demoWindowVisible = false;
-    if ( withDefaultMenu )
+    if ( mainMenuCallback != nullptr )
     {
         if ( ImGui::BeginMainMenuBar() )
         {
             if ( ImGui::BeginMenu( "OUROVEON" ) )
             {
-                ImGui::MenuItem( GetAppNameWithVersion() );
-                ImGui::MenuItem( "ishani.org 2022" );
+                ImGui::MenuItem( GetAppNameWithVersion(), nullptr, nullptr, false );
+                ImGui::MenuItem( "ishani.org 2022", nullptr, nullptr, false );
 
                 ImGui::Separator();
-                if ( ImGui::MenuItem( "Toggle Borderless" ) )
+                if ( ImGui::MenuItem( "Toggle Border" ) )
                     m_mdFrontEnd->toggleBorderless();
 
                 ImGui::Separator();
@@ -330,7 +340,7 @@ bool CoreGUI::MainLoopBegin( bool withDockSpace /*= true*/, bool withDefaultMenu
                 ImGui::EndMenu();
             }
 
-            MainMenuCustom();
+            mainMenuCallback();
 
 #ifdef _DEBUG
             if ( ImGui::BeginMenu( "DEBUG" ) )
@@ -346,6 +356,28 @@ bool CoreGUI::MainLoopBegin( bool withDockSpace /*= true*/, bool withDefaultMenu
         }
     }
 
+    if ( statusBarCallback != nullptr )
+    {
+        if ( ImGui::BeginStatusBar() )
+        {
+            const double audioEngineLoad = m_mdAudio->getAudioEngineCPULoadPercent();
+            m_audoLoadAverage.update( audioEngineLoad );
+
+            ImGui::TextUnformatted( GetAppName() );
+            ImGui::Separator();
+
+            statusBarCallback();
+
+            // right-align
+            ImGui::Dummy( ImVec2( ImGui::GetContentRegionAvail().x - 90.0f, 0.0f ) );
+            ImGui::Separator();
+            ImGui::Text( "LOAD %03.0f%%", m_audoLoadAverage.m_average );
+
+
+            ImGui::EndStatusBar();
+        }
+    }
+
 #ifdef _DEBUG
     if ( demoWindowVisible )
         ImGui::ShowDemoWindow( &demoWindowVisible );
@@ -357,34 +389,35 @@ bool CoreGUI::MainLoopBegin( bool withDockSpace /*= true*/, bool withDefaultMenu
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void CoreGUI::MainLoopEnd( const RenderHookCallback& preImguiRenderCallback, const RenderHookCallback& postImguiRenderCallback )
+void CoreGUI::submitInterfaceLayout()
 {
     ImGui::PopFont();
 
     // keep track of perf for the main loop
     {
-        auto uiElapsed = std::chrono::high_resolution_clock::now() - m_perfData.m_startTime;
+        auto uiElapsed = m_perfData.m_moment.deltaMs();
         m_perfData.m_uiLastMicrosecondsPreRender = (double)std::chrono::duration_cast<std::chrono::microseconds>(uiElapsed).count() * 0.001;
     }
 
     m_mdFrontEnd->appRenderBegin();
 
-    if ( preImguiRenderCallback )
-        preImguiRenderCallback();
+//     if ( preImguiRenderCallback )
+//         preImguiRenderCallback();
 
     m_mdFrontEnd->appRenderImguiDispatch();
 
     // perf post imgui render dispatch
     {
-        auto uiElapsed = std::chrono::high_resolution_clock::now() - m_perfData.m_startTime;
+        auto uiElapsed = m_perfData.m_moment.deltaMs();
         m_perfData.m_uiLastMicrosecondsPostRender = (double)std::chrono::duration_cast<std::chrono::microseconds>(uiElapsed).count() * 0.001;
     }
 
-    if ( postImguiRenderCallback )
-        postImguiRenderCallback();
+//     if ( postImguiRenderCallback )
+//         postImguiRenderCallback();
 
     m_mdFrontEnd->appRenderFinalise();
 }
+
 
 // ---------------------------------------------------------------------------------------------------------------------
 void CoreGUI::ImGuiPerformanceTracker()

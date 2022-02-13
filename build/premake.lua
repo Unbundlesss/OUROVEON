@@ -1064,6 +1064,29 @@ function SetupOuroveonLayer( isFinalRing, layerName )
         targetdir   ( "$(SolutionDir)_" .. layerName .. "/build_%{cfg.shortname}" )
     end
 
+    -- bundle Superluminal performance API into win builds
+    filter "system:Windows"
+        defines 
+        {
+            "PERF_SUPERLUMINAL"
+        }
+        libdirs
+        {
+            SrcRoot() .. "r0.external/superluminal/lib/x64"
+        }
+
+        filter "configurations:Debug"
+        links ( "PerformanceAPI_MDd.lib" )
+        filter "configurations:Release or Release-AVX2"
+        links ( "PerformanceAPI_MD.lib" )
+        filter {}
+
+        includedirs
+        {
+            SrcRoot() .. "r0.external/superluminal/include",
+        }
+    filter {}
+
     defines 
     {
         "IMGUI_IMPL_OPENGL_LOADER_GLAD",

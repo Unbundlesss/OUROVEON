@@ -9,7 +9,7 @@
 
 #include "pch.h"
 
-#include "base/perf.h"
+#include "spacetime/moment.h"
 #include "math/rng.h"
 #include "dsp/fft.h"
 #include "app/module.frontend.h"
@@ -55,7 +55,7 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
 {
     m_state = State::WorkEnqueued;
 
-    perf::TimingPoint stemTiming( "stem finalize" );
+    spacetime::ScopedTimer stemTiming( "stem finalize" );
 
     // prepare download buffer
     RawAudioMemory audioMemory( m_data.fileLengthBytes );

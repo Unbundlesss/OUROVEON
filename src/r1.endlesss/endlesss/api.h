@@ -579,8 +579,9 @@ struct StemDetails : public ResultRowHeader<ResultDocsHeader<ResultStemDocument,
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-// return of app_client_config/bands:joinable
-struct PublicJams
+// return of app_client_config/bands:joinable - the current batch of public "Join In" front-page jams listed on the app
+//
+struct CurrentJoinInJams
 {
     std::vector< std::string >  band_ids;
 
@@ -610,8 +611,9 @@ struct ResultJamMembership
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-// return of getting user membership
-struct PrivateJams : public ResultRowHeader<ResultJamMembership>
+// return of getting jams that the user has subscribed to / are private to them
+//
+struct SubscribedJams : public ResultRowHeader<ResultJamMembership>
 {
     bool fetch( const NetConfiguration& ncfg, const std::string& userName );
 };

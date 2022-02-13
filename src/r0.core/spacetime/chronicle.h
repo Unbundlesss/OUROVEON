@@ -5,13 +5,13 @@
 //  ishani.org 2022              e.t.c.                  MIT License
 //
 //  spacetime is a namespace full of datetime/chrono/etc related stuff
-//  named as such to be clear separate and distinct, even if a little silly
+//  named as such to be clear separate and distinct, even if a little silly. 
+//
+//  'chronicle' relates to date/time stuff
+//  everything here makes substantial use of chrono as well as Howard Hinnant's [date] library and TZ extension
 
 #pragma once
 
-// everything here makes substantial use of chrono as well as Howard Hinnant's [date] library and TZ extension
-
-namespace base {
 namespace spacetime {
 
 extern const char* defaultDisplayTimeFormatTZ;
@@ -44,8 +44,8 @@ Delta calculateDelta( InSeconds t1, InSeconds t0 );
 
 inline Delta calculateDeltaFromNow( InSeconds t0 )
 {
-    return base::spacetime::calculateDelta(
-        base::spacetime::InSeconds{ std::chrono::seconds{ std::time( nullptr ) } },
+    return spacetime::calculateDelta(
+        spacetime::InSeconds{ std::chrono::seconds{ std::time( nullptr ) } },
         t0 );
 }
 
@@ -79,4 +79,3 @@ bool datestampUnixExpiryFromNow( const uint64_t unix, uint32_t& outDays, uint32_
 std::string createPrefixTimestampForFile();
 
 } // namespace spacetime
-} // namespace base

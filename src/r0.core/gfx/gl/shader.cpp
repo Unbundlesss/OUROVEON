@@ -9,7 +9,7 @@
 
 #include "pch.h"
 
-#include "gl/shader.h"
+#include "gfx/gl/shader.h"
 
 void logGLErrorLog( GLuint glID )
 {
@@ -19,7 +19,7 @@ void logGLErrorLog( GLuint glID )
     {
         GLchar* log = (GLchar*)calloc( logLength + 1, 1 );
         glGetShaderInfoLog( glID, logLength, &logLength, log );
-        blog::error::gl( "Compilation log : {}", log );
+        blog::error::gfx( "Compilation log : {}", log );
         free( log );
     }
 }
@@ -35,7 +35,7 @@ GLuint compileShader(const char* context, const char* source, GLuint shaderType)
     glGetShaderiv(result, GL_COMPILE_STATUS, &shaderCompiled);
     if (shaderCompiled != GL_TRUE)
     {
-        blog::error::gl( "Shader compilation error [{}] ({})", context, result );
+        blog::error::gfx( "Shader compilation error [{}] ({})", context, result );
 
         logGLErrorLog( result );
         glDeleteShader(result);
@@ -43,7 +43,7 @@ GLuint compileShader(const char* context, const char* source, GLuint shaderType)
     }
     else
     {
-        blog::gl( "Shader compiled [{}]", context );
+        blog::gfx( "Shader compiled [{}]", context );
     }
     return result;
 }

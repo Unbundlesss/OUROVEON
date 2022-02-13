@@ -822,6 +822,9 @@ inline int Executor::this_worker_id() const {
   return i == _wids.end() ? -1 : static_cast<int>(_workers[i->second]._id);
 }
 
+// #HDD let client code have a taste (so we can tag and name it)
+extern void _taskflow_worker_thread_init( size_t tid );
+
 // Procedure: _spawn
 inline void Executor::_spawn(size_t N) {
 
@@ -852,6 +855,8 @@ inline void Executor::_spawn(size_t N) {
       //this_worker().worker = &w;
 
       Node* t = nullptr;
+
+      _taskflow_worker_thread_init(n);
 
       // must use 1 as condition instead of !done
       while(1) {

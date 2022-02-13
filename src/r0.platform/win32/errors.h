@@ -9,6 +9,8 @@
 
 #pragma once
 
+#if OURO_PLATFORM_WIN
+
 namespace win32 {
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -22,3 +24,5 @@ std::string FormatErrorCode( const LONG errorCode );
 const char* GetStringFromWM( uint32_t wmcode );
 
 } // namespace win32
+
+#endif // OURO_PLATFORM_WIN

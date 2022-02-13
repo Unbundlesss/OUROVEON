@@ -10,7 +10,7 @@
 #include "pch.h"
 
 #include "base/utils.h"
-#include "base/spacetime.h"
+#include "spacetime/chronicle.h"
 
 #include "endlesss/api.h"
 
@@ -49,7 +49,7 @@ std::string NetConfiguration::generateRandomLoadBalancerCookie() const
 std::string NetConfiguration::getVerboseCaptureFilename( const char* context ) const
 {
     const auto newIndex     = m_writeIndex++;
-    const auto timestamp    = base::spacetime::createPrefixTimestampForFile();
+    const auto timestamp    = spacetime::createPrefixTimestampForFile();
 
     const auto resultPath   = m_tempDir / fmt::format( "{}.{}.{}.json", timestamp, newIndex, context );
 
@@ -233,22 +233,22 @@ bool StemDetails::fetchBatch( const NetConfiguration& ncfg, const endlesss::type
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-bool PublicJams::fetch( const NetConfiguration& ncfg )
+bool CurrentJoinInJams::fetch( const NetConfiguration& ncfg )
 {
     auto res = createEndlesssHttpClient( ncfg, UserAgent::ClientService )->Get( "/app_client_config/bands:joinable" );
 
-    return deserializeJson< PublicJams >( ncfg, res, *this, __FUNCTION__ );
+    return deserializeJson< CurrentJoinInJams >( ncfg, res, *this, __FUNCTION__ );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 // NB: could change this to data.endlesss.fm/user_appdata${user}/_find
 //
-bool PrivateJams::fetch( const NetConfiguration& ncfg, const std::string& userName )
+bool SubscribedJams::fetch( const NetConfiguration& ncfg, const std::string& userName )
 {
     auto res = createEndlesssHttpClient( ncfg, UserAgent::ClientService )->Get(
         fmt::format( "/user_appdata${}/_design/membership/_view/getMembership", userName ).c_str() );
 
-    return deserializeJson< PrivateJams >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, userName ) );
+    return deserializeJson< SubscribedJams >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, userName ) );
 }
 
 } // namespace remote

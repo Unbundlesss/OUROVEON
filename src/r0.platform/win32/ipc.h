@@ -9,6 +9,8 @@
 
 #pragma once
 
+#if OURO_PLATFORM_WIN
+
 namespace win32 {
 
 namespace details {
@@ -105,3 +107,5 @@ protected:
 
 
 } // namespace win32
+
+#endif // OURO_PLATFORM_WIN

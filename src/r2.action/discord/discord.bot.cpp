@@ -13,7 +13,7 @@
 #include "discord/discord.bot.h"
 #include "discord/config.h"
 
-#include "base/spacetime.h"
+#include "spacetime/chronicle.h"
 
 #include "app/core.h"
 #include "app/module.audio.h"
@@ -285,8 +285,8 @@ struct Bot::State
 
             if ( exchangeData.m_riffTimestamp > 0 )
             {
-                const auto riffTimeDelta = base::spacetime::calculateDeltaFromNow(
-                    base::spacetime::InSeconds( std::chrono::seconds{ exchangeData.m_riffTimestamp } ) ).asPastTenseString( 3 );
+                const auto riffTimeDelta = spacetime::calculateDeltaFromNow(
+                    spacetime::InSeconds( std::chrono::seconds{ exchangeData.m_riffTimestamp } ) ).asPastTenseString( 3 );
 
                 pastRiff = fmt::format( " ( riff recorded {} )", riffTimeDelta );
             }

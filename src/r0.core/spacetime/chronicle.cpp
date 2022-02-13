@@ -9,9 +9,8 @@
 
 #include "pch.h"
 
-#include "base/spacetime.h"
+#include "spacetime/chronicle.h"
 
-namespace base {
 namespace spacetime {
 
 const char* defaultDisplayTimeFormatTZ  = "%Y-%m-%d %I:%M %p %Z";
@@ -84,7 +83,7 @@ std::string Delta::asPastTenseString( const int32_t maxShownElements /* = 6 */ )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-base::spacetime::Delta calculateDelta( InSeconds t1, InSeconds t0 )
+spacetime::Delta calculateDelta( InSeconds t1, InSeconds t0 )
 {
     using namespace date;
     auto dp0 = floor<days>( t0 );
@@ -163,7 +162,7 @@ std::string datestampStringFromUnix( const uint64_t unix )
 std::string datestampStringFromUnix( const InSeconds tss )
 {
     auto zonedTime = date::make_zoned( date::current_zone(), tss );
-    return date::format( base::spacetime::defaultDisplayTimeFormatTZ, zonedTime );
+    return date::format( spacetime::defaultDisplayTimeFormatTZ, zonedTime );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -211,5 +210,5 @@ std::string createPrefixTimestampForFile()
     return date::format( defaultFileTimeFormatTZ, zonedNow );
 }
 
-} // namespace base
 } // namespace spacetime
+

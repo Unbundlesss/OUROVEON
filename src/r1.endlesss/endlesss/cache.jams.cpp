@@ -9,16 +9,16 @@
 
 #include "pch.h"
 
-#include "base/spacetime.h"
+#include "spacetime/chronicle.h"
+#include "spacetime/moment.h"
 
 #include "app/module.frontend.h"
+#include "config/base.h"
 #include "config/frontend.h"
 
 #include "endlesss/api.h"
 #include "endlesss/cache.jams.h"
 
-
-// ---------------------------------------------------------------------------------------------------------------------
 using namespace std::chrono_literals;
 
 
@@ -26,21 +26,30 @@ namespace endlesss {
 namespace cache {
 
 // ---------------------------------------------------------------------------------------------------------------------
-bool Jams::load( const fs::path& cachePath )
+bool Jams::load( const config::IPathProvider& pathProvider )
 {
-    fs::path jamLibraryCacheFile = cachePath;
-    jamLibraryCacheFile.append( cFilename );
+    // load the fixed public jam snapshot, assuming it shipped with the build correctly
+    const auto publicsLoadResult = config::load( pathProvider, m_configEndlesssPublics );
+    if ( publicsLoadResult != config::LoadResult::Success )
+    {
+        // we expect the public jam manifest, although we could survive without it tbh
+        blog::error::cfg( "Unable to load Endlesss public jam manifest [{}]",
+            config::getFullPath< config::endlesss::PublicJamManifest >( pathProvider ).string() );
+    }
+    blog::core( "loaded {} public jams from snapshot manifest", m_configEndlesssPublics.jams.size() );
 
-    blog::cache( "Jam cache at [{}]", jamLibraryCacheFile.string() );
+
+    // dynamic jam cache is shared between apps
+    fs::path jamLibraryCacheFile = pathProvider.getPath( config::IPathProvider::PathFor::SharedConfig );
+    jamLibraryCacheFile.append( cFilename );
 
     if ( fs::exists( jamLibraryCacheFile ) )
     {
+        blog::cache( "loading dynamic jam cache [{}]", jamLibraryCacheFile.string() );
         try
         {
             std::ifstream is( jamLibraryCacheFile );
             cereal::JSONInputArchive archive( is );
-
-            blog::cache( "Loading existing cache ..." );
 
             serialize( archive );
 
@@ -50,9 +59,9 @@ bool Jams::load( const fs::path& cachePath )
                 const auto systemTime     = std::chrono::clock_cast<std::chrono::system_clock>(filetime);
                 const auto timePointSec   = std::chrono::time_point_cast<std::chrono::seconds>(systemTime);
 
-                const auto cacheTimeDelta = base::spacetime::calculateDeltaFromNow( timePointSec ).asPastTenseString(2);
+                const auto cacheTimeDelta = spacetime::calculateDeltaFromNow( timePointSec ).asPastTenseString(2);
 
-                m_cacheFileState = fmt::format( "Jam cache updated {} ( {} items )", cacheTimeDelta, m_jamData.size() );
+                m_cacheFileState = fmt::format( "Jam cache updated {}", cacheTimeDelta );
             }
 
             postProcessNewData();
@@ -64,14 +73,15 @@ bool Jams::load( const fs::path& cachePath )
             blog::error::cache( "cache load failure | {}", cEx.what() );
         }
     }
+
     m_cacheFileState = "No jam cache found";
     return false;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-bool Jams::save( const fs::path& cachePath )
+bool Jams::save( const config::IPathProvider& pathProvider )
 {
-    fs::path jamLibraryCacheFile = cachePath;
+    fs::path jamLibraryCacheFile = pathProvider.getPath( config::IPathProvider::PathFor::SharedConfig );
     jamLibraryCacheFile.append( cFilename );
 
     try
@@ -84,7 +94,7 @@ bool Jams::save( const fs::path& cachePath )
         serialize( archive );
 
         {
-            m_cacheFileState = fmt::format( "Jam cache synchronised ( {} items )", m_jamData.size() );
+            m_cacheFileState = fmt::format( "Jam cache synchronised" );
         }
 
         return true;
@@ -102,30 +112,31 @@ void Jams::asyncCacheRebuild( const endlesss::api::NetConfiguration& ncfg, tf::T
 {
     taskFlow.emplace( [&, asyncCallback]()
     {
-        asyncCallback( AsyncFetchState::Working, "Fetching private jams ..." );
+        asyncCallback( AsyncFetchState::Working, "Fetching subscribed jams ..." );
 
-        api::PrivateJams jamPrivate;
-        if ( !jamPrivate.fetch( ncfg, ncfg.auth().user_id ) )
+        api::SubscribedJams jamSubscribed;
+        if ( !jamSubscribed.fetch( ncfg, ncfg.auth().user_id ) )
         {
-            asyncCallback( AsyncFetchState::Failed, "Failed to get private jam data" );
+            asyncCallback( AsyncFetchState::Failed, "Failed to get subscribed jam data" );
             return;
         }
 
-        asyncCallback( AsyncFetchState::Working, "Fetching public jams ..." );
+        asyncCallback( AsyncFetchState::Working, "Fetching current public jams ..." );
 
-        api::PublicJams jamPublic;
-        if ( !jamPublic.fetch( ncfg ) )
+        api::CurrentJoinInJams jamJoinIn;
+        if ( !jamJoinIn.fetch( ncfg ) )
         {
             asyncCallback( AsyncFetchState::Failed, "Failed to get public jam data" );
             return;
         }
 
-        asyncCallback( AsyncFetchState::Working, "Pulling jam metadata ..." );
+        asyncCallback( AsyncFetchState::Working, "Updating jam metadata ..." );
 
-        m_jamData.clear();
+
+        m_jamDataJoinIn.clear();
 
         int64_t dummyTimestamp = 0;
-        for ( const auto& jdb : jamPublic.band_ids )
+        for ( const auto& jdb : jamJoinIn.band_ids )
         {
             api::JamProfile jamProfile;
             if ( !jamProfile.fetch( ncfg, endlesss::types::JamCouchID{ jdb } ) )
@@ -133,14 +144,16 @@ void Jams::asyncCacheRebuild( const endlesss::api::NetConfiguration& ncfg, tf::T
                 blog::error::cache( "jam profile failed on {}", jdb );
                 continue;
             }
-            m_jamData.emplace_back( jdb,
-                                    jamProfile.displayName,
-                                    "unknown",
-                                    dummyTimestamp++,
-                                    true );
+
+            m_jamDataJoinIn.emplace_back( jdb,
+                                          jamProfile.displayName,
+                                          jamProfile.bio,
+                                          dummyTimestamp++ );
         }
 
-        for ( const auto& jdb : jamPrivate.rows )
+        m_jamDataUserSubscribed.clear();
+
+        for ( const auto& jdb : jamSubscribed.rows )
         {
             api::JamProfile jamProfile;
             if ( !jamProfile.fetch( ncfg, endlesss::types::JamCouchID{ jdb.id }  ) )
@@ -148,14 +161,13 @@ void Jams::asyncCacheRebuild( const endlesss::api::NetConfiguration& ncfg, tf::T
                 blog::error::cache( "jam profile failed on {}", jdb.id );
                 continue;
             }
-            
-            const auto jamTimestamp = base::spacetime::parseISO8601( jdb.key );
 
-            m_jamData.emplace_back( jdb.id,
-                                    jamProfile.displayName,
-                                    jdb.key,
-                                    jamTimestamp,
-                                    false );
+            const auto jamTimestamp = spacetime::parseISO8601( jdb.key );
+
+            m_jamDataUserSubscribed.emplace_back( jdb.id,
+                                                  jamProfile.displayName,
+                                                  jamProfile.bio,
+                                                  jamTimestamp );
         }
 
         postProcessNewData();
@@ -163,6 +175,80 @@ void Jams::asyncCacheRebuild( const endlesss::api::NetConfiguration& ncfg, tf::T
     });
 
     asyncCallback( AsyncFetchState::Working, "Fetching data ..." );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+bool Jams::loadDataForCacheIndex( const CacheIndex& index, Data& result ) const
+{
+    if ( !index.valid() )
+        return false;
+
+    const std::vector< Data >* dataArray = getArrayPtrForType( index.type() );
+    result = dataArray->at( index.index() );
+    return true;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void Jams::postProcessNewData()
+{
+    spacetime::ScopedTimer perfTimer( __FUNCTION__ );
+
+    m_jamDataPublicArchive.clear();
+
+    for ( const auto& pjam : m_configEndlesssPublics.jams )
+    {
+        auto& pjd = m_jamDataPublicArchive.emplace_back( pjam.band_id,
+                                                         pjam.jam_name,
+                                                         fmt::format("started by [{}]\nest. {} days of activity", pjam.earliest_user, pjam.estimated_days_of_activity ),
+                                                         pjam.earliest_unixtime );
+        pjd.m_riffCount = pjam.total_riffs;
+    }
+
+    m_jamCouchIDToJamIndexMap.clear();
+
+    for ( const auto jamType : cEachJamType )
+    {
+        const std::vector< Data >* dataArray = getArrayPtrForType( jamType );
+        assert( dataArray );
+
+        const size_t jamTypeIndex = (size_t)jamType;
+
+        for ( size_t idx = 0; idx < dataArray->size(); idx++ )
+        {
+            m_idxSortedByTime[jamTypeIndex].push_back( idx );
+            m_idxSortedByName[jamTypeIndex].push_back( idx );
+
+            std::sort( m_idxSortedByTime[jamTypeIndex].begin(), m_idxSortedByTime[jamTypeIndex].end(),
+                [dataArray]( const size_t lhs, const size_t rhs ) -> bool
+                {
+                    return dataArray->at(lhs).m_timestampOrdering < dataArray->at(rhs).m_timestampOrdering;
+                });
+
+            std::sort( m_idxSortedByName[jamTypeIndex].begin(), m_idxSortedByName[jamTypeIndex].end(),
+                [dataArray]( const size_t lhs, const size_t rhs ) -> bool
+                {
+                    return dataArray->at( lhs ).m_displayName < dataArray->at( rhs ).m_displayName;
+                });
+
+            m_jamCouchIDToJamIndexMap.try_emplace( dataArray->at(idx).m_jamCID, CacheIndex( jamType, idx ) );
+        }
+    }
+
+    {
+        for ( Data& data : m_jamDataPublicArchive )
+        {
+            if ( data.m_timestampOrdering > 0 )
+                data.m_timestampOrderingDescription = spacetime::datestampStringFromUnix( data.m_timestampOrdering );
+            else
+                data.m_timestampOrderingDescription = " - ";
+        }
+
+        for ( Data& data : m_jamDataJoinIn )
+            data.m_timestampOrderingDescription = "";
+
+        for ( Data& data : m_jamDataUserSubscribed )
+            data.m_timestampOrderingDescription = spacetime::datestampStringFromUnix( data.m_timestampOrdering );
+    }
 }
 
 } // namespace cache

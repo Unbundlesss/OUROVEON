@@ -22,8 +22,8 @@ public:
     Buffer2D( const Buffer2D& rhs ) = delete;
 
     Buffer2D(
-        const int32_t width,
-        const int32_t height )
+        const uint32_t width,
+        const uint32_t height )
         : m_width(width)
         , m_height(height)
     {
@@ -38,18 +38,17 @@ public:
         other.m_buffer = nullptr;
     }
 
-
     ~Buffer2D()
     {
         mem::free16( m_buffer );
     }
 
-    inline int32_t getWidth() const
+    inline uint32_t getWidth() const
     {
         return m_width;
     }
 
-    inline int32_t getHeight() const
+    inline uint32_t getHeight() const
     {
         return m_height;
     }
@@ -65,19 +64,19 @@ public:
 
 
     // direct (x,y) accessor does no error checking
-    inline const _Type& operator () ( const int32_t &x, const int32_t &y ) const
+    inline const _Type& operator () ( const uint32_t &x, const uint32_t &y ) const
     {
-        assert( x >= 0 && x < m_width );
-        assert( y >= 0 && y < m_height );
+        assert( x < m_width );
+        assert( y < m_height );
 
         return m_buffer[( y * m_width ) + x];
     }
 
     // direct (x,y) accessor does no error checking
-    inline _Type& operator () ( const int32_t &x, const int32_t &y )
+    inline _Type& operator () ( const uint32_t &x, const uint32_t &y )
     {
-        assert( x >= 0 && x < m_width );
-        assert( y >= 0 && y < m_height );
+        assert( x < m_width );
+        assert( y < m_height );
 
         return m_buffer[( y * m_width ) + x];
     }
@@ -85,7 +84,7 @@ public:
     // access the data buffer linearly with []
     inline const _Type& operator [] ( const size_t offset ) const
     {
-        assert( offset < ( m_width * m_height) );
+        assert( offset < ( m_width * m_height ) );
 
         return m_buffer[offset];
     }
@@ -93,7 +92,7 @@ public:
     // access the data buffer linearly with []
     inline _Type& operator [] ( const size_t offset )
     {
-        assert( offset < ( m_width * m_height) );
+        assert( offset < ( m_width * m_height ) );
 
         return m_buffer[offset];
     }
@@ -101,13 +100,11 @@ public:
 
     // set a entry, safely ignoring out-of-bounds XY coordinates
     inline void poke(
-        const int32_t x,
-        const int32_t y,
+        const uint32_t x,
+        const uint32_t y,
         const _Type& colour )
     {
-        if ( x < 0 ||
-             x >= m_width ||
-             y < 0 ||
+        if ( x >= m_width ||
              y >= m_height )
         {
             return;
@@ -118,12 +115,10 @@ public:
 
     // get a pointer back to a entry, or null if XY is out-of bounds
     inline _Type* peek(
-        const int32_t x,
-        const int32_t y )
+        const uint32_t x,
+        const uint32_t y )
     {
-        if ( x < 0 ||
-             x >= m_width ||
-             y < 0 ||
+        if ( x >= m_width ||
              y >= m_height )
         {
             return nullptr;
@@ -132,7 +127,8 @@ public:
         return &m_buffer[( y * m_width ) + x];
     }
 
-    inline _Type* getBuffer() { return m_buffer; }
+    inline       _Type* getBuffer()       { return m_buffer; }
+    inline const _Type* getBuffer() const { return m_buffer; }
 
     inline void findMinMax( _Type& minValue, _Type& maxValue )
     {
@@ -149,8 +145,8 @@ private:
 
     _Type      *m_buffer;
 
-    int32_t     m_width;
-    int32_t     m_height;
+    uint32_t     m_width;
+    uint32_t     m_height;
 };
 
 

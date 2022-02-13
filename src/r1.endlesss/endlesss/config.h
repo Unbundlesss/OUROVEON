@@ -14,6 +14,7 @@
 namespace config {
 namespace endlesss {
 
+// ---------------------------------------------------------------------------------------------------------------------
 // extraction of the default web login response, to gather login tokens
 struct Auth : public Base
 {
@@ -39,6 +40,7 @@ struct Auth : public Base
     }
 };
 
+// ---------------------------------------------------------------------------------------------------------------------
 // config required for all the remote calls to pull data from endlesss backend
 struct API : public Base
 {
@@ -89,6 +91,53 @@ struct API : public Base
         );
     }
 };
+
+// ---------------------------------------------------------------------------------------------------------------------
+// a captured bank of public jam metadata we siphon via a tedious automated process
+struct PublicJamManifest : public Base
+{
+    // data routing
+    static constexpr auto StoragePath       = IPathProvider::PathFor::SharedData;       // public snapshot ships with build
+    static constexpr auto StorageFilename   = "endlesss.publics.json";
+
+    struct Jam
+    {
+        std::string             band_id;
+        std::string             invite_id;
+        std::string             jam_name;
+        std::string             earliest_user;
+        std::string             latest_user;
+        uint32_t                earliest_unixtime;
+        uint32_t                latest_unixtime;
+        uint32_t                estimated_days_of_activity;
+        uint32_t                total_riffs;
+
+        template<class Archive>
+        void serialize( Archive& archive )
+        {
+            archive( CEREAL_NVP( band_id )
+                   , CEREAL_NVP( invite_id )
+                   , CEREAL_NVP( jam_name )
+                   , CEREAL_NVP( earliest_user )
+                   , CEREAL_NVP( latest_user )
+                   , CEREAL_NVP( earliest_unixtime )
+                   , CEREAL_NVP( latest_unixtime )
+                   , CEREAL_NVP( estimated_days_of_activity )
+                   , CEREAL_NVP( total_riffs )
+            );
+        }
+    };
+
+    std::vector< Jam >  jams;
+
+    template<class Archive>
+    void serialize( Archive& archive )
+    {
+        archive( CEREAL_NVP( jams )
+        );
+    }
+};
+
 
 } // namespace endlesss
 } // namespace config

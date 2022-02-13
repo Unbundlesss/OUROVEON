@@ -9,6 +9,8 @@
 
 #include "pch.h"
 
+#if OURO_PLATFORM_WIN
+
 #include "win32/ipc.h"
 
 #include <sddl.h>
@@ -103,3 +105,5 @@ void details::IPC::unlock()
 }
 
 } // namespace win32
+
+#endif // OURO_PLATFORM_WIN

@@ -13,6 +13,8 @@
 #include "app/module.frontend.h"
 #include "app/module.frontend.fonts.h"
 
+#include "gfx/gl/enumstring.h"
+
 #include "config/frontend.h"
 
 // required for file picker
@@ -50,7 +52,7 @@ void ApplyOuroveonImGuiStyle()
     colors[ImGuiCol_TitleBg]               = ImVec4( 0.11f, 0.22f, 0.46f, 1.00f );
     colors[ImGuiCol_TitleBgActive]         = ImVec4( 0.13f, 0.23f, 0.45f, 1.00f );
     colors[ImGuiCol_TitleBgCollapsed]      = ImVec4( 0.12f, 0.22f, 0.43f, 1.00f );
-    colors[ImGuiCol_MenuBarBg]             = ImVec4( 0.10f, 0.14f, 0.21f, 1.00f );
+    colors[ImGuiCol_MenuBarBg]             = ImVec4( 0.05f, 0.13f, 0.34f, 1.00f );
     colors[ImGuiCol_ScrollbarBg]           = ImVec4( 0.11f, 0.13f, 0.18f, 0.71f );
     colors[ImGuiCol_ScrollbarGrab]         = ImVec4( 0.40f, 0.46f, 0.53f, 0.39f );
     colors[ImGuiCol_ScrollbarGrabHovered]  = ImVec4( 0.40f, 0.46f, 0.53f, 0.63f );
@@ -122,6 +124,8 @@ Frontend::~Frontend()
         destroy();
 }
 
+// NB https://stackoverflow.com/questions/67345946/problem-with-imgui-when-using-glfw-opengl
+
 // ---------------------------------------------------------------------------------------------------------------------
 bool Frontend::create( const app::Core& appCore )
 {
@@ -145,11 +149,11 @@ bool Frontend::create( const app::Core& appCore )
     }
 
     // .. and then GL
-    const char* glsl_version = "#version 400";
+    const char* glsl_version = "#version 150";
     SDL_GL_SetAttribute( SDL_GL_CONTEXT_FLAGS, 0 );
     SDL_GL_SetAttribute( SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE );
-    SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 4 );
-    SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 0 );
+    SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 3 );
+    SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 2 );
 
     SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, 1 );
     SDL_GL_SetAttribute( SDL_GL_DEPTH_SIZE, 24 );
@@ -188,6 +192,20 @@ bool Frontend::create( const app::Core& appCore )
 
     glGetIntegerv( GL_MAX_TEXTURE_SIZE, (GLint*)&m_largestTextureDimension );
     blog::core( "GL_MAX_TEXTURE_SIZE = {}", m_largestTextureDimension );
+
+    {
+        GLint pformat, format, type;
+
+        glGetInternalformativ( GL_TEXTURE_2D, GL_RGBA8, GL_INTERNALFORMAT_PREFERRED, 1, &pformat );
+        glGetInternalformativ( GL_TEXTURE_2D, GL_RGBA8, GL_TEXTURE_IMAGE_FORMAT, 1, &format );
+        glGetInternalformativ( GL_TEXTURE_2D, GL_RGBA8, GL_TEXTURE_IMAGE_TYPE, 1, &type );
+
+        blog::core( "GL_INTERNALFORMAT_PREFERRED = ({:x}) {}", pformat, gl::enumToString(pformat) );
+        blog::core( "    GL_TEXTURE_IMAGE_FORMAT = ({:x}) {}", format, gl::enumToString( format ) );
+        blog::core( "      GL_TEXTURE_IMAGE_TYPE = ({:x}) {}", type, gl::enumToString( type ) );
+    }
+
+
 
     {
         blog::core( "initialising ImGui {}", IMGUI_VERSION );

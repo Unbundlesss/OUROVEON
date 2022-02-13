@@ -105,7 +105,7 @@ private:
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-finline uint32_t nextPow2( uint32_t v )
+constexpr uint32_t nextPow2( uint32_t v )
 {
     v--;
     v |= v >> 1;
@@ -359,5 +359,27 @@ inline std::string humaniseByteSize( const char* prefix, const uint64_t bytes )
         return fmt::format( units[exponent], prefix, quotient );
     }
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+template <double _windowSize>
+struct RollingAverage
+{
+    static constexpr double cNewValueWeight = 1.0 / _windowSize;
+    static constexpr double cOldValueWeight = 1.0 - cNewValueWeight;
+
+    double  m_average       = 0.0;
+    bool    m_initialSample = true;
+
+    inline void update( double v )
+    {
+        if ( m_initialSample )
+        {
+            m_average = v;
+            m_initialSample = false;
+        }
+        else
+            m_average = ( v * cNewValueWeight) + ( m_average * cOldValueWeight);
+    }
+};
 
 } // namespace base

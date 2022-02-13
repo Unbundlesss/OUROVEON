@@ -10,7 +10,7 @@
 #pragma once
 
 #include "base/id.hash.h"
-#include "base/spacetime.h"
+#include "spacetime/chronicle.h"
 
 #include "core.types.h"
 #include "ssp/isamplestreamprocessor.h"
@@ -107,7 +107,7 @@ public:
     std::vector<int32_t>                    m_stemRepetitions;
     std::vector<uint32_t>                   m_stemLengthInSamples;
 
-    base::spacetime::InSeconds              m_stTimestamp;
+    spacetime::InSeconds                    m_stTimestamp;
 
     // set of handy preformatted strings for use in UI rendering
     std::string                             m_uiTimestamp;              // prettified riff submission timestamp

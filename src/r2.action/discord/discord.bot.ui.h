@@ -9,34 +9,13 @@
 
 #pragma once
 
+#include "base/utils.h"
 #include "app/imgui.ext.h"
 
 namespace app { struct ICoreServices; namespace module { struct Frontend; } }
 namespace config { namespace discord { struct Connection; } }
 
 namespace discord {
-
-
-template <double _windowSize>
-struct RollingAverage
-{
-    static constexpr double cNewValueWeight = 1.0 / _windowSize;
-    static constexpr double cOldValueWeight = 1.0 - cNewValueWeight;
-
-    double  m_average       = 0.0;
-    bool    m_initialSample = true;
-
-    inline void update( double v )
-    {
-        if ( m_initialSample )
-        {
-            m_average = v;
-            m_initialSample = false;
-        }
-        else
-            m_average = ( v * cNewValueWeight) + ( m_average * cOldValueWeight);
-    }
-};
 
 struct Bot;
 
@@ -51,12 +30,12 @@ struct BotWithUI
 
 private:
 
-    std::unique_ptr< discord::Bot >     m_discordBot;
+    std::unique_ptr< discord::Bot >             m_discordBot;
 
-    app::ICoreServices&                 m_services;
-    const config::discord::Connection&  m_config;
+    app::ICoreServices&                         m_services;
+    const config::discord::Connection&          m_config;
 
-    RollingAverage< 20.0 >                      m_avg;
+    base::RollingAverage< 20.0 >                m_avg;
     ImGui::RingBufferedGraph< int32_t, 100 >    m_bandwidth;
 };
 

@@ -9,7 +9,7 @@
 
 #pragma once
 
-#include "base/perf.h"
+#include "spacetime/moment.h"
 
 #include "config/data.h"
 #include "config/frontend.h"
@@ -119,8 +119,9 @@ protected:
     fs::path                                m_appConfigPath;                // R/W path for config for this specific app
 
     config::DataOptional                    m_configData = std::nullopt;
-    config::endlesss::API                   m_configEndlessAPI;             // loaded from app install, will be used with
+    config::endlesss::API                   m_configEndlesssAPI;            // loaded from app install, will be used with
                                                                             // an auth block to initialise NetConfiguration
+
 
     // mash of Endlesss access configuration and authentication credentials, required for all our API calls
     // <optional> as this may require a login process during boot sequence
@@ -132,9 +133,6 @@ protected:
 
     // the cached jam metadata - public names et al
     endlesss::cache::Jams                   m_jamLibrary;
-
-    // the global live-instance stem cache, used to populate riffs when preparing for playback
-    endlesss::cache::Stems                  m_stemCache;
 
     // standard state exchange data, filled when possible with the current playback state
     endlesss::Exchange                      m_endlesssExchange;
@@ -181,19 +179,28 @@ struct CoreGUI : public Core
 {
     struct PerfData
     {
-        perf::TimingPoint::HighResTimePoint   m_startTime;
+        spacetime::Moment   m_moment;
 
-        double          m_uiLastMicrosecondsPreRender;
-        double          m_uiLastMicrosecondsPostRender;
+        double              m_uiLastMicrosecondsPreRender;
+        double              m_uiLastMicrosecondsPostRender;
     };
 
-    using RenderHookCallback = std::function<void()>;
+    enum class ViewportMode
+    {
+        BasicViewport,
+        DockingViewport
+    };
 
+    using MainLoopCallback = std::function<void()>;
 
     // ImGui panel displaying gathered performance metrics in a table
     void ImGuiPerformanceTracker();
 
 protected:
+
+    // to avoid flickering values on the status bar; distracting and not particularly useful
+    using AudioLoadAverage = base::RollingAverage< 60.0 >;
+
 
     // app can declare its own frontend configuration blob
     virtual config::Frontend createDefaultFrontendConfig() const;
@@ -210,17 +217,20 @@ protected:
     config::Frontend        m_configFrontend;
 
     PerfData                m_perfData;
+    AudioLoadAverage        m_audoLoadAverage;
+
     app::FrontendModule     m_mdFrontEnd;       // UI canvas management
 
 
     // #HDD TODO refactor 
     // call inside app main loop to perform pre/post core functions (eg. checking for exit, submitting rendering)
-    bool MainLoopBegin( bool withDockSpace = true, bool withDefaultMenu = true );
-    virtual void MainMenuCustom() {}
-    void MainLoopEnd( 
-        const RenderHookCallback& preImguiRenderCallback,
-        const RenderHookCallback& postImguiRenderCallback );
-    
+    bool beginInterfaceLayout(
+        const ViewportMode viewportMode,                        // choose docking mode or not
+        const MainLoopCallback& mainMenuCallback = nullptr,     // add default main menu and execute this CB to allow 
+                                                                // injection of custom menu items after defaults
+        const MainLoopCallback& statusBarCallback = nullptr );  // same, but for the status bar area
+
+    void submitInterfaceLayout();
 };
 
 } // namespace app
