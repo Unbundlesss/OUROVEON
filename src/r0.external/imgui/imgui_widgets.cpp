@@ -6683,6 +6683,75 @@ void ImGui::EndMainMenuBar()
     End();
 }
 
+
+bool ImGui::BeginStatusBar()
+{
+    ImGuiContext& g = *GImGui;
+    ImGuiViewportP* viewport = g.Viewports[0];
+    ImGuiWindow* status_bar_window = FindWindowByName("##StatusBar");
+
+    const ImVec2 menu_bar_pos  = viewport->Pos + ImVec2( 0, viewport->Size.y - 22.0f );
+    const ImVec2 menu_bar_size = ImVec2( viewport->Size.x - viewport->CurrWorkOffsetMin.x + viewport->CurrWorkOffsetMax.x, 22.0f );
+
+    // Get our rectangle at the top of the work area
+    if (status_bar_window == NULL || status_bar_window->BeginCount == 0)
+    {
+        // Set window position
+        // We don't attempt to calculate our height ahead, as it depends on the per-viewport font size. However menu-bar will affect the minimum window size so we'll get the right height.
+        SetNextWindowPos(menu_bar_pos);
+        SetNextWindowSize(menu_bar_size);
+    }
+
+    // Create window
+    SetNextWindowViewport(viewport->ID); // Enforce viewport so we don't create our own viewport when ImGuiConfigFlags_ViewportsNoMerge is set.
+    PushStyleColor( ImGuiCol_WindowBg, g.Style.Colors[ImGuiCol_MenuBarBg] );
+    PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(0, 0));    // Lift normal size constraint, however the presence of a menu-bar will give us the minimum height we want.
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings;
+    bool is_open = Begin("##StatusBar", NULL, window_flags);
+    PopStyleVar(2);
+    PopStyleColor();
+
+    // Report our size into work area (for next frame) using actual window size
+    status_bar_window = GetCurrentWindow();
+    if ( status_bar_window->BeginCount == 1 )
+        viewport->CurrWorkOffsetMax.y -= status_bar_window->Size.y;
+
+    if (!is_open)
+    {
+        End();
+        return false;
+    }
+
+    {
+        ImGuiWindow* window = GetCurrentWindow();
+        BeginGroup();
+        window->DC.CursorPos = window->DC.CursorMaxPos = ImVec2( menu_bar_pos.x + window->DC.MenuBarOffset.x, menu_bar_pos.y + window->DC.MenuBarOffset.y );
+        window->DC.LayoutType = ImGuiLayoutType_Horizontal;
+        AlignTextToFramePadding();
+
+    }
+
+    return true; //-V1020
+}
+
+void ImGui::EndStatusBar()
+{
+    {
+        ImGuiWindow* window = GetCurrentWindow();
+        window->DC.LayoutType = ImGuiLayoutType_Vertical;
+        EndGroup();
+    }
+
+    // When the user has left the menu layer (typically: closed menus through activation of an item), we restore focus to the previous window
+    // FIXME: With this strategy we won't be able to restore a NULL focus.
+    ImGuiContext& g = *GImGui;
+    if (g.CurrentWindow == g.NavWindow && g.NavLayer == ImGuiNavLayer_Main && !g.NavAnyRequest)
+        FocusTopMostWindowUnderOne(g.NavWindow, NULL);
+
+    End();
+}
+
 bool ImGui::BeginMenu(const char* label, bool enabled)
 {
     ImGuiWindow* window = GetCurrentWindow();

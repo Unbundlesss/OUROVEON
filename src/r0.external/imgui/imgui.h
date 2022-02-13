@@ -633,6 +633,11 @@ namespace ImGui
     IMGUI_API void          SetTooltip(const char* fmt, ...) IM_FMTARGS(1);                     // set a text-only tooltip, typically use with ImGui::IsItemHovered(). override any previous call to SetTooltip().
     IMGUI_API void          SetTooltipV(const char* fmt, va_list args) IM_FMTLIST(1);
 
+    // #HDD
+    // Underbar
+    IMGUI_API bool          BeginStatusBar();                                                 // create and append to a full screen menu-bar.
+    IMGUI_API void          EndStatusBar();                                                   // only call EndMainMenuBar() if BeginMainMenuBar() returns true!
+
     // Popups, Modals
     //  - They block normal mouse hovering detection (and therefore most mouse interactions) behind them.
     //  - If not modal: they can be closed by clicking anywhere outside them, or by pressing ESCAPE.
@@ -837,6 +842,9 @@ namespace ImGui
     // Color Utilities
     IMGUI_API ImVec4        ColorConvertU32ToFloat4(ImU32 in);
     IMGUI_API ImU32         ColorConvertFloat4ToU32(const ImVec4& in);
+    // #HDD
+    IMGUI_API ImU32         ColorConvertFloat4ToU32_BGRA_Flip( const ImVec4& in );
+    
     IMGUI_API void          ColorConvertRGBtoHSV(float r, float g, float b, float& out_h, float& out_s, float& out_v);
     IMGUI_API void          ColorConvertHSVtoRGB(float h, float s, float v, float& out_r, float& out_g, float& out_b);
 
