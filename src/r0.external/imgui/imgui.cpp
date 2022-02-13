@@ -1797,6 +1797,17 @@ ImU32 ImGui::ColorConvertFloat4ToU32(const ImVec4& in)
     return out;
 }
 
+// #HDD
+ImU32 ImGui::ColorConvertFloat4ToU32_BGRA_Flip(const ImVec4& in)
+{
+    ImU32 out;
+    out  = ((ImU32)IM_F32_TO_INT8_SAT(in.x)) << IM_COL32_B_SHIFT;
+    out |= ((ImU32)IM_F32_TO_INT8_SAT(in.y)) << IM_COL32_G_SHIFT;
+    out |= ((ImU32)IM_F32_TO_INT8_SAT(in.z)) << IM_COL32_R_SHIFT;
+    out |= ((ImU32)IM_F32_TO_INT8_SAT(in.w)) << IM_COL32_A_SHIFT;
+    return out;
+}
+
 // Convert rgb floats ([0-1],[0-1],[0-1]) to hsv floats ([0-1],[0-1],[0-1]), from Foley & van Dam p592
 // Optimized http://lolengine.net/blog/2013/01/13/fast-rgb-to-hsv
 void ImGui::ColorConvertRGBtoHSV(float r, float g, float b, float& out_h, float& out_s, float& out_v)
@@ -8528,6 +8539,9 @@ void ImGui::BeginTooltipEx(ImGuiWindowFlags extra_flags, ImGuiTooltipFlags toolt
                 ImFormatString(window_name, IM_ARRAYSIZE(window_name), "##Tooltip_%02d", ++g.TooltipOverrideCount);
             }
     ImGuiWindowFlags flags = ImGuiWindowFlags_Tooltip | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking;
+    PushStyleVar( ImGuiStyleVar_PopupBorderSize, 2.0f );
+    PushStyleColor( ImGuiCol_PopupBg, GetColorU32( ImGuiCol_HeaderHovered ) );
+    PushStyleColor( ImGuiCol_Border, IM_COL32( 0, 0, 0, 255 ) );
     Begin(window_name, NULL, flags | extra_flags);
 }
 
@@ -8535,6 +8549,8 @@ void ImGui::EndTooltip()
 {
     IM_ASSERT(GetCurrentWindowRead()->Flags & ImGuiWindowFlags_Tooltip);   // Mismatched BeginTooltip()/EndTooltip() calls
     End();
+    PopStyleColor(2);
+    PopStyleVar();
 }
 
 void ImGui::SetTooltipV(const char* fmt, va_list args)
