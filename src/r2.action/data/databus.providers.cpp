@@ -19,6 +19,7 @@ void registerDefaults( ProviderFactory& factory, ProviderNames& names )
     registerProvider<SinTime>( factory, names );
     registerProvider<CosBus>( factory, names );
     registerProvider<Multiply2>( factory, names );
+    registerProvider<Smooth>( factory, names );
 }
 
 float SinTime::generate( const Input& input )
@@ -39,5 +40,11 @@ float Multiply2::generate( const Input& input )
     return ( input.m_bus1 * input.m_bus2 );
 }
 
-} // namespace providers
-} // namespace data
+float Smooth::generate( const Input& input )
+{
+    m_lastValue += ( input.m_bus1 - m_lastValue ) * 0.1f * input.m_value;
+    return m_lastValue;
+}
+
+} // namespace Providers
+} // namespace Fx

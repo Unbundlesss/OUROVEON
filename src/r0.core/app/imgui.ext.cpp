@@ -79,7 +79,7 @@ ImU32 ParseHexColour( const char* hexColour )
     int i[4];
     float f[4];
     i[0] = i[1] = i[2] = i[3] = 0;
-    sscanf( hexColour, "%02X%02X%02X%02X", (unsigned int*)&i[0], (unsigned int*)&i[1], (unsigned int*)&i[2], (unsigned int*)&i[3] ); // Treat at unsigned (%X is unsigned)
+    sscanf_s( hexColour, "%02X%02X%02X%02X", (unsigned int*)&i[0], (unsigned int*)&i[1], (unsigned int*)&i[2], (unsigned int*)&i[3] ); // Treat at unsigned (%X is unsigned)
     for ( int n = 0; n < 4; n++ )
         f[n] = i[n] / 255.0f;
     return ImGui::ColorConvertFloat4ToU32( ImVec4( f[1], f[2], f[3], f[0] ) );
@@ -448,6 +448,20 @@ ToggleTab::~ToggleTab()
         ImGui::PopStyleColor( 4 );
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+ToggleButtonLit::ToggleButtonLit()
+{
+    const auto buttonColour = ImGui::GetColorU32( ImGuiCol_TabActive );
+    ImGui::PushStyleColor( ImGuiCol_Button,         buttonColour );
+    ImGui::PushStyleColor( ImGuiCol_ButtonHovered,  buttonColour );
+    ImGui::PushStyleColor( ImGuiCol_ButtonActive,   buttonColour );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+ToggleButtonLit::~ToggleButtonLit()
+{
+    ImGui::PopStyleColor( 3 );
+}
 
 } // namespace Scoped
 } // namespace ImGui

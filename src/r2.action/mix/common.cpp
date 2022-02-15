@@ -8,9 +8,7 @@
 #include "pch.h"
 
 #include "mix/common.h"
-
-#include "ispc/.gen/mix_ispc.gen.h"
-
+#include "buffer/mix.h"
 
 namespace mix {
 
@@ -19,7 +17,7 @@ void RiffMixerBase::mixChannelsToOutput(
     const float globalMultiplier,
     const uint32_t samplesToWrite )
 {
-    ispc::downmix_8channel_stereo(
+    buffer::downmix_8channel_stereo(
         globalMultiplier,
         samplesToWrite,
         m_mixChannelLeft[0],

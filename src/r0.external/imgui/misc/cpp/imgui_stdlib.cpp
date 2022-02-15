@@ -74,3 +74,8 @@ bool ImGui::InputTextWithHint(const char* label, const char* hint, std::string* 
     cb_user_data.ChainCallbackUserData = user_data;
     return InputTextWithHint(label, hint, (char*)str->c_str(), str->capacity() + 1, flags, InputTextCallback, &cb_user_data);
 }
+
+void ImGui::TextUnformatted( const std::string& str )
+{
+    ImGui::TextUnformatted( str.c_str(), &str.back() + 1 );
+}

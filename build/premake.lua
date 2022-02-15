@@ -1,65 +1,33 @@
 
-include "ispc-premake/premake.lua"
+-- ==============================================================================
 
 local initialDir = os.getcwd()
+local rootSourceDir = "src"
+local osxHomebrew = "/opt/homebrew/opt/"
+
 function GetInitialDir()
     return initialDir
 end
-
+function GetSourceDir()
+    return rootSourceDir
+end
 function SrcRoot()
-    return initialDir .. "/../src/"
+    return GetInitialDir() .. "/../" .. rootSourceDir .. "/"
+end
+function GetHomebrewDir()
+    return osxHomebrew
 end
 
 
--- ------------------------------------------------------------------------------
-function SetDefaultBuildConfiguration()
-
-    filter "configurations:Debug"
-        defines   { "DEBUG" }
-        symbols   "On"
-        ispcVars {
-            GenerateDebugInformation = true,
-            Opt         = "disabled",
-            CPU         = "core2",
-            TargetISA   = "sse2-i32x8",
-        }
-
-    filter "configurations:Release"
-        defines   { "NDEBUG" }
-        flags     { "LinkTimeOptimization" }
-        optimize  "Full"
-
-        ispcVars { 
-            Opt         = "maximum",
-            CPU         = "core2",
-            TargetISA   = "sse2-i32x8",
-        }
+ModuleRefInclude = {}
+ModuleRefLink = {}
 
 
-    filter "configurations:Release-AVX2"
-        defines   { "NDEBUG" }
-        flags     { "LinkTimeOptimization" }
-        optimize  "Full"
-		
-        vectorextensions "AVX2"
-        ispcVars  {
-            Opt         = "maximum",
-            CPU         = "core-avx2",
-            TargetISA   = "avx2-i32x16",
-        }
+include "ispc-premake/premake.lua"
 
-    filter {}
-
-end
-
--- ------------------------------------------------------------------------------
-function SetDefaultOutputDirectories(subgrp)
-
-    targetdir   ( "$(SolutionDir)_artefact/bin_" .. subgrp .. "/$(Configuration)/%{cfg.platform}" )
-    objdir      ( "!$(SolutionDir)_artefact/obj_" .. subgrp .. "/%{cfg.shortname}/$(ProjectName)/" )
-    debugdir    ( "$(OutDir)" )
-
-end
+include "premake-inc/common.lua"
+include "premake-inc/sys-freetype.lua"
+include "premake-inc/sys-openssl.lua"
 
 
 -- ==============================================================================
@@ -69,12 +37,15 @@ workspace ("ouroveon_" .. _ACTION)
     platforms       { "x86_64" }
     architecture      "x64"
 
-    location "_sln"
+    location "_gen"
 
-    useISPC()
+    filter "system:Windows"
 
-    filter "platforms:x86_64"
-        system "windows"
+        platforms       { "x86_64" }
+        architecture      "x64"
+
+        useISPC()
+
         defines 
         {
             "WIN32",
@@ -86,7 +57,7 @@ workspace ("ouroveon_" .. _ACTION)
 
             "OURO_FEATURE_VST24=1",
 
-            -- for DPP
+            -- for DPP; needs adjusting at the highest level before winsock is included
             "FD_SETSIZE=1024"
         }
         ispcVars { 
@@ -95,9 +66,57 @@ workspace ("ouroveon_" .. _ACTION)
         }
 
     filter {}
+    
+    filter "system:linux"
 
+        platforms       { "x86_64" }
+        architecture      "x64"
 
+        defines
+        {
+            "OURO_PLATFORM_WIN=0",
+            "OURO_PLATFORM_OSX=0",
+            "OURO_PLATFORM_NIX=1",
+
+            "OURO_FEATURE_VST24=0",
+        }
+        buildoptions
+        {
+            "-fPIC -fms-extensions"
+        }
+    filter {}
+
+    filter "system:macosx"
+
+        platforms       { "universal" }
+        architecture      "universal"
+        systemversion     "11.0"
+        
+        defines
+        {
+            "OURO_PLATFORM_WIN=0",
+            "OURO_PLATFORM_OSX=1",
+            "OURO_PLATFORM_NIX=0",
+
+            "OURO_FEATURE_VST24=0",
+        }
+        buildoptions
+        {
+            "-Wall"
+        }
+    filter {}
+
+group "external-hal"
+
+include "premake-inc/hal-glfw.lua"
+include "premake-inc/hal-portaudio.lua"
+include "premake-inc/hal-rtmidi.lua"
+
+group ""
 group "external"
+
+include "premake-inc/ext-imgui.lua"
+
 
 -- ------------------------------------------------------------------------------
 function AddInclude_BROTLI()
@@ -245,6 +264,11 @@ project "ext-sodium"
     SetDefaultBuildConfiguration()
     SetDefaultOutputDirectories("ext")
 
+    disablewarnings { 
+        "4244", -- conversion from 'int64_t' to 'unsigned char'
+        "4197", -- top-level volatile in cast is ignored
+    }
+
     AddInclude_SODIUM()
     files 
     { 
@@ -377,56 +401,6 @@ project "ext-uriparser"
     }
 
 -- ------------------------------------------------------------------------------
-function AddInclude_PORTAUDIO()
-    includedirs
-    {
-        SrcRoot() .. "r0.external/portaudio/include",
-    }
-end
-
-project "ext-portaudio"
-    kind "StaticLib"
-
-    SetDefaultBuildConfiguration()
-    SetDefaultOutputDirectories("ext")
-    
-    defines
-    {
-        "_CRT_SECURE_NO_WARNINGS",
-
-        "PA_USE_ASIO",
-        "PA_USE_DS",
-        "PA_USE_WASAPI",
-        "PA_USE_WDMKS",
-    }
-    AddInclude_PORTAUDIO()
-    includedirs
-    {
-        SrcRoot() .. "r0.external/portaudio/src/common",
-        SrcRoot() .. "r0.external/portaudio/src/os/win",
-
-        SrcRoot() .. "r0.external/steinberg/asio_minimal_2.3.3/common",
-        SrcRoot() .. "r0.external/steinberg/asio_minimal_2.3.3/host",
-        SrcRoot() .. "r0.external/steinberg/asio_minimal_2.3.3/host/pc",
-    }
-    files 
-    { 
-        SrcRoot() .. "r0.external/portaudio/src/common/**.*",
-        SrcRoot() .. "r0.external/portaudio/src/os/win/**.*",
-        SrcRoot() .. "r0.external/portaudio/src/hostapi/asio/*.cpp",
-        SrcRoot() .. "r0.external/portaudio/src/hostapi/asio/*.h",
-        SrcRoot() .. "r0.external/portaudio/src/hostapi/dsound/*.*",
-        SrcRoot() .. "r0.external/portaudio/src/hostapi/wasapi/*.c",
-        SrcRoot() .. "r0.external/portaudio/src/hostapi/wdmks/*.c",
-        SrcRoot() .. "r0.external/portaudio/src/hostapi/wmme/*.c",
-        SrcRoot() .. "r0.external/portaudio/**.h",
-
-        SrcRoot() .. "r0.external/steinberg/asio_minimal_2.3.3/common/asio.cpp",
-        SrcRoot() .. "r0.external/steinberg/asio_minimal_2.3.3/host/asiodrivers.cpp",
-        SrcRoot() .. "r0.external/steinberg/asio_minimal_2.3.3/host/pc/asiolist.cpp",
-    }
-
--- ------------------------------------------------------------------------------
 function AddInclude_DATE_TZ()
     includedirs
     {
@@ -448,276 +422,6 @@ project "ext-date-tz"
         SrcRoot() .. "r0.external/date/include/**.h",
         SrcRoot() .. "r0.external/date/src/tz.cpp"
     }
-
--- ------------------------------------------------------------------------------
-function AddInclude_GLAD()
-    includedirs
-    {
-        SrcRoot() .. "r0.external/glad/include",
-    }
-end
-
-project "ext-glad"
-    kind "StaticLib"
-    language "C"
-
-    SetDefaultBuildConfiguration()
-    SetDefaultOutputDirectories("ext")
-
-    AddInclude_GLAD()
-    files
-    {
-        SrcRoot() .. "r0.external/glad/src/glad.c"
-    }
-
--- ------------------------------------------------------------------------------
-function AddInclude_SDL2()
-    includedirs
-    {
-        SrcRoot() .. "r0.external/sdl2/include",
-    }
-end
-
-project "ext-sdl"
-    kind "StaticLib"
-    language "C"
-
-    SetDefaultBuildConfiguration()
-    SetDefaultOutputDirectories("ext")
-
-    defines 
-    {
-        "HAVE_LIBC=1"
-    }
-    files 
-    { 
-        SrcRoot() .. "r0.external/sdl2/include/**.h",
-        SrcRoot() .. "r0.external/sdl2/src/atomic/SDL_atomic.c",
-        SrcRoot() .. "r0.external/sdl2/src/atomic/SDL_spinlock.c",
-        SrcRoot() .. "r0.external/sdl2/src/audio/directsound/SDL_directsound.c",
-        SrcRoot() .. "r0.external/sdl2/src/audio/disk/SDL_diskaudio.c",
-        SrcRoot() .. "r0.external/sdl2/src/audio/dummy/SDL_dummyaudio.c",
-        SrcRoot() .. "r0.external/sdl2/src/audio/SDL_audio.c",
-        SrcRoot() .. "r0.external/sdl2/src/audio/SDL_audiocvt.c",
-        SrcRoot() .. "r0.external/sdl2/src/audio/SDL_audiodev.c",
-        SrcRoot() .. "r0.external/sdl2/src/audio/SDL_audiotypecvt.c",
-        SrcRoot() .. "r0.external/sdl2/src/audio/SDL_mixer.c",
-        SrcRoot() .. "r0.external/sdl2/src/audio/SDL_wave.c",
-        SrcRoot() .. "r0.external/sdl2/src/audio/winmm/SDL_winmm.c",
-        SrcRoot() .. "r0.external/sdl2/src/audio/wasapi/SDL_wasapi.c",
-        SrcRoot() .. "r0.external/sdl2/src/audio/wasapi/SDL_wasapi_win32.c",
-        SrcRoot() .. "r0.external/sdl2/src/core/windows/SDL_hid.c",
-        SrcRoot() .. "r0.external/sdl2/src/core/windows/SDL_windows.c",
-        SrcRoot() .. "r0.external/sdl2/src/core/windows/SDL_xinput.c",
-        SrcRoot() .. "r0.external/sdl2/src/cpuinfo/SDL_cpuinfo.c",
-        SrcRoot() .. "r0.external/sdl2/src/dynapi/SDL_dynapi.c",
-        SrcRoot() .. "r0.external/sdl2/src/events/SDL_clipboardevents.c",
-        SrcRoot() .. "r0.external/sdl2/src/events/SDL_displayevents.c",
-        SrcRoot() .. "r0.external/sdl2/src/events/SDL_dropevents.c",
-        SrcRoot() .. "r0.external/sdl2/src/events/SDL_events.c",
-        SrcRoot() .. "r0.external/sdl2/src/events/SDL_gesture.c",
-        SrcRoot() .. "r0.external/sdl2/src/events/SDL_keyboard.c",
-        SrcRoot() .. "r0.external/sdl2/src/events/SDL_mouse.c",
-        SrcRoot() .. "r0.external/sdl2/src/events/SDL_quit.c",
-        SrcRoot() .. "r0.external/sdl2/src/events/SDL_touch.c",
-        SrcRoot() .. "r0.external/sdl2/src/events/SDL_windowevents.c",
-        SrcRoot() .. "r0.external/sdl2/src/file/SDL_rwops.c",
-        SrcRoot() .. "r0.external/sdl2/src/filesystem/windows/SDL_sysfilesystem.c",
-        SrcRoot() .. "r0.external/sdl2/src/haptic/dummy/SDL_syshaptic.c",
-        SrcRoot() .. "r0.external/sdl2/src/haptic/SDL_haptic.c",
-        SrcRoot() .. "r0.external/sdl2/src/haptic/windows/SDL_dinputhaptic.c",
-        SrcRoot() .. "r0.external/sdl2/src/haptic/windows/SDL_windowshaptic.c",
-        SrcRoot() .. "r0.external/sdl2/src/haptic/windows/SDL_xinputhaptic.c",
-        SrcRoot() .. "r0.external/sdl2/src/hidapi/SDL_hidapi.c",
-        SrcRoot() .. "r0.external/sdl2/src/joystick/dummy/SDL_sysjoystick.c",
-        SrcRoot() .. "r0.external/sdl2/src/joystick/hidapi/SDL_hidapijoystick.c",
-        SrcRoot() .. "r0.external/sdl2/src/joystick/hidapi/SDL_hidapi_gamecube.c",
-        SrcRoot() .. "r0.external/sdl2/src/joystick/hidapi/SDL_hidapi_luna.c",
-        SrcRoot() .. "r0.external/sdl2/src/joystick/hidapi/SDL_hidapi_ps4.c",
-        SrcRoot() .. "r0.external/sdl2/src/joystick/hidapi/SDL_hidapi_ps5.c",
-        SrcRoot() .. "r0.external/sdl2/src/joystick/hidapi/SDL_hidapi_rumble.c",
-        SrcRoot() .. "r0.external/sdl2/src/joystick/hidapi/SDL_hidapi_stadia.c",
-        SrcRoot() .. "r0.external/sdl2/src/joystick/hidapi/SDL_hidapi_switch.c",
-        SrcRoot() .. "r0.external/sdl2/src/joystick/hidapi/SDL_hidapi_xbox360.c",
-        SrcRoot() .. "r0.external/sdl2/src/joystick/hidapi/SDL_hidapi_xbox360w.c",
-        SrcRoot() .. "r0.external/sdl2/src/joystick/hidapi/SDL_hidapi_xboxone.c",
-        SrcRoot() .. "r0.external/sdl2/src/joystick/SDL_gamecontroller.c",
-        SrcRoot() .. "r0.external/sdl2/src/joystick/SDL_joystick.c",
-        SrcRoot() .. "r0.external/sdl2/src/joystick/virtual/SDL_virtualjoystick.c",
-        SrcRoot() .. "r0.external/sdl2/src/joystick/windows/SDL_dinputjoystick.c",
-        SrcRoot() .. "r0.external/sdl2/src/joystick/windows/SDL_mmjoystick.c",
-        SrcRoot() .. "r0.external/sdl2/src/joystick/windows/SDL_rawinputjoystick.c",
-        SrcRoot() .. "r0.external/sdl2/src/joystick/windows/SDL_windowsjoystick.c",
-        SrcRoot() .. "r0.external/sdl2/src/joystick/windows/SDL_windows_gaming_input.c",
-        SrcRoot() .. "r0.external/sdl2/src/joystick/windows/SDL_xinputjoystick.c",
-        SrcRoot() .. "r0.external/sdl2/src/libm/e_atan2.c",
-        SrcRoot() .. "r0.external/sdl2/src/libm/e_exp.c",
-        SrcRoot() .. "r0.external/sdl2/src/libm/e_fmod.c",
-        SrcRoot() .. "r0.external/sdl2/src/libm/e_log.c",
-        SrcRoot() .. "r0.external/sdl2/src/libm/e_log10.c",
-        SrcRoot() .. "r0.external/sdl2/src/libm/e_pow.c",
-        SrcRoot() .. "r0.external/sdl2/src/libm/e_rem_pio2.c",
-        SrcRoot() .. "r0.external/sdl2/src/libm/e_sqrt.c",
-        SrcRoot() .. "r0.external/sdl2/src/libm/k_cos.c",
-        SrcRoot() .. "r0.external/sdl2/src/libm/k_rem_pio2.c",
-        SrcRoot() .. "r0.external/sdl2/src/libm/k_sin.c",
-        SrcRoot() .. "r0.external/sdl2/src/libm/k_tan.c",
-        SrcRoot() .. "r0.external/sdl2/src/libm/s_atan.c",
-        SrcRoot() .. "r0.external/sdl2/src/libm/s_copysign.c",
-        SrcRoot() .. "r0.external/sdl2/src/libm/s_cos.c",
-        SrcRoot() .. "r0.external/sdl2/src/libm/s_fabs.c",
-        SrcRoot() .. "r0.external/sdl2/src/libm/s_floor.c",
-        SrcRoot() .. "r0.external/sdl2/src/libm/s_scalbn.c",
-        SrcRoot() .. "r0.external/sdl2/src/libm/s_sin.c",
-        SrcRoot() .. "r0.external/sdl2/src/libm/s_tan.c",
-        SrcRoot() .. "r0.external/sdl2/src/loadso/windows/SDL_sysloadso.c",
-        SrcRoot() .. "r0.external/sdl2/src/locale/SDL_locale.c",
-        SrcRoot() .. "r0.external/sdl2/src/locale/windows/SDL_syslocale.c",
-        SrcRoot() .. "r0.external/sdl2/src/misc/SDL_url.c",
-        SrcRoot() .. "r0.external/sdl2/src/misc/windows/SDL_sysurl.c",
-        SrcRoot() .. "r0.external/sdl2/src/power/SDL_power.c",
-        SrcRoot() .. "r0.external/sdl2/src/power/windows/SDL_syspower.c",
-        SrcRoot() .. "r0.external/sdl2/src/render/direct3d11/SDL_shaders_d3d11.c",
-        SrcRoot() .. "r0.external/sdl2/src/render/direct3d/SDL_render_d3d.c",
-        SrcRoot() .. "r0.external/sdl2/src/render/direct3d11/SDL_render_d3d11.c",
-        SrcRoot() .. "r0.external/sdl2/src/render/direct3d/SDL_shaders_d3d.c",
-        SrcRoot() .. "r0.external/sdl2/src/render/opengl/SDL_render_gl.c",
-        SrcRoot() .. "r0.external/sdl2/src/render/opengl/SDL_shaders_gl.c",
-        SrcRoot() .. "r0.external/sdl2/src/render/opengles2/SDL_render_gles2.c",
-        SrcRoot() .. "r0.external/sdl2/src/render/opengles2/SDL_shaders_gles2.c",
-        SrcRoot() .. "r0.external/sdl2/src/render/SDL_d3dmath.c",
-        SrcRoot() .. "r0.external/sdl2/src/render/SDL_render.c",
-        SrcRoot() .. "r0.external/sdl2/src/render/SDL_yuv_sw.c",
-        SrcRoot() .. "r0.external/sdl2/src/render/software/SDL_blendfillrect.c",
-        SrcRoot() .. "r0.external/sdl2/src/render/software/SDL_blendline.c",
-        SrcRoot() .. "r0.external/sdl2/src/render/software/SDL_blendpoint.c",
-        SrcRoot() .. "r0.external/sdl2/src/render/software/SDL_drawline.c",
-        SrcRoot() .. "r0.external/sdl2/src/render/software/SDL_drawpoint.c",
-        SrcRoot() .. "r0.external/sdl2/src/render/software/SDL_render_sw.c",
-        SrcRoot() .. "r0.external/sdl2/src/render/software/SDL_rotate.c",
-        SrcRoot() .. "r0.external/sdl2/src/SDL.c",
-        SrcRoot() .. "r0.external/sdl2/src/SDL_assert.c",
-        SrcRoot() .. "r0.external/sdl2/src/SDL_dataqueue.c",
-        SrcRoot() .. "r0.external/sdl2/src/SDL_error.c",
-        SrcRoot() .. "r0.external/sdl2/src/SDL_hints.c",
-        SrcRoot() .. "r0.external/sdl2/src/SDL_log.c",
-        SrcRoot() .. "r0.external/sdl2/src/sensor/dummy/SDL_dummysensor.c",
-        SrcRoot() .. "r0.external/sdl2/src/sensor/SDL_sensor.c",
-        SrcRoot() .. "r0.external/sdl2/src/sensor/windows/SDL_windowssensor.c",
-        SrcRoot() .. "r0.external/sdl2/src/stdlib/SDL_crc32.c",
-        SrcRoot() .. "r0.external/sdl2/src/stdlib/SDL_getenv.c",
-        SrcRoot() .. "r0.external/sdl2/src/stdlib/SDL_iconv.c",
-        SrcRoot() .. "r0.external/sdl2/src/stdlib/SDL_malloc.c",
-        SrcRoot() .. "r0.external/sdl2/src/stdlib/SDL_qsort.c",
-        SrcRoot() .. "r0.external/sdl2/src/stdlib/SDL_stdlib.c",
-        SrcRoot() .. "r0.external/sdl2/src/stdlib/SDL_string.c",
-        SrcRoot() .. "r0.external/sdl2/src/stdlib/SDL_strtokr.c",
-        SrcRoot() .. "r0.external/sdl2/src/thread/generic/SDL_syscond.c",
-        SrcRoot() .. "r0.external/sdl2/src/thread/SDL_thread.c",
-        SrcRoot() .. "r0.external/sdl2/src/thread/windows/SDL_syscond_srw.c",
-        SrcRoot() .. "r0.external/sdl2/src/thread/windows/SDL_sysmutex.c",
-        SrcRoot() .. "r0.external/sdl2/src/thread/windows/SDL_syssem.c",
-        SrcRoot() .. "r0.external/sdl2/src/thread/windows/SDL_systhread.c",
-        SrcRoot() .. "r0.external/sdl2/src/thread/windows/SDL_systls.c",
-        SrcRoot() .. "r0.external/sdl2/src/timer/SDL_timer.c",
-        SrcRoot() .. "r0.external/sdl2/src/timer/windows/SDL_systimer.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/dummy/SDL_nullevents.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/dummy/SDL_nullframebuffer.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/dummy/SDL_nullvideo.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/SDL_blit.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/SDL_blit_0.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/SDL_blit_1.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/SDL_blit_A.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/SDL_blit_auto.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/SDL_blit_copy.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/SDL_blit_N.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/SDL_blit_slow.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/SDL_bmp.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/SDL_clipboard.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/SDL_egl.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/SDL_fillrect.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/SDL_pixels.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/SDL_rect.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/SDL_RLEaccel.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/SDL_shape.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/SDL_stretch.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/SDL_surface.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/SDL_video.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/SDL_vulkan_utils.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/SDL_yuv.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/windows/SDL_windowsclipboard.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/windows/SDL_windowsevents.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/windows/SDL_windowsframebuffer.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/windows/SDL_windowskeyboard.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/windows/SDL_windowsmessagebox.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/windows/SDL_windowsmodes.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/windows/SDL_windowsmouse.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/windows/SDL_windowsopengl.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/windows/SDL_windowsopengles.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/windows/SDL_windowsshape.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/windows/SDL_windowsvideo.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/windows/SDL_windowsvulkan.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/windows/SDL_windowswindow.c",
-        SrcRoot() .. "r0.external/sdl2/src/video/yuv2rgb/yuv_rgb.c",
-    }
-
-    AddInclude_SDL2() 
-    includedirs
-    {
-        SrcRoot() .. "r0.external/sdl2/src/hidapi/hidapi",
-        SrcRoot() .. "r0.external/sdl2/src/video/khronos",
-    }    
-
--- ------------------------------------------------------------------------------
-function AddInclude_IMGUI()
-    includedirs
-    {
-        SrcRoot() .. "r0.external/imgui/",
-        SrcRoot() .. "r0.external/imgui/backends/",
-        SrcRoot() .. "r0.external/imgui/freetype/",
-        SrcRoot() .. "r0.external/imgui/misc/cpp",
-
-        SrcRoot() .. "r0.external/freetype/include/",
-
-        SrcRoot() .. "r0.external/imgui-ex/",
-        SrcRoot() .. "r0.external/imgui-nodes/",
-        SrcRoot() .. "r0.external/imgui-implot/"
-    }
-end
-
-project "ext-imgui"
-    kind "StaticLib"
-    language "C++"
-    cppdialect "C++17"
-
-    SetDefaultBuildConfiguration()
-    SetDefaultOutputDirectories("ext")
-
-    defines 
-    {
-        "IMGUI_IMPL_OPENGL_LOADER_GLAD",
-    }
-    files
-    {
-        SrcRoot() .. "r0.external/imgui/*.cpp",
-        SrcRoot() .. "r0.external/imgui/*.h",
-        SrcRoot() .. "r0.external/imgui/freetype/*.cpp",
-        SrcRoot() .. "r0.external/imgui/freetype/*.h",
-        SrcRoot() .. "r0.external/imgui/backends/imgui_impl_sdl.*",
-        SrcRoot() .. "r0.external/imgui/backends/imgui_impl_opengl3.*",
-
-        SrcRoot() .. "r0.external/imgui/misc/cpp/*.*",
-
-        SrcRoot() .. "r0.external/imgui-nodes/*.cpp",
-        SrcRoot() .. "r0.external/imgui-nodes/*.h",
-
-        SrcRoot() .. "r0.external/imgui-implot/*.cpp",
-        SrcRoot() .. "r0.external/imgui-implot/*.h"
-    }
-
-    AddInclude_GLAD()
-    AddInclude_SDL2()
-    AddInclude_IMGUI()
 
 -- ------------------------------------------------------------------------------
 function AddInclude_AIFF()
@@ -794,30 +498,6 @@ project "ext-pfold"
     { 
         SrcRoot() .. "r0.external/pfold/*.cpp",
         SrcRoot() .. "r0.external/pfold/*.h",
-    }
-
-
--- ------------------------------------------------------------------------------
-function AddInclude_RTMIDI()
-    includedirs
-    {
-        SrcRoot() .. "r0.external/rtmidi",
-    }
-end
-
-project "ext-rtmidi"
-    kind "StaticLib"
-    language "C++"
-    cppdialect "C++17"
-
-    SetDefaultBuildConfiguration()
-    SetDefaultOutputDirectories("ext")
-    
-    AddInclude_RTMIDI()
-    files 
-    { 
-        SrcRoot() .. "r0.external/rtmidi/**.cpp",
-        SrcRoot() .. "r0.external/rtmidi/**.h",
     }
 
 -- ------------------------------------------------------------------------------
@@ -946,43 +626,6 @@ project "ext-stb"
         SrcRoot() .. "r0.external/stb/*.h",
     }
 
-
--- ------------------------------------------------------------------------------
-function AddInclude_OpenSSL()
-    includedirs
-    {
-        SrcRoot() .. "r0.external/openssl-1.1.1j/x64/include"
-    }
-end
-
-function AddOpenSSL()
-    AddInclude_OpenSSL()
-    libdirs
-    {
-        SrcRoot() .. "r0.external/openssl-1.1.1j/x64/lib"
-    }
-    links
-    {
-        "libcrypto.lib",
-        "libssl.lib",
-    }
-    postbuildcommands { "copy $(SolutionDir)..\\..\\src\\r0.external\\openssl-1.1.1j\\x64\\bin\\*.dll $(TargetDir)" }
-end
-
--- ------------------------------------------------------------------------------
-function AddFreetype()
-    libdirs
-    {
-        SrcRoot() .. "r0.external/freetype/win64"
-    }
-    links
-    {
-        "freetype.lib",
-    }
-    postbuildcommands { "copy $(SolutionDir)..\\..\\src\\r0.external\\freetype\\win64\\*.dll $(TargetDir)" }
-end
-
-
 -- ------------------------------------------------------------------------------
 function AddInclude_HTTPLIB()
     includedirs
@@ -995,6 +638,7 @@ function AddInclude_HTTPLIB()
         "CPPHTTPLIB_BROTLI_SUPPORT",
         "CPPHTTPLIB_ZLIB_SUPPORT"
     }
+    ModuleRefInclude["openssl"]()
 end
 
 
@@ -1016,7 +660,6 @@ project "ext-dpp"
     SetDefaultOutputDirectories("ext")
 
     AddInclude_DPP()
-    AddInclude_OpenSSL()
     AddInclude_ZLIB()
     AddInclude_BROTLI()
     AddInclude_OPUS()
@@ -1072,7 +715,7 @@ function SetupOuroveonLayer( isFinalRing, layerName )
         }
         libdirs
         {
-            SrcRoot() .. "r0.external/superluminal/lib/x64"
+            SrcRoot() .. "r0.sys/superluminal/lib/x64"
         }
 
         filter "configurations:Debug"
@@ -1083,19 +726,19 @@ function SetupOuroveonLayer( isFinalRing, layerName )
 
         includedirs
         {
-            SrcRoot() .. "r0.external/superluminal/include",
+            SrcRoot() .. "r0.sys/superluminal/include",
         }
     filter {}
 
     defines 
     {
-        "IMGUI_IMPL_OPENGL_LOADER_GLAD",
-        
         "VST_2_4_EXTENSIONS",
         "VST_64BIT_PLATFORM=1",
     }
 
-    AddInclude_OpenSSL()
+    for libName, libFn in pairs(ModuleRefInclude) do
+        libFn()
+    end
 
     AddInclude_BROTLI()
     AddInclude_ZLIB()
@@ -1106,14 +749,9 @@ function SetupOuroveonLayer( isFinalRing, layerName )
     AddInclude_SODIUM()
     AddInclude_DPP()
     AddInclude_URIPARSER()
-    AddInclude_PORTAUDIO()
     AddInclude_DATE_TZ()
-    AddInclude_GLAD()
     AddInclude_PFOLD()
-    AddInclude_SDL2()
-    AddInclude_IMGUI()
     AddInclude_R8BRAIN()
-    AddInclude_RTMIDI()
     AddInclude_FMT()
     AddInclude_FFT()
     AddInclude_CITY()
@@ -1122,7 +760,8 @@ function SetupOuroveonLayer( isFinalRing, layerName )
 
     includedirs
     {
-        SrcRoot() .. "r0.external/steinberg",
+        SrcRoot() .. "r0.closed/steinberg",
+
         SrcRoot() .. "r0.external/concurrent",
         SrcRoot() .. "r0.external/utf8",
         SrcRoot() .. "r0.external/cereal/include",
@@ -1157,7 +796,8 @@ function SetupOuroveonLayer( isFinalRing, layerName )
     -- headers
     files 
     { 
-        SrcRoot() .. "r0.external/steinberg/**.h",
+        SrcRoot() .. "r0.closed/steinberg/**.h",
+
         SrcRoot() .. "r0.external/concurrent/*.h",
         SrcRoot() .. "r0.external/utf8/*.h",
         SrcRoot() .. "r0.external/cereal/include/**.hpp",
@@ -1183,20 +823,12 @@ end
 -- ------------------------------------------------------------------------------
 function CommonAppLink()
 
-    AddFreetype()
-    AddOpenSSL()
+    for libName, libFn in pairs(ModuleRefLink) do
+        libFn()
+    end
 
     links
     {
-        "shlwapi",
-        "ws2_32",
-        "opengl32",
-        "winmm",
-        "dxguid.lib",
-        "version.lib",
-        "setupapi.lib",
-        "imm32.lib",
-
         "ext-zlib",
         "ext-flac",
         "ext-flac-cpp",
@@ -1206,14 +838,10 @@ function CommonAppLink()
         "ext-sodium",
         "ext-dpp",
         "ext-uriparser",
-        "ext-portaudio",
         "ext-date-tz",
         "ext-brotli",
-        "ext-glad",
         "ext-pfold",
-        "ext-imgui",
         "ext-r8brain",
-        "ext-sdl",
         "ext-fmt",
         "ext-kissfft",
         "ext-cityhash",
@@ -1221,6 +849,49 @@ function CommonAppLink()
 
         "sdk"
     }
+
+    filter "system:Windows"
+    links
+    {
+        "opengl32",
+        "winmm",
+        "dxguid",
+
+        "ws2_32",
+        "shlwapi",
+        "version",
+        "setupapi",
+        "imm32",
+    }
+    filter {}
+
+    filter "system:linux"
+    links 
+    {
+        "m",
+        "pthread",
+        "dl",
+
+        "X11",
+        "Xrandr",
+        "Xinerama",
+        "Xxf86vm",
+        "Xcursor",
+        "GL",
+    }
+    filter {}
+
+    filter "system:macosx"
+    links 
+    {
+        "pthread",
+
+        "Cocoa.framework",
+        "IOKit.framework",
+        "OpenGL.framework",
+        "CoreVideo.framework",
+    }
+    filter {}
 
 end
 

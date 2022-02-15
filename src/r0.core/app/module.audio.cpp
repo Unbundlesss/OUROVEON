@@ -36,7 +36,6 @@ Audio::Audio()
     , m_paStream( nullptr )
     , m_mixerBuffers( nullptr )
     , m_mute( false )
-    , m_vstBypass( false )
     , m_mixerInterface( nullptr )
 {
     m_mixThreadCommandsIssued = 0;
@@ -206,13 +205,19 @@ void Audio::ProcessMixCommandsOnMixThread()
                 m_mixerInterface = mixCmdData.getPtrAs<MixerInterface>();
                 break;
             case MixThreadCommand::InstallVST:
+#if OURO_FEATURES_VST
                 m_vstiStack.emplace_back( mixCmdData.getPtrAs<vst::Instance>() );
+#endif // OURO_FEATURES_VST
                 break;
             case MixThreadCommand::ClearAllVSTs:
+#if OURO_FEATURES_VST
                 m_vstiStack.clear();
+#endif // OURO_FEATURES_VST
                 break;
             case MixThreadCommand::ToggleVSTBypass:
+#if OURO_FEATURES_VST
                 m_vstBypass = !m_vstBypass;
+#endif // OURO_FEATURES_VST
                 break;
             case MixThreadCommand::ToggleMute:
                 m_mute = !m_mute;
@@ -278,6 +283,7 @@ int Audio::PortAudioCallbackInternal( void* outputBuffer, unsigned long framesPe
     // if we don't use VSTs to process our samples into the output buffer, then we must eventually manually copy them raw; this tracks that
     bool outputsWritten = false;
 
+#if OURO_FEATURES_VST
     if ( m_vstBypass == false )
     {
         for ( auto vstInst : m_vstiStack )
@@ -292,6 +298,7 @@ int Audio::PortAudioCallbackInternal( void* outputBuffer, unsigned long framesPe
             }
         }
     }
+#endif // OURO_FEATURES_VST
 
     m_state.mark( ExposedState::ExecutionStage::VSTs );
 
@@ -391,7 +398,11 @@ AsyncCommandCounter Audio::toggleEffectBypass()
 // ---------------------------------------------------------------------------------------------------------------------
 bool Audio::isEffectBypassEnabled() const
 {
+#if OURO_FEATURES_VST
     return m_vstBypass;
+#else
+    return false;
+#endif 
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

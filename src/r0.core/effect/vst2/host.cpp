@@ -8,13 +8,20 @@
 //
 
 #include "pch.h"
+
+#if OURO_FEATURES_VST
+
 #include "app/module.audio.h"
+#include "app/module.midi.msg.h"
+
 #include "nlohmann/json.hpp"
 
 #include "base/utils.h"
 #include "base/instrumentation.h"
 
 #include "effect/vst2/host.h"
+
+#include "vst_2_4/aeffectx.h"
 
 // enable to dump out what the input and output pin properties are
 #define VST_IO_PROPERTY_VERBOSE 0
@@ -49,9 +56,9 @@ inline std::string vstTimeInfoFlagsToString( VstTimeInfoFlags flags )
 inline std::string vstPinPropertiesFlagsToString( VstPinPropertiesFlags flags )
 {
     std::string result = "";
-    if ( ( flags & kVstPinIsActive     ) == kVstPinIsActive )     result += "Active | ";
-    if ( ( flags & kVstPinIsStereo     ) == kVstPinIsStereo )     result += "StereoLeft | ";
-    if ( ( flags & kVstPinUseSpeaker   ) == kVstPinUseSpeaker )   result += "UseSpeaker | ";
+    if ( ( flags & kVstPinIsActive          ) == kVstPinIsActive )          result += "Active | ";
+    if ( ( flags & kVstPinIsStereo          ) == kVstPinIsStereo )          result += "StereoLeft | ";
+    if ( ( flags & kVstPinUseSpeaker        ) == kVstPinUseSpeaker )        result += "UseSpeaker | ";
 
     base::trimRight( result, c_flagFormatWhiteSpaces );
     return result;
@@ -102,6 +109,9 @@ static constexpr wchar_t const* _vstWindowClass = L"_VSTOuro";
 // ---------------------------------------------------------------------------------------------------------------------
 struct Instance::Data
 {
+    static constexpr auto wStyle    = WS_POPUPWINDOW | WS_OVERLAPPED | WS_CAPTION | WS_VISIBLE | WS_MINIMIZEBOX;
+    static constexpr auto wStyleEx  = WS_EX_PALETTEWINDOW | WS_EX_TOOLWINDOW;
+
     Data()
         : m_unifiedTimeInfo( nullptr )
         , m_vstTimeSampleRateRcp( 1.0 )
@@ -114,6 +124,7 @@ struct Instance::Data
         , m_vstThreadHandle( nullptr )
         , m_vstThreadAlive( false )
         , m_vstThreadInitComplete( false )
+        , m_vstFailedToLoad( false )
         , m_vstEditorState( EditorState::Idle )
         , m_vstActivationState( ActivationState::Inactive )
         , m_vstActivationQueue( 2 )
@@ -183,6 +194,9 @@ struct Instance::Data
 
     std::string             m_vendor;
     std::string             m_product;
+    int32_t                 m_midiInputChannels;
+    int32_t                 m_midiOutputChannels;
+    std::atomic_bool        m_updateIOChannels;
 
     std::string             m_path;
     float                   m_sampleRate;
@@ -198,6 +212,7 @@ struct Instance::Data
     HANDLE                  m_vstThreadHandle;
     std::atomic_bool        m_vstThreadAlive;
     std::atomic_bool        m_vstThreadInitComplete;
+    std::atomic_bool        m_vstFailedToLoad;
 
     EditorStateAtomic       m_vstEditorState;           // request to open/close
     ActivationStateAtomic   m_vstActivationState;       // request to enable/disable (post boot)
@@ -269,8 +284,19 @@ VstIntPtr __cdecl Instance::Data::vstAudioMasterCallback( AEffect* effect, VstIn
     VstIntPtr result = 0;
     if ( effect == nullptr )
     {
-        blog::error::vst( " - vstAudioMasterCallback effect is nullptr for opcode {}", opcode );
-        return 0;
+        if ( opcode == audioMasterGetVendorString       ||
+             opcode == audioMasterGetProductString      ||
+             opcode == audioMasterGetVendorVersion      ||
+             opcode == audioMasterGetCurrentProcessLevel )
+        {
+            // these are stateless so it's okay if effect is null; this has been seen happen on some iZo plugs
+        }
+        else
+        {
+            // .. but otherwise this is an error, we need the userdata in effect to reach back to our host instance
+            blog::error::vst( " - vstAudioMasterCallback effect is nullptr for opcode {} ({})", opcode, vstOpcodeToString( opcode ) );
+            return 0;
+        }
     }
 
     switch ( opcode )
@@ -350,12 +376,41 @@ VstIntPtr __cdecl Instance::Data::vstAudioMasterCallback( AEffect* effect, VstIn
             effect->dispatcher( effect, effEditIdle, 0, 0, nullptr, 0 );
             break;
 
+        case audioMasterSizeWindow:
+            {
+                Instance::Data* localData = (Instance::Data*)effect->user;
+                if ( localData )
+                {
+                    RECT wr = { 0, 0, (LONG)index, (LONG)value };
+                    ::AdjustWindowRectEx( &wr, wStyle, FALSE, wStyleEx );
+                    ::SetWindowPos( localData->m_vstEditorHWND, nullptr, 0, 0, wr.right, wr.bottom, SWP_NOMOVE | SWP_NOREPOSITION | SWP_NOZORDER );
+                }
+            }
+            break;
+
+        case audioMasterCanDo:
+            if ( ptr != nullptr )
+                blog::vst( " - audioMasterCanDo ({})", (const char*)ptr );
+            break;
+
+        case audioMasterIOChanged:
+            {
+                Instance::Data* localData = (Instance::Data*)effect->user;
+                if ( localData )
+                {
+                    localData->m_updateIOChannels = true;
+                }
+            }
+            return 1;
+
         case audioMasterGetVendorString:
-            strncpy( (char*)ptr, "Ouroveon", kVstMaxVendorStrLen - 1 );
+            strcpy_s( (char*)ptr, kVstMaxVendorStrLen, "ishani.org" );
             break;
         case audioMasterGetProductString:
-            strncpy( (char*)ptr, "BEAM", kVstMaxProductStrLen - 1 );
+            strcpy_s( (char*)ptr, kVstMaxVendorStrLen, "OUROVEON" );
             break;
+        case audioMasterGetVendorVersion:
+            return 0x666;
 
         default:
             blog::vst( " - vstAudioMasterCallback unhandled opcode {} ({})", opcode, vstOpcodeToString(opcode) );
@@ -395,8 +450,6 @@ LRESULT WINAPI Instance::Data::vstMsgProc( HWND hWnd, UINT msg, WPARAM wParam, L
 // ---------------------------------------------------------------------------------------------------------------------
 HWND  Instance::Data::vstCreateWindow( uint32_t width, uint32_t height, Instance::Data* dataPtr )
 {
-    auto wStyle     = WS_POPUPWINDOW | WS_OVERLAPPED | WS_CAPTION | WS_VISIBLE | WS_MINIMIZEBOX;
-    auto wStyleEx   = WS_EX_PALETTEWINDOW | WS_EX_TOOLWINDOW;
     RECT wr = { 0, 0, (LONG)width, (LONG)height };
     ::AdjustWindowRectEx( &wr, wStyle, FALSE, wStyleEx );
 
@@ -442,6 +495,8 @@ void Instance::Data::runOnVstThread()
         {
             blog::error::vst( "VSTPluginMain entrypoint not found" );
             FreeLibrary( m_vstModule );
+
+            m_vstFailedToLoad = true;
             return;
         }
     }
@@ -478,23 +533,23 @@ void Instance::Data::runOnVstThread()
                 case 0:
                     saInput.speakers[i].type  = kSpeakerL;
                     saOutput.speakers[i].type = kSpeakerL;
-                    strncpy( saInput.speakers[i].name, "In-Left", kVstMaxNameLen - 1 );
-                    strncpy( saOutput.speakers[i].name, "Out-Left", kVstMaxNameLen - 1 );
+                    strcpy_s( saInput.speakers[i].name, kVstMaxNameLen, "In-Left" );
+                    strcpy_s( saOutput.speakers[i].name, kVstMaxNameLen, "Out-Left" );
                     break;
                 case 1:
                     saInput.speakers[i].type  = kSpeakerR;
                     saOutput.speakers[i].type = kSpeakerR;
-                    strncpy( saInput.speakers[i].name, "In-Right", kVstMaxNameLen - 1 );
-                    strncpy( saOutput.speakers[i].name, "Out-Right", kVstMaxNameLen - 1 );
+                    strcpy_s( saInput.speakers[i].name, kVstMaxNameLen, "In-Right" );
+                    strcpy_s( saOutput.speakers[i].name, kVstMaxNameLen, "Out-Right" );
                     break;
                 case 2:
                     saInput.speakers[i].type = kSpeakerSl;  // ??
-                    strncpy( saInput.speakers[i].name, "Sidechain-Left", kVstMaxNameLen - 1 );
+                    strcpy_s( saInput.speakers[i].name, kVstMaxNameLen, "Sidechain-Left" );
                     saOutput.speakers[i].type = kSpeakerUndefined;
                     break;
                 case 3:
                     saInput.speakers[i].type = kSpeakerSr;  // ??
-                    strncpy( saInput.speakers[i].name, "Sidechain-Right", kVstMaxNameLen - 1 );
+                    strcpy_s( saInput.speakers[i].name, kVstMaxNameLen, "Sidechain-Right" );
                     saOutput.speakers[i].type = kSpeakerUndefined;
                     break;
                 default:
@@ -544,6 +599,8 @@ void Instance::Data::runOnVstThread()
 
     base::instr::setThreadName( fmt::format( OURO_THREAD_PREFIX "VST::{}", m_product ).c_str() );
 
+    // update on first time through
+    m_updateIOChannels = true;
 
     m_vstThreadInitComplete = true;
 
@@ -628,6 +685,16 @@ void Instance::Data::runOnVstThread()
         }
         Sleep( 10 );
 
+        if ( m_updateIOChannels )
+        {
+            m_midiInputChannels     = (int32_t)safeDispatch( effGetNumMidiInputChannels, 0, 0, nullptr, 0 );
+            m_midiOutputChannels    = (int32_t)safeDispatch( effGetNumMidiOutputChannels, 0, 0, nullptr, 0 );
+            m_updateIOChannels      = false;
+
+            blog::vst( "MIDI Channels [{}] : In {} : Out {} ", productString, m_midiInputChannels, m_midiOutputChannels );
+        }
+
+
         // process requests from main thread
         ActivationState requestedActivation;
         if ( m_vstActivationQueue.try_dequeue( requestedActivation ) )
@@ -691,6 +758,11 @@ bool Instance::availableForUse() const
 {
     return ( loaded() && 
              isActive() );
+}
+
+bool Instance::failedToLoad() const
+{
+    return m_data->m_vstFailedToLoad;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -919,5 +991,32 @@ void Instance::process( float** inputs, float** outputs, const int32_t sampleFra
     m_data->m_vstFilterInstance->processReplacing( m_data->m_vstFilterInstance, inputs, outputs, sampleFrames );
 }
 
+/*
+void Instance::dispatchMidi( const app::midi::Message& midiMsg )
+{
+    if ( loaded() && m_data->m_midiInputChannels > 0 )
+    {
+        VstEvents events;
+        events.numEvents = 1;
+        events.reserved = 0;
+
+        VstMidiEvent midiEvent;
+        memset( &midiEvent, 0, sizeof( VstMidiEvent ) );
+        midiEvent.type      = kVstMidiType;
+        midiEvent.byteSize  = sizeof( VstMidiEvent );
+        midiEvent.flags     = kVstMidiEventIsRealtime;
+
+        midiEvent.midiData[0] = app::midi::Message::typeAsByte( midiMsg.m_type );
+        midiEvent.midiData[1] = midiMsg.m_data0_u7;
+        midiEvent.midiData[2] = midiMsg.m_data1_u7;
+
+        events.events[0] = (VstEvent *)&midiEvent;
+
+        m_data->safeDispatch( effProcessEvents, 0, 0, &events, 0 );
+    }
+}
+*/
+
 } // namespace vst
 
+#endif OURO_FEATURES_VST

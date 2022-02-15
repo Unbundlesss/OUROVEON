@@ -58,8 +58,10 @@ struct StoragePaths
 };
 
 
-namespace module { struct Audio; }
+namespace module { struct Audio; struct Midi; }
 using AudioModule = std::unique_ptr<module::Audio>;
+using MidiModule  = std::unique_ptr<module::Midi>;
+
 
 // some access to Core app instances without having to hand over the keys
 struct ICoreServices
@@ -146,6 +148,8 @@ protected:
     // the interface to portaudio, make noise go bang
     app::AudioModule                        m_mdAudio;
 
+    // interface to MIDI capture/production
+    app::MidiModule                         m_mdMidi;
 
 public:
 

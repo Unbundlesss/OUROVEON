@@ -28,7 +28,11 @@ void Exchange::fillDetailsFromRiff( Exchange& data, const live::RiffPtr& riff, c
         return;
     }
 
-    strncpy( data.m_jamName, jamName, endlesss::Exchange::MaxJamName - 1 );
+    strncpy_s(
+        data.m_jamName,
+        endlesss::Exchange::MaxJamName,
+        jamName,
+        endlesss::Exchange::MaxJamName - 1 );
 
     const uint64_t currentRiffHash = currentRiff->getCIDHash().getID();
     data.m_riffHash = currentRiffHash;

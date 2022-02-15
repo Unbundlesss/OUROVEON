@@ -107,7 +107,7 @@ static constexpr char const* cImGuiFontBanner   = "../../shared/fonts/JosefinSan
 Frontend::Frontend( const config::Frontend& feConfig, const char* name )
     : m_feConfigCopy( feConfig )
     , m_appName( name )
-    , m_SDLWindow( nullptr )
+    , m_GlfwWindow( nullptr )
     , m_hwnd( nullptr )
     , m_largestTextureDimension( 0 )
     , m_fontFixed( nullptr )
@@ -122,6 +122,11 @@ Frontend::~Frontend()
 {
     if ( m_hwnd != nullptr )
         destroy();
+}
+
+static void glfwErrorCallback( int error, const char* description )
+{
+    blog::error::core( "[glfw] error %i : %s", error, description );
 }
 
 // NB https://stackoverflow.com/questions/67345946/problem-with-imgui-when-using-glfw-opengl
@@ -140,55 +145,58 @@ bool Frontend::create( const app::Core& appCore )
         return false;
     }
 
-    // begin to configure SDL 
-    blog::core( "loading SDL ..." );
-    if ( SDL_Init( SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER ) != 0 )
+    glfwSetErrorCallback( glfwErrorCallback );
+
+    blog::core( "loading GLFW {}.{}.{} ...", GLFW_VERSION_MAJOR, GLFW_VERSION_MINOR, GLFW_VERSION_REVISION );
+    if ( !glfwInit() )
     {
-        blog::error::core( "InitialiseSDL failed, error: %s", SDL_GetError() );
+        blog::error::core( "[glfw] failed to initialise" );
         return false;
     }
 
-    // .. and then GL
-    const char* glsl_version = "#version 150";
-    SDL_GL_SetAttribute( SDL_GL_CONTEXT_FLAGS, 0 );
-    SDL_GL_SetAttribute( SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE );
-    SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 3 );
-    SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 2 );
+    // GL 3.2 + GLSL 150
+    glfwWindowHint( GLFW_CONTEXT_VERSION_MAJOR,     3 );
+    glfwWindowHint( GLFW_CONTEXT_VERSION_MINOR,     2 );
+    glfwWindowHint( GLFW_OPENGL_PROFILE,            GLFW_OPENGL_CORE_PROFILE );
+    glfwWindowHint( GLFW_OPENGL_FORWARD_COMPAT,     GL_TRUE );
+    glfwWindowHint( GLFW_SAMPLES,                   2 );
+    glfwWindowHint( GLFW_DOUBLEBUFFER,              1 );
 
-    SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, 1 );
-    SDL_GL_SetAttribute( SDL_GL_DEPTH_SIZE, 24 );
-    SDL_GL_SetAttribute( SDL_GL_STENCIL_SIZE, 8 );
-
-    {
-        SDL_GL_SetAttribute( SDL_GL_MULTISAMPLEBUFFERS, 1 );
-        SDL_GL_SetAttribute( SDL_GL_MULTISAMPLESAMPLES, 2 );
-    }
 
     blog::core( "creating main window" );
-    m_SDLWindow = SDL_CreateWindow(
-        fmt::format( "OUROVEON {} // ishani.org 2022", m_appName ).c_str(),
-        SDL_WINDOWPOS_CENTERED,
-        SDL_WINDOWPOS_CENTERED,
+    m_GlfwWindow = glfwCreateWindow(
         m_feConfigCopy.appWidth,
         m_feConfigCopy.appHeight,
-        (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_BORDERLESS | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI)
+        fmt::format( "OUROVEON {} // ishani.org 2022", m_appName ).c_str(),
+        nullptr,
+        nullptr
     );
-    m_isBorderless = true;
+    if ( !m_GlfwWindow )
+    {
+        glfwTerminate();
+        blog::error::core( "[glfw] unable to create main window" );
+        return false;
+    }
+
 
     blog::core( "creating main GL context" );
-    m_GLContext = SDL_GL_CreateContext( m_SDLWindow );
-    SDL_GL_MakeCurrent( m_SDLWindow, m_GLContext );
-    SDL_GL_SetSwapInterval( 1 ); // +vsync
+    glfwMakeContextCurrent( m_GlfwWindow );
+    glfwSetWindowCenter( m_GlfwWindow );
 
     blog::core( "loading GLAD ..." );
-    int gladErr = gladLoadGL();
+    int gladErr = gladLoadGLLoader( (GLADloadproc)glfwGetProcAddress );
     if ( gladErr == 0 )
     {
         blog::error::core( "OpenGL loader failed, {}", gladErr );
         return false;
     }
 
-    blog::core( "bound OpenGL {}.{} | GLSL {}", GLVersion.major, GLVersion.minor, glGetString( GL_SHADING_LANGUAGE_VERSION ) );
+    glfwSwapInterval( 1 );
+
+    m_isBorderless = true;
+    applyBorderless();
+
+    blog::core( "bound OpenGL {} | GLSL {}", glGetString( GL_VERSION ), glGetString( GL_SHADING_LANGUAGE_VERSION ) );
 
     glGetIntegerv( GL_MAX_TEXTURE_SIZE, (GLint*)&m_largestTextureDimension );
     blog::core( "GL_MAX_TEXTURE_SIZE = {}", m_largestTextureDimension );
@@ -220,8 +228,8 @@ bool Frontend::create( const app::Core& appCore )
         ApplyOuroveonImGuiStyle();
 
         // configure rendering with SDL/GL
-        ImGui_ImplSDL2_InitForOpenGL( m_SDLWindow, m_GLContext );
-        ImGui_ImplOpenGL3_Init( glsl_version );
+        ImGui_ImplGlfw_InitForOpenGL( m_GlfwWindow, true );
+        ImGui_ImplOpenGL3_Init( nullptr );
 
 
         ImGuiIO& io = ImGui::GetIO();
@@ -282,10 +290,7 @@ bool Frontend::create( const app::Core& appCore )
     }
 
     // snag the windows HWND for our main window
-    SDL_SysWMinfo wmInfo;
-    SDL_VERSION( &wmInfo.version );
-    SDL_GetWindowWMInfo( m_SDLWindow, &wmInfo );
-    m_hwnd = wmInfo.info.win.window;
+    m_hwnd = glfwGetWin32Window( m_GlfwWindow );
 
     return true;
 }
@@ -294,17 +299,16 @@ bool Frontend::create( const app::Core& appCore )
 void Frontend::destroy()
 {
     ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplSDL2_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
 
     imnodes::Shutdown();
     ImPlot::DestroyContext();
     ImGui::DestroyContext();
 
-    SDL_GL_DeleteContext( m_GLContext );
-    SDL_DestroyWindow( m_SDLWindow );
-    SDL_Quit();
+    glfwDestroyWindow( m_GlfwWindow );
+    glfwTerminate();
 
-    m_SDLWindow = nullptr;
+    m_GlfwWindow = nullptr;
     m_hwnd = nullptr;
 }
 
@@ -313,27 +317,10 @@ bool Frontend::appTick()
 {
     bool shouldQuit = m_quitRequested;
 
-    // Poll and handle events (inputs, window resize, etc.)
-    // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
-    // - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application.
-    // - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application.
-    // Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
-    SDL_Event event;
-    while ( SDL_PollEvent( &event ) )
-    {
-        ImGui_ImplSDL2_ProcessEvent( &event );
-
-        if ( event.type == SDL_QUIT )
-            shouldQuit = true;
-
-        if ( event.type             == SDL_WINDOWEVENT &&
-             event.window.event     == SDL_WINDOWEVENT_CLOSE &&
-             event.window.windowID  == SDL_GetWindowID( m_SDLWindow ) )
-            shouldQuit = true;
-    }
+    shouldQuit |= ( glfwWindowShouldClose( m_GlfwWindow ) != 0 );
 
     ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplSDL2_NewFrame( m_SDLWindow );
+    ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
     ImGui::Scoped::TickPulses();
@@ -363,16 +350,24 @@ void Frontend::appRenderImguiDispatch()
 // ---------------------------------------------------------------------------------------------------------------------
 void Frontend::appRenderFinalise()
 {
-    SDL_GL_SwapWindow( m_SDLWindow );
+    glfwSwapBuffers( m_GlfwWindow );
+    glfwPollEvents();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 void Frontend::toggleBorderless()
 {
     m_isBorderless = !m_isBorderless;
-    SDL_SetWindowBordered( m_SDLWindow, m_isBorderless ? SDL_FALSE : SDL_TRUE );
-    SDL_SetWindowResizable( m_SDLWindow, m_isBorderless ? SDL_FALSE : SDL_TRUE );
+    applyBorderless();
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+void Frontend::applyBorderless()
+{
+    glfwSetWindowAttrib( m_GlfwWindow, GLFW_DECORATED, m_isBorderless ? 0 : 1 );
+    glfwSetWindowAttrib( m_GlfwWindow, GLFW_RESIZABLE, m_isBorderless ? 0 : 1 );
+}
+
 
 // ---------------------------------------------------------------------------------------------------------------------
 bool Frontend::showFilePicker( const char* spec, std::string& fileResult ) const

@@ -9,9 +9,9 @@
 
 #pragma once
 
-#include "vst/aeffectx.h"
+#if OURO_FEATURES_VST
 
-namespace app { struct AudioPlaybackTimeInfo; }
+namespace app { struct AudioPlaybackTimeInfo; namespace midi { struct Message; } }
 namespace vst {
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -41,6 +41,7 @@ public:
     bool loaded() const;                // has instance, thread running
 
     bool availableForUse() const;       // loaded(), isActive()
+    bool failedToLoad() const;
 
     // identity
     const std::string getPath() const;
@@ -74,6 +75,7 @@ public:
     // run the VST against some data
     void process(float** inputs, float** outputs, const int32_t sampleFrames);
 
+
 private:
 
     int32_t                 m_uid;
@@ -92,3 +94,5 @@ struct ScopedInitialiseVSTHosting
 };
 
 } // namespace vst
+
+#endif // OURO_FEATURES_VST

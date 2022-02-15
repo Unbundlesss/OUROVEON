@@ -7,10 +7,7 @@
 //  
 //
 
-// no gods no masters
-#define _CRT_SECURE_NO_WARNINGS
-
-#define OURO_FRAMEWORK_VERSION    "0.6.2"
+#define OURO_FRAMEWORK_VERSION    "0.6.3"
 
 // std
 #include <bitset>
@@ -31,13 +28,33 @@
 #include <barrier>
 #include <latch>
 
+
+#if OURO_PLATFORM_WIN
+#define _CRT_SECURE_NO_WARNINGS
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#pragma push_macro("APIENTRY")
+#endif // OURO_PLATFORM_WIN
+
+// GLFW
+#include <glad/gl.h>
+#define GLFW_INCLUDE_NONE
+#include "GLFW/glfw3.h"
+#include "GLFW/glfw3ext.h"
+
+#if OURO_PLATFORM_WIN
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include "GLFW/glfw3native.h"
+
+#pragma pop_macro("APIENTRY")
+#endif // OURO_PLATFORM_WIN
+
+
+
 // github.com/HowardHinnant/date
 #include "date/date.h"
 #include "date/tz.h"
-
-// gl
-#include "glad/glad.h"
-#undef APIENTRY
 
 // fs
 #include <filesystem>
@@ -183,7 +200,7 @@ ADD_BLOG( stem,     0xe65ea9,    "STEM" )
 
 
 #include "imgui.h"
-#include "imgui_impl_sdl.h"
+#include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "imgui_freetype.h"
 #include "imgui_stdlib.h"
@@ -195,10 +212,6 @@ ADD_BLOG( stem,     0xe65ea9,    "STEM" )
 #include "sqlite3.h"
 #include "SQLiteWrapper.h"
 
-// SDL
-#define SDL_MAIN_HANDLED
-#include "SDL.h"
-#include "SDL_syswm.h"
 
 // etc
 #include "utf8.h"

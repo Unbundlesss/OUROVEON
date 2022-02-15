@@ -9,6 +9,8 @@
 
 #include "pch.h"
 
+#if OURO_FEATURES_VST
+
 #include "effect/effect.stack.h"
 #include "data/databus.h"
 
@@ -316,8 +318,14 @@ void EffectStack::imgui(
                 const auto vstUID = vsti->getUserData();
                 ImGui::PushID( (void*)vstUID );
 
+                const bool vstFailedToLoad          = vsti->failedToLoad();
+                const bool vstLoadingInProgress     = !vsti->loaded();
+
+                bool addDeletionButton = false;
+
                 // VSTs are loaded asynchronously on their own thread; if they are not available, show in-progress placeholder
-                if ( !vsti->loaded() )
+                if ( vstLoadingInProgress || 
+                     vstFailedToLoad )
                 {
                     ImGui::BeginDisabledControls( true );
                     ImGui::Button( "", commonSquareSize ); ImGui::SameLine( 0.0f, 4.0f );
@@ -326,7 +334,13 @@ void EffectStack::imgui(
                     ImGui::Button( "", commonSquareSize ); ImGui::SameLine();
                     ImGui::EndDisabledControls( true );
 
-                    ImGui::TextUnformatted( ICON_FA_HOURGLASS_START );
+                    if ( vstFailedToLoad )
+                    {
+                        ImGui::TextUnformatted( ICON_FA_SAD_CRY " Failed To Load" );
+                        addDeletionButton = true; // load failed, only option to delete now
+                    }
+                    else
+                        ImGui::TextUnformatted( ICON_FA_HOURGLASS_START );
                 }
                 // VST is loaded, show proper controls
                 else
@@ -390,14 +404,20 @@ void EffectStack::imgui(
                         else
                         {
                             // VST is working on opening/closing UI or something that is inhibiting changing that state
-                            ImGui::TextUnformatted( ICON_FA_FAN );
+                            ImGui::BeginDisabledControls( false );
+                            ImGui::Button( ICON_FA_FAN, commonSquareSize );
+                            ImGui::EndDisabledControls( false );
                         }
                     }
 
-
                     ImGui::SameLine();
+                    ImGui::TextUnformatted( vsti->getProductName() );
 
-                    ImGui::TextUnformatted( vsti->getProductName().c_str() );
+                    addDeletionButton = true;
+                }
+
+                if ( addDeletionButton )
+                {
                     ImGui::SameLine();
                     auto cursorX = ImGui::GetCursorPosX();
 
@@ -595,3 +615,5 @@ void EffectStack::ParameterSet::syncToDataBus( const data::DataBus& bus, vst::In
 }
 
 } // namespace effect
+
+#endif // OURO_FEATURES_VST

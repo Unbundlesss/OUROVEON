@@ -1,11 +1,11 @@
 #include "pch.h"
 
-#include "ispc/.gen/colour_ispc.gen.h"
-
 #include "base/utils.h"
 #include "base/buffer2d.h"
 #include "base/metaenum.h"
 #include "base/instrumentation.h"
+
+#include "colour/gradient.h"
 
 #include "config/frontend.h"
 #include "config/data.h"
@@ -14,6 +14,7 @@
 #include "app/module.audio.h"
 #include "app/module.frontend.h"
 #include "app/module.frontend.fonts.h"
+#include "app/module.midi.h"
 
 #include "app/ouro.h"
 
@@ -125,14 +126,14 @@ struct JamVisualisation
     {
         switch ( m_colourSource )
         {
-            case ColourSource::GradientGrayscale:       return ispc::gradient_grayscale_u32( t );
-            case ColourSource::GradientBlueOrange:      return ispc::gradient_blueorange_u32( t );
-            case ColourSource::GradientPlasma:          return ispc::gradient_plasma_u32( t );
-            case ColourSource::GradientRainbowVibrant:  return ispc::gradient_rainbow_ultra_u32( t );
-            case ColourSource::GradientRainbow:         return ispc::gradient_rainbow_u32( t );
-            case ColourSource::GradientTurbo:           return ispc::gradient_turbo_u32( t );
-            case ColourSource::GradientViridis:         return ispc::gradient_viridis_u32( t );
-            case ColourSource::GradientMagma:           return ispc::gradient_magma_u32( t );
+            case ColourSource::GradientGrayscale:       return colour::gradient_grayscale_u32( t );
+            case ColourSource::GradientBlueOrange:      return colour::gradient_blueorange_u32( t );
+            case ColourSource::GradientPlasma:          return colour::gradient_plasma_u32( t );
+            case ColourSource::GradientRainbowVibrant:  return colour::gradient_rainbow_ultra_u32( t );
+            case ColourSource::GradientRainbow:         return colour::gradient_rainbow_u32( t );
+            case ColourSource::GradientTurbo:           return colour::gradient_turbo_u32( t );
+            case ColourSource::GradientViridis:         return colour::gradient_viridis_u32( t );
+            case ColourSource::GradientMagma:           return colour::gradient_magma_u32( t );
             default:
                 return 0xFF00FFFF;
         }
@@ -232,6 +233,14 @@ struct LoreApp : public app::OuroApp
 
     int EntrypointOuro() override;
 
+    void initMidi()
+    {
+        auto* midiInput = m_mdMidi->getInputControl();
+        if ( midiInput != nullptr )
+        {
+            midiInput->getInputPorts( m_midiInputPortNames );
+        }
+    }
 
 protected:
 
@@ -244,19 +253,58 @@ protected:
 
             ImGui::EndMenu();
         }
+
+        auto* midiInput = m_mdMidi->getInputControl();
+        if ( midiInput != nullptr && !m_midiInputPortNames.empty() )
+        {
+            uint32_t openedIndex;
+            const bool hasOpenPort = midiInput->getOpenPortIndex( openedIndex );
+
+            if ( ImGui::BeginMenu( "MIDI" ) )
+            {
+                for ( uint32_t inpIdx = 0; inpIdx < (uint32_t)m_midiInputPortNames.size(); inpIdx++ )
+                {
+                    const bool thisPortIsOpen = hasOpenPort && ( openedIndex == inpIdx );
+
+                    if ( ImGui::MenuItem( m_midiInputPortNames[inpIdx].c_str(), nullptr, thisPortIsOpen ) )
+                    {
+                        if ( thisPortIsOpen )
+                            midiInput->closeInputPort();
+                        else
+                            midiInput->openInputPort( inpIdx );
+                    }
+                }
+                ImGui::EndMenu();
+            }
+        }
     }
 
     void customStatusBar()
     {
-
+        uint32_t openedIndex;
+        auto* midiInput = m_mdMidi->getInputControl();
+        if ( midiInput != nullptr && midiInput->getOpenPortIndex( openedIndex ) )
+        {
+            const auto& inputPortName = m_midiInputPortNames[openedIndex];
+            {
+                ImGui::Scoped::ToggleButtonLit toggled;
+                ImGui::Button( "MIDI" );
+                ImGui::TextUnformatted( inputPortName );
+            }
+            ImGui::Separator();
+        }
     }
+
+    std::vector< std::string >              m_midiInputPortNames;
 
 
     // discord bot & streaming panel 
     std::unique_ptr< discord::BotWithUI >   m_discordBotUI;
 
+#if OURO_FEATURES_VST
     // VST playground
     std::unique_ptr< effect::EffectStack >  m_effectStack;
+#endif // OURO_FEATURES_VST
 
 
 // riff playback management #HDD build into common module?
@@ -968,6 +1016,7 @@ protected:
             break;
         }
     }
+
 };
 
 
@@ -998,14 +1047,19 @@ int LoreApp::EntrypointOuro()
     m_jamVisualisation.m_nameHighlighting[0].m_colour = ImVec4( 1.0f, 0.95f, 0.8f, 1.0f );
 
 
+    // examine our midi state, extract port names
+    initMidi();
+
 
     // create and install the mixer engine
     mix::Preview mixPreview( m_mdAudio->getMaximumBufferSize(), m_mdAudio->getSampleRate(), std::bind( &LoreApp::handleNewRiffPlaying, this, stdp::_1 ) );
     m_mdAudio->blockUntil( m_mdAudio->installMixer( &mixPreview ) );
 
+#if OURO_FEATURES_VST
     // VSTs for audio engine
     m_effectStack = std::make_unique<effect::EffectStack>( m_mdAudio.get(), mixPreview.getTimeInfoPtr(), "preview" );
     m_effectStack->load( m_appConfigPath );
+#endif // OURO_FEATURES_VST
 
     m_syncAndPlaybackThread = std::make_unique<std::jthread>( [&mixPreview, &warehouse, this]( std::stop_token stoken )
         {
@@ -1013,7 +1067,7 @@ int LoreApp::EntrypointOuro()
 
             base::instr::setThreadName( OURO_THREAD_PREFIX "LORE::riff-sync" );
 
-            endlesss::live::RiffCacheLRU liveRiffMiniCache{ 32 };
+            endlesss::live::RiffCacheLRU liveRiffMiniCache{ 50 };
             endlesss::types::RiffCouchID riffCouchID;
 
             blog::app( "background riff sync thread [enter]" );
@@ -1117,10 +1171,12 @@ int LoreApp::EntrypointOuro()
                     ux::widget::DiskRecorder( *mixRecordable, m_storagePaths->outputApp );
             }
 
+#if OURO_FEATURES_VST
             ImGui::Spacing();
             ImGui::Spacing();
 
             m_effectStack->imgui( *m_mdFrontEnd );
+#endif // OURO_FEATURES_VST
 
             ImGui::End();
         }
@@ -1141,6 +1197,8 @@ int LoreApp::EntrypointOuro()
         // note if the warehouse is running ops, if not then disable new-task buttons
         const bool warehouseIsPaused = warehouse.workerIsPaused();
 
+
+        m_mdMidi->processMessages( [this, &currentRiff]( const app::midi::Message& msg ){ } );
 
         {
             m_discordBotUI->imgui( *m_mdFrontEnd );
@@ -1531,9 +1589,11 @@ int LoreApp::EntrypointOuro()
     // remove the mixer and ensure the async op has taken before leaving scope
     m_mdAudio->blockUntil( m_mdAudio->installMixer( nullptr ) );
 
+#if OURO_FEATURES_VST
     // serialize effects
     m_effectStack->save( m_appConfigPath );
     m_effectStack.reset();
+#endif // OURO_FEATURES_VST
 
 
     return 0;

@@ -9,6 +9,10 @@
 
 #pragma once
 
+#if OURO_FEATURES_VST
+
+#include "app/module.midi.msg.h"
+
 namespace vst { class Instance; }
 namespace app { struct AudioPlaybackTimeInfo; namespace module { struct Frontend; } }
 namespace data { struct DataBus; }
@@ -213,3 +217,5 @@ private:
 };
 
 } // namespace effect
+
+#endif // OURO_FEATURES_VST

@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "base/utils.h"
+#include "buffer/mix.h"
 #include "spacetime/moment.h"
 
 #include "config/data.h"
@@ -23,13 +24,10 @@
 
 #include "endlesss/all.h"
 
-#include "beam.fx.vst.h"
-#include "beam.fx.databus.h"
+#include "data/databus.h"
+#include "effect/effect.stack.h"
 
-#define MIX_ISPC 1
-#if MIX_ISPC
-#include "ispc/.gen/mix_ispc.gen.h"
-#endif 
+
 
 #define OUROVEON_BEAM           "BEAM"
 #define OUROVEON_BEAM_VERSION   OURO_FRAMEWORK_VERSION "-alpha"
@@ -247,7 +245,7 @@ struct MixEngine : public app::module::MixerInterface,
         const float         outputVolume,
         const uint32_t      samplesToWrite )
     {
-        ispc::downmix_8channel_stereo(
+        buffer::downmix_8channel_stereo(
             outputVolume,
             samplesToWrite,
             m_mixChannelLeft[0],
@@ -894,7 +892,7 @@ void MixEngine::update(
 namespace Providers {
 
 // ---------------------------------------------------------------------------------------------------------------------
-struct RiffPercentage : public Fx::Provider
+struct RiffPercentage : public data::Provider
 {
     static constexpr size_t UniqueID         = PROVIDER_ID( 'R', 'I', 'F', '%' );
     static constexpr const char* VisibleName = "Riff %";
@@ -914,7 +912,7 @@ struct RiffPercentage : public Fx::Provider
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-struct MixTransition : public Fx::Provider
+struct MixTransition : public data::Provider
 {
     static constexpr size_t UniqueID         = PROVIDER_ID( 'M', 'X', 'T', 'R' );
     static constexpr const char* VisibleName = "Transit";
@@ -942,7 +940,9 @@ struct BeamApp : public app::OuroApp
     BeamApp()
         : app::OuroApp()
     {
-        Fx::Providers::registerDefaults( m_dataBus.m_providerFactory, m_dataBus.m_providerNames );
+#if OURO_FEATURES_VST
+        data::providers::registerDefaults( m_dataBus.m_providerFactory, m_dataBus.m_providerNames );
+#endif // OURO_FEATURES_VST
 
         m_discordBotUI = std::make_unique<discord::BotWithUI>( *this, m_configDiscord );
     }
@@ -983,9 +983,10 @@ protected:
 
     MixEngine::RepComConfiguration          m_repComConfig;
 
-
-    Fx::DataBus                             m_dataBus;
-    Fx::VstStack                            m_vstStack;
+#if OURO_FEATURES_VST
+    data::DataBus                           m_dataBus;
+    std::unique_ptr< effect::EffectStack >  m_effectStack;
+#endif // OURO_FEATURES_VST
 
     spacetime::Moment                       m_lastAutoMemoryReclaimationMoment;
 
@@ -1000,15 +1001,15 @@ int BeamApp::EntrypointOuro()
     MixEngine mixEngine( m_mdAudio );
     m_mdAudio->blockUntil( m_mdAudio->installMixer( &mixEngine ) );
 
-
+#if OURO_FEATURES_VST
     // custom databus providers
     {
-        Fx::Providers::registerProvider< Providers::RiffPercentage >(
+        data::providers::registerProvider< Providers::RiffPercentage >(
             m_dataBus.m_providerFactory,
             m_dataBus.m_providerNames,
             [&]() { return new Providers::RiffPercentage( &mixEngine ); } );
 
-        Fx::Providers::registerProvider< Providers::MixTransition >(
+        data::providers::registerProvider< Providers::MixTransition >(
             m_dataBus.m_providerFactory,
             m_dataBus.m_providerNames,
             [&]() { return new Providers::MixTransition( &mixEngine ); } );
@@ -1017,8 +1018,10 @@ int BeamApp::EntrypointOuro()
     // load last databus setup
     m_dataBus.load( m_appConfigPath );
 
-    // management of VSTs
-    m_vstStack.load( m_appConfigPath, m_mdAudio, &mixEngine.m_unifiedTimeInfo );
+    // VSTs for audio engine
+    m_effectStack = std::make_unique<effect::EffectStack>( m_mdAudio.get(), &mixEngine.m_unifiedTimeInfo, "beam" );
+    m_effectStack->load( m_appConfigPath );
+#endif // OURO_FEATURES_VST
 
 
     // == SNOOP ========================================================================================================
@@ -1118,12 +1121,19 @@ int BeamApp::EntrypointOuro()
 
         ImGuiPerformanceTracker();
 
+#if OURO_FEATURES_VST
+
         m_dataBus.update();
         m_dataBus.imgui();
 
-        m_vstStack.syncToDataBus( m_dataBus );
-        m_vstStack.imgui( m_mdAudio, &mixEngine.m_unifiedTimeInfo, *m_mdFrontEnd, m_dataBus );
+        {
+            ImGui::Begin( "Effects" );
+            m_effectStack->syncToDataBus( m_dataBus );
+            m_effectStack->imgui( *m_mdFrontEnd, &m_dataBus );
+            ImGui::End();
+        }
 
+#endif // OURO_FEATURES_VST
 
         m_discordBotUI->imgui( *m_mdFrontEnd );
 
@@ -1473,8 +1483,10 @@ int BeamApp::EntrypointOuro()
 
     m_mdAudio->blockUntil( m_mdAudio->installMixer( nullptr ) );
 
+#if OURO_FEATURES_VST
     m_dataBus.save( m_appConfigPath );
-    m_vstStack.save( m_appConfigPath );
+    m_effectStack->save( m_appConfigPath );
+#endif // OURO_FEATURES_VST
 
     return 0;
 }

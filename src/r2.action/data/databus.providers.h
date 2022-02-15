@@ -93,6 +93,18 @@ struct Multiply2 : public Provider
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
+struct Smooth : public Provider
+{
+    static constexpr size_t UniqueID = PROVIDER_ID( 'S', 'M', 'T', 'H' );
+    static constexpr const char* VisibleName = "Smooth";
+
+    virtual AbilityFlags flags() const { return (AbilityFlags)( kUsesValue | kUsesBus1 | kUsesRemapping ); }
+    virtual float generate( const Input& input ) override;
+
+    float m_lastValue = 0;
+};
+
+// ---------------------------------------------------------------------------------------------------------------------
 void registerDefaults( ProviderFactory& factory, ProviderNames& names );
 
 } // namespace providers

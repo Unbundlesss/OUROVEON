@@ -12,10 +12,9 @@
 #include "ssp/flac.h"
 
 #include "base/utils.h"
+#include "buffer/mix.h"
 
 #include "FLAC++/encoder.h"
-
-#include "ispc/.gen/mix_ispc.gen.h"
 
 namespace ssp {
 
@@ -86,7 +85,7 @@ struct FLACWriter::StreamInstance : public FLAC::Encoder::File
             FLAC__int32* bufferWritePoint = &m_sampleBuffer[m_sampleBufferUsed];
 
             auto samplesToWritePerChannel = samplesCanBeWritten / 2;
-            ispc::interleave_float_to_int24( samplesToWritePerChannel, bufferLeft, bufferRight, bufferWritePoint );
+            buffer::interleave_float_to_int24( samplesToWritePerChannel, bufferLeft, bufferRight, bufferWritePoint );
             
 
             m_sampleBufferUsed += samplesCanBeWritten;

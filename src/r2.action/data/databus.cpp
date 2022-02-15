@@ -14,9 +14,9 @@
 
 namespace data {
 
-static fs::path getConfigPath( const std::string& appStashPath )
+static fs::path getConfigPath( const fs::path& appStashPath )
 {
-    return fs::absolute( fs::path( appStashPath ) / "databus.config.json" );
+    return fs::absolute( appStashPath / "databus.config.json" );
 }
 
 void DataBus::BusConfiguration::imgui( const DataBus& dataBus, const data::Provider::AbilityFlags flags )
@@ -42,7 +42,7 @@ void DataBus::BusConfiguration::imgui( const DataBus& dataBus, const data::Provi
     }
 }
 
-void DataBus::save( const std::string& appStashPath )
+void DataBus::save( const fs::path& appStashPath )
 {
     fs::path configPath = getConfigPath( appStashPath );
     {
@@ -68,7 +68,7 @@ void DataBus::save( const std::string& appStashPath )
     }
 }
 
-void DataBus::load( const std::string& appStashPath )
+void DataBus::load( const fs::path& appStashPath )
 {
     fs::path configPath = getConfigPath( appStashPath );
 

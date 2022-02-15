@@ -19,6 +19,7 @@
 #include "app/module.frontend.h"
 #include "app/module.frontend.fonts.h"
 #include "app/module.audio.h"
+#include "app/module.midi.h"
 
 #include "filesys/fsutil.h"
 
@@ -198,7 +199,10 @@ int Core::Run()
 #if OURO_PLATFORM_WIN
     // bring up global external registrations / services that will auto-unwind on exit
     win32::ScopedInitialiseCOM      scopedCOM;
+
+#if OURO_FEATURES_VST
     vst::ScopedInitialiseVSTHosting scopedVST;
+#endif // OURO_FEATURES_VST
 #endif // OURO_PLATFORM_WIN
 
 #if OURO_EXCHANGE_IPC
@@ -225,10 +229,18 @@ int Core::Run()
         return -2;
     }
 
+    m_mdMidi = std::make_unique<app::module::Midi>();
+    if ( !m_mdMidi->create( *this ) )
+    {
+        blog::error::core( "app::module::Midi unable to start" );
+        return -2;
+    }
+
     // run the app main loop
     int appResult = Entrypoint();
 
     // unwind started services
+    m_mdMidi->destroy();
     m_mdAudio->destroy();
 
     return appResult;
@@ -345,10 +357,7 @@ bool CoreGUI::beginInterfaceLayout(
 #ifdef _DEBUG
             if ( ImGui::BeginMenu( "DEBUG" ) )
             {
-                ImGui::MenuItem( "VST Parameter Logging", "", &vst::Instance::DebugVerboseParameterLogging );
-                ImGui::Separator();
                 ImGui::MenuItem( "ImGUI Demo", "", &demoWindowVisible );
-
                 ImGui::EndMenu();
             }
 #endif

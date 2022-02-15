@@ -225,11 +225,17 @@ void Preview::update(
     // compute where we are (roughly) for the UI
     if ( m_riffCurrent )
     {
-        m_riffCurrent->getTimingDetails().ComputeProgressionAtSample(
+        const auto timingData = m_riffCurrent->getTimingDetails();
+        timingData.ComputeProgressionAtSample(
             m_riffPlaybackSample,
             m_riffPlaybackPercentage,
             m_riffPlaybackBar,
             m_riffPlaybackBarSegment );
+
+        m_timeInfo.samplePos          = (double)samplePosition;
+        m_timeInfo.tempo              = timingData.m_bpm;
+        m_timeInfo.timeSigNumerator   = timingData.m_quarterBeats;
+        m_timeInfo.timeSigDenominator = 4;
     }
 
     mixChannelsToOutput( outputBuffer, outputVolume, samplesToWrite );

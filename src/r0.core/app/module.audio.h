@@ -220,16 +220,16 @@ private:
     void*                           m_paStream;
     uint32_t                        m_sampleRate;
     OutputBuffer*                   m_mixerBuffers;                 // the aligned intermediate buffer, filled by the configurable mixer process
-    bool                            m_mute;
+    bool                            m_mute = false;
 
     ExposedState                    m_state;
 
-
+#if OURO_FEATURES_VST
     using VSTFxSlots = std::vector< vst::Instance* >;
 
     VSTFxSlots                      m_vstiStack;                    // VST slots, executed in order
-    bool                            m_vstBypass;
-
+    bool                            m_vstBypass = false;
+#endif // OURO_FEATURES_VST
 
     std::atomic<float>              m_volume = 0.5f;                // generic 0..1 global gain control
 

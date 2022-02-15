@@ -82,8 +82,8 @@ struct DataBus
             delete name;
     }
 
-    void save( const std::string& appStashPath );
-    void load( const std::string& appStashPath );
+    void save( const fs::path& appStashPath );
+    void load( const fs::path& appStashPath );
 
 
     void updateBus( const size_t bI, const float currentTime );

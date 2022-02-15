@@ -118,13 +118,13 @@ constexpr uint32_t nextPow2( uint32_t v )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-finline float oscSine( const float phase )
+inline float oscSine( const float phase )
 {
     return std::sin( phase * constants::f_2pi );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-finline float oscTriangle( const float phase )
+constexpr float oscTriangle( const float phase )
 {
     float rV;
 
@@ -137,7 +137,7 @@ finline float oscTriangle( const float phase )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-finline float oscSquare( const float phase )
+constexpr float oscSquare( const float phase )
 {
     if ( phase <= 0.5f )
         return 1.0f;
@@ -146,15 +146,15 @@ finline float oscSquare( const float phase )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-finline float oscSawtooth( const float phase )
+constexpr float oscSawtooth( const float phase )
 {
     return ((phase * 2.0f) - 1.0f) * -1.0f;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-finline float fract( const float x )
+inline float fract( const float x )
 {
-    return x - floor( x );
+    return x - std::floor( x );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
