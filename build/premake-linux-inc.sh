@@ -10,4 +10,4 @@
 #export LDFLAGS=-v 
 
 cd _gen
-make 
+make config=release_x86_64
