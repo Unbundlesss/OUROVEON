@@ -398,7 +398,7 @@ void Frontend::titleText( const char* label )
 
 void Frontend::reloadImguiLayoutFromDefault()
 {
-    ImGui::LoadIniSettingsFromDisk( "..\\layout.default.ini" );
+    ImGui::LoadIniSettingsFromDisk( "../layout.default.ini" );
     ImGui::MarkIniSettingsDirty();
 }
 
