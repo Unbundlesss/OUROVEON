@@ -956,6 +956,28 @@ end
 -- ------------------------------------------------------------------------------
 function CommonAppLink()
 
+    links
+    {
+        "sdk",
+
+        "ext-flac",
+        "ext-flac-cpp",
+        "ext-sqlite3",
+        "ext-dragonbox",
+        "ext-dpp",
+        "ext-uriparser",
+        "ext-date-tz",
+        "ext-pfold",
+        "ext-r8brain",
+        "ext-fmt",
+        "ext-kissfft",
+        "ext-cityhash",
+        "ext-stb",
+
+        "ext-brotli",
+        "ext-zlib",
+    }
+    
     for libName, libFn in pairs(ModuleRefLink) do
         libFn()
     end
@@ -973,28 +995,7 @@ function CommonAppLink()
         for libName, libFn in pairs(ModuleRefLinkOSX) do
             libFn()
         end
-    end
-
-    links
-    {
-        "ext-zlib",
-        "ext-flac",
-        "ext-flac-cpp",
-        "ext-sqlite3",
-        "ext-dragonbox",
-        "ext-dpp",
-        "ext-uriparser",
-        "ext-date-tz",
-        "ext-brotli",
-        "ext-pfold",
-        "ext-r8brain",
-        "ext-fmt",
-        "ext-kissfft",
-        "ext-cityhash",
-        "ext-stb",
-
-        --"sdk"
-    }
+    end    
 
     filter "system:Windows"
     links
@@ -1040,8 +1041,6 @@ function CommonAppLink()
         "m",
         "pthread",
         "dl",
-        "c++abi",
-        "c++",
 
         "X11",
         "Xrandr",
@@ -1070,16 +1069,16 @@ end
 -- ==============================================================================
 
 
---group "ouroveon"
+group "ouroveon"
 
---project "sdk"
-    --kind "StaticLib"
---SetupOuroveonLayer( false, "sdk" )
+project "sdk"
+    kind "StaticLib"
+    SetupOuroveonLayer( false, "sdk" )
 
- --   pchsource "../src/r0.core/pch.cpp"
-   -- pchheader "pch.h"
+    pchsource "../src/r0.core/pch.cpp"
+    pchheader "pch.h"
 
---group ""
+group ""
 
 
 -- ==============================================================================
@@ -1091,7 +1090,7 @@ group "apps"
 project "BEAM"
 
     kind "ConsoleApp"
-    SetupOuroveonLayer( false, "beam" )
+    SetupOuroveonLayer( true, "beam" )
     CommonAppLink()
 
     files
