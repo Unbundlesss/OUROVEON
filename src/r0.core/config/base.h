@@ -28,14 +28,15 @@ struct IPathProvider
 
 // ---------------------------------------------------------------------------------------------------------------------
 
+/*
 template<typename T>
 concept Serializeable = requires( T& t )
 {
-    { T::StoragePath }        -> std::convertible_to<IPathProvider::PathFor>;
-    { T::StorageFilename }    -> std::convertible_to<std::string>;
+    { T::StoragePath }        -> std::same_as<const IPathProvider::PathFor>;
+    { T::StorageFilename }    -> std::same_as<const char* const>;
 };
 
-/*
+
 template<typename T>
 constexpr bool HasPostLoad = requires( T& t )
 {
@@ -76,7 +77,7 @@ enum class SaveResult
 // ---------------------------------------------------------------------------------------------------------------------
 // return the full assembled path for the given config type
 //
-template < Serializeable _config_type >
+template < typename _config_type >
 inline fs::path getFullPath( const IPathProvider& pathProvider )
 {
     fs::path loadPath = pathProvider.getPath( _config_type::StoragePath );
@@ -87,7 +88,7 @@ inline fs::path getFullPath( const IPathProvider& pathProvider )
 // ---------------------------------------------------------------------------------------------------------------------
 // generic load & save functions for a Base derived data type
 
-template < Serializeable _config_type >
+template < typename _config_type >
 inline LoadResult load( const IPathProvider& pathProvider, _config_type& result )
 {
     const fs::path loadPath = getFullPath<_config_type>( pathProvider );
@@ -119,7 +120,7 @@ inline LoadResult load( const IPathProvider& pathProvider, _config_type& result 
     return LoadResult::Success;
 }
 
-template < Serializeable _config_type >
+template < typename _config_type >
 inline LoadResult loadFromMemory( const std::string& rawJson, _config_type& result )
 {
     try
@@ -147,7 +148,7 @@ inline LoadResult loadFromMemory( const std::string& rawJson, _config_type& resu
 
 }
 
-template < Serializeable _config_type >
+template < typename _config_type >
 inline SaveResult save( const IPathProvider& pathProvider, _config_type& data )
 {
     //if constexpr ( HasPreSave<_config_type> )

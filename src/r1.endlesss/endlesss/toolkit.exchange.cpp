@@ -28,9 +28,8 @@ void Exchange::fillDetailsFromRiff( Exchange& data, const live::RiffPtr& riff, c
         return;
     }
 
-    strncpy_s(
+    strncpy(
         data.m_jamName,
-        endlesss::Exchange::MaxJamName,
         jamName,
         endlesss::Exchange::MaxJamName - 1 );
 

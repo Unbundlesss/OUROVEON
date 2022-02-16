@@ -72,3 +72,4 @@ struct cid_hash {
                     return formatter<std::string>::format( c, ctx );                                                        \
                 }                                                                                                           \
             };
+

@@ -103,8 +103,7 @@ inline static bool deserializeJson( const NetConfiguration& ncfg, const httplib:
 
         const auto exportFilename = ncfg.getVerboseCaptureFilename( "json_parse_error" );
         {
-            FILE* fExport = nullptr;
-            fopen_s( &fExport, exportFilename.c_str(), "wt" );
+            FILE* fExport = fopen( exportFilename.c_str(), "wt" );            
             fprintf( fExport, "%s\n\n", cEx.what() );
             fprintf( fExport, "%s\n\n", functionContext.c_str() );
             fprintf( fExport, "%s\n", bodyText.c_str() );

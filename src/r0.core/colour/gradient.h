@@ -57,7 +57,7 @@ struct col3
 
     static col3 cosine( const col3& rhs )
     {
-        return col3( std::cosf(rhs.x), std::cosf( rhs.y ), std::cosf( rhs.z ) );
+        return col3( (float)std::cos(rhs.x), (float)std::cos( rhs.y ), (float)std::cos( rhs.z ) );
     }
 
     float x = 0.0f,

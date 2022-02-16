@@ -30,6 +30,11 @@ function _PortAudio_Include()
         "PA_USE_ALSA",
         "PA_USE_JACK",
     }
+    links
+    {
+        "jack",
+        "asound",
+    }
     filter {}
 
     filter "system:macosx"
@@ -88,7 +93,17 @@ project "hal-portaudio"
     filter {}
 
     filter "system:linux"
-
+    includedirs
+    {
+        Root_PORTAUDIO() .. "src/os/unix",
+    }
+    files 
+    { 
+        Root_PORTAUDIO() .. "src/os/unix/**.*",
+        Root_PORTAUDIO() .. "src/hostapi/jack/*.c",
+        Root_PORTAUDIO() .. "src/hostapi/alsa/*.c",
+        Root_PORTAUDIO() .. "**.h",
+    }
     filter {}
 
     filter "system:macosx"

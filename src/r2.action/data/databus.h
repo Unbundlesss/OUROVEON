@@ -72,7 +72,7 @@ struct DataBus
         for ( auto bI = 0U; bI < cBusCount; bI++ )
         {
             m_busNames[bI] = new char[10];
-            strcpy_s( m_busNames[bI], 10, "------" );
+            strcpy( m_busNames[bI], "------" ); // #HDD _s
         }
     }
 

@@ -89,12 +89,12 @@ int OuroApp::EntrypointGUI()
     {
         // if we are starting with no config data, put a suggestion in
         const fs::path initalPathSuggestion = fs::path( sago::getDocumentsFolder() ) / "OUROVEON";
-        strcpy_s( dataStoragePathBuffer, dataStoragePathBufferSize, initalPathSuggestion.string().c_str() );
+        strcpy( dataStoragePathBuffer, initalPathSuggestion.string().c_str() );
     }
     else
     {
         // already got one!
-        strcpy_s( dataStoragePathBuffer, dataStoragePathBufferSize, m_configData->storageRoot.c_str() );
+        strcpy( dataStoragePathBuffer, m_configData->storageRoot.c_str() );
     }
 
     // ::filesystem variant of the buffer and computed free-space data, udpated via a lambda that can be called

@@ -20,6 +20,7 @@
 #include <string>
 #include <variant>
 #include <vector>
+#include <atomic>
 
 // dpp
 #include <dpp/discord.h>

@@ -107,14 +107,14 @@ public:
 
         switch ( index )
         {
-            case 0: strcpy_s( m_jammerName1, text ); m_jammerNameValidBits |= ( 1 << 0 ); break;
-            case 1: strcpy_s( m_jammerName2, text ); m_jammerNameValidBits |= ( 1 << 1 ); break;
-            case 2: strcpy_s( m_jammerName3, text ); m_jammerNameValidBits |= ( 1 << 2 ); break;
-            case 3: strcpy_s( m_jammerName4, text ); m_jammerNameValidBits |= ( 1 << 3 ); break;
-            case 4: strcpy_s( m_jammerName5, text ); m_jammerNameValidBits |= ( 1 << 4 ); break;
-            case 5: strcpy_s( m_jammerName6, text ); m_jammerNameValidBits |= ( 1 << 5 ); break;
-            case 6: strcpy_s( m_jammerName7, text ); m_jammerNameValidBits |= ( 1 << 6 ); break;
-            case 7: strcpy_s( m_jammerName8, text ); m_jammerNameValidBits |= ( 1 << 7 ); break;
+            case 0: strcpy( m_jammerName1, text ); m_jammerNameValidBits |= ( 1 << 0 ); break;
+            case 1: strcpy( m_jammerName2, text ); m_jammerNameValidBits |= ( 1 << 1 ); break;
+            case 2: strcpy( m_jammerName3, text ); m_jammerNameValidBits |= ( 1 << 2 ); break;
+            case 3: strcpy( m_jammerName4, text ); m_jammerNameValidBits |= ( 1 << 3 ); break;
+            case 4: strcpy( m_jammerName5, text ); m_jammerNameValidBits |= ( 1 << 4 ); break;
+            case 5: strcpy( m_jammerName6, text ); m_jammerNameValidBits |= ( 1 << 5 ); break;
+            case 6: strcpy( m_jammerName7, text ); m_jammerNameValidBits |= ( 1 << 6 ); break;
+            case 7: strcpy( m_jammerName8, text ); m_jammerNameValidBits |= ( 1 << 7 ); break;
         }
     }
 

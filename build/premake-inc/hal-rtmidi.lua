@@ -16,7 +16,7 @@ ModuleRefInclude["rtmidi"] = _RtMidi_Include
 project "hal-rtmidi"
     kind "StaticLib"
     language "C++"
-    cppdialect "C++17"
+    cppdialect "C++20"
 
     SetDefaultBuildConfiguration()
     SetDefaultOutputDirectories("hal")

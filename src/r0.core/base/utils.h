@@ -339,32 +339,35 @@ finline void asciifyString( const std::string& source, std::string& dest, const 
 //
 inline std::string humaniseByteSize( const char* prefix, const uint64_t bytes )
 {
-    static constexpr std::array< const char*, 6 > units{
-        "{}{:.0f} bytes",
-        "{}{:.0f} kB",
-        "{}{:.1f} MB",
-        "{}{:.2f} GB",
-        "{}{:.2f} TB",
-        "{}{:.2f} PB"
-    };
-
     if ( bytes == 0 )
         return "0 bytes";
     if ( bytes == 1 )
         return "1 byte";
     {
-        auto exponent = std::min( (int32_t)(std::log( bytes ) / std::log( 1024 )), (int32_t)(units.size() - 1) );
+        auto exponent = (int32_t)(std::log( bytes ) / std::log( 1024 ));
         auto quotient = double( bytes ) / std::pow( 1024, exponent );
 
-        return fmt::format( units[exponent], prefix, quotient );
+        // done via a switch as fmt::format needs a consteval format arg
+        switch ( exponent)
+        {
+            case 0: return fmt::format( "{}{:.0f} bytes", prefix, quotient );
+            case 1: return fmt::format( "{}{:.0f} kB", prefix, quotient );
+            case 2: return fmt::format( "{}{:.1f} MB", prefix, quotient );
+            case 3: return fmt::format( "{}{:.2f} GB", prefix, quotient );
+            case 4: return fmt::format( "{}{:.2f} TB", prefix, quotient );
+            case 5: return fmt::format( "{}{:.2f} PB", prefix, quotient );
+            default:
+                return "unknown";
+                break;
+        }
     }
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-template <double _windowSize>
+template <int32_t _windowSize>
 struct RollingAverage
 {
-    static constexpr double cNewValueWeight = 1.0 / _windowSize;
+    static constexpr double cNewValueWeight = 1.0 / (double)_windowSize;
     static constexpr double cOldValueWeight = 1.0 - cNewValueWeight;
 
     double  m_average       = 0.0;

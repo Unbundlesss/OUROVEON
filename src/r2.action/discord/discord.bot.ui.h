@@ -35,7 +35,7 @@ private:
     app::ICoreServices&                         m_services;
     const config::discord::Connection&          m_config;
 
-    base::RollingAverage< 20.0 >                m_avg;
+    base::RollingAverage< 20 >                  m_avg;
     ImGui::RingBufferedGraph< int32_t, 100 >    m_bandwidth;
 };
 

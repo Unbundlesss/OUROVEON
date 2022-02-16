@@ -215,7 +215,7 @@ void DataBus::imgui()
 
             if ( ImGui::InputText( "Name", m_busNames[m_busEditIndex], 7, ImGuiInputTextFlags_EnterReturnsTrue ) )
             {
-                _strupr_s( m_busNames[m_busEditIndex], 10 );
+                //strupr( m_busNames[m_busEditIndex], 10 );
             }
 
             const auto currentProviderUID = m_busConfigs[m_busEditIndex].m_providerUID;

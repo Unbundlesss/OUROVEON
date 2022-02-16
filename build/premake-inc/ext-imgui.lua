@@ -26,7 +26,7 @@ ModuleRefInclude["imgui"] = _ImGui_Include
 project "ext-imgui"
     kind "StaticLib"
     language "C++"
-    cppdialect "C++17"
+    cppdialect "C++20"
 
     SetDefaultBuildConfiguration()
     SetDefaultOutputDirectories("ext")

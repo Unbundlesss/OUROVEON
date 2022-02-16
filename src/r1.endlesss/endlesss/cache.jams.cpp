@@ -56,12 +56,16 @@ bool Jams::load( const config::IPathProvider& pathProvider )
             // snag the last write time of the cache file
             {
                 const auto filetime       = std::filesystem::last_write_time( jamLibraryCacheFile );
+#if OURO_PLATFORM_WIN
                 const auto systemTime     = std::chrono::clock_cast<std::chrono::system_clock>(filetime);
                 const auto timePointSec   = std::chrono::time_point_cast<std::chrono::seconds>(systemTime);
 
                 const auto cacheTimeDelta = spacetime::calculateDeltaFromNow( timePointSec ).asPastTenseString(2);
 
                 m_cacheFileState = fmt::format( "Jam cache updated {}", cacheTimeDelta );
+#else
+                m_cacheFileState = fmt::format( "Jam cache updated" );
+#endif                 
             }
 
             postProcessNewData();

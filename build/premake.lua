@@ -2,6 +2,7 @@
 -- ==============================================================================
 
 local initialDir = os.getcwd()
+local rootBuildGenerationDir = "_gen"
 local rootSourceDir = "src"
 local osxHomebrew = "/opt/homebrew/opt/"
 
@@ -18,9 +19,22 @@ function GetHomebrewDir()
     return osxHomebrew
 end
 
+function GetBuildRootToken()
+    if ( os.host() == "windows" ) then
+        return "$(SolutionDir)"
+    else
+        return GetInitialDir() .. "/" .. rootBuildGenerationDir .. "/"
+    end
+end
+print ( "build root : " .. GetBuildRootToken() )
+
 
 ModuleRefInclude = {}
 ModuleRefLink = {}
+
+ModuleRefLinkWin    = {}
+ModuleRefLinkLinux  = {}
+ModuleRefLinkOSX    = {}
 
 
 include "ispc-premake/premake.lua"
@@ -34,10 +48,14 @@ include "premake-inc/sys-openssl.lua"
 workspace ("ouroveon_" .. _ACTION)
 
     configurations  { "Debug", "Release", "Release-AVX2" }
-    platforms       { "x86_64" }
-    architecture      "x64"
 
-    location "_gen"
+    if os.is64bit() then
+        print( os.host() .. " 64-bit")
+    else
+        print( os.host() .. " 32-bit")
+    end
+
+    location (rootBuildGenerationDir)
 
     filter "system:Windows"
 
@@ -72,6 +90,10 @@ workspace ("ouroveon_" .. _ACTION)
         platforms       { "x86_64" }
         architecture      "x64"
 
+        systemversion   "latest"
+        pic             "On"
+        staticruntime   "On"
+
         defines
         {
             "OURO_PLATFORM_WIN=0",
@@ -82,7 +104,7 @@ workspace ("ouroveon_" .. _ACTION)
         }
         buildoptions
         {
-            "-fPIC -fms-extensions"
+            "-ffast-math"
         }
     filter {}
 
@@ -142,7 +164,7 @@ project "ext-brotli"
 
 -- ------------------------------------------------------------------------------
 function AddInclude_ZLIB()
-    includedirs
+    sysincludedirs
     {
         SrcRoot() .. "r0.external/zlib",
     }
@@ -165,34 +187,69 @@ project "ext-zlib"
 
 -- ------------------------------------------------------------------------------
 function AddInclude_FLAC()
-    includedirs
+    sysincludedirs
     {
         SrcRoot() .. "r0.external/xiph/include",
     }
+end
+
+function _FLAC_ApplyConfigH()
     defines
     {
         "ENABLE_64_BIT_WORDS",
         "FLAC__HAS_OGG=1",
         "FLAC__CPU_X86_64",
-        "FLAC__HAS_X86INTRIN",
+        "FLAC__HAS_X86INTRIN=1",
         "FLAC__ALIGN_MALLOC_DATA",
         "FLAC__NO_DLL",
         "FLAC__OVERFLOW_DETECT",
+        "HAVE_INTTYPES_H=1",
+        "HAVE_STDINT_H=1",
+        "HAVE_STRING_H",
         "FLaC__INLINE=_inline",
         "PACKAGE_VERSION=\"1.3.3\"",
     }
+    filter "system:linux"
+    defines
+    {
+        "FLAC__SYS_LINUX",
+        "HAVE_BSWAP16=1",
+        "HAVE_BSWAP32=1",
+        "HAVE_BYTESWAP_H",
+        "HAVE_CLOCK_GETTIME",
+        "HAVE_CPUID_H",
+        "HAVE_CXX_VARARRAYS",
+        "HAVE_FSEEKO",
+        "HAVE_ICONV",
+        "HAVE_LROUND=1",
+        "HAVE_SYS_IOCTL_H",
+        "HAVE_SYS_PARAM_H",
+        "HAVE_SYS_TYPES_H",
+        "HAVE_TERMIOS_H"
+    }
+    filter {}
+    filter "system:macosx"
+    defines
+    {
+        "FLAC__SYS_DARWIN"        
+    }
+    filter {}
 end
 
 project "ext-flac"
     kind "StaticLib"
     language "C"
 
+    filter "system:Windows"
     disablewarnings { "4267", "4996", "4244", "4334" }
+    filter {}
 
     SetDefaultBuildConfiguration()
     SetDefaultOutputDirectories("ext")
 
     AddInclude_FLAC()
+    _FLAC_ApplyConfigH()
+
     includedirs
     {
         SrcRoot() .. "r0.external/xiph/src/libFLAC/include",
@@ -205,16 +262,28 @@ project "ext-flac"
         SrcRoot() .. "r0.external/xiph/src/ogg/*.c",
     }
 
+    filter "system:linux or macosx"
+    excludes
+    {
+        SrcRoot() .. "r0.external/xiph/src/libFLAC/windows_unicode_filenames.c",
+    }
+    filter{}
+
 project "ext-flac-cpp"
     kind "StaticLib"
     language "C++"
+    cppdialect "C++20"
 
+    filter "system:Windows"
     disablewarnings { "4267", "4996", "4244", "4334" }
+    filter {}
 
     SetDefaultBuildConfiguration()
     SetDefaultOutputDirectories("ext")
 
     AddInclude_FLAC()
+    _FLAC_ApplyConfigH()
+    
     files 
     { 
         SrcRoot() .. "r0.external/xiph/include/FLAC++/*.h",
@@ -246,6 +315,8 @@ project "ext-sqlite3"
 
 -- ------------------------------------------------------------------------------
 function AddInclude_SODIUM()
+
+    filter "system:Windows"
     includedirs
     {
         SrcRoot() .. "r0.external/sodium/src/libsodium/include/",
@@ -255,9 +326,28 @@ function AddInclude_SODIUM()
         "SODIUM_STATIC",
         "NATIVE_LITTLE_ENDIAN"
     }
+    filter {}
+
+    filter "system:linux"
+    sysincludedirs
+    {
+        "/usr/include/sodium/",
+    }
+    filter {}
+
+    filter "system:macosx"
+    sysincludedirs
+    {
+        GetHomebrewDir() .. "sodium/",
+    }
+    filter {}
+
 end
 
+if ( os.host() == "windows" ) then
+
 project "ext-sodium"
+
     kind "StaticLib"
     language "C"
 
@@ -268,7 +358,6 @@ project "ext-sodium"
         "4244", -- conversion from 'int64_t' to 'unsigned char'
         "4197", -- top-level volatile in cast is ignored
     }
-
     AddInclude_SODIUM()
     files 
     { 
@@ -281,8 +370,42 @@ project "ext-sodium"
         SrcRoot() .. "r0.external/sodium/src/libsodium/include/sodium",
     }
 
+end
+
+-- ==============================================================================
+function _Sodium_LinkPrebuilt()
+
+    filter "system:linux"
+    links
+    {
+        "sodium",
+    }
+    filter {}
+
+    filter "system:macosx"
+    libdirs
+    {
+        GetHomebrewDir() .. "sodium//lib"
+    }
+    links
+    {
+        "sodium",
+    }
+    filter {}
+end
+
+function _Sodium_LinkProject()
+    links { "ext-sodium" }
+end
+
+ModuleRefLinkWin["sodium"]      = _Sodium_LinkProject
+ModuleRefLinkLinux["sodium"]    = _Sodium_LinkPrebuilt
+ModuleRefLinkOSX["sodium"]      = _Sodium_LinkPrebuilt
+
+
 -- ------------------------------------------------------------------------------
 function AddInclude_OPUS()
+    filter "system:Windows"
     includedirs
     {
         SrcRoot() .. "r0.external/opus/include",
@@ -291,7 +414,25 @@ function AddInclude_OPUS()
     { 
         "OPUS_EXPORT="
     }
+    filter {}
+
+    filter "system:linux"
+    sysincludedirs
+    {
+        "/usr/include/opus/",
+    }
+    filter {}
+
+    filter "system:macosx"
+    sysincludedirs
+    {
+        GetHomebrewDir() .. "opus/",
+    }
+    filter {}    
+
 end
+
+if ( os.host() == "windows" ) then
 
 project "ext-opus"
     kind "StaticLib"
@@ -349,6 +490,40 @@ project "ext-opus"
         SrcRoot() .. "r0.external/opus/src/mlp_train.*",
     }
 
+end
+
+-- ==============================================================================
+function _Opus_LinkPrebuilt()
+
+    filter "system:linux"
+    links
+    {
+        "opus",
+    }
+    filter {}
+
+    filter "system:macosx"
+    libdirs
+    {
+        GetHomebrewDir() .. "opus//lib"
+    }
+    links
+    {
+        "opus",
+    }
+    filter {}
+end
+
+function _Opus_LinkProject()
+    links { "ext-opus" }
+end
+
+ModuleRefLinkWin["opus"]        = _Opus_LinkProject
+ModuleRefLinkLinux["opus"]      = _Opus_LinkPrebuilt
+ModuleRefLinkOSX["opus"]        = _Opus_LinkPrebuilt
+
+
+
 
 -- ------------------------------------------------------------------------------
 function AddInclude_DRAGONBOX()
@@ -361,7 +536,7 @@ end
 project "ext-dragonbox"
     kind "StaticLib"
     language "C++"
-    cppdialect "C++17"
+    cppdialect "C++20"
 
     SetDefaultBuildConfiguration()
     SetDefaultOutputDirectories("ext")
@@ -406,12 +581,16 @@ function AddInclude_DATE_TZ()
     {
         SrcRoot() .. "r0.external/date/include",
     }
+    defines 
+    {
+        "HAS_REMOTE_API=0"
+    }
 end
 
 project "ext-date-tz"
     kind "StaticLib"
     language "C++"
-    cppdialect "C++17"
+    cppdialect "C++20"
 
     SetDefaultBuildConfiguration()
     SetDefaultOutputDirectories("ext")
@@ -465,7 +644,7 @@ end
 project "ext-r8brain"
     kind "StaticLib"
     language "C++"
-    cppdialect "C++17"
+    cppdialect "C++20"
 
     SetDefaultBuildConfiguration()
     SetDefaultOutputDirectories("ext")
@@ -488,7 +667,7 @@ end
 project "ext-pfold"
     kind "StaticLib"
     language "C++"
-    cppdialect "C++17"
+    cppdialect "C++20"
 
     SetDefaultBuildConfiguration()
     SetDefaultOutputDirectories("ext")
@@ -498,30 +677,6 @@ project "ext-pfold"
     { 
         SrcRoot() .. "r0.external/pfold/*.cpp",
         SrcRoot() .. "r0.external/pfold/*.h",
-    }
-
--- ------------------------------------------------------------------------------
-function AddInclude_FASTNOISE()
-    includedirs
-    {
-        SrcRoot() .. "r0.external/fastnoise2/include",
-    }
-end
-
-project "ext-fastnoise2"
-    kind "StaticLib"
-    language "C++"
-    cppdialect "C++17"
-
-    SetDefaultBuildConfiguration()
-    SetDefaultOutputDirectories("ext")
-    
-    AddInclude_FASTNOISE()
-    files 
-    { 
-        SrcRoot() .. "r0.external/fastnoise2/**.cpp",
-        SrcRoot() .. "r0.external/fastnoise2/**.inl",
-        SrcRoot() .. "r0.external/fastnoise2/**.h",
     }
 
 -- ------------------------------------------------------------------------------
@@ -654,7 +809,7 @@ end
 project "ext-dpp"
     kind "StaticLib"
     language "C++"
-    cppdialect "C++17"
+    cppdialect "C++20"
 
     SetDefaultBuildConfiguration()
     SetDefaultOutputDirectories("ext")
@@ -702,33 +857,11 @@ function SetupOuroveonLayer( isFinalRing, layerName )
     SetDefaultOutputDirectories(layerName)
 
     if isFinalRing == true then
-       targetdir   ( "$(SolutionDir)../../bin/" .. layerName .. "/build_%{cfg.shortname}" )
+       targetdir ( GetBuildRootToken() .. "../../bin/" .. layerName .. "/%{cfg.system}_%{cfg.shortname}" )
     else
-        targetdir   ( "$(SolutionDir)_" .. layerName .. "/build_%{cfg.shortname}" )
+       targetdir ( GetBuildRootToken() .. "_artefact/ouro/_" .. layerName .. "/%{cfg.system}_%{cfg.shortname}" )
     end
 
-    -- bundle Superluminal performance API into win builds
-    filter "system:Windows"
-        defines 
-        {
-            "PERF_SUPERLUMINAL"
-        }
-        libdirs
-        {
-            SrcRoot() .. "r0.sys/superluminal/lib/x64"
-        }
-
-        filter "configurations:Debug"
-        links ( "PerformanceAPI_MDd.lib" )
-        filter "configurations:Release or Release-AVX2"
-        links ( "PerformanceAPI_MD.lib" )
-        filter {}
-
-        includedirs
-        {
-            SrcRoot() .. "r0.sys/superluminal/include",
-        }
-    filter {}
 
     defines 
     {
@@ -826,6 +959,21 @@ function CommonAppLink()
     for libName, libFn in pairs(ModuleRefLink) do
         libFn()
     end
+    if ( os.host() == "windows" ) then
+        for libName, libFn in pairs(ModuleRefLinkWin) do
+            libFn()
+        end
+    end
+    if ( os.host() == "linux" ) then
+        for libName, libFn in pairs(ModuleRefLinkLinux) do
+            libFn()
+        end
+    end
+    if ( os.host() == "macosx" ) then
+        for libName, libFn in pairs(ModuleRefLinkOSX) do
+            libFn()
+        end
+    end
 
     links
     {
@@ -834,8 +982,6 @@ function CommonAppLink()
         "ext-flac-cpp",
         "ext-sqlite3",
         "ext-dragonbox",
-        "ext-opus",
-        "ext-sodium",
         "ext-dpp",
         "ext-uriparser",
         "ext-date-tz",
@@ -847,7 +993,7 @@ function CommonAppLink()
         "ext-cityhash",
         "ext-stb",
 
-        "sdk"
+        --"sdk"
     }
 
     filter "system:Windows"
@@ -865,12 +1011,37 @@ function CommonAppLink()
     }
     filter {}
 
+    -- bundle Superluminal performance API into win builds
+    if ( os.host() == "windows" ) then
+        defines 
+        {
+            "PERF_SUPERLUMINAL"
+        }
+        libdirs
+        {
+            SrcRoot() .. "r0.sys/superluminal/lib/x64"
+        }
+
+        filter "configurations:Debug"
+        links ( "PerformanceAPI_MDd.lib" )
+        filter "configurations:Release or Release-AVX2"
+        links ( "PerformanceAPI_MD.lib" )
+        filter {}
+
+        includedirs
+        {
+            SrcRoot() .. "r0.sys/superluminal/include",
+        }
+    end
+
     filter "system:linux"
     links 
     {
         "m",
         "pthread",
         "dl",
+        "c++abi",
+        "c++",
 
         "X11",
         "Xrandr",
@@ -899,16 +1070,16 @@ end
 -- ==============================================================================
 
 
-group "ouroveon"
+--group "ouroveon"
 
-project "sdk"
-    kind "StaticLib"
-    SetupOuroveonLayer( false, "sdk" )
+--project "sdk"
+    --kind "StaticLib"
+--SetupOuroveonLayer( false, "sdk" )
 
-    pchsource "../src/r0.core/pch.cpp"
-    pchheader "pch.h"
+ --   pchsource "../src/r0.core/pch.cpp"
+   -- pchheader "pch.h"
 
-group ""
+--group ""
 
 
 -- ==============================================================================
@@ -920,7 +1091,7 @@ group "apps"
 project "BEAM"
 
     kind "ConsoleApp"
-    SetupOuroveonLayer( true, "beam" )
+    SetupOuroveonLayer( false, "beam" )
     CommonAppLink()
 
     files
@@ -930,10 +1101,14 @@ project "BEAM"
         SrcRoot() .. "r3.beam/**.cpp",
         SrcRoot() .. "r3.beam/**.h",
         SrcRoot() .. "r3.beam/**.inl",
-
+    }
+    filter "system:windows"
+    files
+    {
         SrcRoot() .. "r3.beam/*.rc",
         SrcRoot() .. "r3.beam/*.ico",
     }
+    filter {}
 
     pchsource "../src/r3.beam/pch.cpp"
     pchheader "pch.h"
@@ -952,10 +1127,15 @@ project "LORE"
         SrcRoot() .. "r3.lore/**.cpp",
         SrcRoot() .. "r3.lore/**.h",
         SrcRoot() .. "r3.lore/**.inl",
-
+    }
+    filter "system:windows"
+    files
+    {
         SrcRoot() .. "r3.lore/*.rc",
         SrcRoot() .. "r3.lore/*.ico",
     }
+    filter {}
+
 
     pchsource "../src/r3.lore/pch.cpp"
     pchheader "pch.h"
@@ -974,10 +1154,15 @@ project "PONY"
         SrcRoot() .. "r3.pony/**.cpp",
         SrcRoot() .. "r3.pony/**.h",
         SrcRoot() .. "r3.pony/**.inl",
+    }
 
+    filter "system:windows"
+    files
+    {
         SrcRoot() .. "r3.pony/*.rc",
         SrcRoot() .. "r3.pony/*.ico",
     }
+    filter {}
 
     pchsource "../src/r3.pony/pch.cpp"
     pchheader "pch.h"

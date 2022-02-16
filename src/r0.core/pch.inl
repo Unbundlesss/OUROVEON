@@ -24,10 +24,13 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <mutex>
+#include <concepts>
+
+#ifdef OURO_SEMA_CXX20
 #include <semaphore>
 #include <barrier>
 #include <latch>
-
+#endif // OURO_SEMA_CXX20
 
 #if OURO_PLATFORM_WIN
 #define _CRT_SECURE_NO_WARNINGS
@@ -97,26 +100,24 @@ namespace detail {
         constexpr std::string_view midsep = " | ";
         constexpr std::string_view suffix = "\n";
 
-        constexpr fmt::detail::ansi_color_escape<char> foreground1( _fg1, "\x1b[38;2;" );
-        constexpr fmt::detail::ansi_color_escape<char> foreground2( _fg2, "\x1b[38;2;" );
+        const auto foreground1 = fmt::detail::make_foreground_color<char>( fmt::detail::color_type( _fg1 ) );
+        const auto foreground2 = fmt::detail::make_foreground_color<char>( fmt::detail::color_type( _fg2 ) );
 
         // size of buffer used by ansi_color_escape
         constexpr size_t size_of_text_style = 7u + 3u * 4u + 1u;
 
-        const auto size = fmt::formatted_size( format_str, args... ) + 1;
-
         // format the input into our first buffer
         static thread_local std::string formatBuffer;
         {
-            formatBuffer.resize( size );
-            std::fill_n( formatBuffer.begin(), size, '\0' );
-            fmt::format_to( &formatBuffer[0], format_str, args... );
+            formatBuffer.clear();
+            fmt::vformat_to( std::back_inserter(formatBuffer), fmt::to_string_view(format_str), fmt::make_format_args(args...) );
         }
 
         // build the final output by appending components
         static thread_local std::string outputBuffer;
         {
             static constexpr auto reset_color = "\x1b[0m";
+            const auto size = formatBuffer.size() + 1;
 
             const size_t bufferSize =
                 (size_of_text_style * 5) +

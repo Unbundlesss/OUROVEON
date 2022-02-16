@@ -163,6 +163,8 @@ constexpr uint8_t Message::typeAsByte( const Type t )
     case Type::NoteOn:        return NoteOn::u7Type;
     case Type::NoteOff:       return NoteOn::u7Type;
     case Type::ControlChange: return NoteOn::u7Type;
+    default:
+        break;
     }
     return 0;
 }

@@ -1019,4 +1019,4 @@ void Instance::dispatchMidi( const app::midi::Message& midiMsg )
 
 } // namespace vst
 
-#endif OURO_FEATURES_VST
+#endif // OURO_FEATURES_VST

@@ -132,7 +132,7 @@ struct Audio : public Module
 
         ExposedState()
         {
-            m_perfCounterFreq       = _Query_perf_frequency();
+            m_perfCounterFreq       = 0;//_Query_perf_frequency();
             m_perfCounterFreqRcp    = 1.0 / (double)m_perfCounterFreq;
             m_samplePos             = 0;
             m_perfTraceIndex        = 0;
@@ -146,7 +146,7 @@ struct Audio : public Module
 
         inline void mark( const ExecutionStage es )
         {
-            m_perfCounters[ (size_t)es ][m_perfTraceIndex] = _Query_perf_counter();
+            m_perfCounters[ (size_t)es ][m_perfTraceIndex] = 0;//_Query_perf_counter();
 
             // on last phase, cycle trace index
             if ( es == ExecutionStage::RecordToDisk )

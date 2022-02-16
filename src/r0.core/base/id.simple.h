@@ -39,7 +39,7 @@ private:
 
 template< typename Simple >
 struct smp_hash {
-    size_t operator()( Simple const& tid ) const noexcept { return hash<Simple::IntType>( tid.get() ); }
+    size_t operator()( Simple const& tid ) const noexcept { return std::hash<typename Simple::IntType>( tid.get() ); }
 };
 
 struct _async_command_counter_id {};

@@ -47,8 +47,7 @@ struct Frontend : public Module
     finline bool wasQuitRequested() const { return m_quitRequested; }
 
     // as we do initialisation in the constructor, one must check afterwards that all is well
-    finline bool wasBootSuccessful() const  { return m_GlfwWindow != nullptr && m_hwnd != nullptr; }
-    finline HWND getHWND() const            { return m_hwnd; }
+    finline bool wasBootSuccessful() const  { return m_GlfwWindow != nullptr; }
 
     finline int32_t getLargestTextureDim() const{ return m_largestTextureDimension; }
 
@@ -97,7 +96,6 @@ private:
     char*               m_imguiLayoutIni;
 
     GLFWwindow*         m_GlfwWindow;
-    HWND                m_hwnd;
     int32_t             m_largestTextureDimension;
     bool                m_isBorderless;
 

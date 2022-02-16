@@ -73,14 +73,10 @@ std::unique_ptr<WAVWriter> WAVWriter::Create(
     const uint32_t sampleRate,
     const uint32_t writeBufferInSeconds /* = 10 */ )
 {
-    FILE* fp = nullptr;
-    if ( fopen_s( &fp, outputFile.c_str(), "wb" ) || 
-         fp == nullptr )
+    FILE* fp =fopen( outputFile.c_str(), "wb" );
+    if ( fp == nullptr )
     {
-        char errBuf[128];
-        strerror_s( errBuf, 128, errno );
-
-        blog::error::core( "rec::WavFile could not open [{}] for writing ({})", outputFile, errBuf );
+        blog::error::core( "rec::WavFile could not open [{}] for writing ({})", outputFile, strerror(errno) );
         return nullptr;
     }
 

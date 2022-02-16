@@ -132,7 +132,7 @@ project "hal-glfw"
     }
 
     for k,v in pairs(common_headers) do 
-        includedirs { Root_GLFW() .. v }
+        files       { Root_GLFW() .. v }
     end
     for k,v in pairs(common_sources) do 
         files       { Root_GLFW() .. v }
@@ -145,7 +145,7 @@ project "hal-glfw"
     filter "system:Windows"
     defines { "_CRT_SECURE_NO_WARNINGS" }
     for k,v in pairs(windows_headers) do 
-        includedirs { Root_GLFW() .. v }
+        files       { Root_GLFW() .. v }
     end
     for k,v in pairs(windows_sources) do 
         files       { Root_GLFW() .. v }
@@ -154,7 +154,7 @@ project "hal-glfw"
 
     filter "system:linux"
     for k,v in pairs(linux_headers) do 
-        includedirs { Root_GLFW() .. v }
+        files       { Root_GLFW() .. v }
     end
     for k,v in pairs(linux_sources) do 
         files       { Root_GLFW() .. v }
@@ -163,7 +163,7 @@ project "hal-glfw"
 
     filter "system:macosx"
     for k,v in pairs(osx_headers) do 
-        includedirs { Root_GLFW() .. v }
+        files       { Root_GLFW() .. v }
     end
     for k,v in pairs(osx_sources) do 
         files       { Root_GLFW() .. v }

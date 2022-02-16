@@ -17,9 +17,6 @@
 
 #include "config/frontend.h"
 
-// required for file picker
-#include <commdlg.h>
-
 // bits from imgui internals
 #include "imgui_internal.h"
 
@@ -108,7 +105,6 @@ Frontend::Frontend( const config::Frontend& feConfig, const char* name )
     : m_feConfigCopy( feConfig )
     , m_appName( name )
     , m_GlfwWindow( nullptr )
-    , m_hwnd( nullptr )
     , m_largestTextureDimension( 0 )
     , m_fontFixed( nullptr )
     , m_fontMedium( nullptr )
@@ -120,7 +116,7 @@ Frontend::Frontend( const config::Frontend& feConfig, const char* name )
 // ---------------------------------------------------------------------------------------------------------------------
 Frontend::~Frontend()
 {
-    if ( m_hwnd != nullptr )
+    if ( m_GlfwWindow != nullptr )
         destroy();
 }
 
@@ -240,7 +236,7 @@ bool Frontend::create( const app::Core& appCore )
 
             m_imguiLayoutIni = new char[layoutPathMax];
             const auto layoutStore = ( appCore.getAppConfigPath() / "layout.current.ini" ).string();
-            strcpy_s( m_imguiLayoutIni, layoutPathMax, layoutStore.c_str() );
+            strncpy( m_imguiLayoutIni, layoutStore.c_str(), layoutPathMax - 1 );
 
             // if the current layout ini doesn't exist, manually pull the default one
             if ( !fs::exists( layoutStore ) )
@@ -289,9 +285,6 @@ bool Frontend::create( const app::Core& appCore )
         }
     }
 
-    // snag the windows HWND for our main window
-    m_hwnd = glfwGetWin32Window( m_GlfwWindow );
-
     return true;
 }
 
@@ -309,7 +302,6 @@ void Frontend::destroy()
     glfwTerminate();
 
     m_GlfwWindow = nullptr;
-    m_hwnd = nullptr;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -372,6 +364,7 @@ void Frontend::applyBorderless()
 // ---------------------------------------------------------------------------------------------------------------------
 bool Frontend::showFilePicker( const char* spec, std::string& fileResult ) const
 {
+    /*
     char filename[MAX_PATH];
 
     OPENFILENAMEA ofn;
@@ -390,6 +383,7 @@ bool Frontend::showFilePicker( const char* spec, std::string& fileResult ) const
         fileResult = filename;
         return true;
     }
+    */
     return false;
 }
 

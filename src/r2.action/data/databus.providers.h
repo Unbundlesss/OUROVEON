@@ -14,6 +14,8 @@ namespace data {
 // ---------------------------------------------------------------------------------------------------------------------
 struct Provider
 {
+    virtual ~Provider(){}
+    
     enum AbilityFlags
     {
         kNothingSpecial = 0,
@@ -41,11 +43,11 @@ using ProviderNames   = std::unordered_map< uint32_t, std::string >;
 // ---------------------------------------------------------------------------------------------------------------------
 namespace providers {
 
-#define PROVIDER_ID(ch0, ch1, ch2, ch3)         \
-                ((uint32_t)(BYTE)(ch0)        | \
-                ((uint32_t)(BYTE)(ch1) << 8)  | \
-                ((uint32_t)(BYTE)(ch2) << 16) | \
-                ((uint32_t)(BYTE)(ch3) << 24  ))
+#define PROVIDER_ID(ch0, ch1, ch2, ch3)   \
+                ((uint32_t)(ch0)        | \
+                ((uint32_t)(ch1) << 8)  | \
+                ((uint32_t)(ch2) << 16) | \
+                ((uint32_t)(ch3) << 24  ))
 
 template< typename _type >
 inline static void registerProvider( ProviderFactory& factory, ProviderNames& names )
@@ -68,7 +70,7 @@ struct SinTime : public Provider
     static constexpr size_t UniqueID         = PROVIDER_ID( 'S', 'I', 'N', 'T' );
     static constexpr const char* VisibleName = "Sin( time )";
 
-    virtual AbilityFlags flags() const { return (AbilityFlags)( kUsesTime | kUsesRemapping ); }
+    virtual AbilityFlags flags() const override { return (AbilityFlags)( kUsesTime | kUsesRemapping ); }
     virtual float generate( const Input& input ) override;
 };
 
@@ -78,7 +80,7 @@ struct CosBus : public Provider
     static constexpr size_t UniqueID         = PROVIDER_ID( 'C', 'O', 'S', 'B' );
     static constexpr const char* VisibleName = "Cos( bus-1 )";
 
-    virtual AbilityFlags flags() const { return (AbilityFlags)( kUsesValue | kUsesBus1 | kUsesRemapping ); }
+    virtual AbilityFlags flags() const override { return (AbilityFlags)( kUsesValue | kUsesBus1 | kUsesRemapping ); }
     virtual float generate( const Input& input ) override;
 };
 
@@ -88,7 +90,7 @@ struct Multiply2 : public Provider
     static constexpr size_t UniqueID         = PROVIDER_ID( 'M', 'U', 'L', '2' );
     static constexpr const char* VisibleName = "Multiply 2";
 
-    virtual AbilityFlags flags() const { return (AbilityFlags)( kUsesBus1 | kUsesBus2 | kUsesRemapping ); }
+    virtual AbilityFlags flags() const override { return (AbilityFlags)( kUsesBus1 | kUsesBus2 | kUsesRemapping ); }
     virtual float generate( const Input& input ) override;
 };
 
@@ -98,7 +100,7 @@ struct Smooth : public Provider
     static constexpr size_t UniqueID = PROVIDER_ID( 'S', 'M', 'T', 'H' );
     static constexpr const char* VisibleName = "Smooth";
 
-    virtual AbilityFlags flags() const { return (AbilityFlags)( kUsesValue | kUsesBus1 | kUsesRemapping ); }
+    virtual AbilityFlags flags() const override { return (AbilityFlags)( kUsesValue | kUsesBus1 | kUsesRemapping ); }
     virtual float generate( const Input& input ) override;
 
     float m_lastValue = 0;

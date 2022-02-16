@@ -34,6 +34,8 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
+#include <stdint.h>
+#include <inttypes.h>
 
 #include "share/alloc.h"
 #include "FLAC++/metadata.h"

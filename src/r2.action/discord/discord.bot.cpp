@@ -208,7 +208,7 @@ struct Bot::State
         blog::discord( "found {} potential voice channels", channelList->size() );
 
         // stash voice metadata ready for use
-        m_voiceChannels.store( std::shared_ptr< const VoiceChannels >( channelList ) );
+        m_voiceChannels = std::shared_ptr< const VoiceChannels >( channelList );
         m_voiceState = Bot::VoiceState::NotJoined;
 
         // ready to use the connection
@@ -244,7 +244,7 @@ struct Bot::State
 
         if ( m_voiceState != Bot::VoiceState::NotJoined )
         {
-            blog::error::discord( "voiceState ({}) not in NotJoined, can't trigger Join event", m_voiceState.load() );
+            blog::error::discord( "voiceState ({}) not in NotJoined, can't trigger Join event", (int32_t)m_voiceState.load() );
             return false;
         }
 
@@ -263,7 +263,7 @@ struct Bot::State
 
         if ( m_voiceState != Bot::VoiceState::Joined )
         {
-            blog::error::discord( "voiceState ({}) not in Joined, can't trigger Leave event", m_voiceState.load() );
+            blog::error::discord( "voiceState ({}) not in Joined, can't trigger Leave event", (int32_t)m_voiceState.load() );
             return false;
         }
 
@@ -543,7 +543,7 @@ bool Bot::isBotBusy() const
 discord::VoiceChannelsPtr Bot::getVoiceChannels() const
 {
     if ( m_state )
-        return m_state->m_voiceChannels.load();
+        return m_state->m_voiceChannels;
 
     return nullptr;
 }

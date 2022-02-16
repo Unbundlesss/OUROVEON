@@ -85,8 +85,8 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
             }
         }
 
-        std::basic_ifstream<uint8_t> ifs( cacheFile, std::ios::binary );
-        ifs.read( audioMemory.m_rawAudio, fileSize );
+        std::basic_ifstream<char> ifs( cacheFile, std::ios::in | std::ios::binary );
+        ifs.read( (char*)audioMemory.m_rawAudio, fileSize );
 
         audioMemory.m_rawReceived = fileSize;
     }
@@ -129,8 +129,8 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
 
     // emit a successful capture back to the cache
     {
-        std::basic_ofstream<uint8_t> ofs( cacheFile, std::ios::binary );
-        ofs.write( audioMemory.m_rawAudio, audioMemory.m_rawReceived );
+        std::basic_ofstream<char> ofs( cacheFile, std::ios::out | std::ios::binary );
+        ofs.write( (char*)audioMemory.m_rawAudio, audioMemory.m_rawReceived );
     }
 
     // basic magic header check

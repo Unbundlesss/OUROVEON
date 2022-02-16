@@ -333,7 +333,9 @@ protected:
     SyncAndPlaybackQueue            m_syncAndPlaybackCompletions;   // riffs that have been fetched & played - written to by worker, read by main thread
     endlesss::types::RiffCouchIDs   m_syncAndPlaybackInFlight;      // main thread list of work submitted to worker
     std::unique_ptr< std::jthread > m_syncAndPlaybackThread;        // the worker thread
+#ifdef OURO_FEATURE_CXX20    
     std::counting_semaphore<>       m_syncAndPlaybackSem { 0 };
+#endif // OURO_FEATURE_CXX20
 
     SyncAndPlaybackQueue            m_riffsDequedByMixer;
     endlesss::types::RiffCouchIDs   m_riffsQueuedForPlayback;
@@ -350,7 +352,9 @@ protected:
         m_syncAndPlaybackInFlight.emplace_back( riff );     // log that we will be asynchronously fetching this
 
         m_syncAndPlaybackQueue.emplace( riff );             // push it onto the pile to be examined by the worker thread
+#ifdef OURO_FEATURE_CXX20        
         m_syncAndPlaybackSem.release();
+#endif // OURO_FEATURE_CXX20        
     }
 
     void handleNewRiffPlaying( endlesss::live::RiffPtr& nowPlayingRiff )
@@ -1076,7 +1080,9 @@ int LoreApp::EntrypointOuro()
                 if ( stoken.stop_requested() ) 
                     return;
 
+#ifdef OURO_FEATURE_CXX20
                 if ( m_syncAndPlaybackSem.try_acquire_for( 200ms ) )
+#endif // OURO_FEATURE_CXX20                
                 {
                     base::instr::ScopedEvent se( "riff-load", base::instr::PresetColour::Emerald );
 

@@ -154,13 +154,10 @@ std::unique_ptr<FLACWriter> FLACWriter::Create(
     }
 
     // open a FILE* to pass to the encoder
-    if ( fopen_s( &newState->m_flacFileHandle, outputFile.c_str(), "w+b" ) ||
-                   newState->m_flacFileHandle == nullptr )
+    newState->m_flacFileHandle = fopen( outputFile.c_str(), "w+b" );
+    if ( newState->m_flacFileHandle == nullptr )
     {
-        char errBuf[128];
-        strerror_s( errBuf, 128, errno );
-
-        fmt::print( "FLAC could not open [{}] for writing ({})\n", outputFile, errBuf );
+        fmt::print( "FLAC could not open [{}] for writing ({})\n", outputFile, std::strerror(errno) );
         return nullptr;
     }
 

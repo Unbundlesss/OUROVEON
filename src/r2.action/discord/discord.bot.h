@@ -32,7 +32,7 @@ struct VoiceChannel
 };
 using VoiceChannels         = std::vector< VoiceChannel >;
 using VoiceChannelsPtr      = std::shared_ptr< const VoiceChannels >;
-using VoiceChannelsAtomic   = std::atomic< VoiceChannelsPtr >;
+using VoiceChannelsAtomic   = VoiceChannelsPtr; // #HDD CXX20 atomic shared_ptr is not widely available :(
 
 struct GuildMetadata
 {

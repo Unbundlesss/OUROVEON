@@ -1,6 +1,8 @@
 
 -- ------------------------------------------------------------------------------
 function SetDefaultBuildConfiguration()
+    
+    cppdialect "C++20"
 
     filter "configurations:Debug"
         defines   { "DEBUG" }
@@ -43,8 +45,8 @@ end
 -- ------------------------------------------------------------------------------
 function SetDefaultOutputDirectories(subgrp)
 
-    targetdir   ( "$(SolutionDir)_artefact/bin_" .. subgrp .. "/$(Configuration)/%{cfg.platform}" )
-    objdir      ( "!$(SolutionDir)_artefact/obj_" .. subgrp .. "/%{cfg.shortname}/$(ProjectName)/" )
+    targetdir   ( GetBuildRootToken() .. "_artefact/bin_" .. subgrp .. "/%{cfg.shortname}/%{prj.name}/" )
+    objdir      ( GetBuildRootToken() .. "_artefact/obj_" .. subgrp .. "/%{cfg.shortname}/%{prj.name}/" )
     debugdir    ( "$(OutDir)" )
 
 end

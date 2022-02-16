@@ -203,7 +203,7 @@ struct CoreGUI : public Core
 protected:
 
     // to avoid flickering values on the status bar; distracting and not particularly useful
-    using AudioLoadAverage = base::RollingAverage< 60.0 >;
+    using AudioLoadAverage = base::RollingAverage< 60 >;
 
 
     // app can declare its own frontend configuration blob

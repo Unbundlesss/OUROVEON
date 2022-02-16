@@ -19,7 +19,9 @@
  *
  ************************************************************************************/
 #include "dpp_pch.h"
-#define _XOPEN_SOURCE
+#if !defined(_XOPEN_SOURCE) && !defined(__DARWIN__) && !defined(__APPLE__)
+#  define _XOPEN_SOURCE 600
+#endif
 #include <string>
 #include <iostream>
 #include <fstream>

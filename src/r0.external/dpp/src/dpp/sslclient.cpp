@@ -148,7 +148,7 @@ void ssl_client::connect()
 	int status = getaddrinfo(hostname.c_str(), port.c_str(), &hints, &addrs);
 	if ( status != 0 )
 	{
-		std::string gai = gai_strerrorA( status );
+		std::string gai = gai_strerror( status );
 		throw dpp::exception( fmt::format( "getaddrinfo (host={}, port={}): ", hostname, port, gai ) );
 	}
 

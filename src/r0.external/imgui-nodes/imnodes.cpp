@@ -2699,14 +2699,14 @@ void node_line_handler(EditorContext& editor, const char* line)
 {
     int id;
     int x, y;
-    if (sscanf_s(line, "[node.%i", &id) == 1)
+    if (sscanf(line, "[node.%i", &id) == 1)
     {
         const int node_idx = object_pool_find_or_create_index(editor.nodes, id);
         g.current_node_idx = node_idx;
         NodeData& node = editor.nodes.pool[node_idx];
         node.id = id;
     }
-    else if (sscanf_s(line, "origin=%i,%i", &x, &y) == 2)
+    else if (sscanf(line, "origin=%i,%i", &x, &y) == 2)
     {
         NodeData& node = editor.nodes.pool[g.current_node_idx];
         node.origin = ImVec2((float)x, (float)y);
@@ -2715,7 +2715,7 @@ void node_line_handler(EditorContext& editor, const char* line)
 
 void editor_line_handler(EditorContext& editor, const char* line)
 {
-    sscanf_s(line, "panning=%f,%f", &editor.panning.x, &editor.panning.y);
+    sscanf(line, "panning=%f,%f", &editor.panning.x, &editor.panning.y);
 }
 } // namespace
 

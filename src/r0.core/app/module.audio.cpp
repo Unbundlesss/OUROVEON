@@ -23,8 +23,6 @@
 
 #include "portaudio.h"
 
-#include <objbase.h>
-
 
 namespace app {
 namespace module {
