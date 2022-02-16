@@ -4,5 +4,5 @@
 
     "jamSentinelPollRateInSeconds": 5,
 
-    "certBundleRelative":   "cert\\curl-ca-bundle.crt"
+    "certBundleRelative":   "cert/curl-ca-bundle.crt"
 }
