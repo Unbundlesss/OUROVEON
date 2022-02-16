@@ -1,6 +1,11 @@
 .vs/
 .vscode/
+
 bin/**/build_*
+bin/**/linux_*
+bin/**/macosx_*
+bin/**/windows_*
+
 build/_sln
 build/_gen
 build/_artefact
