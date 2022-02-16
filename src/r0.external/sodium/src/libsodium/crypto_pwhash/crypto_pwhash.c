@@ -65,13 +65,13 @@ crypto_pwhash_strprefix(void)
     return crypto_pwhash_STRPREFIX;
 }
 
-unsigned long long
+size_t
 crypto_pwhash_opslimit_min(void)
 {
     return crypto_pwhash_OPSLIMIT_MIN;
 }
 
-unsigned long long
+size_t
 crypto_pwhash_opslimit_max(void)
 {
     return crypto_pwhash_OPSLIMIT_MAX;
@@ -89,7 +89,7 @@ crypto_pwhash_memlimit_max(void)
     return crypto_pwhash_MEMLIMIT_MAX;
 }
 
-unsigned long long
+size_t
 crypto_pwhash_opslimit_interactive(void)
 {
     return crypto_pwhash_OPSLIMIT_INTERACTIVE;
@@ -101,7 +101,7 @@ crypto_pwhash_memlimit_interactive(void)
     return crypto_pwhash_MEMLIMIT_INTERACTIVE;
 }
 
-unsigned long long
+size_t
 crypto_pwhash_opslimit_moderate(void)
 {
     return crypto_pwhash_OPSLIMIT_MODERATE;
@@ -113,7 +113,7 @@ crypto_pwhash_memlimit_moderate(void)
     return crypto_pwhash_MEMLIMIT_MODERATE;
 }
 
-unsigned long long
+size_t
 crypto_pwhash_opslimit_sensitive(void)
 {
     return crypto_pwhash_OPSLIMIT_SENSITIVE;
@@ -172,7 +172,7 @@ crypto_pwhash_str_alg(char out[crypto_pwhash_STRBYTES],
 }
 
 int
-crypto_pwhash_str_verify(const char * str,
+crypto_pwhash_str_verify(const char str[crypto_pwhash_STRBYTES],
                          const char * const passwd,
                          unsigned long long passwdlen)
 {
@@ -190,7 +190,7 @@ crypto_pwhash_str_verify(const char * str,
 }
 
 int
-crypto_pwhash_str_needs_rehash(const char * str,
+crypto_pwhash_str_needs_rehash(const char str[crypto_pwhash_STRBYTES],
                                unsigned long long opslimit, size_t memlimit)
 {
     if (strncmp(str, crypto_pwhash_argon2id_STRPREFIX,
