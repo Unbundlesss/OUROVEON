@@ -91,7 +91,8 @@ OptionalNameValuePair<T, void> make_optional_nvp(const std::string &name, T &&op
 };
 }
 
-#define CEREAL_OPTIONAL_NVP(T, ...) ::cereal::make_optional_nvp(#T, T, __VA_ARGS__)
+#define CEREAL_OPTIONAL_NVP(T) ::cereal::make_optional_nvp(#T, T)
+#define CEREAL_OPTIONAL_NVP_ARGS(T, ...) ::cereal::make_optional_nvp(#T, T, __VA_ARGS__)
 
 
 #endif //CEREAL_OPTIONAL_OPTIONAL_NVP_HPP
