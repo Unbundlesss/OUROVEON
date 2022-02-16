@@ -46,7 +46,7 @@ end
 function SetDefaultOutputDirectories(subgrp)
 
     targetdir   ( GetBuildRootToken() .. "_artefact/bin_" .. subgrp .. "/%{cfg.shortname}/%{prj.name}/" )
-    objdir      ( GetBuildRootToken() .. "_artefact/obj_" .. subgrp .. "/%{cfg.shortname}/%{prj.name}/" )
+    objdir      ( "!" .. GetBuildRootToken() .. "_artefact/obj_" .. subgrp .. "/%{cfg.shortname}/%{prj.name}/" )
     debugdir    ( "$(OutDir)" )
 
 end
