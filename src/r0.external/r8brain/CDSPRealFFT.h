@@ -7,26 +7,30 @@
  * @brief Real-valued FFT transform class.
  *
  * This file includes FFT object implementation. All created FFT objects are
- * kept in a global list after use for future reusal. Such approach minimizes
- * time necessary to initialize the FFT object of the required length.
+ * kept in a global list after use, for a future reusal. Such approach
+ * minimizes time necessary to initialize the FFT object of the required
+ * length.
  *
- * r8brain-free-src Copyright (c) 2013-2021 Aleksey Vaneev
- * See the "License.txt" file for license.
+ * r8brain-free-src Copyright (c) 2013-2022 Aleksey Vaneev
+ * See the "LICENSE" file for license.
  */
 
 #ifndef R8B_CDSPREALFFT_INCLUDED
 #define R8B_CDSPREALFFT_INCLUDED
 
 #include "r8bbase.h"
-#include <cmath>
 
-#if !R8B_IPP && !R8B_PFFFT
+#if !R8B_IPP && !R8B_PFFFT && !R8B_PFFFT_DOUBLE
 	#include "fft4g.h"
-#endif // !R8B_IPP && !R8B_PFFFT
+#endif // !R8B_IPP && !R8B_PFFFT && !R8B_PFFFT_DOUBLE
 
 #if R8B_PFFFT
 	#include "pffft.h"
 #endif // R8B_PFFFT
+
+#if R8B_PFFFT_DOUBLE
+	#include "pffft_double/pffft_double.h"
+#endif // R8B_PFFFT_DOUBLE
 
 namespace r8b {
 
@@ -40,8 +44,8 @@ namespace r8b {
  * Uses functions from the FFT package by: Copyright(C) 1996-2001 Takuya OOURA
  * http://www.kurims.kyoto-u.ac.jp/~ooura/fft.html
  *
- * Also uses Intel IPP library functions if available (the R8B_IPP=1 macro was
- * defined). Note that IPP library's FFT functions are 2-3 times more
+ * Also uses Intel IPP library functions if available (if the R8B_IPP=1 macro
+ * was defined). Note that IPP library's FFT functions are 2-3 times more
  * efficient on the modern Intel Core i7-3770K processor than Ooura's
  * functions. It may be worthwhile investing in IPP. Note, that FFT functions
  * take less than 20% of the overall sample rate conversion time. However,
@@ -115,7 +119,11 @@ public:
 
 		pffft_transform_ordered( setup, op, op, work, PFFFT_FORWARD );
 
-	#else // R8B_PFFFT
+	#elif R8B_PFFFT_DOUBLE
+
+		pffftd_transform_ordered( setup, p, p, work, PFFFT_FORWARD );
+
+	#else // R8B_PFFFT_DOUBLE
 
 		ooura_fft :: rdft( Len, 1, p, wi.getPtr(), wd.getPtr() );
 
@@ -140,7 +148,11 @@ public:
 		pffft_transform_ordered( setup, (float*) p, (float*) p, work,
 			PFFFT_BACKWARD );
 
-	#else // R8B_PFFFT
+	#elif R8B_PFFFT_DOUBLE
+
+		pffftd_transform_ordered( setup, p, p, work, PFFFT_BACKWARD );
+
+	#else // R8B_PFFFT_DOUBLE
 
 		ooura_fft :: rdft( Len, -1, p, wi.getPtr(), wd.getPtr() );
 
@@ -230,7 +242,10 @@ public:
 
 		const double* const ip = aip;
 		double* const op = aop;
+
+		#if !R8B_IPP
 		double t;
+		#endif // !R8B_IPP
 
 	#endif // R8B_FLOATFFT
 
@@ -264,11 +279,11 @@ public:
 	 * object.
 	 *
 	 * @param aip Input data block 1, "zero-phase" response. This block should
-	 * be first transformed via the convertToZ() function.
+	 * be first transformed via the convertToZP() function.
 	 * @param[in,out] aop Output/input data block 2.
 	 */
 
-	void multiplyBlocksZ( const double* const aip, double* const aop ) const
+	void multiplyBlocksZP( const double* const aip, double* const aop ) const
 	{
 	#if R8B_FLOATFFT
 
@@ -277,16 +292,84 @@ public:
 
 	#else // R8B_FLOATFFT
 
-		const double* const ip = aip;
-		double* const op = aop;
+		const double* ip = aip;
+		double* op = aop;
 
 	#endif // R8B_FLOATFFT
 
-	#if R8B_IPP
+	// SIMD implementations assume that pointers are address-aligned.
 
-		ippsMul_64f_I( (const Ipp64f*) ip, (Ipp64f*) op, Len );
+	#if !R8B_FLOATFFT && defined( R8B_SSE2 )
 
-	#else // R8B_IPP
+		int c8 = Len >> 3;
+
+		while( c8 != 0 )
+		{
+			const __m128d iv1 = _mm_load_pd( ip );
+			const __m128d iv2 = _mm_load_pd( ip + 2 );
+			const __m128d ov1 = _mm_load_pd( op );
+			const __m128d ov2 = _mm_load_pd( op + 2 );
+			_mm_store_pd( op, _mm_mul_pd( iv1, ov1 ));
+			_mm_store_pd( op + 2, _mm_mul_pd( iv2, ov2 ));
+
+			const __m128d iv3 = _mm_load_pd( ip + 4 );
+			const __m128d ov3 = _mm_load_pd( op + 4 );
+			const __m128d iv4 = _mm_load_pd( ip + 6 );
+			const __m128d ov4 = _mm_load_pd( op + 6 );
+			_mm_store_pd( op + 4, _mm_mul_pd( iv3, ov3 ));
+			_mm_store_pd( op + 6, _mm_mul_pd( iv4, ov4 ));
+
+			ip += 8;
+			op += 8;
+			c8--;
+		}
+
+		int c = Len & 7;
+
+		while( c != 0 )
+		{
+			*op *= *ip;
+			ip++;
+			op++;
+			c--;
+		}
+
+	#elif !R8B_FLOATFFT && defined( R8B_NEON )
+
+		int c8 = Len >> 3;
+
+		while( c8 != 0 )
+		{
+			const float64x2_t iv1 = vld1q_f64( ip );
+			const float64x2_t iv2 = vld1q_f64( ip + 2 );
+			const float64x2_t ov1 = vld1q_f64( op );
+			const float64x2_t ov2 = vld1q_f64( op + 2 );
+			vst1q_f64( op, vmulq_f64( iv1, ov1 ));
+			vst1q_f64( op + 2, vmulq_f64( iv2, ov2 ));
+
+			const float64x2_t iv3 = vld1q_f64( ip + 4 );
+			const float64x2_t iv4 = vld1q_f64( ip + 6 );
+			const float64x2_t ov3 = vld1q_f64( op + 4 );
+			const float64x2_t ov4 = vld1q_f64( op + 6 );
+			vst1q_f64( op + 4, vmulq_f64( iv3, ov3 ));
+			vst1q_f64( op + 6, vmulq_f64( iv4, ov4 ));
+
+			ip += 8;
+			op += 8;
+			c8--;
+		}
+
+		int c = Len & 7;
+
+		while( c != 0 )
+		{
+			*op *= *ip;
+			ip++;
+			op++;
+			c--;
+		}
+
+	#else // SIMD
 
 		int i;
 
@@ -295,7 +378,7 @@ public:
 			op[ i ] *= ip[ i ];
 		}
 
-	#endif // R8B_IPP
+	#endif // SIMD
 	}
 
 	/**
@@ -305,7 +388,7 @@ public:
 	 * @param[in,out] ap Block to transform.
 	 */
 
-	void convertToZ( double* const ap ) const
+	void convertToZP( double* const ap ) const
 	{
 	#if R8B_FLOATFFT
 
@@ -349,7 +432,12 @@ private:
 			///<
 		CFixedBuffer< float > work; ///< Working buffer.
 			///<
-	#else // R8B_PFFFT
+	#elif R8B_PFFFT_DOUBLE
+		PFFFTD_Setup* setup; ///< PFFFTD setup object.
+			///<
+		CFixedBuffer< double > work; ///< Working buffer.
+			///<
+	#else // R8B_PFFFT_DOUBLE
 		CFixedBuffer< int > wi; ///< Working buffer (ints).
 			///<
 		CFixedBuffer< double > wd; ///< Working buffer (doubles).
@@ -411,7 +499,9 @@ private:
 		, InvMulConst( 1.0 / Len )
 	#elif R8B_PFFFT
 		, InvMulConst( 1.0 / Len )
-	#else // R8B_PFFFT
+	#elif R8B_PFFFT_DOUBLE
+		, InvMulConst( 1.0 / Len )
+	#else // R8B_PFFFT_DOUBLE
 		, InvMulConst( 2.0 / Len )
 	#endif // R8B_IPP
 	{
@@ -436,7 +526,12 @@ private:
 		setup = pffft_new_setup( Len, PFFFT_REAL );
 		work.alloc( Len );
 
-	#else // R8B_PFFFT
+	#elif R8B_PFFFT_DOUBLE
+
+		setup = pffftd_new_setup( Len, PFFFT_REAL );
+		work.alloc( Len );
+
+	#else // R8B_PFFFT_DOUBLE
 
 		wi.alloc( (int) ceil( 2.0 + sqrt( (double) ( Len >> 1 ))));
 		wi[ 0 ] = 0;
@@ -449,7 +544,9 @@ private:
 	{
 		#if R8B_PFFFT
 			pffft_destroy_setup( setup );
-		#endif // R8B_PFFFT
+		#elif R8B_PFFFT_DOUBLE
+			pffftd_destroy_setup( setup );
+		#endif // R8B_PFFFT_DOUBLE
 
 		delete Next;
 	}
@@ -626,8 +723,8 @@ inline void calcMinPhaseTransform( double* const Kernel, const int KernelLen,
 	CFixedBuffer< double > ip( Len );
 	CFixedBuffer< double > ip2( Len2 + 1 );
 
-	memcpy( &ip[ 0 ], Kernel, KernelLen * sizeof( double ));
-	memset( &ip[ KernelLen ], 0, ( Len - KernelLen ) * sizeof( double ));
+	memcpy( &ip[ 0 ], Kernel, KernelLen * sizeof( ip[ 0 ]));
+	memset( &ip[ KernelLen ], 0, ( Len - KernelLen ) * sizeof( ip[ 0 ]));
 
 	CDSPRealFFTKeeper ffto( LenBits );
 	ffto -> forward( ip );
@@ -638,7 +735,7 @@ inline void calcMinPhaseTransform( double* const Kernel, const int KernelLen,
 	#if R8B_FLOATFFT
 		float* const aip = (float*) &ip[ 0 ];
 		float* const aip2 = (float*) &ip2[ 0 ];
-		const float nzbias = 1e-35f;
+		const float nzbias = 1e-35;
 	#else // R8B_FLOATFFT
 		double* const aip = &ip[ 0 ];
 		double* const aip2 = &ip2[ 0 ];
@@ -646,16 +743,16 @@ inline void calcMinPhaseTransform( double* const Kernel, const int KernelLen,
 	#endif // R8B_FLOATFFT
 
 	aip2[ 0 ] = aip[ 0 ];
-	aip[ 0 ] = std::log( std::abs( aip[ 0 ]) + nzbias );
+	aip[ 0 ] = log( fabs( aip[ 0 ]) + nzbias );
 	aip2[ Len2 ] = aip[ 1 ];
-	aip[ 1 ] = std::log( std::fabs( aip[ 1 ]) + nzbias );
+	aip[ 1 ] = log( fabs( aip[ 1 ]) + nzbias );
 
 	for( i = 1; i < Len2; i++ )
 	{
-		aip2[ i ] = std::sqrt( aip[ i * 2 ] * aip[ i * 2 ] +
+		aip2[ i ] = sqrt( aip[ i * 2 ] * aip[ i * 2 ] +
 			aip[ i * 2 + 1 ] * aip[ i * 2 + 1 ]);
 
-		aip[ i * 2 ] = std::log( aip2[ i ] + nzbias );
+		aip[ i * 2 ] = log( aip2[ i ] + nzbias );
 		aip[ i * 2 + 1 ] = 0.0;
 	}
 
@@ -706,7 +803,7 @@ inline void calcMinPhaseTransform( double* const Kernel, const int KernelLen,
 	}
 	else
 	{
-		memcpy( &Kernel[ 0 ], &ip[ 0 ], KernelLen * sizeof( double ));
+		memcpy( &Kernel[ 0 ], &ip[ 0 ], KernelLen * sizeof( Kernel[ 0 ]));
 	}
 
 	if( DCGroupDelay != NULL )

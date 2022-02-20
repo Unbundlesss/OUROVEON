@@ -1,13 +1,15 @@
-# r8brain-free-src #
+# r8brain-free-src - High-Quality Resampler #
 
 ## Introduction ##
 
 Open source (under the MIT license) high-quality professional audio sample
-rate converter (SRC) (resampling) C++ library.  Features routines for SRC,
+rate converter (SRC) / resampler C++ library.  Features routines for SRC,
 both up- and downsampling, to/from any sample rate, including non-integer
-sample rates: it can be also used for conversion to/from SACD sample rate, and
-even go beyond that.  SRC routines were implemented in a multi-platform C++
-code, and have a high level of optimality.
+sample rates: it can be also used for conversion to/from SACD/DSD sample
+rates, and even go beyond that.  SRC routines were implemented in a
+multi-platform C++ code, and have a high level of optimality. Also suitable
+for fast general-purpose 1D time-series resampling / interpolation (with
+relaxed filter parameters).
 
 The structure of this library's objects is such that they can be frequently
 created and destroyed in large applications with a minimal performance impact
@@ -16,11 +18,14 @@ objects: the fast Fourier transform and FIR filter objects.
 
 The SRC algorithm at first produces 2X oversampled (relative to the source
 sample rate, or the destination sample rate if the downsampling is performed)
-signal, then performs interpolation using a bank of short (14 to 24 taps,
+signal, then performs interpolation using a bank of short (8 to 30 taps,
 depending on the required precision) polynomial-interpolated sinc
 function-based fractional delay filters.  This puts the algorithm into the
 league of the fastest among the most precise SRC algorithms.  The more precise
 alternative being only the whole number-factored SRC, which can be slower.
+
+P.S. Please credit the creator of this library in your documentation in the
+following way: "Sample rate converter designed by Aleksey Vaneev of Voxengo".
 
 ## Requirements ##
 
@@ -34,7 +39,7 @@ library does not have dependencies beside the standard C library, the
 ## Links ##
 
 * [Documentation](https://www.voxengo.com/public/r8brain-free-src/Documentation/)
-* [Discussion](http://www.kvraudio.com/forum/viewtopic.php?t=389711)
+* [Discussion](https://www.kvraudio.com/forum/viewtopic.php?t=389711)
 
 ## Usage Information ##
 
@@ -60,8 +65,8 @@ The library is able to process signal of any scale and loudness: it is not
 limited to just a "usual" -1.0 to 1.0 range.
 
 By defining the `R8B_IPP` configuration macro it is possible to enable Intel
-IPP back-end for FFT functions, instead of Ooura FFT.  IPP FFT makes sample
-rate conversion faster by 23% on average.
+IPP back-end for FFT functions, instead of the default Ooura FFT.  IPP FFT
+makes sample rate conversion faster by 23% on average.
 
     #define R8B_IPP 1
 
@@ -73,29 +78,40 @@ the beginning of the `r8bconf.h` file, or during compilation:
     #define R8B_FASTTIMING 1
     #define R8B_EXTFFT 1
 
-If you do not have access to Intel IPP then you may consider enabling PFFFT
-which is only slightly slower than Intel IPP FFT in performance, however since
-PFFFT works in single-precision resolution, the overall resampler's precision
-will be limited to 24-bit sample rate conversions. To use the PFFFT, define
-the `R8B_PFFFT` macro, compile and include the supplied `pffft.cpp` file
-to your project build.
+If you do not have access to the Intel IPP then you may consider enabling the
+PFFFT which is only slightly slower than Intel IPP FFT in performance.  There
+are two macros available: `R8B_PFFFT` and `R8B_PFFFT_DOUBLE`.  The first macro
+enables PFFFT that works in single-precision resolution, thus limiting the
+overall resampler's precision to 24-bit sample rate conversions (for
+mission-critical professional audio applications, using the `R8B_PFFFT` macro
+is not recommended as its peak error is quite large).  The second macro
+enables PFFFT implementation that works in double-precision resolution, making
+use of SSE2, AVX, and NEON intrinsics, yielding precision that is equal to
+both Intel IPP and Ooura FFT implementations.
+
+To use the PFFFT, define the `R8B_PFFFT` or `R8B_PFFFT_DOUBLE` macro, compile
+and include the supplied `pffft.cpp` or `pffft_double/pffft_double.c` file to
+your project build.
 
     #define R8B_PFFFT 1
 
+    or
+
+    #define R8B_PFFFT_DOUBLE 1
+
 The code of this library was commented in the [Doxygen](http://www.doxygen.org/)
 style.  To generate the documentation locally you may run the
-`doxygen ./other/r8bdoxy.txt` command from the library's directory.
+`doxygen ./other/r8bdoxy.txt` command from the library's folder.
 
 Preliminary tests show that the r8b::CDSPResampler24 resampler class achieves
-`61.2*n_cores` Mflops (`83.3*n_cores` for Intel IPP FFT) when
-converting 1 channel of 24-bit audio from 44100 to 96000 sample rate
-(2% transition band), on an Intel Core i7-7700K processor-based 64-bit
-AVX2-enabled system without overclocking.  This approximately translates to a
-real-time resampling of `637*n_cores` (`868*n_cores`) audio streams, at 100%
-CPU load.  Time performance when converting to other sample rates may vary
-greatly.  When comparing performance of this resampler library to another
+`31.8*n_cores` Mrops (`44*n_cores` for Intel IPP FFT) when converting 1
+channel of 24-bit audio from 44100 to 96000 sample rate (2% transition band),
+on a Ryzen 3700X processor-based 64-bit system.  This approximately translates
+to a real-time resampling of `720*n_cores` (`1000*n_cores`) audio streams, at
+100% CPU load.  Speed performance when converting to other sample rates may
+vary greatly.  When comparing performance of this resampler library to another
 library make sure that the competing library is also tuned to produce a fully
-linear-phase response, has similar stop-band characteristics, and similar
+linear-phase response, has similar stop-band characteristics and similar
 sample timing precision.
 
 ## Dynamic Link Library ##
@@ -104,24 +120,25 @@ The functions of this SRC library are also accessible in simplified form via
 the DLL file on Windows, requiring a processor with SSE2 support (Win64
 version includes AVX2 auto-dispatch code).  Delphi Pascal interface unit file
 for the DLL file is available.  DLL and C LIB files are distributed in the DLL
-folder at the project's homepage.  On non-Windows systems it is preferrable
+folder on the project's homepage.  On non-Windows systems it is preferrable
 to use the C++ library directly.  Note that the DLL was compiled with the
-PFFFT enabled.
+Intel IPP enabled.
 
-## Real-time Applications ##
+## Real-Time Applications ##
 
 The resampler class of this library was designed as an asynchronous processor:
 it may produce any number of output samples, depending on the input sample
 data length and the resampling parameters.  The resampler must be fed with the
-input sample data until enough output sample data was produced, with any
+input sample data until enough output sample data were produced, with any
 excess output samples used before feeding the resampler with more input data.
 A "relief" factor here is that the resampler removes the initial processing
 latency automatically, and that after initial moments of processing the output
 becomes steady, with only minor output sample data length fluctuations.
 
-So, while for offline resampling a "push" method can be used demonstrated in
-the `example.cpp`, for real-time resampling a "pull" method should be used
-which calls resampling process until output buffer is filled.
+So, while for an off-line resampling a "push" method can be used,
+demonstrated in the `example.cpp` file, for a real-time resampling a "pull"
+method should be used which calls the resampling process until the output
+buffer is filled.
 
 ## Notes ##
 
@@ -133,24 +150,25 @@ attenuation in decibel.
 
 The transition band is specified as the normalized spectral space of the input
 signal (or the output signal if the downsampling is performed) between the
-low-pass filter's -3 dB point and the Nyquist frequency, and ranges from
-0.5% to 45%.  Stop-band attenuation can be specified in the range 49 to 218
-decibel.  Both transition band and stop-band attenuation affect resampler's
-overall speed performance and initial output delay.  For your information,
-transition frequency range spans 175% of the specified transition band,
-which means that for 2% transition band, frequency response below
+low-pass filter's -3 dB point and the Nyquist frequency, and ranges from 0.5%
+to 45%.  Stop-band attenuation can be specified in the range from 49 to 218
+decibel.  Both the transition band and stop-band attenuation affect
+resampler's overall speed performance and initial output delay.  For your
+information, transition frequency range spans 175% of the specified transition
+band, which means that for 2% transition band, frequency response below
 0.965\*Nyquist is linear.
 
 This SRC library also implements a much faster "power of 2" resampling (e.g.
-2X, 4X, 8X, 16X, 3X, 3\*2X, 3\*4X, 3\*8X, etc. upsampling and downsampling).
+2X, 4X, 8X, 16X, 3X, 3\*2X, 3\*4X, 3\*8X, etc. upsampling and downsampling),
+which is engaged automatically if the resampling parameters permit.
 
 This library was tested for compatibility with [GNU C++](https://gcc.gnu.org/),
-[Microsoft Visual C++](https://visualstudio.microsoft.com/) and
-[Intel C++](https://software.intel.com/en-us/c-compilers) compilers, on 32-
-and 64-bit Windows, macOS and CentOS Linux.
+[Microsoft Visual C++](https://visualstudio.microsoft.com/),
+[LLVM](https://llvm.org/) and [Intel C++](https://software.intel.com/en-us/c-compilers)
+compilers, on 32- and 64-bit Windows, macOS, and CentOS Linux.
 
-All code is fully "inline", without the need to compile many source files.
-The memory footprint is quite modest.
+Most code is "inline", without the need to compile many source files. The
+memory footprint is quite modest.
 
 ## Acknowledgements ##
 
@@ -160,37 +178,110 @@ r8brain-free-src is bundled with the following code:
 [Homepage](http://www.kurims.kyoto-u.ac.jp/~ooura/fft.html)
 * PFFFT Copyright (c) 2013 Julien Pommier.
 [Homepage](https://bitbucket.org/jpommier/pffft)
+* PFFFT DOUBLE Copyright (c) 2020 Hayati Ayguen, Dario Mambro.
+[Homepage](https://github.com/marton78/pffft)
 
 ## Users ##
 
 This library is used by:
 
-* [Combo Model V VSTi instrument](https://www.martinic.com/combov/)
+* [REAPER](https://reaper.fm/)
+* [AUDIRVANA](https://audirvana.com/)
+* [Red Dead Redemption 2](https://www.rockstargames.com/reddeadredemption2/credits)
+* [Mini Piano Lite](https://play.google.com/store/apps/details?id=umito.android.minipiano)
+* [OpenMPT](https://openmpt.org/)
 * [Boogex Guitar Amp audio plugin](https://www.voxengo.com/product/boogex/)
 * [r8brain free sample rate converter](https://www.voxengo.com/product/r8brain/)
-* [OpenMPT](https://openmpt.org/)
-* [Zynewave Podium](https://zynewave.com/podium/)
-* [Red Dead Redemption 2](https://www.rockstargames.com/reddeadredemption2/credits)
 * [Voice Aloud Reader](https://play.google.com/store/apps/details?id=com.hyperionics.avarLic)
-* [Mini Piano Lite](https://play.google.com/store/apps/details?id=umito.android.minipiano)
+* [Zynewave Podium](https://zynewave.com/podium/)
 * [Phonometrica](http://www.phonometrica-ling.org/index.html)
 * [Ripcord](https://cancel.fm/ripcord/)
-* [Curvessor](https://github.com/unevens/Curvessor)
-* [Overdraw](https://github.com/unevens/Overdraw)
-* [Fresponze](https://github.com/Vertver/Fresponze)
 * [TensorVox](https://github.com/ZDisket/TensorVox)
+* [Curvessor](https://github.com/unevens/Curvessor)
 
-Please drop me a note at aleksey.vaneev@gmail.com and I will include a link to
-your software product to the list of users. This list is important at
-maintaining confidence in this library among the interested parties.
+Please send me a note via aleksey.vaneev@gmail.com and I will include a link
+to your software product to this list of users. This list is important in
+maintaining confidence in this library among the interested parties. The
+inclusion into this list is not mandatory.
 
-## Other ##
+## Change Log ##
 
-[Follow me on Twitter](https://twitter.com/AlekseyVaneev)
+Version 5.6:
 
-[Become a patron on Patreon](https://patreon.com/aleksey_vaneev)
+* Added SSE and NEON implementations to `CDSPHBUpsampler` yielding 15%
+performance improvement of power-of-2 upsampling.
+* Added SSE and NEON implementations to the `CDSPRealFFT::multiplyBlocksZP`
+function, for 2-3% performance improvement.
+* Added intermediate interpolator's transition band limitation, for logical
+hardness (not practically needed).
+* Added the `aDoConsumeLatency` parameter to `CDSPHBUpsampler` constructor,
+for "inline" DSP uses of the class.
+* Made various minor changes across the codebase.
 
-## Change log ##
+Version 5.5:
+
+* Hardened positional logic of fractional filter calculation, removed
+redundant multiplications.
+* Removed unnecessary function templating from the `CDSPSincFilterGen` class.
+* Added the `__ARM_NEON` macro to NEON availability detection.
+
+Version 5.4:
+
+* Added compiler specializations to previously optimized inner loops.
+"Shuffled" SIMD interpolation code is not efficient on Apple M1. Intel C++
+Compiler vectorizes "whole stepping" interpolation as good as a
+manually-written SSE.
+* Reorganized SIMD instructions for a slightly better performance.
+* Changed internal buffer sizes of half-band resamplers (1-2% performance
+boost).
+* Fixed compiler warnings in PFFFT code.
+* Added several asserts to the code.
+
+Version 5.3:
+
+* Optimized inner loops of the fractional interpolator, added SSE2 and NEON
+intrinsics, resulting in a measurable (8-25%) performance gain.
+* Optimized filter calculation functions: changed some divisions by a constant
+to multiplications.
+* Renamed M_PI macros to R8B_PI, to avoid macro collisions.
+* Removed redundant code and macros.
+
+Version 5.2:
+
+* Modified `PFFFT` and `PFFFT DOUBLE` conditional pre-processor directives to
+always enable NEON on `aarch64`/`arm64` (this includes code built for
+Apple M1).
+
+Version 5.1:
+
+* Changed alignment in the `CFixedBuffer` class to 64 bytes. This improves AVX
+performance of the `PFFFT DOUBLE` implementation by a few percent.
+* Removed redundant files from the `pffft_double` folder, integrated the
+`pffft_common.c` file into the `pffft_double.c` file.
+
+Version 5.0:
+
+* Removed a long-outdated macros from the `r8bconf.h` file.
+* Changed a conditional pre-processor directive in the `pf_sse2_double.h` file
+as per PFFFT DOUBLE author's suggestion, to allow SSE2 intrinsics in most
+compilers.
+* Fixed "License.txt" misnaming in the source files to "LICENSE".
+
+Version 4.10:
+
+* Added the `PFFFT DOUBLE` implementation support. Now available via the
+`R8B_PFFFT_DOUBLE` definition macro.
+
+Version 4.9:
+
+* Reoptimized half-band and fractional interpolation filters with a stricter
+frequency response linearity constraints. This did not impact the average
+speed performance.
+
+Version 4.8:
+
+* Added a limit to the intermediate filter's transition band, to keep the
+latency under control at any resampling ratio.
 
 Version 4.7:
 
@@ -200,7 +291,7 @@ Version 4.7:
 Version 4.6:
 
 * Removed the `MaxInLen` parameter from the `oneshot()` function.
-* Increased intermediate low-pass filter's transition band slightly, for more
+* Decreased intermediate low-pass filter's transition band slightly, for more
 stable quality.
 
 Version 4.5:

@@ -95,6 +95,10 @@
 #pragma warning( disable : 4244 4305 4204 4456 )
 #endif
 
+#ifndef M_PI
+  #define M_PI    3.14159265358979323846  /* pi */
+#endif
+
 /* 
    vector support macros: the rest of the code is independant of
    SSE/Altivec/NEON -- adding support for other platforms with 4-element
@@ -108,7 +112,8 @@
 /*
    Altivec support macros 
 */
-#if !defined(PFFFT_SIMD_DISABLE) && (defined(__ppc__) || defined(__ppc64__))
+#if !defined(PFFFT_SIMD_DISABLE) && (defined(__ppc__) || defined(__ppc64__) || \
+	defined(__powerpc__) || defined(__powerpc64__))
 typedef vector float v4sf;
 #  define SIMD_SZ 4
 #  define VZERO() ((vector float) vec_splat_u8(0))
@@ -160,7 +165,8 @@ typedef __m128 v4sf;
 /*
   ARM NEON support macros
 */
-#elif !defined(PFFFT_SIMD_DISABLE) && defined(__arm__) 
+#elif !defined(PFFFT_SIMD_DISABLE) && ( defined(__ARM_NEON) || \
+	defined(__aarch64__) || defined(__arm64__))
 #  include <arm_neon.h>
 typedef float32x4_t v4sf;
 #  define SIMD_SZ 4
@@ -262,10 +268,12 @@ void validate_pffft_simd() {
 
 /* SSE and co like 16-bytes aligned pointers */
 #define MALLOC_V4SF_ALIGNMENT 64 // with a 64-byte alignment, we are even aligned on L2 cache lines...
+#define MALLOC_V4SF_SIZE (MALLOC_V4SF_ALIGNMENT+sizeof(void*))
 void *pffft_aligned_malloc(size_t nb_bytes) {
-  void *p, *p0 = malloc(nb_bytes + MALLOC_V4SF_ALIGNMENT);
+  void *p, *p0 = malloc(nb_bytes + MALLOC_V4SF_SIZE);
   if (!p0) return (void *) 0;
-  p = (void *) (((size_t) p0 + MALLOC_V4SF_ALIGNMENT) & (~((size_t) (MALLOC_V4SF_ALIGNMENT-1))));
+  p = (void *) (((uintptr_t) p0 + MALLOC_V4SF_SIZE) &
+    ~(uintptr_t) (MALLOC_V4SF_ALIGNMENT-1));
   *((void **) p - 1) = p0;
   return p;
 }
@@ -1176,19 +1184,19 @@ v4sf *cfftf1_ps(int n, const v4sf *input_readonly, v4sf *work1, v4sf *work2, con
         int ix2 = iw + idot;
         int ix3 = ix2 + idot;
         int ix4 = ix3 + idot;
-        passf5_ps(idot, l1, in, out, &wa[iw], &wa[ix2], &wa[ix3], &wa[ix4], isign);
+        passf5_ps(idot, l1, in, out, &wa[iw], &wa[ix2], &wa[ix3], &wa[ix4], (float)isign);
       } break;
       case 4: {
         int ix2 = iw + idot;
         int ix3 = ix2 + idot;
-        passf4_ps(idot, l1, in, out, &wa[iw], &wa[ix2], &wa[ix3], isign);
+        passf4_ps(idot, l1, in, out, &wa[iw], &wa[ix2], &wa[ix3], (float)isign);
       } break;
       case 2: {
-        passf2_ps(idot, l1, in, out, &wa[iw], isign);
+        passf2_ps(idot, l1, in, out, &wa[iw], (float)isign);
       } break;
       case 3: {
         int ix2 = iw + idot;
-        passf3_ps(idot, l1, in, out, &wa[iw], &wa[ix2], isign);
+        passf3_ps(idot, l1, in, out, &wa[iw], &wa[ix2], (float)isign);
       } break;
       default:
         assert(0);

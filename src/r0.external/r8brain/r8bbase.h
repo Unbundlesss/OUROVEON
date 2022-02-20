@@ -9,9 +9,6 @@
  * converter. This inclusion file contains implementations of several small
  * utility classes and functions used by the library.
  *
- * r8brain-free-src Copyright (c) 2013-2021 Aleksey Vaneev
- * See the "License.txt" file for license.
- *
  * @mainpage
  *
  * @section intro_sec Introduction
@@ -30,7 +27,7 @@
  *
  * The MIT License (MIT)
  * 
- * r8brain-free-src Copyright (c) 2013-2021 Aleksey Vaneev
+ * r8brain-free-src Copyright (c) 2013-2022 Aleksey Vaneev
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -54,7 +51,7 @@
  * following way: "Sample rate converter designed by Aleksey Vaneev of
  * Voxengo"
  *
- * @version 4.7
+ * @version 5.6
  */
 
 #ifndef R8BBASE_INCLUDED
@@ -66,11 +63,33 @@
 #include <math.h>
 #include "r8bconf.h"
 
-#if defined( R8B_WIN )
+#if defined( _WIN32 )
 	#include <windows.h>
-#else // R8B_WIN
+#else // defined( _WIN32 )
 	#include <pthread.h>
-#endif // R8B_WIN
+#endif // defined( _WIN32 )
+
+#if defined( __SSE4_2__ ) || defined( __SSE4_1__ ) || \
+	defined( __SSSE3__ ) || defined( __SSE3__ ) || defined( __SSE2__ ) || \
+	defined( __x86_64__ ) || defined( _M_AMD64 ) || defined( _M_X64 ) || \
+	defined( __amd64 )
+
+	#include <immintrin.h>
+
+	#define R8B_SSE2
+	#define R8B_SIMD_ISH
+
+#elif defined( __aarch64__ ) || defined( __arm64__ ) || defined( __ARM_NEON )
+
+	#include <arm_neon.h>
+
+	#define R8B_NEON
+
+	#if !defined( __APPLE__ )
+		#define R8B_SIMD_ISH // Shuffled interpolation is inefficient on M1.
+	#endif // !defined( __APPLE__ )
+
+#endif // ARM64
 
 /**
  * @brief The "r8brain-free-src" library namespace.
@@ -84,51 +103,34 @@ namespace r8b {
  * Macro defines r8brain-free-src version string.
  */
 
-#define R8B_VERSION "4.7"
+#define R8B_VERSION "5.6"
 
-#if !defined( M_PI )
-	/**
-	 * The macro equals to "pi" constant, fits 53-bit floating point mantissa.
-	 */
+/**
+ * The macro equals to "pi" constant, fits 53-bit floating point mantissa.
+ */
 
-	#define M_PI 3.14159265358979324
-#endif // M_PI
+#define R8B_PI 3.14159265358979324
 
-#if !defined( M_2PI )
-	/**
-	 * The M_2PI macro equals to "2 * pi" constant, fits 53-bit floating point
-	 * mantissa.
-	 */
+/**
+ * The R8B_2PI macro equals to "2 * pi" constant, fits 53-bit floating point
+ * mantissa.
+ */
 
-	#define M_2PI 6.28318530717958648
-#endif // M_2PI
+#define R8B_2PI 6.28318530717958648
 
-#if !defined( M_3PI )
-	/**
-	 * The M_3PI macro equals to "3 * pi" constant, fits 53-bit floating point
-	 * mantissa.
-	 */
+/**
+ * The R8B_3PI macro equals to "3 * pi" constant, fits 53-bit floating point
+ * mantissa.
+ */
 
-	#define M_3PI 9.42477796076937972
-#endif // M_3PI
+#define R8B_3PI 9.42477796076937972
 
-#if !defined( M_4PI )
-	/**
-	 * The M_4PI macro equals to "4 * pi" constant, fits 53-bit floating point
-	 * mantissa.
-	 */
+/**
+ * The R8B_PId2 macro equals to "pi divided by 2" constant, fits 53-bit
+ * floating point mantissa.
+ */
 
-	#define M_4PI 12.56637061435917295
-#endif // M_4PI
-
-#if !defined( M_PId2 )
-	/**
-	 * The macro equals to "pi divided by 2" constant, fits 53-bit floating
-	 * point mantissa.
-	 */
-
-	#define M_PId2 1.57079632679489662
-#endif // M_PId2
+#define R8B_PId2 1.57079632679489662
 
 /**
  * A special macro that defines empty copy-constructor and copy operator with
@@ -257,6 +259,21 @@ public:
 };
 
 /**
+ * This function forces the provided "ptr" pointer to be aligned to
+ * "align" bytes. Works with power-of-2 alignments only.
+ *
+ * @param ptr Pointer to align.
+ * @param align Alignment, in bytes, power-of-2.
+ * @tparam T Pointer's element type.
+ */
+
+template< typename T >
+inline T* alignptr( T* const ptr, const uintptr_t align )
+{
+	return( (T*) (( (uintptr_t) ptr + align - 1 ) & ~( align - 1 )));
+}
+
+/**
  * @brief Templated memory buffer class for element buffers of fixed capacity.
  *
  * Fixed memory buffer object. Supports allocation of a fixed amount of
@@ -268,13 +285,13 @@ public:
  * This class manages memory space only - it does not perform element class
  * construction nor destruction operations.
  *
- * This class applies 256-bit memory address alignment to the allocated data
+ * This class applies 64-byte memory address alignment to the allocated data
  * block.
  *
- * @param T The class of the stored elements (e.g. "double").
+ * @tparam T The type of the stored elements (e.g. "double").
  */
 
-template< class T >
+template< typename T >
 class CFixedBuffer : public R8B_MEMALLOCCLASS
 {
 	R8BNOCTOR( CFixedBuffer );
@@ -391,27 +408,13 @@ public:
 	}
 
 private:
-	static const size_t Alignment = 32; ///< Data buffer alignment, in bytes.
+	static const size_t Alignment = 64; ///< Buffer address alignment, in
+		///< bytes.
 		///<
 	void* Data0; ///< Buffer pointer, original unaligned.
 		///<
 	T* Data; ///< Element buffer pointer, aligned.
 		///<
-
-	/**
-	 * This macro forces provided pointer ptr to be aligned to align bytes.
-	 * Works with power-of-2 alignments only. If no alignment is necessary,
-	 * "align" bytes will be added to the pointer value.
-	 *
-	 * @tparam Tp Pointer type.
-	 */
-
-	template< class Tp >
-	inline Tp alignptr( const Tp ptr, const uintptr_t align )
-	{
-		return( (Tp) ( (uintptr_t) ptr + align -
-			( (uintptr_t) ptr & ( align - 1 ))) );
-	}
 };
 
 /**
@@ -421,7 +424,7 @@ private:
  * should be deleted together with the "keeper" by calling object's "delete"
  * operator.
  *
- * @param T Pointer type to operate with, must include the asterisk (e.g.
+ * @tparam T Pointer type to operate with, must include the asterisk (e.g.
  * "CDSPFIRFilter*").
  */
 
@@ -440,6 +443,7 @@ public:
 	 * Constructor assigns a pointer to object to *this keeper.
 	 *
 	 * @param aObject Pointer to object to keep, can be NULL.
+	 * @tparam T2 Object's pointer type.
 	 */
 
 	template< class T2 >
@@ -458,6 +462,7 @@ public:
 	 * keeped pointer will be reset and object deleted.
 	 *
 	 * @param aObject Pointer to object to keep, can be NULL.
+	 * @tparam T2 Object's pointer type.
 	 */
 
 	template< class T2 >
@@ -530,24 +535,24 @@ class CSyncObject
 public:
 	CSyncObject()
 	{
-		#if defined( R8B_WIN )
+		#if defined( _WIN32 )
 			InitializeCriticalSectionAndSpinCount( &CritSec, 4000 );
-		#else // R8B_WIN
+		#else // defined( _WIN32 )
 			pthread_mutexattr_t MutexAttrs;
 			pthread_mutexattr_init( &MutexAttrs );
 			pthread_mutexattr_settype( &MutexAttrs, PTHREAD_MUTEX_RECURSIVE );
 			pthread_mutex_init( &Mutex, &MutexAttrs );
 			pthread_mutexattr_destroy( &MutexAttrs );
-		#endif // R8B_WIN
+		#endif // defined( _WIN32 )
 	}
 
 	~CSyncObject()
 	{
-		#if defined( R8B_WIN )
+		#if defined( _WIN32 )
 			DeleteCriticalSection( &CritSec );
-		#else // R8B_WIN
+		#else // defined( _WIN32 )
 			pthread_mutex_destroy( &Mutex );
-		#endif // R8B_WIN
+		#endif // defined( _WIN32 )
 	}
 
 	/**
@@ -557,11 +562,11 @@ public:
 
 	void acquire()
 	{
-		#if defined( R8B_WIN )
+		#if defined( _WIN32 )
 			EnterCriticalSection( &CritSec );
-		#else // R8B_WIN
+		#else // defined( _WIN32 )
 			pthread_mutex_lock( &Mutex );
-		#endif // R8B_WIN
+		#endif // defined( _WIN32 )
 	}
 
 	/**
@@ -571,22 +576,22 @@ public:
 
 	void release()
 	{
-		#if defined( R8B_WIN )
+		#if defined( _WIN32 )
 			LeaveCriticalSection( &CritSec );
-		#else // R8B_WIN
+		#else // defined( _WIN32 )
 			pthread_mutex_unlock( &Mutex );
-		#endif // R8B_WIN
+		#endif // defined( _WIN32 )
 	}
 
 private:
-	#if defined( R8B_WIN )
+	#if defined( _WIN32 )
 		CRITICAL_SECTION CritSec; ///< Standard Windows critical section
 			///< structure.
 			///<
-	#else // R8B_WIN
+	#else // defined( _WIN32 )
 		pthread_mutex_t Mutex; ///< pthread.h mutex object.
 			///<
-	#endif // R8B_WIN
+	#endif // defined( _WIN32 )
 };
 
 /**
@@ -679,11 +684,11 @@ public:
 	}
 
 	/**
-	 * Constructor initializes *this sine signal generator.
+	 * Constructor initializes *this sine signal generator, with unity gain
+	 * output.
 	 *
 	 * @param si Sine function increment, in radians.
-	 * @param ph Starting phase, in radians. Add 0.5 * M_PI for cosine
-	 * function.
+	 * @param ph Starting phase, in radians. Add R8B_PId2 for cosine function.
 	 */
 
 	CSineGen( const double si, const double ph )
@@ -697,8 +702,7 @@ public:
 	 * Constructor initializes *this sine signal generator.
 	 *
 	 * @param si Sine function increment, in radians.
-	 * @param ph Starting phase, in radians. Add 0.5 * M_PI for cosine
-	 * function.
+	 * @param ph Starting phase, in radians. Add R8B_PId2 for cosine function.
 	 * @param g The overall gain factor, 1.0 for unity gain (-1.0 to 1.0
 	 * amplitude).
 	 */
@@ -711,11 +715,11 @@ public:
 	}
 
 	/**
-	 * Function initializes *this sine signal generator.
+	 * Function initializes *this sine signal generator, with unity gain
+	 * output.
 	 *
 	 * @param si Sine function increment, in radians.
-	 * @param ph Starting phase, in radians. Add 0.5 * M_PI for cosine
-	 * function.
+	 * @param ph Starting phase, in radians. Add R8B_PId2 for cosine function.
 	 */
 
 	void init( const double si, const double ph )
@@ -729,8 +733,7 @@ public:
 	 * Function initializes *this sine signal generator.
 	 *
 	 * @param si Sine function increment, in radians.
-	 * @param ph Starting phase, in radians. Add 0.5 * M_PI for cosine
-	 * function.
+	 * @param ph Starting phase, in radians. Add R8B_PId2 for cosine function.
 	 * @param g The overall gain factor, 1.0 for unity gain (-1.0 to 1.0
 	 * amplitude).
 	 */
@@ -774,7 +777,7 @@ private:
 
 inline int getBitOccupancy( const int v )
 {
-	static const char OccupancyTable[] =
+	static const uint8_t OccupancyTable[] =
 	{
 		1, 1, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4,
 		5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
@@ -799,12 +802,14 @@ inline int getBitOccupancy( const int v )
 	if( tt != 0 )
 	{
 		const int t = v >> 24;
+
 		return( t != 0 ? 24 + OccupancyTable[ t & 0xFF ] :
 			16 + OccupancyTable[ tt ]);
 	}
 	else
 	{
 		const int t = v >> 8;
+
 		return( t != 0 ? 8 + OccupancyTable[ t ] : OccupancyTable[ v ]);
 	}
 }
@@ -818,7 +823,7 @@ inline int getBitOccupancy( const int v )
  * @param th Circular frequency [0; pi].
  * @param[out] re0 Resulting real part of the complex frequency response.
  * @param[out] im0 Resulting imaginary part of the complex frequency response.
- * @param fltlat Filter's latency in samples.
+ * @param fltlat Filter's latency, in samples.
  */
 
 inline void calcFIRFilterResponse( const double* flt, int fltlen,
@@ -897,9 +902,9 @@ inline void calcFIRFilterResponseAndGroupDelay( const double* const flt,
 		ths[ 0 ] = 0.0;
 	}
 
-	if( ths[ 1 ] > M_PI )
+	if( ths[ 1 ] > R8B_PI )
 	{
-		ths[ 1 ] = M_PI;
+		ths[ 1 ] = R8B_PI;
 	}
 
 	double ph1[ Count ];
@@ -914,15 +919,15 @@ inline void calcFIRFilterResponseAndGroupDelay( const double* const flt,
 		ph1[ i ] = atan2( im1, re1 );
 	}
 
-	if( fabs( ph1[ 1 ] - ph1[ 0 ]) > M_PI )
+	if( fabs( ph1[ 1 ] - ph1[ 0 ]) > R8B_PI )
 	{
 		if( ph1[ 1 ] > ph1[ 0 ])
 		{
-			ph1[ 1 ] -= M_2PI;
+			ph1[ 1 ] -= R8B_2PI;
 		}
 		else
 		{
-			ph1[ 1 ] += M_2PI;
+			ph1[ 1 ] += R8B_2PI;
 		}
 	}
 
@@ -984,7 +989,7 @@ inline void normalizeFIRFilter( double* const p, const int l,
  * @param x4 Point at x+4 position.
  */
 
-inline void calcSpline3p8Coeffs( double* c, const double xm3,
+inline void calcSpline3p8Coeffs( double* const c, const double xm3,
 	const double xm2, const double xm1, const double x0, const double x1,
 	const double x2, const double x3, const double x4 )
 {
@@ -1002,7 +1007,7 @@ inline void calcSpline3p8Coeffs( double* c, const double xm3,
 /**
  * Function calculates coefficients used to calculate 2rd order spline
  * (polynomial) on the equidistant lattice, using 8 points. This function is
- * based on the calcSpline3Coeffs8() function, but without the 3rd order
+ * based on the calcSpline3p8Coeffs() function, but without the 3rd order
  * coefficient.
  *
  * @param[out] c Output coefficients buffer, length = 3.
@@ -1016,7 +1021,7 @@ inline void calcSpline3p8Coeffs( double* c, const double xm3,
  * @param x4 Point at x+4 position.
  */
 
-inline void calcSpline2p8Coeffs( double* c, const double xm3,
+inline void calcSpline2p8Coeffs( double* const c, const double xm3,
 	const double xm2, const double xm1, const double x0, const double x1,
 	const double x2, const double x3, const double x4 )
 {
@@ -1037,7 +1042,7 @@ inline void calcSpline2p8Coeffs( double* c, const double xm3,
  * x=0 point.
  */
 
-inline void calcInterpCoeffs3p4( double* const c, const double* const y )
+inline void calcSpline3p4Coeffs( double* const c, const double* const y )
 {
 	c[ 0 ] = y[ 1 ];
 	c[ 1 ] = 0.5 * ( y[ 2 ] - y[ 0 ]);
@@ -1054,7 +1059,7 @@ inline void calcInterpCoeffs3p4( double* const c, const double* const y )
  * x=0 point.
  */
 
-inline void calcInterpCoeffs3p6( double* const c, const double* const y )
+inline void calcSpline3p6Coeffs( double* const c, const double* const y )
 {
 	c[ 0 ] = y[ 2 ];
 	c[ 1 ] = ( 11.0 * ( y[ 3 ] - y[ 1 ]) + 2.0 * ( y[ 0 ] - y[ 4 ])) / 14.0;
@@ -1065,56 +1070,16 @@ inline void calcInterpCoeffs3p6( double* const c, const double* const y )
 		2.0 * ( y[ 0 ] - y[ 5 ])) / 14.0;
 }
 
-/**
- * Function calculates coefficients used to calculate 3rd order segment
- * interpolation polynomial on the equidistant lattice, using 8 points.
- *
- * @param[out] c Output coefficients buffer, length = 4.
- * @param[in] y Equidistant point values. Value at offset 3 corresponds to
- * x=0 point.
- */
-
-inline void calcInterpCoeffs3p8( double* const c, const double* const y )
-{
-	c[ 0 ] = y[ 3 ];
-	c[ 1 ] = ( 61.0 * ( y[ 4 ] - y[ 2 ]) + 16.0 * ( y[ 1 ] - y[ 5 ]) +
-		3.0 * ( y[ 6 ] - y[ 0 ])) / 76.0;
-
-	c[ 2 ] = ( 106.0 * ( y[ 2 ] + y[ 4 ]) + 10.0 * y[ 6 ] + 6.0 * y[ 0 ] -
-		3.0 * y[ 7 ] - 29.0 * ( y[ 1 ] + y[ 5 ]) - 167.0 * y[ 3 ]) / 76.0;
-
-	c[ 3 ] = ( 91.0 * ( y[ 3 ] - y[ 4 ]) + 45.0 * ( y[ 5 ] - y[ 2 ]) +
-		13.0 * ( y[ 1 ] - y[ 6 ]) + 3.0 * ( y[ 7 ] - y[ 0 ])) / 76.0;
-}
-
-/**
- * Function calculates coefficients used to calculate 3rd order segment
- * interpolation polynomial on the equidistant lattice, using 8 points.
- *
- * @param[out] c Output coefficients buffer, length = 3.
- * @param[in] y Equidistant point values. Value at offset 3 corresponds to
- * x=0 point.
- */
-
-inline void calcInterpCoeffs2p8( double* const c, const double* const y )
-{
-	c[ 0 ] = y[ 3 ];
-	c[ 1 ] = ( 61.0 * ( y[ 4 ] - y[ 2 ]) + 16.0 * ( y[ 1 ] - y[ 5 ]) +
-		3.0 * ( y[ 6 ] - y[ 0 ])) / 76.0;
-
-	c[ 2 ] = ( 106.0 * ( y[ 2 ] + y[ 4 ]) + 10.0 * y[ 6 ] + 6.0 * y[ 0 ] -
-		3.0 * y[ 7 ] - 29.0 * ( y[ 1 ] + y[ 5 ]) - 167.0 * y[ 3 ]) / 76.0;
-}
-
 #if !defined( min )
 
 /**
  * @param v1 Value 1.
  * @param v2 Value 2.
+ * @tparam T Values' type.
  * @return The minimum of 2 values.
  */
 
-template< class T >
+template< typename T >
 inline T min( const T& v1, const T& v2 )
 {
 	return( v1 < v2 ? v1 : v2 );
@@ -1127,10 +1092,11 @@ inline T min( const T& v1, const T& v2 )
 /**
  * @param v1 Value 1.
  * @param v2 Value 2.
+ * @tparam T Values' type.
  * @return The maximum of 2 values.
  */
 
-template< class T >
+template< typename T >
 inline T max( const T& v1, const T& v2 )
 {
 	return( v1 > v2 ? v1 : v2 );
@@ -1210,7 +1176,8 @@ inline double asinh( const double v )
 /**
  * @param x Input value.
  * @return Calculated zero-th order modified Bessel function of the first kind
- * of the input value. Approximate value.
+ * of the input value. Approximate value. Coefficients by Abramowitz and
+ * Stegun.
  */
 
 inline double besselI0( const double x )
