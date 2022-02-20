@@ -35,7 +35,7 @@ using TaskQueue = mcc::ConcurrentQueue<Task>;
 struct Warehouse::ITask
 {
     ITask() {}
-    ~ITask() {}
+    virtual ~ITask() {}
 
     virtual bool usesNetwork() const { return false; }
     virtual bool forceContentReport() const { return false; }
@@ -69,8 +69,8 @@ struct ContentsReportTask : Warehouse::ITask
 
     Warehouse::ContentsReportCallback m_reportCallback;
 
-    virtual const char* getTag() { return Tag; }
-    virtual std::string Describe() { return std::move( fmt::format( "[{}] creating database contents report", Tag ) ); }
+    virtual const char* getTag() override { return Tag; }
+    virtual std::string Describe() override { return fmt::format( "[{}] creating database contents report", Tag ); }
     virtual bool Work( TaskQueue& currentTasks ) override;
 };
 
@@ -88,8 +88,8 @@ struct JamSliceTask : Warehouse::ITask
     types::JamCouchID               m_jamCID;
     Warehouse::JamSliceCallback     m_reportCallback;
 
-    virtual const char* getTag() { return Tag; }
-    virtual std::string Describe() { return std::move( fmt::format( "[{}] extracting jam data for [{}]", Tag, m_jamCID.value() ) ); }
+    virtual const char* getTag() override { return Tag; }
+    virtual std::string Describe() override { return fmt::format( "[{}] extracting jam data for [{}]", Tag, m_jamCID.value() ); }
     virtual bool Work( TaskQueue& currentTasks ) override;
 };
 
@@ -108,8 +108,8 @@ struct JamSnapshotTask : Warehouse::INetworkTask
 
     types::JamCouchID m_jamCID;
 
-    virtual const char* getTag() { return Tag; }
-    virtual std::string Describe() { return std::move( fmt::format( "[{}] fetching Jam snapshot of [{}]", Tag, m_jamCID ) ); }
+    virtual const char* getTag() override { return Tag; }
+    virtual std::string Describe() override { return fmt::format( "[{}] fetching Jam snapshot of [{}]", Tag, m_jamCID ); }
     virtual bool Work( TaskQueue& currentTasks ) override;
 };
 
@@ -128,8 +128,8 @@ struct JamPurgeTask : Warehouse::INetworkTask
 
     types::JamCouchID m_jamCID;
 
-    virtual const char* getTag() { return Tag; }
-    virtual std::string Describe() { return std::move( fmt::format( "[{}] deleting all records for [{}]", Tag, m_jamCID ) ); }
+    virtual const char* getTag() override { return Tag; }
+    virtual std::string Describe() override { return fmt::format( "[{}] deleting all records for [{}]", Tag, m_jamCID ); }
     virtual bool Work( TaskQueue& currentTasks ) override;
 };
 
@@ -148,8 +148,8 @@ struct GetRiffDataTask : Warehouse::INetworkTask
     types::JamCouchID                 m_jamCID;
     std::vector< types::RiffCouchID > m_riffCIDs;
 
-    virtual const char* getTag() { return Tag; }
-    virtual std::string Describe() { return std::move( fmt::format( "[{}] pulling {} riff details", Tag, m_riffCIDs.size() ) ); }
+    virtual const char* getTag() override { return Tag; }
+    virtual std::string Describe() override { return fmt::format( "[{}] pulling {} riff details", Tag, m_riffCIDs.size() ); }
     virtual bool Work( TaskQueue& currentTasks ) override;
 };
 
@@ -167,8 +167,8 @@ struct GetStemData : Warehouse::INetworkTask
     types::JamCouchID                 m_jamCID;
     std::vector< types::StemCouchID > m_stemCIDs;
 
-    virtual const char* getTag() { return Tag; }
-    virtual std::string Describe() { return std::move( fmt::format( "[{}] pulling {} stem details", Tag, m_stemCIDs.size() ) ); }
+    virtual const char* getTag() override { return Tag; }
+    virtual std::string Describe() override { return fmt::format( "[{}] pulling {} stem details", Tag, m_stemCIDs.size() ); }
     virtual bool Work( TaskQueue& currentTasks ) override;
 };
 

@@ -49,6 +49,7 @@ int OuroApp::EntrypointGUI()
     const auto authLoadResult    = config::load( *this, endlesssAuth );
     const auto discordLoadResult = config::load( *this, m_configDiscord );
 
+    // #HDD check and do something with config load results?
 
     app::AudioDeviceQuery adq;
     int32_t chosenDeviceIndex;

@@ -28,7 +28,7 @@ struct IPathProvider
 
 // ---------------------------------------------------------------------------------------------------------------------
 
-/*
+
 template<typename T>
 concept Serializeable = requires( T& t )
 {
@@ -40,15 +40,15 @@ concept Serializeable = requires( T& t )
 template<typename T>
 constexpr bool HasPostLoad = requires( T& t )
 {
-    { t.postLoad() } -> std::convertible_to<bool>;
+    { t.postLoad() } -> std::same_as<bool>;
 };
 
 template<typename T>
 constexpr bool HasPreSave = requires( const T& t )
 {
-    { t.preSave() } -> std::convertible_to<bool>;
+    { t.preSave() } -> std::same_as<bool>;
 };
-*/
+
 
 struct Base
 {

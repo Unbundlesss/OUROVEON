@@ -5,7 +5,7 @@ function SetDefaultBuildConfiguration()
     cppdialect "C++20"
 
     filter "configurations:Debug"
-        defines   { "DEBUG" }
+        defines   { "DEBUG", "OURO_DEBUG" }
         symbols   "On"
         ispcVars {
             GenerateDebugInformation = true,
@@ -13,31 +13,17 @@ function SetDefaultBuildConfiguration()
             CPU         = "core2",
             TargetISA   = "sse2-i32x8",
         }
+    filter {}
 
     filter "configurations:Release"
-        defines   { "NDEBUG" }
+        defines   { "NDEBUG", "OURO_RELEASE" }
         flags     { "LinkTimeOptimization" }
         optimize  "Full"
-
         ispcVars { 
             Opt         = "maximum",
             CPU         = "core2",
             TargetISA   = "sse2-i32x8",
         }
-
-
-    filter "configurations:Release-AVX2"
-        defines   { "NDEBUG" }
-        flags     { "LinkTimeOptimization" }
-        optimize  "Full"
-        
-        vectorextensions "AVX2"
-        ispcVars  {
-            Opt         = "maximum",
-            CPU         = "core-avx2",
-            TargetISA   = "avx2-i32x16",
-        }
-
     filter {}
 
 end

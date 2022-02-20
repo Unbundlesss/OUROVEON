@@ -26,11 +26,11 @@
 #include <mutex>
 #include <concepts>
 
-#ifdef OURO_SEMA_CXX20
+#ifdef OURO_CXX20_SEMA
 #include <semaphore>
 #include <barrier>
 #include <latch>
-#endif // OURO_SEMA_CXX20
+#endif // OURO_CXX20_SEMA
 
 #if OURO_PLATFORM_WIN
 #define _CRT_SECURE_NO_WARNINGS

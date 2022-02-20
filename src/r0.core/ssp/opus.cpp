@@ -308,7 +308,7 @@ struct PagedOpus::StreamInstance
 
         newPacketStream->m_averagePacketSize = ( totalPacketSizes / totalPackets );
 
-        m_newPageCallback( std::move( OpusPacketStreamInstance( newPacketStream ) ) );
+        m_newPageCallback( OpusPacketStreamInstance( newPacketStream ) );
     }
 
 

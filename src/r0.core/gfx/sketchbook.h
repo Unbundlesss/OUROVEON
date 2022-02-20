@@ -166,6 +166,7 @@ struct SketchUpload
     ~SketchUpload();
 
     inline const Dimensions& bounds() const { return m_bounds; }
+    inline uint32_t uploadID() const { return m_uploadID; }
 
     // pass-through to GPUTask call of the same name
     inline bool getStateIfValid( GPUTask::ValidState& result ) const

@@ -325,7 +325,9 @@ bool CoreGUI::beginInterfaceLayout(
     if ( viewportMode == ViewportMode::DockingViewport )
         ImGui::DockSpaceOverViewport( ImGui::GetMainViewport() );
 
+#ifdef _DEBUG
     static bool demoWindowVisible = false;
+#endif // _DEBUG
     if ( mainMenuCallback != nullptr )
     {
         if ( ImGui::BeginMainMenuBar() )

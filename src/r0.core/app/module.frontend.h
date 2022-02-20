@@ -21,7 +21,7 @@ namespace module {
 struct Frontend : public Module
 {
     Frontend( const config::Frontend& feConfig, const char* name );
-    ~Frontend();
+    virtual ~Frontend();
 
     // Module
     bool create( const app::Core& appCore ) override;

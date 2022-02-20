@@ -5,7 +5,7 @@ function _Freetype_Include()
     filter "system:Windows"
     includedirs
     {
-        SrcRoot() .. "r0.sys/freetype/include/",
+        SrcDir() .. "r0.sys/freetype/include/",
     }
     filter {}
 
@@ -19,7 +19,7 @@ function _Freetype_Include()
     filter "system:macosx"
     sysincludedirs
     {
-        GetHomebrewDir() .. "freetype/include/freetype2/",
+        GetMacOSPackgesDir() .. "freetype/include/freetype2/",
     }
     filter {}
 end
@@ -33,7 +33,7 @@ function _Freetype_LinkPrebuilt()
     -- https://github.com/ubawurinna/freetype-windows-binaries/releases/tag/v2.11.1
     libdirs
     {
-        SrcRoot() .. "r0.sys/freetype/lib/win64_release_dll"
+        SrcDir() .. "r0.sys/freetype/lib/win64_release_dll"
     }
     links
     {
@@ -52,11 +52,13 @@ function _Freetype_LinkPrebuilt()
     filter "system:macosx"
     libdirs
     {
-        GetHomebrewDir() .. "freetype/lib"
+        GetMacOSFatLibs()
     }
     links
     {
         "freetype",
+        "png",
+        "bz2",
     }
     filter {}
 end

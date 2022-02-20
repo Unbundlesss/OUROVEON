@@ -26,11 +26,12 @@ public:
     std::string fragment() const;
 
 private:
-    std::string m_uri;
-    bool        m_valid;
 
     struct ParsedData;
     std::unique_ptr< ParsedData >   m_data;
+
+    std::string m_uri;
+    bool        m_valid;
 };
 
 } // namespace base

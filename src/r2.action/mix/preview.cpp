@@ -23,9 +23,8 @@ namespace mix {
 // ---------------------------------------------------------------------------------------------------------------------
 Preview::Preview( const int32_t maxBufferSize, const int32_t sampleRate, const RiffChangeCallback& riffChangeCallback )
     : RiffMixerBase( maxBufferSize, sampleRate )
-    , m_riffChangeCallback( riffChangeCallback )
     , m_riffPlaybackSample( 0 )
-    , m_lockTransitionToNextBar( false )
+    , m_riffChangeCallback( riffChangeCallback )
 {
 
 }
@@ -401,10 +400,10 @@ void Preview::exportRiff( const app::StoragePaths& storagePaths, const endlesss:
                     stemData.m_data.user,
                     stemData.m_data.couchID.value() ) ).string();
 
-            return std::move( ssp::WAVWriter::Create(
+            return ssp::WAVWriter::Create(
                 flacFilename,
                 exportSampleRate,
-                true ) );
+                true );
         });
 }
 

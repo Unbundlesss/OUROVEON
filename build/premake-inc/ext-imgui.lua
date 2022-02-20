@@ -1,7 +1,7 @@
 
 
 function Root_IMGUI()
-    return SrcRoot() .. "r0.external/imgui"
+    return SrcDir() .. "r0.external/imgui"
 end
 
 -- ------------------------------------------------------------------------------

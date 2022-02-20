@@ -332,10 +332,11 @@ protected:
     SyncAndPlaybackQueue            m_syncAndPlaybackQueue;         // riffs to fetch & play - written to by main thread, read from worker
     SyncAndPlaybackQueue            m_syncAndPlaybackCompletions;   // riffs that have been fetched & played - written to by worker, read by main thread
     endlesss::types::RiffCouchIDs   m_syncAndPlaybackInFlight;      // main thread list of work submitted to worker
-    std::unique_ptr< std::jthread > m_syncAndPlaybackThread;        // the worker thread
-#ifdef OURO_FEATURE_CXX20    
+    std::unique_ptr< std::thread >  m_syncAndPlaybackThread;        // the worker thread
+    std::atomic_bool                m_syncAndPlaybackThreadHalt;
+#ifdef OURO_CXX20_SEMA    
     std::counting_semaphore<>       m_syncAndPlaybackSem { 0 };
-#endif // OURO_FEATURE_CXX20
+#endif // OURO_CXX20_SEMA
 
     SyncAndPlaybackQueue            m_riffsDequedByMixer;
     endlesss::types::RiffCouchIDs   m_riffsQueuedForPlayback;
@@ -352,9 +353,9 @@ protected:
         m_syncAndPlaybackInFlight.emplace_back( riff );     // log that we will be asynchronously fetching this
 
         m_syncAndPlaybackQueue.emplace( riff );             // push it onto the pile to be examined by the worker thread
-#ifdef OURO_FEATURE_CXX20        
+#if OURO_CXX20_SEMA
         m_syncAndPlaybackSem.release();
-#endif // OURO_FEATURE_CXX20        
+#endif // OURO_CXX20_SEMA        
     }
 
     void handleNewRiffPlaying( endlesss::live::RiffPtr& nowPlayingRiff )
@@ -604,7 +605,6 @@ protected:
             
             int32_t pageHeight = 1024;
             int32_t cellsPerPage = (int32_t)std::floor( (pageHeight - cJamBitmapGridCell) / (float)cJamBitmapGridCell );
-            int32_t pageExtentY = 0;
 
             gfx::DimensionsPow2 sketchPageDim( viewWidth, pageHeight );
 
@@ -1065,7 +1065,8 @@ int LoreApp::EntrypointOuro()
     m_effectStack->load( m_appConfigPath );
 #endif // OURO_FEATURES_VST
 
-    m_syncAndPlaybackThread = std::make_unique<std::jthread>( [&mixPreview, &warehouse, this]( std::stop_token stoken )
+    m_syncAndPlaybackThreadHalt = false;
+    m_syncAndPlaybackThread = std::make_unique<std::thread>( [&mixPreview, &warehouse, this]()
         {
             using namespace std::chrono_literals;
 
@@ -1077,12 +1078,12 @@ int LoreApp::EntrypointOuro()
             blog::app( "background riff sync thread [enter]" );
             for (;;)
             {
-                if ( stoken.stop_requested() ) 
+                if ( m_syncAndPlaybackThreadHalt )
                     return;
 
-#ifdef OURO_FEATURE_CXX20
+#if OURO_CXX20_SEMA
                 if ( m_syncAndPlaybackSem.try_acquire_for( 200ms ) )
-#endif // OURO_FEATURE_CXX20                
+#endif // OURO_CXX20_SEMA                
                 {
                     base::instr::ScopedEvent se( "riff-load", base::instr::PresetColour::Emerald );
 
@@ -1143,10 +1144,6 @@ int LoreApp::EntrypointOuro()
         {
             ImGui::Begin( "Audio" );
 
-            const auto panelRegionAvailable = ImGui::GetContentRegionAvail();
-            const auto panelVolumeModule    = 65.0f;
-
-
             // expose volume control
             {
                 float volumeF = m_mdAudio->getMasterVolume() * 1000.0f;
@@ -1204,7 +1201,7 @@ int LoreApp::EntrypointOuro()
         const bool warehouseIsPaused = warehouse.workerIsPaused();
 
 
-        m_mdMidi->processMessages( [this, &currentRiff]( const app::midi::Message& msg ){ } );
+        m_mdMidi->processMessages( []( const app::midi::Message& ){ } );
 
         {
             m_discordBotUI->imgui( *m_mdFrontEnd );
@@ -1588,6 +1585,8 @@ int LoreApp::EntrypointOuro()
         submitInterfaceLayout();
     }
 
+    m_syncAndPlaybackThreadHalt = true;
+    m_syncAndPlaybackThread->join();
     m_syncAndPlaybackThread.reset();
 
     m_discordBotUI.reset();

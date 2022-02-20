@@ -5,14 +5,14 @@ function _OpenSSL_Include()
     filter "system:Windows"
     sysincludedirs
     {
-        SrcRoot() .. "r0.sys/openssl-1.1.1j/win64/include"
+        SrcDir() .. "r0.sys/openssl-1.1.1j/win64/include"
     }
     filter {}
 
     filter "system:macosx"
     sysincludedirs
     {
-        GetHomebrewDir() .. "openssl@1.1/include/",
+        GetMacOSPackgesDir() .. "openssl@1.1/include/",
     }
     filter {}
 end
@@ -25,7 +25,7 @@ function _OpenSSL_LinkPrebuilt()
     filter "system:Windows"
     libdirs
     {
-        SrcRoot() .. "r0.sys/openssl-1.1.1j/win64/lib"
+        SrcDir() .. "r0.sys/openssl-1.1.1j/win64/lib"
     }
     links
     {
@@ -46,7 +46,7 @@ function _OpenSSL_LinkPrebuilt()
     filter "system:macosx"
     libdirs
     {
-        GetHomebrewDir() .. "openssl@1.1//lib"
+        GetMacOSFatLibs()
     }
     links
     {

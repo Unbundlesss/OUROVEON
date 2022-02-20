@@ -26,6 +26,7 @@ struct Midi : public Module
 
     struct InputControl
     {
+        virtual ~InputControl() {}
         virtual bool getInputPorts( std::vector<std::string>& names ) = 0;
         virtual bool openInputPort( uint32_t index ) = 0;
         virtual bool getOpenPortIndex( uint32_t& result ) = 0;

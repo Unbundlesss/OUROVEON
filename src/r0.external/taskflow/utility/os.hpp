@@ -121,11 +121,18 @@
 //----------------------------------------------------------------------------- 
 // pause
 //----------------------------------------------------------------------------- 
+#if defined(__arm64__)
+#define TF_HAS_MM_PAUSE 1
+inline void _mm_pause()
+{
+  __asm__ __volatile__("isb\n");
+}
+#else
 #if __has_include (<immintrin.h>)
   #define TF_HAS_MM_PAUSE 1
   #include <immintrin.h>
 #endif
-
+#endif
 
 
 

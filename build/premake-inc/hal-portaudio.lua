@@ -1,10 +1,10 @@
 
 function Root_PORTAUDIO()
-    return SrcRoot() .. "r0.hal/portaudio/"
+    return SrcDir() .. "r0.hal/portaudio/"
 end
 
 function Root_Steinberg()
-    return SrcRoot() .. "r0.closed/steinberg/"
+    return SrcDir() .. "r0.closed/steinberg/"
 end
 
 -- ------------------------------------------------------------------------------
@@ -107,7 +107,18 @@ project "hal-portaudio"
     filter {}
 
     filter "system:macosx"
-
+    includedirs
+    {
+        Root_PORTAUDIO() .. "src/os/unix",
+    }
+    files 
+    { 
+        Root_PORTAUDIO() .. "src/os/unix/**.*",
+        Root_PORTAUDIO() .. "src/hostapi/coreaudio/pa_mac_core.c",
+        Root_PORTAUDIO() .. "src/hostapi/coreaudio/pa_mac_core_blocking.c",
+        Root_PORTAUDIO() .. "src/hostapi/coreaudio/pa_mac_core_utilities.c",
+        Root_PORTAUDIO() .. "src/hostapi/coreaudio/**.h",
+    }
     filter {}
 
 function _PortAudio_LinkProject()

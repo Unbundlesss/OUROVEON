@@ -339,9 +339,6 @@ void BeatSegments(
     const ImU32 highlightColour,
     const ImU32 backgroundColour )
 {
-    ImGuiIO& io = ImGui::GetIO();
-    ImGuiStyle& style = ImGui::GetStyle();
-
     const ImVec2 pos = ImGui::GetCursorScreenPos();
     const float width = ImGui::GetContentRegionAvail().x;
 

@@ -1,14 +1,14 @@
 
 function Root_GLFW()
-    return SrcRoot() .. "r0.hal/glfw/"
+    return SrcDir() .. "r0.hal/glfw/"
 end
 function Root_GLFW_Ext()
-    return SrcRoot() .. "r0.hal/glfw_ext/"
+    return SrcDir() .. "r0.hal/glfw_ext/"
 end
 
 -- ------------------------------------------------------------------------------
 function _GLFW_Include()
-    includedirs
+    sysincludedirs
     {
         Root_GLFW() .. "include",
         Root_GLFW_Ext() .. "include",

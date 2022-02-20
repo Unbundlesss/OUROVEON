@@ -408,7 +408,7 @@ public:
                m_multiTrackInFlux;
     }
 
-    inline uint64_t getRecordingDataUsage() const
+    inline uint64_t getRecordingDataUsage() const override
     {
         if ( !isRecording() )
             return 0;
@@ -903,7 +903,7 @@ struct RiffPercentage : public data::Provider
         : m_mixer( mixerInst )
     {}
 
-    virtual AbilityFlags flags() const { return kUsesRemapping; }
+    virtual AbilityFlags flags() const override { return kUsesRemapping; }
 
     virtual float generate( const Input& input ) override
     {
@@ -923,7 +923,7 @@ struct MixTransition : public data::Provider
         : m_mixer( mixerInst )
     {}
 
-    virtual AbilityFlags flags() const { return kUsesRemapping; }
+    virtual AbilityFlags flags() const override { return kUsesRemapping; }
 
     virtual float generate( const Input& input ) override
     {

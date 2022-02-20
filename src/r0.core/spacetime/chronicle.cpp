@@ -79,7 +79,7 @@ std::string Delta::asPastTenseString( const int32_t maxShownElements /* = 6 */ )
 
     pastTense += " ago";
 
-    return std::move(pastTense);
+    return pastTense;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

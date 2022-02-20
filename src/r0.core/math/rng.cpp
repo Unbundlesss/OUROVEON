@@ -9,6 +9,10 @@
 
 #include "math/rng.h"
 
+#if OURO_PLATFORM_OSX
+#include <mach/mach_time.h>
+#endif
+
 namespace math {
 
 //----------------------------------------------------------------------------------------------------------------------
@@ -32,11 +36,11 @@ RNG32::RNG32()
     // by default, seed with the ms-since-system-start ( or similar )
     reseed((uint32_t)(
 #if OURO_PLATFORM_WIN
-        ::GetTickCount64() 
+    ::GetTickCount64() 
 #elif OURO_PLATFORM_NIX
-        GetTickCountMs()
+    GetTickCountMs()
 #elif OURO_PLATFORM_OSX
-     #error something for mac
+    mach_absolute_time()
 #else
     #error oh dear
 #endif

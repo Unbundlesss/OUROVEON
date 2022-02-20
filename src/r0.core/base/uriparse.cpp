@@ -44,8 +44,8 @@ struct UriParse::ParsedData
 };
 
 UriParse::UriParse( std::string uri ) 
-    : m_uri( uri )
-    , m_data( std::make_unique<ParsedData>() )
+    : m_data( std::make_unique<ParsedData>() )
+    , m_uri( uri )
     , m_valid( false )
 {
     UriParserStateA state_;

@@ -29,15 +29,7 @@ namespace module {
 
 // ---------------------------------------------------------------------------------------------------------------------
 Audio::Audio() 
-    : m_sampleRate( 0 )
-    , m_paDeviceIndex( -1 )
-    , m_paStream( nullptr )
-    , m_mixerBuffers( nullptr )
-    , m_mute( false )
-    , m_mixerInterface( nullptr )
 {
-    m_mixThreadCommandsIssued = 0;
-    m_mixThreadCommandsComplete = 0;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

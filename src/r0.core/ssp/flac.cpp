@@ -168,9 +168,10 @@ std::unique_ptr<FLACWriter> FLACWriter::Create(
         return nullptr;
     }
 
-    // work out a buffer big enough for N seconds of storage
-    const uint32_t samplesToBufferForSecs = sampleRate * writeBufferInSeconds * 2 /* stereo */;
+    /* work out a buffer big enough for N seconds of storage
+    const uint32_t samplesToBufferForSecs = sampleRate * writeBufferInSeconds * 2; // stereo
     const uint32_t samplesToBuffer        = ( 1 + (samplesToBufferForSecs / 4096) ) * 4096;
+    */
 
     newState->m_sampleBufferSize         = 4096 * 6;
 

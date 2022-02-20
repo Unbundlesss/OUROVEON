@@ -1,6 +1,6 @@
 
 function Root_RTMIDI()
-    return SrcRoot() .. "r0.hal/rtmidi/"
+    return SrcDir() .. "r0.hal/rtmidi/"
 end
 
 -- ------------------------------------------------------------------------------

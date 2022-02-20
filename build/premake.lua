@@ -1,29 +1,34 @@
+require('xcode')
+local xcode = premake.modules.xcode 
+xcode.cppLanguageStandards["C++20"] = "c++20"
 
 -- ==============================================================================
 
+-- stash the starting directory upfront to use as a reference root 
 local initialDir = os.getcwd()
+
 local rootBuildGenerationDir = "_gen"
 local rootSourceDir = "src"
 local osxHomebrew = "/opt/homebrew/opt/"
 
-function GetInitialDir()
-    return initialDir
-end
 function GetSourceDir()
     return rootSourceDir
 end
-function SrcRoot()
-    return GetInitialDir() .. "/../" .. rootSourceDir .. "/"
+function SrcDir()
+    return initialDir .. "/../" .. rootSourceDir .. "/"
 end
-function GetHomebrewDir()
+function GetMacOSPackgesDir()
     return osxHomebrew
+end
+function GetMacOSFatLibs()
+    return initialDir .. "/../libs/macos/universal-fat/"
 end
 
 function GetBuildRootToken()
     if ( os.host() == "windows" ) then
         return "$(SolutionDir)"
     else
-        return GetInitialDir() .. "/" .. rootBuildGenerationDir .. "/"
+        return initialDir .. "/" .. rootBuildGenerationDir .. "/"
     end
 end
 print ( "build root : " .. GetBuildRootToken() )
@@ -47,7 +52,7 @@ include "premake-inc/sys-openssl.lua"
 -- ==============================================================================
 workspace ("ouroveon_" .. _ACTION)
 
-    configurations  { "Debug", "Release", "Release-AVX2" }
+    configurations  { "Debug", "Release" }
 
     if os.is64bit() then
         print( os.host() .. " 64-bit")
@@ -74,6 +79,8 @@ workspace ("ouroveon_" .. _ACTION)
             "OURO_PLATFORM_NIX=0",
 
             "OURO_FEATURE_VST24=1",
+            
+            "OURO_CXX20_SEMA=1",
 
             -- for DPP; needs adjusting at the highest level before winsock is included
             "FD_SETSIZE=1024"
@@ -121,6 +128,8 @@ workspace ("ouroveon_" .. _ACTION)
             "OURO_PLATFORM_NIX=0",
 
             "OURO_FEATURE_VST24=0",
+
+            "OURO_CXX20_SEMA=0",
         }
         buildoptions
         {
@@ -142,9 +151,9 @@ include "premake-inc/ext-imgui.lua"
 
 -- ------------------------------------------------------------------------------
 function AddInclude_BROTLI()
-    includedirs
+    sysincludedirs
     {
-        SrcRoot() .. "r0.external/brotli/include",
+        SrcDir() .. "r0.external/brotli/include",
     }
 end
 
@@ -158,15 +167,15 @@ project "ext-brotli"
     AddInclude_BROTLI()
     files 
     { 
-        SrcRoot() .. "r0.external/brotli/**.c",
-        SrcRoot() .. "r0.external/brotli/**.h",
+        SrcDir() .. "r0.external/brotli/**.c",
+        SrcDir() .. "r0.external/brotli/**.h",
     }
 
 -- ------------------------------------------------------------------------------
 function AddInclude_ZLIB()
     sysincludedirs
     {
-        SrcRoot() .. "r0.external/zlib",
+        SrcDir() .. "r0.external/zlib",
     }
 end
 
@@ -180,20 +189,40 @@ project "ext-zlib"
     AddInclude_ZLIB()
     files 
     { 
-        SrcRoot() .. "r0.external/zlib/**.c",
-        SrcRoot() .. "r0.external/zlib/**.h",
+        SrcDir() .. "r0.external/zlib/**.c",
+        SrcDir() .. "r0.external/zlib/**.h",
     }
 
 
 -- ------------------------------------------------------------------------------
 function AddInclude_FLAC()
+
+    filter "system:Windows"
     sysincludedirs
     {
-        SrcRoot() .. "r0.external/xiph/include",
+        SrcDir() .. "r0.external/xiph/include",
     }
+    filter {}
+
+    filter "system:macosx"
+    sysincludedirs ( GetMacOSPackgesDir() .. "flac/include" )
+    filter {}    
 end
 
-function _FLAC_ApplyConfigH()
+if ( os.host() == "windows" ) then
+
+project "ext-flac"
+    kind "StaticLib"
+    language "C"
+
+    disablewarnings { "4267", "4996", "4244", "4334" }    
+
+    SetDefaultBuildConfiguration()
+    SetDefaultOutputDirectories("ext")
+
+    AddInclude_FLAC()
+
+    -- some precomputed config.h for windows
     defines
     {
         "ENABLE_64_BIT_WORDS",
@@ -209,92 +238,64 @@ function _FLAC_ApplyConfigH()
         "FLaC__INLINE=_inline",
         "PACKAGE_VERSION=\"1.3.3\"",
     }
-    filter "system:linux"
-    defines
-    {
-        "FLAC__SYS_LINUX",
-        "HAVE_BSWAP16=1",
-        "HAVE_BSWAP32=1",
-        "HAVE_BYTESWAP_H",
-        "HAVE_CLOCK_GETTIME",
-        "HAVE_CPUID_H",
-        "HAVE_CXX_VARARRAYS",
-        "HAVE_FSEEKO",
-        "HAVE_ICONV",
-        "HAVE_LROUND=1",
-        "HAVE_SYS_IOCTL_H",
-        "HAVE_SYS_PARAM_H",
-        "HAVE_SYS_TYPES_H",
-        "HAVE_TERMIOS_H"
-    }
-    filter {}
-    filter "system:macosx"
-    defines
-    {
-        "FLAC__SYS_DARWIN"        
-    }
-    filter {}
-end
-
-project "ext-flac"
-    kind "StaticLib"
-    language "C"
-
-    filter "system:Windows"
-    disablewarnings { "4267", "4996", "4244", "4334" }
-    filter {}
-
-    SetDefaultBuildConfiguration()
-    SetDefaultOutputDirectories("ext")
-
-    AddInclude_FLAC()
-    _FLAC_ApplyConfigH()
 
     includedirs
     {
-        SrcRoot() .. "r0.external/xiph/src/libFLAC/include",
+        SrcDir() .. "r0.external/xiph/src/libFLAC/include",
     }
     files 
     {
-        SrcRoot() .. "r0.external/xiph/include/libFLAC/**.h",
-        SrcRoot() .. "r0.external/xiph/src/libFLAC/**.h",
-        SrcRoot() .. "r0.external/xiph/src/libFLAC/**.c",
-        SrcRoot() .. "r0.external/xiph/src/ogg/*.c",
+        SrcDir() .. "r0.external/xiph/include/libFLAC/**.h",
+        SrcDir() .. "r0.external/xiph/src/libFLAC/**.h",
+        SrcDir() .. "r0.external/xiph/src/libFLAC/**.c",
+        SrcDir() .. "r0.external/xiph/src/ogg/*.c",
     }
-
-    filter "system:linux or macosx"
-    excludes
-    {
-        SrcRoot() .. "r0.external/xiph/src/libFLAC/windows_unicode_filenames.c",
-    }
-    filter{}
 
 project "ext-flac-cpp"
     kind "StaticLib"
     language "C++"
     cppdialect "C++20"
 
-    filter "system:Windows"
     disablewarnings { "4267", "4996", "4244", "4334" }
-    filter {}
 
     SetDefaultBuildConfiguration()
     SetDefaultOutputDirectories("ext")
 
     AddInclude_FLAC()
-    _FLAC_ApplyConfigH()
     
     files 
     { 
-        SrcRoot() .. "r0.external/xiph/include/FLAC++/*.h",
-        SrcRoot() .. "r0.external/xiph/src/libFLAC++/*.cpp"
+        SrcDir() .. "r0.external/xiph/include/FLAC++/*.h",
+        SrcDir() .. "r0.external/xiph/src/libFLAC++/*.cpp"
     }
+
+end
+
+-- ==============================================================================
+function _FLAC_LinkPrebuilt()
+
+    links       { "flac", "flac++", "ogg" }
+
+    filter "system:macosx"
+    libdirs     ( GetMacOSFatLibs() )
+    filter {}
+end
+
+function _FLAC_LinkProject()
+    links       { "ext-flac", "ext-flac-cpp" }
+end
+
+ModuleRefLinkWin["flac"]      = _FLAC_LinkProject
+ModuleRefLinkLinux["flac"]    = _FLAC_LinkPrebuilt
+ModuleRefLinkOSX["flac"]      = _FLAC_LinkPrebuilt
+
+
 
 -- ------------------------------------------------------------------------------
 function AddInclude_SQLITE3()
     includedirs
     {
-        SrcRoot() .. "r0.external/sqlite3",
+        SrcDir() .. "r0.external/sqlite3",
     }
     defines   { "SQLITE_ENABLE_FTS5", "SQLITE_ENABLE_JSON1" }
 end
@@ -309,8 +310,8 @@ project "ext-sqlite3"
     AddInclude_SQLITE3()
     files 
     { 
-        SrcRoot() .. "r0.external/sqlite3/**.c",
-        SrcRoot() .. "r0.external/sqlite3/**.h",
+        SrcDir() .. "r0.external/sqlite3/**.c",
+        SrcDir() .. "r0.external/sqlite3/**.h",
     }
 
 -- ------------------------------------------------------------------------------
@@ -319,7 +320,7 @@ function AddInclude_SODIUM()
     filter "system:Windows"
     includedirs
     {
-        SrcRoot() .. "r0.external/sodium/src/libsodium/include/",
+        SrcDir() .. "r0.external/sodium/src/libsodium/include/",
     }
     defines
     { 
@@ -338,7 +339,7 @@ function AddInclude_SODIUM()
     filter "system:macosx"
     sysincludedirs
     {
-        GetHomebrewDir() .. "sodium/",
+        GetMacOSPackgesDir() .. "libsodium/include",
     }
     filter {}
 
@@ -361,13 +362,13 @@ project "ext-sodium"
     AddInclude_SODIUM()
     files 
     { 
-        SrcRoot() .. "r0.external/sodium/src/**.c",
-        SrcRoot() .. "r0.external/sodium/src/**.h",
+        SrcDir() .. "r0.external/sodium/src/**.c",
+        SrcDir() .. "r0.external/sodium/src/**.h",
     }
     
     includedirs
     {
-        SrcRoot() .. "r0.external/sodium/src/libsodium/include/sodium",
+        SrcDir() .. "r0.external/sodium/src/libsodium/include/sodium",
     }
 
 end
@@ -385,7 +386,7 @@ function _Sodium_LinkPrebuilt()
     filter "system:macosx"
     libdirs
     {
-        GetHomebrewDir() .. "sodium//lib"
+        GetMacOSFatLibs()
     }
     links
     {
@@ -408,7 +409,7 @@ function AddInclude_OPUS()
     filter "system:Windows"
     includedirs
     {
-        SrcRoot() .. "r0.external/opus/include",
+        SrcDir() .. "r0.external/opus/include",
     }
     defines 
     { 
@@ -426,7 +427,7 @@ function AddInclude_OPUS()
     filter "system:macosx"
     sysincludedirs
     {
-        GetHomebrewDir() .. "opus/",
+        GetMacOSPackgesDir() .. "opus/include/opus",
     }
     filter {}    
 
@@ -445,11 +446,11 @@ project "ext-opus"
 
     includedirs
     {
-        SrcRoot() .. "r0.external/opus/",
-        SrcRoot() .. "r0.external/opus/win32",
-        SrcRoot() .. "r0.external/opus/celt",
-        SrcRoot() .. "r0.external/opus/silk",
-        SrcRoot() .. "r0.external/opus/silk/float",
+        SrcDir() .. "r0.external/opus/",
+        SrcDir() .. "r0.external/opus/win32",
+        SrcDir() .. "r0.external/opus/celt",
+        SrcDir() .. "r0.external/opus/silk",
+        SrcDir() .. "r0.external/opus/silk/float",
     }
     defines 
     { 
@@ -464,30 +465,30 @@ project "ext-opus"
 
     files
     {
-        SrcRoot() .. "r0.external/opus/celt/*.c",
-        SrcRoot() .. "r0.external/opus/celt/*.h",
-        SrcRoot() .. "r0.external/opus/silk/*.c",
-        SrcRoot() .. "r0.external/opus/silk/*.h",
-        SrcRoot() .. "r0.external/opus/src/*.c",
-        SrcRoot() .. "r0.external/opus/src/*.h",
-        SrcRoot() .. "r0.external/opus/include/**.h",
+        SrcDir() .. "r0.external/opus/celt/*.c",
+        SrcDir() .. "r0.external/opus/celt/*.h",
+        SrcDir() .. "r0.external/opus/silk/*.c",
+        SrcDir() .. "r0.external/opus/silk/*.h",
+        SrcDir() .. "r0.external/opus/src/*.c",
+        SrcDir() .. "r0.external/opus/src/*.h",
+        SrcDir() .. "r0.external/opus/include/**.h",
     }
     files
     {
-        SrcRoot() .. "r0.external/opus/win32/*.h",
-        SrcRoot() .. "r0.external/opus/celt/x86/*.c",
-        SrcRoot() .. "r0.external/opus/celt/x86/*.h",
-        SrcRoot() .. "r0.external/opus/silk/float/*.c",
-        SrcRoot() .. "r0.external/opus/silk/x86/*.c",
-        SrcRoot() .. "r0.external/opus/silk/x86/*.h",
+        SrcDir() .. "r0.external/opus/win32/*.h",
+        SrcDir() .. "r0.external/opus/celt/x86/*.c",
+        SrcDir() .. "r0.external/opus/celt/x86/*.h",
+        SrcDir() .. "r0.external/opus/silk/float/*.c",
+        SrcDir() .. "r0.external/opus/silk/x86/*.c",
+        SrcDir() .. "r0.external/opus/silk/x86/*.h",
     }
     excludes 
     { 
-        SrcRoot() .. "r0.external/opus/celt/opus_custom_demo.c",
-        SrcRoot() .. "r0.external/opus/src/opus_compare.c",
-        SrcRoot() .. "r0.external/opus/src/opus_demo.c",
-        SrcRoot() .. "r0.external/opus/src/repacketizer_demo.c",
-        SrcRoot() .. "r0.external/opus/src/mlp_train.*",
+        SrcDir() .. "r0.external/opus/celt/opus_custom_demo.c",
+        SrcDir() .. "r0.external/opus/src/opus_compare.c",
+        SrcDir() .. "r0.external/opus/src/opus_demo.c",
+        SrcDir() .. "r0.external/opus/src/repacketizer_demo.c",
+        SrcDir() .. "r0.external/opus/src/mlp_train.*",
     }
 
 end
@@ -505,7 +506,7 @@ function _Opus_LinkPrebuilt()
     filter "system:macosx"
     libdirs
     {
-        GetHomebrewDir() .. "opus//lib"
+        GetMacOSFatLibs()
     }
     links
     {
@@ -529,7 +530,7 @@ ModuleRefLinkOSX["opus"]        = _Opus_LinkPrebuilt
 function AddInclude_DRAGONBOX()
     includedirs
     {
-        SrcRoot() .. "r0.external/dragonbox/include",
+        SrcDir() .. "r0.external/dragonbox/include",
     }
 end
 
@@ -544,15 +545,15 @@ project "ext-dragonbox"
     AddInclude_DRAGONBOX()
     files 
     { 
-        SrcRoot() .. "r0.external/dragonbox/**.cpp",
-        SrcRoot() .. "r0.external/dragonbox/**.h",
+        SrcDir() .. "r0.external/dragonbox/**.cpp",
+        SrcDir() .. "r0.external/dragonbox/**.h",
     }
 
 -- ------------------------------------------------------------------------------
 function AddInclude_URIPARSER()
-    includedirs
+    sysincludedirs
     {
-        SrcRoot() .. "r0.external/uriparser/include",
+        SrcDir() .. "r0.external/uriparser/include",
     }
     defines 
     {
@@ -571,15 +572,15 @@ project "ext-uriparser"
     AddInclude_URIPARSER()
     files 
     { 
-        SrcRoot() .. "r0.external/uriparser/**.c",
-        SrcRoot() .. "r0.external/uriparser/**.h",
+        SrcDir() .. "r0.external/uriparser/**.c",
+        SrcDir() .. "r0.external/uriparser/**.h",
     }
 
 -- ------------------------------------------------------------------------------
 function AddInclude_DATE_TZ()
     includedirs
     {
-        SrcRoot() .. "r0.external/date/include",
+        SrcDir() .. "r0.external/date/include",
     }
     defines 
     {
@@ -598,15 +599,15 @@ project "ext-date-tz"
     AddInclude_DATE_TZ()
     files
     {
-        SrcRoot() .. "r0.external/date/include/**.h",
-        SrcRoot() .. "r0.external/date/src/tz.cpp"
+        SrcDir() .. "r0.external/date/include/**.h",
+        SrcDir() .. "r0.external/date/src/tz.cpp"
     }
 
 -- ------------------------------------------------------------------------------
 function AddInclude_AIFF()
     includedirs
     {
-        SrcRoot() .. "r0.external/libaiff",
+        SrcDir() .. "r0.external/libaiff",
     }
 end
 
@@ -625,15 +626,15 @@ project "ext-libaiff"
     AddInclude_AIFF()
     files 
     { 
-        SrcRoot() .. "r0.external/libaiff/**.c",
-        SrcRoot() .. "r0.external/libaiff/**.h",
+        SrcDir() .. "r0.external/libaiff/**.c",
+        SrcDir() .. "r0.external/libaiff/**.h",
     }
 
 -- ------------------------------------------------------------------------------
 function AddInclude_R8BRAIN()
     includedirs
     {
-        SrcRoot() .. "r0.external/r8brain",
+        SrcDir() .. "r0.external/r8brain",
     }
     defines
     {
@@ -652,15 +653,15 @@ project "ext-r8brain"
     AddInclude_R8BRAIN()
     files 
     { 
-        SrcRoot() .. "r0.external/r8brain/**.cpp",
-        SrcRoot() .. "r0.external/r8brain/**.h",
+        SrcDir() .. "r0.external/r8brain/**.cpp",
+        SrcDir() .. "r0.external/r8brain/**.h",
     }
 
 -- ------------------------------------------------------------------------------
 function AddInclude_PFOLD()
     includedirs
     {
-        SrcRoot() .. "r0.external/pfold",
+        SrcDir() .. "r0.external/pfold",
     }
 end
 
@@ -675,15 +676,15 @@ project "ext-pfold"
     AddInclude_PFOLD()
     files 
     { 
-        SrcRoot() .. "r0.external/pfold/*.cpp",
-        SrcRoot() .. "r0.external/pfold/*.h",
+        SrcDir() .. "r0.external/pfold/*.cpp",
+        SrcDir() .. "r0.external/pfold/*.h",
     }
 
 -- ------------------------------------------------------------------------------
 function AddInclude_FMT()
     includedirs
     {
-        SrcRoot() .. "r0.external/fmt/include",
+        SrcDir() .. "r0.external/fmt/include",
     }
 end
 
@@ -697,12 +698,12 @@ project "ext-fmt"
     AddInclude_FMT()
     files 
     { 
-        SrcRoot() .. "r0.external/fmt/**.cc",
-        SrcRoot() .. "r0.external/fmt/**.h",
+        SrcDir() .. "r0.external/fmt/**.cc",
+        SrcDir() .. "r0.external/fmt/**.h",
     }
     excludes
     {
-        SrcRoot() .. "r0.external/fmt/src/fmt.cc"
+        SrcDir() .. "r0.external/fmt/src/fmt.cc"
     }
 
 -- ------------------------------------------------------------------------------
@@ -714,7 +715,7 @@ function AddInclude_FFT()
     }	
     includedirs
     {
-        SrcRoot() .. "r0.external/kissfft",
+        SrcDir() .. "r0.external/kissfft",
     }
 end
 
@@ -728,15 +729,15 @@ project "ext-kissfft"
     AddInclude_FMT()
     files 
     { 
-        SrcRoot() .. "r0.external/kissfft/*.c",
-        SrcRoot() .. "r0.external/kissfft/*.h",
+        SrcDir() .. "r0.external/kissfft/*.c",
+        SrcDir() .. "r0.external/kissfft/*.h",
     }
 
 -- ------------------------------------------------------------------------------
 function AddInclude_CITY()
-    includedirs
+    sysincludedirs
     {
-        SrcRoot() .. "r0.external/cityhash",
+        SrcDir() .. "r0.external/cityhash",
     }
 end
 
@@ -750,15 +751,15 @@ project "ext-cityhash"
     AddInclude_CITY()
     files 
     { 
-        SrcRoot() .. "r0.external/cityhash/*.cc",
-        SrcRoot() .. "r0.external/cityhash/*.h",
+        SrcDir() .. "r0.external/cityhash/*.cc",
+        SrcDir() .. "r0.external/cityhash/*.h",
     }
 
 -- ------------------------------------------------------------------------------
 function AddInclude_STB()
     includedirs
     {
-        SrcRoot() .. "r0.external/stb",
+        SrcDir() .. "r0.external/stb",
     }
     defines
     {
@@ -776,16 +777,16 @@ project "ext-stb"
     AddInclude_STB()
     files 
     { 
-        SrcRoot() .. "r0.external/stb/*.cpp",
-        SrcRoot() .. "r0.external/stb/*.c",
-        SrcRoot() .. "r0.external/stb/*.h",
+        SrcDir() .. "r0.external/stb/*.cpp",
+        SrcDir() .. "r0.external/stb/*.c",
+        SrcDir() .. "r0.external/stb/*.h",
     }
 
 -- ------------------------------------------------------------------------------
 function AddInclude_HTTPLIB()
     includedirs
     {
-        SrcRoot() .. "r0.external/httplib",
+        SrcDir() .. "r0.external/httplib",
     }
     defines
     {
@@ -799,9 +800,9 @@ end
 
 -- ------------------------------------------------------------------------------
 function AddInclude_DPP()
-    includedirs
+    sysincludedirs
     {
-        SrcRoot() .. "r0.external/dpp/include",
+        SrcDir() .. "r0.external/dpp/include",
     }
     defines { "DPP_ENABLE_VOICE" }
 end
@@ -823,7 +824,7 @@ project "ext-dpp"
     AddInclude_HTTPLIB()
     includedirs
     {
-        SrcRoot() .. "r0.external/json",
+        SrcDir() .. "r0.external/json",
     }
 
     defines 
@@ -833,12 +834,12 @@ project "ext-dpp"
 
     files 
     { 
-        SrcRoot() .. "r0.external/dpp/src/**.cpp",
-        SrcRoot() .. "r0.external/dpp/include/**.h",
+        SrcDir() .. "r0.external/dpp/src/**.cpp",
+        SrcDir() .. "r0.external/dpp/include/**.h",
     }
 
     pchsource ( "../src/r0.external/dpp/src/dpp_pch.cpp" )
-    pchheader "dpp_pch.h"
+    pchheader ( SrcDir() .. "r0.external/dpp/include/dpp_pch.h" )
 
 
 
@@ -893,62 +894,62 @@ function SetupOuroveonLayer( isFinalRing, layerName )
 
     includedirs
     {
-        SrcRoot() .. "r0.closed/steinberg",
+        SrcDir() .. "r0.closed/steinberg",
 
-        SrcRoot() .. "r0.external/concurrent",
-        SrcRoot() .. "r0.external/utf8",
-        SrcRoot() .. "r0.external/cereal/include",
-        SrcRoot() .. "r0.external/cereal/include/cereal_optional",
-        SrcRoot() .. "r0.external/taskflow",
-        SrcRoot() .. "r0.external/robinhood",
-        SrcRoot() .. "r0.external/cppcodec",
-        SrcRoot() .. "r0.external/json",
+        SrcDir() .. "r0.external/concurrent",
+        SrcDir() .. "r0.external/utf8",
+        SrcDir() .. "r0.external/cereal/include",
+        SrcDir() .. "r0.external/cereal/include/cereal_optional",
+        SrcDir() .. "r0.external/taskflow",
+        SrcDir() .. "r0.external/robinhood",
+        SrcDir() .. "r0.external/cppcodec",
+        SrcDir() .. "r0.external/json",
 
-        SrcRoot() .. "r0.core",
-        SrcRoot() .. "r0.platform",
-        SrcRoot() .. "r1.endlesss",
-        SrcRoot() .. "r2.action",
+        SrcDir() .. "r0.core",
+        SrcDir() .. "r0.platform",
+        SrcDir() .. "r1.endlesss",
+        SrcDir() .. "r2.action",
     }
 
     -- sdk layer compiles all code
     if isFinalRing == false then
     files 
     { 
-        SrcRoot() .. "r0.core/**.cpp",
-        SrcRoot() .. "r0.core/**.ispc",
-        SrcRoot() .. "r0.core/**.isph",
+        SrcDir() .. "r0.core/**.cpp",
+        SrcDir() .. "r0.core/**.ispc",
+        SrcDir() .. "r0.core/**.isph",
 
-        SrcRoot() .. "r0.platform/**.cpp",
+        SrcDir() .. "r0.platform/**.cpp",
 
-        SrcRoot() .. "r1.endlesss/**.cpp",
+        SrcDir() .. "r1.endlesss/**.cpp",
 
-        SrcRoot() .. "r2.action/**.cpp",
+        SrcDir() .. "r2.action/**.cpp",
     }
     end
 
     -- headers
     files 
     { 
-        SrcRoot() .. "r0.closed/steinberg/**.h",
+        SrcDir() .. "r0.closed/steinberg/**.h",
 
-        SrcRoot() .. "r0.external/concurrent/*.h",
-        SrcRoot() .. "r0.external/utf8/*.h",
-        SrcRoot() .. "r0.external/cereal/include/**.hpp",
-        SrcRoot() .. "r0.external/taskflow/**.hpp",
-        SrcRoot() .. "r0.external/robinhood/**.h",
-        SrcRoot() .. "r0.external/cppcodec/**.hpp",
-        SrcRoot() .. "r0.external/httplib/**.h",
-        SrcRoot() .. "r0.external/json/**.h",
-        SrcRoot() .. "r0.external/date/include/**.h",
+        SrcDir() .. "r0.external/concurrent/*.h",
+        SrcDir() .. "r0.external/utf8/*.h",
+        SrcDir() .. "r0.external/cereal/include/**.hpp",
+        SrcDir() .. "r0.external/taskflow/**.hpp",
+        SrcDir() .. "r0.external/robinhood/**.h",
+        SrcDir() .. "r0.external/cppcodec/**.hpp",
+        SrcDir() .. "r0.external/httplib/**.h",
+        SrcDir() .. "r0.external/json/**.h",
+        SrcDir() .. "r0.external/date/include/**.h",
 
-        SrcRoot() .. "r0.core/**.h",
-        SrcRoot() .. "r0.core/**.inl",
+        SrcDir() .. "r0.core/**.h",
+        SrcDir() .. "r0.core/**.inl",
 
-        SrcRoot() .. "r0.platform/**.h",
+        SrcDir() .. "r0.platform/**.h",
 
-        SrcRoot() .. "r1.endlesss/**.h",
+        SrcDir() .. "r1.endlesss/**.h",
 
-        SrcRoot() .. "r2.action/**.h",
+        SrcDir() .. "r2.action/**.h",
     }
 
 end
@@ -960,8 +961,6 @@ function CommonAppLink()
     {
         "sdk",
 
-        "ext-flac",
-        "ext-flac-cpp",
         "ext-sqlite3",
         "ext-dragonbox",
         "ext-dpp",
@@ -1020,18 +1019,18 @@ function CommonAppLink()
         }
         libdirs
         {
-            SrcRoot() .. "r0.sys/superluminal/lib/x64"
+            SrcDir() .. "r0.sys/superluminal/lib/x64"
         }
 
         filter "configurations:Debug"
         links ( "PerformanceAPI_MDd.lib" )
-        filter "configurations:Release or Release-AVX2"
+        filter "configurations:Release"
         links ( "PerformanceAPI_MD.lib" )
         filter {}
 
         includedirs
         {
-            SrcRoot() .. "r0.sys/superluminal/include",
+            SrcDir() .. "r0.sys/superluminal/include",
         }
     end
 
@@ -1060,6 +1059,10 @@ function CommonAppLink()
         "IOKit.framework",
         "OpenGL.framework",
         "CoreVideo.framework",
+        "CoreAudio.framework",
+        "CoreMIDI.framework",
+        "AudioToolBox.framework",
+        "AudioUnit.framework",
     }
     filter {}
 
@@ -1076,7 +1079,7 @@ project "sdk"
     SetupOuroveonLayer( false, "sdk" )
 
     pchsource "../src/r0.core/pch.cpp"
-    pchheader "pch.h"
+    pchheader ( SrcDir() .. "r0.core/pch.h" )
 
 group ""
 
@@ -1095,22 +1098,22 @@ project "BEAM"
 
     files
     {
-        SrcRoot() .. "r3.beam/pch.cpp",
+        SrcDir() .. "r3.beam/pch.cpp",
 
-        SrcRoot() .. "r3.beam/**.cpp",
-        SrcRoot() .. "r3.beam/**.h",
-        SrcRoot() .. "r3.beam/**.inl",
+        SrcDir() .. "r3.beam/**.cpp",
+        SrcDir() .. "r3.beam/**.h",
+        SrcDir() .. "r3.beam/**.inl",
     }
     filter "system:windows"
     files
     {
-        SrcRoot() .. "r3.beam/*.rc",
-        SrcRoot() .. "r3.beam/*.ico",
+        SrcDir() .. "r3.beam/*.rc",
+        SrcDir() .. "r3.beam/*.ico",
     }
     filter {}
 
     pchsource "../src/r3.beam/pch.cpp"
-    pchheader "pch.h"
+    pchheader ( SrcDir() .. "r0.core/pch.h" )
 
 -- ------------------------------------------------------------------------------
 project "LORE"
@@ -1121,23 +1124,23 @@ project "LORE"
 
     files 
     {
-        SrcRoot() .. "r3.lore/pch.cpp",
+        SrcDir() .. "r3.lore/pch.cpp",
 
-        SrcRoot() .. "r3.lore/**.cpp",
-        SrcRoot() .. "r3.lore/**.h",
-        SrcRoot() .. "r3.lore/**.inl",
+        SrcDir() .. "r3.lore/**.cpp",
+        SrcDir() .. "r3.lore/**.h",
+        SrcDir() .. "r3.lore/**.inl",
     }
     filter "system:windows"
     files
     {
-        SrcRoot() .. "r3.lore/*.rc",
-        SrcRoot() .. "r3.lore/*.ico",
+        SrcDir() .. "r3.lore/*.rc",
+        SrcDir() .. "r3.lore/*.ico",
     }
     filter {}
 
 
     pchsource "../src/r3.lore/pch.cpp"
-    pchheader "pch.h"
+    pchheader ( SrcDir() .. "r0.core/pch.h" )
 
 -- ------------------------------------------------------------------------------
 project "PONY"
@@ -1148,22 +1151,22 @@ project "PONY"
 
     files
     {
-        SrcRoot() .. "r3.pony/pch.cpp",
+        SrcDir() .. "r3.pony/pch.cpp",
 
-        SrcRoot() .. "r3.pony/**.cpp",
-        SrcRoot() .. "r3.pony/**.h",
-        SrcRoot() .. "r3.pony/**.inl",
+        SrcDir() .. "r3.pony/**.cpp",
+        SrcDir() .. "r3.pony/**.h",
+        SrcDir() .. "r3.pony/**.inl",
     }
 
     filter "system:windows"
     files
     {
-        SrcRoot() .. "r3.pony/*.rc",
-        SrcRoot() .. "r3.pony/*.ico",
+        SrcDir() .. "r3.pony/*.rc",
+        SrcDir() .. "r3.pony/*.ico",
     }
     filter {}
 
     pchsource "../src/r3.pony/pch.cpp"
-    pchheader "pch.h"
+    pchheader ( SrcDir() .. "r0.core/pch.h" )
 
 group ""

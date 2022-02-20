@@ -1,5 +1,6 @@
 .vs/
 .vscode/
+.DS_Store
 
 bin/**/build_*
 bin/**/linux_*

@@ -10,10 +10,14 @@
 
 #include <string>
 
-#ifdef _MSC_VER
-#include <intrin.h>
+#if OURO_PLATFORM_OSX
+    #include <mach/mach_time.h>
 #else
-#include <x86intrin.h>
+    #ifdef _MSC_VER
+    #include <intrin.h>
+    #else
+    #include <x86intrin.h>
+    #endif
 #endif
 
 #ifdef WIN32
@@ -32,7 +36,7 @@ finline _T* malloc16As( const size_t numElements )
 #ifdef WIN32
     return reinterpret_cast<_T*>(_aligned_malloc( sizeof( _T ) * numElements, 16 ));
 #else
-    return reinterpret_cast<_T*>(aligned_alloc( 16, sizeof( _T ) * numElements ));
+    return reinterpret_cast<_T*>(malloc( sizeof( _T ) * numElements ));
 #endif
 }
 
@@ -43,7 +47,7 @@ finline _T* malloc16AsSet( const size_t numElements, const _T defaultValue )
 #ifdef WIN32
     _T* mblock = reinterpret_cast<_T*>(_aligned_malloc( sizeof( _T ) * numElements, 16 ));
 #else
-    _T* mblock = reinterpret_cast<_T*>(aligned_alloc( 16, sizeof( _T ) * numElements ));
+    _T* mblock = reinterpret_cast<_T*>(malloc( sizeof( _T ) * numElements ));
 #endif
     for ( size_t kI = 0; kI < numElements; kI++ )
         mblock[kI] = defaultValue;
@@ -277,7 +281,11 @@ finline uint64_t crush64( const uint64_t value1, const uint64_t value2, const ui
 // mix a RDTSC value to produce a random seed
 finline uint64_t randomU64()
 {
+    #if OURO_PLATFORM_OSX
+    uint64_t value = mach_absolute_time();
+    #else
     uint64_t value = __rdtsc();
+    #endif
              value ^= value >> 33;
              value *= 0x64dd81482cbd31d7UL;
              value ^= value >> 33;

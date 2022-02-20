@@ -14,6 +14,7 @@ namespace app {
 struct Core;
 struct Module
 {
+    virtual ~Module() {}
     virtual bool create( const app::Core& appCore ) = 0;
     virtual void destroy() = 0;
 };

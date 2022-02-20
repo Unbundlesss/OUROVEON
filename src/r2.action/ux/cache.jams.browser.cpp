@@ -56,7 +56,6 @@ void modalUniversalJamBrowser(
         bool shouldClosePopup = false;
 
         // wrap up the search function for filtering between public/private jams
-        bool iterationPublic = true;
         const auto iterationFn = [&]( const Jams::Data& jamData )
         {
             if ( !jamNameFilter.PassFilter( jamData.m_displayName.c_str() ) )

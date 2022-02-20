@@ -225,7 +225,7 @@ void DataBus::imgui()
 
             if ( ImGui::BeginCombo( "##provider", providerName.c_str(), 0) )
             {
-                for ( const auto providers : m_providerNames )
+                for ( const auto& providers : m_providerNames )
                 {
                     const auto newProviderUID = providers.first;
                     const bool isSelected     = ( currentProviderUID == newProviderUID );

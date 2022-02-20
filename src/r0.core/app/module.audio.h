@@ -212,15 +212,15 @@ private:
         const PaStreamCallbackTimeInfo* timeInfo );
 
     MixThreadCommandQueue           m_mixThreadCommandQueue;
-    std::atomic_uint32_t            m_mixThreadCommandsIssued;
-    std::atomic_uint32_t            m_mixThreadCommandsComplete;
+    std::atomic_uint32_t            m_mixThreadCommandsIssued   = 0;
+    std::atomic_uint32_t            m_mixThreadCommandsComplete = 0;
 
     // active output 
-    int32_t                         m_paDeviceIndex;
-    void*                           m_paStream;
-    uint32_t                        m_sampleRate;
-    OutputBuffer*                   m_mixerBuffers;                 // the aligned intermediate buffer, filled by the configurable mixer process
-    bool                            m_mute = false;
+    int32_t                         m_paDeviceIndex     = -1;
+    void*                           m_paStream          = nullptr;
+    uint32_t                        m_sampleRate        = 0;
+    OutputBuffer*                   m_mixerBuffers      = nullptr;      // the aligned intermediate buffer, filled by the configurable mixer process
+    bool                            m_mute              = false;
 
     ExposedState                    m_state;
 
@@ -231,9 +231,9 @@ private:
     bool                            m_vstBypass = false;
 #endif // OURO_FEATURES_VST
 
-    std::atomic<float>              m_volume = 0.5f;                // generic 0..1 global gain control
+    std::atomic<float>              m_volume            = 0.5f;         // generic 0..1 global gain control
 
-    MixerInterface*                 m_mixerInterface;
+    MixerInterface*                 m_mixerInterface    = nullptr;
 
 
     SampleProcessorInstances        m_sampleProcessorsToInstall;

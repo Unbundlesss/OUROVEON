@@ -66,19 +66,19 @@ protected:
         const uint64_t      samplePosition );
 
 
-    RiffQueue                   m_riffQueue;                // lf interface between main and audio threads for new riff requests
-    endlesss::live::RiffPtr     m_riffCurrent;              // what we're playing; this is managed by the audio thread
-    int64_t                     m_riffPlaybackSample;       // 
+    RiffQueue                   m_riffQueue;                        // lf interface between main and audio threads for new riff requests
+    endlesss::live::RiffPtr     m_riffCurrent;                      // what we're playing; this is managed by the audio thread
+    int64_t                     m_riffPlaybackSample        = 0;    //
 
-    double                      m_riffPlaybackPercentage;
-    int32_t                     m_riffPlaybackBar;
-    int32_t                     m_riffPlaybackBarSegment;
+    double                      m_riffPlaybackPercentage    = 0;
+    int32_t                     m_riffPlaybackBar           = 0;
+    int32_t                     m_riffPlaybackBarSegment    = 0;
 
     int32_t                     m_lockTransitionOnBeat      = 0;
     int32_t                     m_lockTransitionBarCount    = 1;
     bool                        m_lockTransitionToNextBar   = false;
 
-    std::atomic_bool            m_drainQueueAndStop = false;
+    std::atomic_bool            m_drainQueueAndStop         = false;
 
     RiffChangeCallback          m_riffChangeCallback;
 };
