@@ -9,7 +9,7 @@
 
 #pragma once
 
-#if OURO_FEATURES_VST
+#if OURO_FEATURE_VST24
 
 #include "app/module.midi.msg.h"
 
@@ -218,4 +218,4 @@ private:
 
 } // namespace effect
 
-#endif // OURO_FEATURES_VST
+#endif // OURO_FEATURE_VST24

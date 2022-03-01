@@ -1,11 +1,22 @@
+--   _______ _______ ______ _______ ___ ___ _______ _______ _______ 
+--  |       |   |   |   __ \       |   |   |    ___|       |    |  |
+--  |   -   |   |   |      <   -   |   |   |    ___|   -   |       |
+--  |_______|_______|___|__|_______|\_____/|_______|_______|__|____|
+
 require('xcode')
 local xcode = premake.modules.xcode 
 xcode.cppLanguageStandards["C++20"] = "c++20"
+
+require("vstudio")
+premake.override(premake.vstudio.vc2010, "languageStandard", function(base, cfg)
+    premake.vstudio.vc2010.element("LanguageStandard", nil, 'stdcpp20')
+end)
 
 -- ==============================================================================
 
 -- stash the starting directory upfront to use as a reference root 
 local initialDir = os.getcwd()
+print( "Premake launch directory: " .. initialDir )
 
 local rootBuildGenerationDir = "_gen"
 local rootSourceDir = "src"
@@ -17,12 +28,21 @@ end
 function SrcDir()
     return initialDir .. "/../" .. rootSourceDir .. "/"
 end
+
 function GetMacOSPackgesDir()
     return osxHomebrew
 end
-function GetMacOSFatLibs()
+function GetPrebuiltLibs_MacUniversal()
     return initialDir .. "/../libs/macos/universal-fat/"
 end
+
+function GetPrebuiltLibs_Win64()
+    return initialDir .. "/../libs/windows/win64/"
+end
+function GetPrebuiltLibs_Win64_VSMacro()
+    return "$(SolutionDir)..\\..\\libs\\windows\\win64\\"
+end
+
 
 function GetBuildRootToken()
     if ( os.host() == "windows" ) then
@@ -31,7 +51,7 @@ function GetBuildRootToken()
         return initialDir .. "/" .. rootBuildGenerationDir .. "/"
     end
 end
-print ( "build root : " .. GetBuildRootToken() )
+print ( "Build root token : " .. GetBuildRootToken() )
 
 
 ModuleRefInclude = {}
@@ -47,6 +67,7 @@ include "ispc-premake/premake.lua"
 include "premake-inc/common.lua"
 include "premake-inc/sys-freetype.lua"
 include "premake-inc/sys-openssl.lua"
+include "premake-inc/sys-superluminal.lua"
 
 
 -- ==============================================================================
@@ -197,6 +218,11 @@ project "ext-zlib"
 -- ------------------------------------------------------------------------------
 function AddInclude_FLAC()
 
+    defines
+    {
+        "FLAC__NO_DLL",
+    }
+
     filter "system:Windows"
     sysincludedirs
     {
@@ -215,14 +241,14 @@ project "ext-flac"
     kind "StaticLib"
     language "C"
 
-    disablewarnings { "4267", "4996", "4244", "4334" }    
+    disablewarnings { "4267", "4996", "4244", "4334" }
 
     SetDefaultBuildConfiguration()
     SetDefaultOutputDirectories("ext")
 
     AddInclude_FLAC()
 
-    -- some precomputed config.h for windows
+    -- some precomputed config.h for windows source build of FLAC
     defines
     {
         "ENABLE_64_BIT_WORDS",
@@ -230,12 +256,9 @@ project "ext-flac"
         "FLAC__CPU_X86_64",
         "FLAC__HAS_X86INTRIN=1",
         "FLAC__ALIGN_MALLOC_DATA",
-        "FLAC__NO_DLL",
         "FLAC__OVERFLOW_DETECT",
         "HAVE_INTTYPES_H=1",
         "HAVE_STDINT_H=1",
-        "HAVE_STRING_H",
-        "FLaC__INLINE=_inline",
         "PACKAGE_VERSION=\"1.3.3\"",
     }
 
@@ -277,7 +300,7 @@ function _FLAC_LinkPrebuilt()
     links       { "flac", "flac++", "ogg" }
 
     filter "system:macosx"
-    libdirs     ( GetMacOSFatLibs() )
+    libdirs     ( GetPrebuiltLibs_MacUniversal() )
     filter {}
 end
 
@@ -386,7 +409,7 @@ function _Sodium_LinkPrebuilt()
     filter "system:macosx"
     libdirs
     {
-        GetMacOSFatLibs()
+        GetPrebuiltLibs_MacUniversal()
     }
     links
     {
@@ -506,7 +529,7 @@ function _Opus_LinkPrebuilt()
     filter "system:macosx"
     libdirs
     {
-        GetMacOSFatLibs()
+        GetPrebuiltLibs_MacUniversal()
     }
     links
     {
@@ -618,11 +641,6 @@ project "ext-libaiff"
     SetDefaultBuildConfiguration()
     SetDefaultOutputDirectories("ext")
 
-    defines
-    {
-        "_CRT_SECURE_NO_WARNINGS"
-    }
-    
     AddInclude_AIFF()
     files 
     { 
@@ -827,20 +845,16 @@ project "ext-dpp"
         SrcDir() .. "r0.external/json",
     }
 
-    defines 
-    {
-        "_CRT_SECURE_NO_WARNINGS"
-    }
-
     files 
     { 
         SrcDir() .. "r0.external/dpp/src/**.cpp",
         SrcDir() .. "r0.external/dpp/include/**.h",
     }
 
-    pchsource ( "../src/r0.external/dpp/src/dpp_pch.cpp" )
-    pchheader ( SrcDir() .. "r0.external/dpp/include/dpp_pch.h" )
-
+    AddPCH(
+        "../src/r0.external/dpp/src/dpp_pch.cpp",
+        SrcDir() .. "r0.external/dpp/include/",
+        "dpp_pch.h" )
 
 
 -- ==============================================================================
@@ -1011,29 +1025,6 @@ function CommonAppLink()
     }
     filter {}
 
-    -- bundle Superluminal performance API into win builds
-    if ( os.host() == "windows" ) then
-        defines 
-        {
-            "PERF_SUPERLUMINAL"
-        }
-        libdirs
-        {
-            SrcDir() .. "r0.sys/superluminal/lib/x64"
-        }
-
-        filter "configurations:Debug"
-        links ( "PerformanceAPI_MDd.lib" )
-        filter "configurations:Release"
-        links ( "PerformanceAPI_MD.lib" )
-        filter {}
-
-        includedirs
-        {
-            SrcDir() .. "r0.sys/superluminal/include",
-        }
-    end
-
     filter "system:linux"
     links 
     {
@@ -1078,8 +1069,10 @@ project "sdk"
     kind "StaticLib"
     SetupOuroveonLayer( false, "sdk" )
 
-    pchsource "../src/r0.core/pch.cpp"
-    pchheader ( SrcDir() .. "r0.core/pch.h" )
+    AddPCH( 
+        "../src/r0.core/pch.cpp",
+        SrcDir() .. "r0.core/",
+        "pch.h" )
 
 group ""
 
@@ -1112,8 +1105,10 @@ project "BEAM"
     }
     filter {}
 
-    pchsource "../src/r3.beam/pch.cpp"
-    pchheader ( SrcDir() .. "r0.core/pch.h" )
+    AddPCH( 
+        "../src/r3.beam/pch.cpp",
+        SrcDir() .. "r0.core/",
+        "pch.h" )
 
 -- ------------------------------------------------------------------------------
 project "LORE"
@@ -1138,9 +1133,11 @@ project "LORE"
     }
     filter {}
 
+    AddPCH( 
+        "../src/r3.lore/pch.cpp",
+        SrcDir() .. "r0.core/",
+        "pch.h" )
 
-    pchsource "../src/r3.lore/pch.cpp"
-    pchheader ( SrcDir() .. "r0.core/pch.h" )
 
 -- ------------------------------------------------------------------------------
 project "PONY"
@@ -1166,7 +1163,10 @@ project "PONY"
     }
     filter {}
 
-    pchsource "../src/r3.pony/pch.cpp"
-    pchheader ( SrcDir() .. "r0.core/pch.h" )
+    AddPCH( 
+        "../src/r3.pony/pch.cpp",
+        SrcDir() .. "r0.core/",
+        "pch.h" )
+
 
 group ""

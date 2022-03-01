@@ -208,6 +208,11 @@ void Jams::postProcessNewData()
         pjd.m_riffCount = pjam.total_riffs;
     }
 
+    for ( auto& innerVec : m_idxSortedByTime )
+        innerVec.clear();
+    for ( auto& innerVec : m_idxSortedByName )
+        innerVec.clear();
+
     m_jamCouchIDToJamIndexMap.clear();
 
     for ( const auto jamType : cEachJamType )

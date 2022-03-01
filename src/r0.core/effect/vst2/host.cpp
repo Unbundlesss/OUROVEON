@@ -9,7 +9,7 @@
 
 #include "pch.h"
 
-#if OURO_FEATURES_VST
+#if OURO_FEATURE_VST24
 
 #include "app/module.audio.h"
 #include "app/module.midi.msg.h"
@@ -115,6 +115,9 @@ struct Instance::Data
     Data()
         : m_unifiedTimeInfo( nullptr )
         , m_vstTimeSampleRateRcp( 1.0 )
+        , m_midiInputChannels( 0 )
+        , m_midiOutputChannels( 0 )
+        , m_updateIOChannels( false )
         , m_sampleRate( 0 )
         , m_maximumBlockSize( 0 )
         , m_automationCallbackFn( nullptr )
@@ -1019,4 +1022,4 @@ void Instance::dispatchMidi( const app::midi::Message& midiMsg )
 
 } // namespace vst
 
-#endif // OURO_FEATURES_VST
+#endif // OURO_FEATURE_VST24

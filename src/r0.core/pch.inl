@@ -33,7 +33,6 @@
 #endif // OURO_CXX20_SEMA
 
 #if OURO_PLATFORM_WIN
-#define _CRT_SECURE_NO_WARNINGS
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
@@ -97,26 +96,27 @@ namespace detail {
     template < const fmt::color _fg1, const fmt::color _fg2, typename S, typename... Args, fmt::FMT_ENABLE_IF( fmt::detail::is_string<S>::value )>
     void _printer( const std::string_view& prefix, const S& format_str, const Args&... args )
     {
+        const auto& vargs = fmt::make_format_args( args... );
+
         constexpr std::string_view midsep = " | ";
         constexpr std::string_view suffix = "\n";
 
-        const auto foreground1 = fmt::detail::make_foreground_color<char>( fmt::detail::color_type( _fg1 ) );
-        const auto foreground2 = fmt::detail::make_foreground_color<char>( fmt::detail::color_type( _fg2 ) );
+        constexpr auto foreground1 = fmt::detail::make_foreground_color<char>( fmt::detail::color_type( _fg1 ) );
+        constexpr auto foreground2 = fmt::detail::make_foreground_color<char>( fmt::detail::color_type( _fg2 ) );
 
         // size of buffer used by ansi_color_escape
         constexpr size_t size_of_text_style = 7u + 3u * 4u + 1u;
 
         // format the input into our first buffer
-        static thread_local std::string formatBuffer;
+        static thread_local fmt::basic_memory_buffer<char> formatBuffer;
         {
             formatBuffer.clear();
-            fmt::vformat_to( std::back_inserter(formatBuffer), fmt::to_string_view(format_str), fmt::make_format_args(args...) );
+            fmt::detail::vformat_to( formatBuffer, fmt::to_string_view( format_str ), vargs, {} );
         }
 
         // build the final output by appending components
-        static thread_local std::string outputBuffer;
+        static thread_local fmt::basic_memory_buffer<char> outputBuffer;
         {
-            static constexpr auto reset_color = "\x1b[0m";
             const auto size = formatBuffer.size() + 1;
 
             const size_t bufferSize =
@@ -125,25 +125,27 @@ namespace detail {
                 size +
                 suffix.size();
 
+            outputBuffer.try_reserve( bufferSize );
             outputBuffer.clear();
-            outputBuffer.reserve( bufferSize );
 
             outputBuffer.append( foreground1.begin(), foreground1.end() );
 
-            outputBuffer += prefix;
+            outputBuffer.append( prefix );
 
-            outputBuffer += reset_color;
-            outputBuffer += midsep;
+            fmt::detail::reset_color( outputBuffer );
+
+            outputBuffer.append( midsep );
 
             outputBuffer.append( foreground2.begin(), foreground2.end() );
 
-            outputBuffer += formatBuffer;
-            outputBuffer += suffix;
+            outputBuffer.append( formatBuffer );
+            outputBuffer.append( suffix );
 
-            outputBuffer += reset_color;
+            fmt::detail::reset_color( outputBuffer );
+            outputBuffer.push_back( '\0' );
         }
 
-        std::cout << outputBuffer;
+        std::cout << outputBuffer.data();
     }
 }
 

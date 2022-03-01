@@ -284,7 +284,7 @@ bool KnobFloat( const char* label, const float outerRadius, float* p_value, floa
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-bool Spinner( const char* label, bool active, float radius, float thickness, const ImU32& color )
+bool Spinner( const char* label, bool active, float radius, float thickness, float yOffset, const ImU32& color )
 {
     ImGuiWindow* window = GetCurrentWindow();
     if ( window->SkipItems )
@@ -297,7 +297,7 @@ bool Spinner( const char* label, bool active, float radius, float thickness, con
     ImVec2 pos = window->DC.CursorPos;
     ImVec2 size( (radius) * 2, (radius + style.FramePadding.y) * 2 );
 
-    const ImRect bb( pos, ImVec2( pos.x + size.x, pos.y + size.y ) );
+    const ImRect bb( pos, ImVec2( pos.x + size.x, pos.y + size.y + yOffset ) );
     ItemSize( bb, style.FramePadding.y );
     if ( !ItemAdd( bb, id ) )
         return false;
@@ -314,7 +314,7 @@ bool Spinner( const char* label, bool active, float radius, float thickness, con
     const float a_min = IM_PI * 2.0f * ((float)start) / (float)num_segments;
     const float a_max = IM_PI * 2.0f * ((float)num_segments - 3) / (float)num_segments;
 
-    const ImVec2 centre = ImVec2( 2.0f + pos.x + radius, pos.y + radius + style.FramePadding.y );
+    const ImVec2 centre = ImVec2( 2.0f + pos.x + radius, pos.y + radius + style.FramePadding.y + yOffset );
 
     for ( int i = 0; i < num_segments; i++ ) 
     {

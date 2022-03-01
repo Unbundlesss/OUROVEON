@@ -337,9 +337,9 @@ struct ResultRiffDocument
 
     State                       state;
     std::string                 userName;
-    uint64_t                    created;
-    int32_t                     root;
-    int32_t                     scale;
+    uint64_t                    created     = 0;
+    int32_t                     root        = 0;
+    int32_t                     scale       = 0;
     int32_t                     app_version = 0;
     float                       magnitude   = 0;
 
@@ -370,7 +370,7 @@ struct ResultStemDocument
             std::string     key;                    // eg. "attachments/oggAudio/####/################"
             std::string     url;                    // full URL to the audio data
             std::string     mime = "audio/ogg";     // leave as default; very old jams (/stems) lack MIME data
-            int32_t         length;
+            int32_t         length = 0;
 
             // OGGAudio blocks have changed a bit over the lifetime of the app and require the most manual 
             // fix-up and error-correction

@@ -36,8 +36,8 @@ struct GPUTaskGL : public gfx::GPUTask
     gfx::SketchBufferPtr& getBufferPtr() { return m_buffer; }
 
     ValidState          m_validState;
-    uint32_t            m_glTextureID;
-    std::atomic_bool    m_valid = false;
+    uint32_t            m_glTextureID   = 0;
+    std::atomic_bool    m_valid         = false;
 };
 
 // ---------------------------------------------------------------------------------------------------------------------

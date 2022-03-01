@@ -9,7 +9,7 @@
 
 #include "pch.h"
 
-#if OURO_FEATURES_VST
+#if OURO_FEATURE_VST24
 
 #include "effect/effect.stack.h"
 #include "data/databus.h"
@@ -142,6 +142,8 @@ vst::Instance* EffectStack::addVST( const char* vstFilename, const int64_t vstLo
         if ( retries <= 0 )
         {
             blog::error::vst( "WARNING - VST thread may not have booted correctly [{}] for [{}], aborting", vstInst->getUniqueID(), vstFilename );
+
+            delete vstInst;
             return nullptr;
         }
     }
@@ -328,10 +330,18 @@ void EffectStack::imgui(
                      vstFailedToLoad )
                 {
                     ImGui::BeginDisabledControls( true );
-                    ImGui::Button( "", commonSquareSize ); ImGui::SameLine( 0.0f, 4.0f );
-                    if ( dataBus != nullptr ) // parameter map button hidden without a databus to use
-                    ImGui::Button( "", commonSquareSize ); ImGui::SameLine( 0.0f, 4.0f );
-                    ImGui::Button( "", commonSquareSize ); ImGui::SameLine();
+                    ImGui::Button( "", commonSquareSize );
+                    ImGui::SameLine( 0.0f, 4.0f );
+
+                    // parameter map button hidden without a databus to use
+                    if ( dataBus != nullptr )
+                    {
+                        ImGui::Button( "", commonSquareSize ); 
+                        ImGui::SameLine( 0.0f, 4.0f );
+                    }
+
+                    ImGui::Button( "", commonSquareSize );
+                    ImGui::SameLine();
                     ImGui::EndDisabledControls( true );
 
                     if ( vstFailedToLoad )
@@ -616,4 +626,4 @@ void EffectStack::ParameterSet::syncToDataBus( const data::DataBus& bus, vst::In
 
 } // namespace effect
 
-#endif // OURO_FEATURES_VST
+#endif // OURO_FEATURE_VST24

@@ -138,12 +138,10 @@ project "hal-glfw"
         files       { Root_GLFW() .. v }
     end
 
-    files ( Root_GLFW() .. "include/**.h" )
     files ( Root_GLFW_Ext() .. "**.h" )
     files ( Root_GLFW_Ext() .. "**.c" )
 
     filter "system:Windows"
-    defines { "_CRT_SECURE_NO_WARNINGS" }
     for k,v in pairs(windows_headers) do 
         files       { Root_GLFW() .. v }
     end

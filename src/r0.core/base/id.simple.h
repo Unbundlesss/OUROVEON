@@ -15,10 +15,12 @@ namespace base {
 namespace id {
 
 // ---------------------------------------------------------------------------------------------------------------------
-template< typename _identity, typename _inttype >
+template< typename _identity, typename _inttype, _inttype _defaultValue, _inttype _invalidValue >
 struct Simple
 {
     using IntType = _inttype;
+
+    constexpr Simple() : m_id( _defaultValue ) {}
 
     constexpr explicit Simple( const _inttype _id ) : m_id( _id )
     {
@@ -29,6 +31,9 @@ struct Simple
 
     constexpr bool operator == ( const Simple& rhs ) const { return rhs.m_id == m_id; }
     constexpr bool operator != ( const Simple& rhs ) const { return rhs.m_id != m_id; }
+
+
+    static Simple invalid() { return Simple( _invalidValue ); }
 
 private:
     _inttype    m_id;
@@ -43,5 +48,5 @@ struct smp_hash {
 };
 
 struct _async_command_counter_id {};
-using AsyncCommandCounter = base::id::Simple<_async_command_counter_id, uint32_t>;
+using AsyncCommandCounter = base::id::Simple<_async_command_counter_id, uint32_t, 1, 0>;
 

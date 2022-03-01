@@ -46,7 +46,7 @@ void BotWithUI::imgui( const app::module::Frontend& frontend )
         ImGui::SameLine();
         ImGui::Dummy( ImVec2( ImGui::GetContentRegionAvail().x - 32.0f, 0.0f ) );
         ImGui::SameLine();
-        ImGui::Spinner( "##syncing", isBotBusy, ImGui::GetTextLineHeight() * 0.4f, 3.0f, ImGui::GetColorU32( ImGuiCol_Text ) );
+        ImGui::Spinner( "##syncing", isBotBusy, ImGui::GetTextLineHeight() * 0.4f, 3.0f, 0.0f, ImGui::GetColorU32( ImGuiCol_Text ) );
     }
     ImGui::Spacing();
     ImGui::Spacing();

@@ -200,9 +200,9 @@ int Core::Run()
     // bring up global external registrations / services that will auto-unwind on exit
     win32::ScopedInitialiseCOM      scopedCOM;
 
-#if OURO_FEATURES_VST
+#if OURO_FEATURE_VST24
     vst::ScopedInitialiseVSTHosting scopedVST;
-#endif // OURO_FEATURES_VST
+#endif // OURO_FEATURE_VST24
 #endif // OURO_PLATFORM_WIN
 
 #if OURO_EXCHANGE_IPC
@@ -292,6 +292,21 @@ int CoreGUI::Entrypoint()
         return -2;
     }
 
+    registerMainMenuEntry( -1, "LAYOUT", [this]()
+    {
+        if ( ImGui::MenuItem( "Reset" ) )
+        {
+            m_resetLayoutInNextUpdate = true;
+        }
+    });
+
+#if OURO_DEBUG
+    registerMainMenuEntry( 1000, "DEBUG", [this]()
+    {
+        ImGui::MenuItem( "ImGUI Demo", "", &m_showImGuiDebugWindow );
+    });
+#endif
+
     // run the app main loop
     int appResult = EntrypointGUI();
 
@@ -302,17 +317,24 @@ int CoreGUI::Entrypoint()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-bool CoreGUI::beginInterfaceLayout(
-    const ViewportMode viewportMode,
-    const MainLoopCallback& mainMenuCallback /*= nullptr*/,
-    const MainLoopCallback& statusBarCallback /*= nullptr*/ )
+void CoreGUI::activateModalPopup( const char* label, const ModalPopupExecutor& executor )
 {
-    // crap hack that I'll fix later (i wont), but resetting/loading new layouts has to happen before layout is underway
-    static bool doResetBeforeTick = false;
-    if ( doResetBeforeTick )
+    blog::core( "activating modal [{}]", label );
+
+    m_modalsWaiting.emplace_back( label );
+    m_modalsActive.emplace_back( label, executor );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+bool CoreGUI::beginInterfaceLayout( const ViewportFlags viewportFlags )
+{
+    // resetting/loading new layouts has to happen before layout is underway
+    if ( m_resetLayoutInNextUpdate )
     {
+        blog::core( "resetting layout from default ..." );
+
         app::module::Frontend::reloadImguiLayoutFromDefault();
-        doResetBeforeTick = false;
+        m_resetLayoutInNextUpdate = false;
     }
 
     // tick the presentation layer, begin a new imgui Frame
@@ -322,16 +344,15 @@ bool CoreGUI::beginInterfaceLayout(
     m_perfData.m_moment.restart();
 
     // inject dock space if we're expecting to lay the imgui out with docking
-    if ( viewportMode == ViewportMode::DockingViewport )
+    if ( hasViewportFlag( viewportFlags, VF_WithDocking ) )
         ImGui::DockSpaceOverViewport( ImGui::GetMainViewport() );
 
-#ifdef _DEBUG
-    static bool demoWindowVisible = false;
-#endif // _DEBUG
-    if ( mainMenuCallback != nullptr )
+    // add main menu bar
+    if ( hasViewportFlag( viewportFlags, VF_WithMainMenu ) )
     {
         if ( ImGui::BeginMainMenuBar() )
         {
+            // the only uncustomisable, first-entry menu item; everything else uses hooks
             if ( ImGui::BeginMenu( "OUROVEON" ) )
             {
                 ImGui::MenuItem( GetAppNameWithVersion(), nullptr, nullptr, false );
@@ -348,56 +369,120 @@ bool CoreGUI::beginInterfaceLayout(
                 ImGui::EndMenu();
             }
 
-            if ( ImGui::BeginMenu( "LAYOUT" ) )
+            for ( const auto& mainMenuEntry : m_mainMenuEntries )
             {
-                if ( ImGui::MenuItem( "Reset" ) )
+                if ( ImGui::BeginMenu( mainMenuEntry.m_name.c_str() ) )
                 {
-                    doResetBeforeTick = true;
+                    for ( const auto& callbacks : mainMenuEntry.m_callbacks )
+                    {
+                        callbacks();
+                    }
+                    ImGui::EndMenu();
                 }
-                ImGui::EndMenu();
             }
 
-            mainMenuCallback();
-
-#ifdef _DEBUG
-            if ( ImGui::BeginMenu( "DEBUG" ) )
-            {
-                ImGui::MenuItem( "ImGUI Demo", "", &demoWindowVisible );
-                ImGui::EndMenu();
-            }
-#endif
             ImGui::EndMainMenuBar();
         }
     }
 
-    if ( statusBarCallback != nullptr )
+    // status bar at base of viewport
+    if ( hasViewportFlag( viewportFlags, VF_WithStatusBar ) )
     {
         if ( ImGui::BeginStatusBar() )
         {
-            const double audioEngineLoad = m_mdAudio->getAudioEngineCPULoadPercent();
-            m_audoLoadAverage.update( audioEngineLoad );
+            // not white, choose a bright but blended theme colour for text on the status bar
+            ImGui::PushStyleColor( ImGuiCol_Text, GImGui->Style.Colors[ImGuiCol_ResizeGripActive] );
 
             ImGui::TextUnformatted( GetAppName() );
             ImGui::Separator();
 
-            statusBarCallback();
+            // left-aligned blocks; adds in order, dummy-bulks out space to the specified minimum size as we go.
+            // no controls on blocks that end up larger than the specified size, no clipping done
 
-            // right-align
-            ImGui::Dummy( ImVec2( ImGui::GetContentRegionAvail().x - 90.0f, 0.0f ) );
+            for ( const auto& statusBlock : m_statusBarBlocksLeft )
+            {
+                const float regionBefore = ImGui::GetContentRegionAvail().x;
+                statusBlock.m_callback();
+                const float regionAfter = ImGui::GetContentRegionAvail().x;
+
+                const float padSpace = statusBlock.m_size - (regionBefore - regionAfter);
+                if ( padSpace > 0 )
+                {
+                    ImGui::Dummy( ImVec2( padSpace, 0.0f ) );
+                }
+                ImGui::Separator();
+            }
+
+            // right alignment; we save the left-hand cursor and then re-apply dummy elements on each
+            //      iteration to add the expected spacing - note there is no clipping yet so right-aligned things may overflow
+
+            constexpr float audioLoadBlockSize = 90.0f;
+
+            float cursorSave = ImGui::GetCursorPosX();
+            float rightLoad  = audioLoadBlockSize;
+
+            // add the audio load indicator first, far right
+            {
+                ImGui::Dummy( ImVec2( ImGui::GetContentRegionAvail().x - audioLoadBlockSize, 0.0f ) );
+                ImGui::Separator();
+
+                const double audioEngineLoad = m_mdAudio->getAudioEngineCPULoadPercent();
+                m_audoLoadAverage.update( audioEngineLoad );
+
+                ImGui::Text( "LOAD %03.0f%%", m_audoLoadAverage.m_average );
+            }
+
+            for ( const auto& statusBlock : m_statusBarBlocksRight )
+            {
+                ImGui::SetCursorPosX( cursorSave );
+
+                ImGui::Dummy( ImVec2( ImGui::GetContentRegionAvail().x - ( statusBlock.m_size + rightLoad ), 0.0f ) );
+                ImGui::Separator();
+
+                statusBlock.m_callback();
+
+                rightLoad += statusBlock.m_size;
+            }
+
+
             ImGui::Separator();
-            ImGui::Text( "LOAD %03.0f%%", m_audoLoadAverage.m_average );
 
 
+            ImGui::PopStyleColor();
             ImGui::EndStatusBar();
         }
     }
 
-#ifdef _DEBUG
-    if ( demoWindowVisible )
-        ImGui::ShowDemoWindow( &demoWindowVisible );
-#endif
+#if OURO_DEBUG
+    if ( m_showImGuiDebugWindow )
+        ImGui::ShowDemoWindow( &m_showImGuiDebugWindow );
+#endif // OURO_DEBUG
 
     ImGui::PushFont( m_mdFrontEnd->getFont( app::module::Frontend::FontChoice::FixedMain ) );
+
+
+    // run active modal dialog callbacks
+    for ( const auto& modalPair : m_modalsActive )
+    {
+        std::get<1>( modalPair )( std::get<0>( modalPair ).c_str() );
+    }
+    if ( !m_modalsActive.empty() )
+    {
+        // purge any modals that ImGui no longer claims as Open
+        auto new_end = std::remove_if( m_modalsActive.begin(),
+                                       m_modalsActive.end(),
+                                       []( const std::tuple< std::string, ModalPopupExecutor >& ma )
+                                       {
+                                           return !ImGui::IsPopupOpen( std::get<0>( ma ).c_str() );
+                                       });
+
+        for ( auto it = new_end; it != m_modalsActive.end(); ++it )
+        {
+            blog::core( "modal discard : [{}]", std::get<0>( *it ) );
+        }
+        m_modalsActive.erase( new_end, m_modalsActive.end() );
+    }
+
 
     return true;
 }
@@ -405,6 +490,15 @@ bool CoreGUI::beginInterfaceLayout(
 // ---------------------------------------------------------------------------------------------------------------------
 void CoreGUI::submitInterfaceLayout()
 {
+    // trigger popups that are waiting after we're clear of the imgui UI stack
+    for ( const auto& modalToPop : m_modalsWaiting )
+    {
+        blog::core( "modal open : [{}]", modalToPop );
+        ImGui::OpenPopup( modalToPop.c_str() );
+    }
+    m_modalsWaiting.clear();
+
+
     ImGui::PopFont();
 
     // keep track of perf for the main loop
@@ -459,23 +553,19 @@ void CoreGUI::ImGuiPerformanceTracker()
         ImGui::EndTable();
     }
 
-    static constexpr auto executionStages = app::module::Audio::ExposedState::cNumExecutionStages - 1;
-    using PerfPoints = std::array< double, executionStages >;
+    static constexpr auto executionStages = app::module::Audio::ExposedState::cNumExecutionStages;
+    using PerfPoints = std::array< uint64_t, executionStages >;
 
     static int32_t maxCountdown = 256;       // ignore early [max] readings to disregard boot-up spikes
-    static PerfPoints maxPerf = { 0.0, 0.0, 0.0 };
+    static PerfPoints maxPerf = { 0, 0, 0 };
     PerfPoints totalPerf;
-    totalPerf.fill( 0.0 );
+    totalPerf.fill( 0 );
 
     for ( uint32_t pI = 0; pI < app::module::Audio::ExposedState::cPerfTrackSlots; pI++ )
     {
-        // ignore perf counters that are mid-update (where the end counter hasn't been updated yet)
-        if ( aeState.m_perfCounters[executionStages][pI] < aeState.m_perfCounters[0][pI] )
-            continue;
-
-        for ( auto cI = 0; cI < executionStages; cI++ )
+        for ( auto cI = 1; cI < executionStages; cI++ )
         {
-            const double perfValue = (double)(aeState.m_perfCounters[cI+1][pI] - aeState.m_perfCounters[cI][pI]) * 1000000.0 * aeState.m_perfCounterFreqRcp;
+            const uint64_t perfValue = aeState.m_perfCounters[cI][pI];
 
             // only update max scores once initial grace period has passed
             if ( maxCountdown == 0 )
@@ -488,10 +578,9 @@ void CoreGUI::ImGuiPerformanceTracker()
     }
     maxCountdown = std::max( 0, maxCountdown - 1 );
 
-    double totalSum = 0;
+    uint64_t totalSum = 0;
     for ( auto cI = 0; cI < executionStages; cI++ )
     {
-        totalPerf[cI] *= app::module::Audio::ExposedState::cPerfSumRcp;
         totalSum += totalPerf[cI];
     }
 
@@ -502,17 +591,17 @@ void CoreGUI::ImGuiPerformanceTracker()
         ImGui::TableSetupColumn( "", ImGuiTableColumnFlags_None );
         ImGui::TableHeadersRow();
         ImGui::PopStyleColor();
-
+        
         ImGui::TableNextColumn(); ImGui::TextUnformatted( "Mixer" );
-        ImGui::TableNextColumn(); ImGui::Text( "%9.1f us", totalPerf[0] );
+        ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalPerf[1] );
         ImGui::TableNextColumn(); ImGui::TextUnformatted( "VST" );
-        ImGui::TableNextColumn(); ImGui::Text( "%9.1f us", totalPerf[1] );
+        ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalPerf[2] );
         ImGui::TableNextColumn(); ImGui::TextUnformatted( "Interleave" );
-        ImGui::TableNextColumn(); ImGui::Text( "%9.1f us", totalPerf[2] );
+        ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalPerf[3] );
         ImGui::TableNextColumn(); ImGui::TextUnformatted( "Recorder" );
-        ImGui::TableNextColumn(); ImGui::Text( "%9.1f us", totalPerf[3] );
+        ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalPerf[4] );
         ImGui::TableNextColumn(); ImGui::TextUnformatted( "Total" );
-        ImGui::TableNextColumn(); ImGui::Text( "%9.1f us", totalSum );
+        ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalSum );
         ImGui::TableNextColumn(); ImGui::TextUnformatted( "Load" );
         ImGui::TableNextColumn(); ImGui::Text( "%9.1f %%", m_mdAudio->getAudioEngineCPULoadPercent() );
 
@@ -527,17 +616,17 @@ void CoreGUI::ImGuiPerformanceTracker()
         ImGui::PopStyleColor();
 
         ImGui::TableNextColumn(); ImGui::TextUnformatted( "Mixer" );
-        ImGui::TableNextColumn(); ImGui::Text( "%9.1f us", maxPerf[0] );
+        ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", maxPerf[1] );
         ImGui::TableNextColumn(); ImGui::TextUnformatted( "VST" );
-        ImGui::TableNextColumn(); ImGui::Text( "%9.1f us", maxPerf[1] );
+        ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", maxPerf[2] );
         ImGui::TableNextColumn(); ImGui::TextUnformatted( "Recorder" );
-        ImGui::TableNextColumn(); ImGui::Text( "%9.1f us", maxPerf[2] );
+        ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", maxPerf[3] );
 
         ImGui::TableNextColumn(); 
         ImGui::Spacing();
         if ( ImGui::Button( "Reset" ) )
         {
-            maxPerf.fill( 0.0 );
+            maxPerf.fill( 0 );
         }
         ImGui::Spacing(); ImGui::TableNextColumn();
 
@@ -560,6 +649,86 @@ void CoreGUI::ImGuiPerformanceTracker()
     }
 
     ImGui::End();
+}
+
+app::CoreGUI::UIInjectionHandle CoreGUI::registerStatusBarBlock( const StatusBarAlignment alignment, const float size, const UIInjectionCallback& callback )
+{
+    const auto newHandle = m_injectionHandleCounter++;
+
+    if ( alignment == StatusBarAlignment::Left )
+        m_statusBarBlocksLeft.emplace_back( newHandle, size, callback );
+    else
+        m_statusBarBlocksRight.emplace_back( newHandle, size, callback );
+
+    return newHandle;
+}
+
+bool CoreGUI::unregisterStatusBarBlock( const UIInjectionHandle handle )
+{
+    bool foundSomething = false;
+    {
+        auto new_end = std::remove_if( m_statusBarBlocksLeft.begin(),
+                                       m_statusBarBlocksLeft.end(),
+                                       [handle]( const StatusBarBlock& sbb )
+                                       {
+                                           return sbb.m_handle == handle;
+                                       });
+        foundSomething |= (new_end != m_statusBarBlocksLeft.end());
+        m_statusBarBlocksLeft.erase( new_end, m_statusBarBlocksLeft.end() );
+    }
+    {
+        auto new_end = std::remove_if( m_statusBarBlocksRight.begin(),
+                                       m_statusBarBlocksRight.end(),
+                                       [handle]( const StatusBarBlock& sbb )
+                                       {
+                                           return sbb.m_handle == handle;
+                                       });
+        foundSomething |= (new_end != m_statusBarBlocksRight.end());
+        m_statusBarBlocksRight.erase( new_end, m_statusBarBlocksRight.end() );
+    }
+
+    return foundSomething;
+}
+
+app::CoreGUI::UIInjectionHandle CoreGUI::registerMainMenuEntry( const int32_t ordering, const std::string& menuName, const UIInjectionCallback& callback )
+{
+    const auto newHandle = m_injectionHandleCounter++;
+
+    MenuMenuEntry* menuEntry = nullptr;
+
+    // find existing top level menu? 
+    for ( auto& existingMenu : m_mainMenuEntries )
+    {
+        if ( existingMenu.m_name == menuName )
+        {
+            menuEntry = &existingMenu;
+            break;
+        }
+    }
+    // .. or not, so create new entry for this name
+    if ( menuEntry == nullptr )
+    {
+        auto& newEntry = m_mainMenuEntries.emplace_back();
+        newEntry.m_name = menuName;
+        menuEntry = &newEntry;
+    }
+
+    menuEntry->m_ordering = ordering;
+    menuEntry->m_handles.emplace_back( newHandle );
+    menuEntry->m_callbacks.emplace_back( callback );
+
+    // resort menu stack each time we add anything
+    std::sort( m_mainMenuEntries.begin(), m_mainMenuEntries.end(), []( const MenuMenuEntry& lhs, const MenuMenuEntry& rhs )
+        {
+            return lhs.m_ordering < rhs.m_ordering;
+        });
+
+    return newHandle;
+}
+
+bool CoreGUI::unregisterMainMenuEntry( const UIInjectionHandle handle )
+{
+    return false;
 }
 
 } // namespace app

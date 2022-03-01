@@ -70,7 +70,7 @@ void CompactTooltip( const char* tip );
 bool KnobFloat( const char* label, const float outerRadius, float* p_value, float v_min, float v_max, float v_step );
 
 // ---------------------------------------------------------------------------------------------------------------------
-bool Spinner( const char* label, bool active, float radius, float thickness, const ImU32& color );
+bool Spinner( const char* label, bool active, float radius, float thickness, float yOffset, const ImU32& color );
 
 // ---------------------------------------------------------------------------------------------------------------------
 void BeatSegments(

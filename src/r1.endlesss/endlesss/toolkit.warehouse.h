@@ -112,7 +112,6 @@ protected:
     ContentsReportCallback                  m_cbContentsReportToInstall = nullptr;
     std::mutex                              m_cbMutex;
 
-    //tf::Executor                            m_taskExecutor;
     std::unique_ptr<std::thread>            m_workerThread;
     std::atomic_bool                        m_workerThreadAlive;
     std::atomic_bool                        m_workerThreadPaused;

@@ -1097,7 +1097,7 @@ bool GetRiffDataTask::Work( TaskQueue& currentTasks )
                 const auto setInsert = uniqueStemCIDs.emplace( stemCID );
                 if ( setInsert.second )
                 {
-                    stemsToValidate.emplace_back( std::move(stemCID) );
+                    stemsToValidate.emplace_back( stemCID );
                 }
             }
         }

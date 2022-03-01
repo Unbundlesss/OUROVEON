@@ -18,7 +18,7 @@
 #include "app/core.h"
 #include "app/module.audio.h"
 
-#include "ssp/opus.h"
+#include "ssp/ssp.stream.opus.h"
 
 #include "dpp/dpp.h"
 
@@ -38,7 +38,7 @@ using VoiceChannelNameMap = std::unordered_map< dpp::snowflake, std::string >;
 struct Bot::State
 {
     // lf queue exchanging completed blocks of packets from sample processor (audio thread) and our dispatch (main thread)
-    using OpusPacketQueue = mcc::ReaderWriterQueue<ssp::OpusPacketStreamInstance>;
+    using OpusPacketQueue = mcc::ReaderWriterQueue<ssp::OpusPacketDataInstance>;
 
 
     State( app::ICoreServices& coreServices, const config::discord::Connection& configConnection )
@@ -58,7 +58,9 @@ struct Bot::State
 
     ~State()
     {
-        m_appCoreServices.getAudioModule()->clearAuxSampleProcessor();
+        m_appCoreServices.getAudioModule()->blockUntil(
+            m_appCoreServices.getAudioModule()->detachSampleProcessor( m_opusStreamProcessorID ) );
+
         m_phase = Bot::ConnectionPhase::Uninitialised;
     }
 
@@ -158,16 +160,20 @@ struct Bot::State
         // create and install an OPUS sample processor that points back to this bot instance; we will accept and
         // handle the blocks of packets it returns.
         // nb. 48000 hz sample rate is required by Discord and should be enforced by the UI / app boot process if you want to use the bot interface
-        auto opusProcessor = ssp::PagedOpus::Create( std::bind( &State::onOpusPacketBlock, this, std::placeholders::_1 ), 48000 );
-        m_appCoreServices.getAudioModule()->installAuxSampleProcessor( std::move( opusProcessor ) );
+        m_opusStreamProcessor = ssp::OpusStream::Create( std::bind( &State::onOpusPacketBlock, this, std::placeholders::_1 ), 48000 );
+
+        assert( m_opusStreamProcessorID == ssp::StreamProcessorInstanceID::invalid() );
+        m_opusStreamProcessorID = m_opusStreamProcessor->getInstanceID();
+        m_appCoreServices.getAudioModule()->attachSampleProcessor( m_opusStreamProcessor );
     }
 
-    void onOpusPacketBlock( ssp::OpusPacketStreamInstance&& packets )
+    // called from compressor thread; take the data and return as fast as we can
+    void onOpusPacketBlock( ssp::OpusPacketDataInstance&& packets )
     {
         if ( m_voiceState != Bot::VoiceState::Joined )
             return;
 
-        blog::discord( "[ OPUS ] packet stream enqueued" );
+        blog::discord( "[ OPUS ] new packet stream enqueued" );
 
         m_opusQueue.enqueue( std::move( packets ) );
     }
@@ -341,6 +347,10 @@ struct Bot::State
     dpp::cluster                            m_cluster;
     dpp::commandhandler                     m_commandHandler;
 
+    std::shared_ptr<ssp::OpusStream>        m_opusStreamProcessor;
+    ssp::StreamProcessorInstanceID          m_opusStreamProcessorID;
+
+
     const dpp::snowflake                    m_guildSID;
     GuildMetadataOptional                   m_guildMetadata;
 
@@ -354,8 +364,8 @@ struct Bot::State
     VoiceChannelNameMap                     m_voiceChannelNamesByID;
 
     OpusPacketQueue                         m_opusQueue;
-    ssp::OpusPacketStreamInstance           m_opusPacketInProgress;
-    ssp::OpusPacketStreamInstance           m_opusPacketInReserve;
+    ssp::OpusPacketDataInstance             m_opusPacketInProgress;
+    ssp::OpusPacketDataInstance             m_opusPacketInReserve;
     bool                                    m_opusDispatchRunning;
 };
 
@@ -426,7 +436,7 @@ void Bot::State::update( DispatchStats& stats )
         else if ( m_voiceState == Bot::VoiceState::Flux )
         {
             // flush all the dispatch state when in Flux
-            ssp::OpusPacketStreamInstance flushQueue;
+            ssp::OpusPacketDataInstance flushQueue;
             while ( m_opusQueue.try_dequeue( flushQueue ) )
             {
                 blog::discord( "draining packet queue..." );

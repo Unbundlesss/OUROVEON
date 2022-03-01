@@ -37,7 +37,22 @@ struct Stem
 
     void fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath );
 
-    inline bool hasFailed() const 
+    void fft();
+
+    // stem needs a copy of the analysis task future to ensure that in the unlikely case
+    // of destruction arriving before the task is done, we wait to avoid the analysis working with a deleted object
+    inline void keepFuture( std::shared_future<void>& analysisFuture )
+    {
+        assert( !m_analysisFuture.valid() );
+        m_analysisFuture = analysisFuture;
+    }
+
+    inline bool isAnalysisComplete() const
+    {
+        return m_hasValidAnalysis;
+    }
+
+    constexpr bool hasFailed() const 
     {
         return ( m_state == State::Failed_Http          ||
                  m_state == State::Failed_DataUnderflow ||
@@ -65,9 +80,12 @@ private:
     // returns false if something broke; sets the m_state appropriately in that case
     bool attemptRemoteFetch( const api::NetConfiguration& ncfg, const uint32_t attemptUID, RawAudioMemory& audioMemory );
 
-    void fft();
 
     size_t computeMemoryUsage() const;
+
+
+    std::shared_future<void>        m_analysisFuture;
+    std::atomic_bool                m_hasValidAnalysis; // set in async analysis if analysis data is to be trusted
 
 public:
     const types::Stem               m_data;

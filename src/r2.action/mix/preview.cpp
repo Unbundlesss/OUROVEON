@@ -8,8 +8,9 @@
 #include "pch.h"
 
 #include "mix/preview.h"
-#include "ssp/flac.h"
-#include "ssp/wav.h"
+
+#include "ssp/ssp.file.wav.h"
+#include "ssp/ssp.file.flac.h"
 
 #include "app/core.h"
 #include "app/imgui.ext.h"
@@ -17,6 +18,8 @@
 
 #include "endlesss/core.constants.h"
 #include "endlesss/live.stem.h"
+#include "endlesss/toolkit.export.h"
+
 
 namespace mix {
 
@@ -283,15 +286,6 @@ void Preview::imgui( const app::StoragePaths& storagePaths )
 
         // toggle transition mode
         {
-            ImGui::BeginDisabledControls( !currentRiffIsValid );
-            if ( ImGui::Button( ICON_FA_SAVE ) )
-            {
-                exportRiff( storagePaths, currentRiffPtr );
-            }
-            ImGui::EndDisabledControls( !currentRiffIsValid );
-            ImGui::CompactTooltip( "Export Current Playback" );
-            ImGui::SameLine();
-
             {
                 ImGui::Scoped::ToggleButton highlightButton( m_lockTransitionToNextBar, true );
                 if ( ImGui::Button( ICON_FA_RULER_HORIZONTAL ) )
@@ -339,72 +333,6 @@ void Preview::imgui( const app::StoragePaths& storagePaths )
             ImGui::EndDisabledControls( !m_lockTransitionToNextBar );
         }
     }
-}
-
-// ---------------------------------------------------------------------------------------------------------------------
-void Preview::exportRiff( const app::StoragePaths& storagePaths, const endlesss::live::RiffPtr& riffPtr )
-{
-    const auto currentRiff = riffPtr.get();
-
-    std::string asciiJamName;
-    base::asciifyString( currentRiff->m_riffData.jam.displayName, asciiJamName );
-
-    const auto jamOutputPath = fs::path{ storagePaths.outputApp } /
-                               fs::path{ asciiJamName };
-
-    if ( !fs::exists( jamOutputPath ) )
-    {
-        fs::create_directory( jamOutputPath );
-    }
-
-    const auto riffTimestamp = date::make_zoned(
-        date::current_zone(),
-        date::floor<std::chrono::seconds>( currentRiff->m_stTimestamp )
-    );
-    const auto riffTimestampPrefix = date::format( "%Y%m%d.%H%M%S_", riffTimestamp );
-
-    const auto riffOutputPath = fs::path{ jamOutputPath } /
-                                fs::path{ fmt::format( "{}_{:#x}_{}bpm_{}-{}", 
-                                            riffTimestampPrefix, 
-                                            currentRiff->getCIDHash().getID(),
-                                            currentRiff->m_riffData.riff.BPMrnd,
-                                            endlesss::constants::cRootNames[currentRiff->m_riffData.riff.root],
-                                            endlesss::constants::cScaleNamesFilenameSanitize[currentRiff->m_riffData.riff.scale] )
-                                        };
-    if ( !fs::exists( riffOutputPath ) )
-    {
-        fs::create_directory( riffOutputPath );
-    }
-
-    const auto riffMetadataPath = fs::path{ riffOutputPath } / "metadata.json";
-    try
-    {
-        std::ofstream is( riffMetadataPath.string() );
-        cereal::JSONOutputArchive archive( is );
-
-        archive( currentRiff->m_riffData );
-    }
-    catch ( std::exception ex )
-    {
-        blog::error::cfg( "unable to save metadata, {}", ex.what() );
-    }
-
-    const uint32_t exportSampleRate = currentRiff->m_targetSampleRate;
-    currentRiff->exportToDisk( [&]( const uint32_t stemIndex, const endlesss::live::Stem& stemData ) -> ssp::SampleStreamProcessorInstance
-        {
-            const auto flacFilename = fs::absolute(
-                riffOutputPath /
-                fmt::format( "{}_stem_{}_{}_{}.wav",
-                    riffTimestampPrefix,
-                    stemIndex,
-                    stemData.m_data.user,
-                    stemData.m_data.couchID.value() ) ).string();
-
-            return ssp::WAVWriter::Create(
-                flacFilename,
-                exportSampleRate,
-                true );
-        });
 }
 
 }

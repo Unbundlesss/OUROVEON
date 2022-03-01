@@ -11,6 +11,7 @@
 
 #include "config/base.h"
 
+#include "base/metaenum.h"
 #include "base/utils.h"
 
 namespace config {
@@ -21,9 +22,11 @@ struct Audio : public Base
     static constexpr auto StoragePath       = IPathProvider::PathFor::SharedConfig;
     static constexpr auto StorageFilename   = "audio.json";
 
+
     uint32_t        sampleRate = 44100;
     std::string     lastDevice = "";
     bool            lowLatency = true;
+    uint32_t        bufferSize = 0;
 
 
     template<class Archive>
@@ -32,6 +35,7 @@ struct Audio : public Base
         archive( CEREAL_NVP( sampleRate )
                , CEREAL_NVP( lastDevice )
                , CEREAL_NVP( lowLatency )
+               , CEREAL_OPTIONAL_NVP( bufferSize )
         );
     }
 };

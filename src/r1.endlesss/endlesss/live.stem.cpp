@@ -30,6 +30,7 @@ Stem::Stem( const types::Stem& stemData, const uint32_t targetSampleRate )
     , m_state( State::Empty )
     , m_sampleRate( targetSampleRate )
     , m_sampleCount( 0 )
+    , m_hasValidAnalysis( false )
 {
     m_channel.fill( nullptr );
 
@@ -41,6 +42,10 @@ Stem::Stem( const types::Stem& stemData, const uint32_t targetSampleRate )
 // ---------------------------------------------------------------------------------------------------------------------
 Stem::~Stem()
 {
+    // let any outstanding background functions finish
+    if ( m_analysisFuture.valid() )
+        m_analysisFuture.wait();
+
     blog::stem( "releasing C:{}", m_data.couchID );
 
     mem::free16( m_channel[0] );
@@ -127,25 +132,19 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
         }
     }
 
-    // emit a successful capture back to the cache
-    {
-        std::basic_ofstream<char> ofs( cacheFile, std::ios::out | std::ios::binary );
-        ofs.write( (char*)audioMemory.m_rawAudio, audioMemory.m_rawReceived );
-    }
-
     // basic magic header check
     if ( audioMemory.m_rawAudio[0] != 'O' ||
          audioMemory.m_rawAudio[1] != 'g' ||
          audioMemory.m_rawAudio[2] != 'g' ||
          audioMemory.m_rawAudio[3] != 'S' )
     {
-        blog::error::stem( "vorbis header broken [{}] | {}", m_data.couchID, audioMemory.m_rawAudio );
+        blog::error::stem( "vorbis header broken [{}]", m_data.couchID );
         m_state = State::Failed_Vorbis;
         return;
     }
 
     // decode the vorbis stream into interleaved shorts
-    short* oggData = nullptr;
+    short*  oggData = nullptr;
     int32_t oggChannels;
     int32_t oggSampleRate;
 
@@ -170,6 +169,12 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
         m_state = State::Failed_Vorbis;
         free( oggData );
         return;
+    }
+
+    // emit a successful capture back to the cache
+    {
+        std::basic_ofstream<char> ofs( cacheFile, std::ios::out | std::ios::binary );
+        ofs.write( (char*)audioMemory.m_rawAudio, audioMemory.m_rawReceived );
     }
 
     const double shortToDoubleNormalisedRcp = 1.0 / 32768.0;
@@ -223,8 +228,6 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
     }
 
     free( oggData );
-
-    fft();
 
     m_state = State::Complete;
 
@@ -320,7 +323,7 @@ bool Stem::attemptRemoteFetch( const api::NetConfiguration& ncfg, const uint32_t
 
     if ( audioMemory.m_rawReceived != audioMemory.m_rawLength )
     {
-        auto result = cdnClient->get_openssl_verify_result();
+        // auto result = cdnClient->get_openssl_verify_result();
 
         blog::error::stem( "ogg data size mismatch [{}{}] (expected {}, got {})", httpUrl, slashedKey, audioMemory.m_rawLength, audioMemory.m_rawReceived );
         m_state = State::Failed_DataUnderflow;
@@ -362,6 +365,10 @@ void Stem::fft()
     constexpr float   fftVarianceRcp    = 1.0f / (float)(fftWindowSize / fftBandBuckets);
 
     static_assert((fftWindowSize >> fftWindowToBucket) == fftBandBuckets, "incorrect bitshift value for window->bucket");
+
+    // such a small stem that we can't really do much? shout out to Blackest Jammmmmmmmmmm
+    if ( m_sampleCount <= fftWindowSize )
+        return;
 
     const uint64_t    fftTimeSlices     = m_sampleCount / fftWindowSize;
     
@@ -499,6 +506,8 @@ void Stem::fft()
     mem::free16( fftOutLowBand );
     mem::free16( fftOutMagnitude );
     mem::free16( fftDataIn );
+
+    m_hasValidAnalysis = true;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -509,9 +518,13 @@ size_t Stem::computeMemoryUsage() const
     result += sizeof( types::Stem );
     result += sizeof( int32_t ) * 4;
     result += m_sampleCount * sizeof( float ) * 2;
-    result += m_detectedBeatTimes.size() * sizeof( double );
-    result += m_sampleEnergy.size() * sizeof( float );
-    result += m_sampleBeat.size() * sizeof( uint64_t );
+
+    if ( m_hasValidAnalysis )
+    {
+        result += m_detectedBeatTimes.size() * sizeof( double );
+        result += m_sampleEnergy.size() * sizeof( float );
+        result += m_sampleBeat.size() * sizeof( uint64_t );
+    }
 
     return result;
 }
@@ -542,7 +555,7 @@ void Stem::RawAudioMemory::allocate( size_t newSize )
         mem::free16( m_rawAudio );
 
     m_rawLength = newSize;
-    m_rawAudio = mem::malloc16AsSet< uint8_t >( m_rawLength, 0 );
+    m_rawAudio = mem::malloc16AsSet< uint8_t >( m_rawLength + 4, 0 );   // +4 supports header read check in worst case of empty buf
 }
 
 } // namespace live

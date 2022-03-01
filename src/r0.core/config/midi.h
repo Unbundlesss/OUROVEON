@@ -21,15 +21,11 @@ struct Midi : public Base
     static constexpr auto StoragePath       = IPathProvider::PathFor::SharedConfig;
     static constexpr auto StorageFilename   = "midi.json";
 
-    std::vector< uint8_t >      relativeDecrementSignals;
-    std::vector< uint8_t >      relativeIncrementSignals;
 
     template<class Archive>
     void serialize( Archive& archive )
     {
-        archive( CEREAL_NVP( relativeDecrementSignals )
-               , CEREAL_NVP( relativeIncrementSignals )
-        );
+
     }
 };
 using MidiOptional = std::optional< Midi >;

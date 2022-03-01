@@ -18,8 +18,8 @@
 #include "win32/errors.h"
 #include "win32/utils.h"
 
-#include "ssp/wav.h"
-#include "ssp/flac.h"
+#include "ssp/ssp.file.wav.h"
+#include "ssp/ssp.file.flac.h"
 
 #include "portaudio.h"
 
@@ -100,7 +100,7 @@ bool Audio::initOutput( const config::Audio& outputDevice )
                         nullptr,
                         &outputParameters,
                         outputDevice.sampleRate,
-                        0,
+                        outputDevice.bufferSize,
                         paNoFlag,
                         PortAudioCallback,
                         (void *)this );
@@ -195,28 +195,57 @@ void Audio::ProcessMixCommandsOnMixThread()
                 m_mixerInterface = mixCmdData.getPtrAs<MixerInterface>();
                 break;
             case MixThreadCommand::InstallVST:
-#if OURO_FEATURES_VST
+#if OURO_FEATURE_VST24
                 m_vstiStack.emplace_back( mixCmdData.getPtrAs<vst::Instance>() );
-#endif // OURO_FEATURES_VST
+#endif // OURO_FEATURE_VST24
                 break;
             case MixThreadCommand::ClearAllVSTs:
-#if OURO_FEATURES_VST
+#if OURO_FEATURE_VST24
                 m_vstiStack.clear();
-#endif // OURO_FEATURES_VST
+#endif // OURO_FEATURE_VST24
                 break;
             case MixThreadCommand::ToggleVSTBypass:
-#if OURO_FEATURES_VST
+#if OURO_FEATURE_VST24
                 m_vstBypass = !m_vstBypass;
-#endif // OURO_FEATURES_VST
+#endif // OURO_FEATURE_VST24
                 break;
             case MixThreadCommand::ToggleMute:
                 m_mute = !m_mute;
                 break;
-            case MixThreadCommand::InstallSampleProcessor:
-                m_sampleProcessorsInstalled[commandI64] = std::move( m_sampleProcessorsToInstall[commandI64] );
+            case MixThreadCommand::AttachSampleProcessor:
+                {
+                    ssp::SampleStreamProcessorInstance instance;
+                    if ( m_sampleProcessorsToInstall.try_dequeue( instance ) )
+                    {
+                        m_sampleProcessorsInstalled.emplace_back( instance );
+                        blog::mix( "attaching SSP [{}]", instance->getInstanceID().get() );
+                    }
+                    else
+                    {
+                        blog::error::mix( "unable to deque new SSP on mix thread" );
+                    }
+                }
                 break;
-            case MixThreadCommand::ClearSampleProcessor:
-                m_sampleProcessorsInstalled[commandI64].reset();
+            case MixThreadCommand::DetatchSampleProcessor:
+                {
+                    ssp::StreamProcessorInstanceID idToRemove( (uint32_t)commandI64 );
+
+                    auto new_end = std::remove_if( m_sampleProcessorsInstalled.begin(),
+                                                   m_sampleProcessorsInstalled.end(),
+                                                  [=]( ssp::SampleStreamProcessorInstance& ssp )
+                                                  {
+                                                      return ssp->getInstanceID() == idToRemove;
+                                                  });
+                    if ( new_end == m_sampleProcessorsInstalled.end() )
+                    {
+                        blog::error::mix( "unable to detach SSP [{}]", commandI64 );
+                    }
+                    else
+                    {
+                        blog::mix( "detaching SSP [{}]", commandI64 );
+                    }
+                    m_sampleProcessorsInstalled.erase( new_end, m_sampleProcessorsInstalled.end() );
+                }
                 break;
         }
 
@@ -235,7 +264,7 @@ int Audio::PortAudioCallbackInternal( void* outputBuffer, unsigned long framesPe
     // pass control to the installed mixer, if we have one
     if ( m_mixerInterface != nullptr )
     {
-        m_mixerInterface->update( *m_mixerBuffers, m_volume, framesPerBuffer, m_state.m_samplePos );
+        m_mixerInterface->update( *m_mixerBuffers, m_gain, framesPerBuffer, m_state.m_samplePos );
     }
     // otherwise, ssshhh
     else
@@ -273,7 +302,7 @@ int Audio::PortAudioCallbackInternal( void* outputBuffer, unsigned long framesPe
     // if we don't use VSTs to process our samples into the output buffer, then we must eventually manually copy them raw; this tracks that
     bool outputsWritten = false;
 
-#if OURO_FEATURES_VST
+#if OURO_FEATURE_VST24
     if ( m_vstBypass == false )
     {
         for ( auto vstInst : m_vstiStack )
@@ -288,7 +317,7 @@ int Audio::PortAudioCallbackInternal( void* outputBuffer, unsigned long framesPe
             }
         }
     }
-#endif // OURO_FEATURES_VST
+#endif // OURO_FEATURE_VST24
 
     m_state.mark( ExposedState::ExecutionStage::VSTs );
 
@@ -304,7 +333,6 @@ int Audio::PortAudioCallbackInternal( void* outputBuffer, unsigned long framesPe
     }
 
     {
-        // #hdd not like this is slow but could probably be ISPCd
         float* out = (float*)outputBuffer;
         for ( auto i = 0U; i < framesPerBuffer; i++ )
         {
@@ -326,11 +354,10 @@ int Audio::PortAudioCallbackInternal( void* outputBuffer, unsigned long framesPe
 
     for ( auto& ssp : m_sampleProcessorsInstalled )
     {
-        if ( ssp )
-            ssp->appendSamples( resultChannelLeft, resultChannelRight, framesPerBuffer );
+        ssp->appendSamples( resultChannelLeft, resultChannelRight, framesPerBuffer );
     }
 
-    m_state.mark( ExposedState::ExecutionStage::RecordToDisk );
+    m_state.mark( ExposedState::ExecutionStage::SampleProcessing );
 
     // mute only the final output if requested - preserve all the processed work and WAV-output
     if ( m_mute )
@@ -342,15 +369,16 @@ int Audio::PortAudioCallbackInternal( void* outputBuffer, unsigned long framesPe
 // ---------------------------------------------------------------------------------------------------------------------
 bool Audio::beginRecording( const std::string& outputPath, const std::string& filePrefix )
 {
-    auto wavFilename = fs::absolute( fs::path( outputPath ) / fmt::format( "{}_finalmix.flac", filePrefix ) ).string();
-    blog::core( "Opening FLAC final-mix output '{}'", wavFilename );
+    assert( !isRecording() );
 
-    auto newRecorder = ssp::FLACWriter::Create( wavFilename, getSampleRate(), 5 );
-    if ( newRecorder )
+    auto outputFilename = fs::absolute( fs::path( outputPath ) / fmt::format( "{}_finalmix.flac", filePrefix ) ).string();
+    blog::core( "Opening FLAC final-mix output '{}'", outputFilename );
+
+    assert( m_currentRecorderProcessor == nullptr );
+    m_currentRecorderProcessor = ssp::FLACWriter::Create( outputFilename, getSampleRate(), 1.0f );
+    if ( m_currentRecorderProcessor )
     {
-        m_sampleProcessorsToInstall[0] = std::move( newRecorder );
-
-        m_mixThreadCommandQueue.emplace( MixThreadCommand::InstallSampleProcessor, 0 );
+        attachSampleProcessor( m_currentRecorderProcessor );
         return true;
     }
     return false;
@@ -359,20 +387,23 @@ bool Audio::beginRecording( const std::string& outputPath, const std::string& fi
 // ---------------------------------------------------------------------------------------------------------------------
 void Audio::stopRecording()
 {
-    m_mixThreadCommandQueue.emplace( MixThreadCommand::ClearSampleProcessor, 0 );
+    assert( isRecording() );
+    blockUntil( 
+        detachSampleProcessor( m_currentRecorderProcessor->getInstanceID() ) );
+    m_currentRecorderProcessor.reset();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 bool Audio::isRecording() const
 {
-    return m_sampleProcessorsInstalled[0] != nullptr;
+    return ( m_currentRecorderProcessor != nullptr );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 uint64_t Audio::getRecordingDataUsage() const
 {
     if ( isRecording() )
-        return m_sampleProcessorsInstalled[0]->getStorageUsageInBytes();
+        return m_currentRecorderProcessor->getStorageUsageInBytes();
 
     return 0;
 }
@@ -388,7 +419,7 @@ AsyncCommandCounter Audio::toggleEffectBypass()
 // ---------------------------------------------------------------------------------------------------------------------
 bool Audio::isEffectBypassEnabled() const
 {
-#if OURO_FEATURES_VST
+#if OURO_FEATURE_VST24
     return m_vstBypass;
 #else
     return false;
@@ -419,20 +450,21 @@ AsyncCommandCounter Audio::installMixer( MixerInterface* mixIf )
     return AsyncCommandCounter{ commandCounter };
 }
 
+
 // ---------------------------------------------------------------------------------------------------------------------
-AsyncCommandCounter Audio::installAuxSampleProcessor( ssp::SampleStreamProcessorInstance&& sspInstance )
+AsyncCommandCounter Audio::attachSampleProcessor( ssp::SampleStreamProcessorInstance sspInstance )
 {
     const uint32_t commandCounter = m_mixThreadCommandsIssued++;
-    m_sampleProcessorsToInstall[1] = std::move( sspInstance );
-    m_mixThreadCommandQueue.emplace( MixThreadCommand::InstallSampleProcessor, 1 );
+    m_sampleProcessorsToInstall.enqueue( sspInstance );
+    m_mixThreadCommandQueue.emplace( MixThreadCommand::AttachSampleProcessor, commandCounter );
     return AsyncCommandCounter{ commandCounter };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-AsyncCommandCounter Audio::clearAuxSampleProcessor()
+AsyncCommandCounter Audio::detachSampleProcessor( ssp::StreamProcessorInstanceID sspID )
 {
     const uint32_t commandCounter = m_mixThreadCommandsIssued++;
-    m_mixThreadCommandQueue.emplace( MixThreadCommand::ClearSampleProcessor, 1 );
+    m_mixThreadCommandQueue.emplace( MixThreadCommand::DetatchSampleProcessor, sspID.get() );
     return AsyncCommandCounter{ commandCounter };
 }
 

@@ -37,17 +37,17 @@ concept Serializeable = requires( T& t )
 };
 
 
-template<typename T>
-constexpr bool HasPostLoad = requires( T& t )
-{
-    { t.postLoad() } -> std::same_as<bool>;
-};
-
-template<typename T>
-constexpr bool HasPreSave = requires( const T& t )
-{
-    { t.preSave() } -> std::same_as<bool>;
-};
+// template<typename T>
+// constexpr bool HasPostLoad = requires( T& t )
+// {
+//     { t.postLoad() } -> std::same_as<bool>;
+// };
+// 
+// template<typename T>
+// constexpr bool HasPreSave = requires( const T& t )
+// {
+//     { t.preSave() } -> std::same_as<bool>;
+// };
 
 
 struct Base

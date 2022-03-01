@@ -71,7 +71,8 @@ SketchUpload::~SketchUpload()
 
 
 Sketchbook::Sketchbook()
-    : m_lifecycle( this, []( Sketchbook* ) {} )
+    : m_uploadCounter( 0 )
+    , m_lifecycle( this, []( Sketchbook* ) {} )
 {
 
 }

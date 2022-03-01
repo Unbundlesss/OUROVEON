@@ -17,6 +17,8 @@
 
 #include "config/frontend.h"
 
+#include <commdlg.h>
+
 // bits from imgui internals
 #include "imgui_internal.h"
 
@@ -192,7 +194,9 @@ bool Frontend::create( const app::Core& appCore )
     m_isBorderless = true;
     applyBorderless();
 
-    blog::core( "bound OpenGL {} | GLSL {}", glGetString( GL_VERSION ), glGetString( GL_SHADING_LANGUAGE_VERSION ) );
+    blog::core( "bound OpenGL {} | GLSL {}",
+        (char*)glGetString( GL_VERSION ),                       // casts as glGetString returns uchar
+        (char*)glGetString( GL_SHADING_LANGUAGE_VERSION ) );
 
     glGetIntegerv( GL_MAX_TEXTURE_SIZE, (GLint*)&m_largestTextureDimension );
     blog::core( "GL_MAX_TEXTURE_SIZE = {}", m_largestTextureDimension );
@@ -364,14 +368,14 @@ void Frontend::applyBorderless()
 // ---------------------------------------------------------------------------------------------------------------------
 bool Frontend::showFilePicker( const char* spec, std::string& fileResult ) const
 {
-    /*
+    
     char filename[MAX_PATH];
 
     OPENFILENAMEA ofn;
     ZeroMemory( &filename, sizeof( filename ) );
     ZeroMemory( &ofn, sizeof( ofn ) );
     ofn.lStructSize = sizeof( ofn );
-    ofn.hwndOwner   = getHWND();
+    ofn.hwndOwner = nullptr;
     ofn.lpstrFilter = spec;
     ofn.lpstrFile   = filename;
     ofn.nMaxFile    = MAX_PATH;
@@ -383,7 +387,7 @@ bool Frontend::showFilePicker( const char* spec, std::string& fileResult ) const
         fileResult = filename;
         return true;
     }
-    */
+    
     return false;
 }
 

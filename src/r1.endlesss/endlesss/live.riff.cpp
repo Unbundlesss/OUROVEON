@@ -110,6 +110,9 @@ void Riff::fetch( const api::NetConfiguration& ncfg, endlesss::cache::Stems& ste
         blog::riff( "Fetching stems for riff [{}]", theRiff.couchID );
 
         tf::Taskflow stemLoadFlow;
+        tf::Taskflow stemAnalysisFlow;
+
+        std::vector< endlesss::live::Stem* > stemsWithAsyncAnalysis;
 
         for ( size_t stemI = 0; stemI < 8; stemI++ )
         {
@@ -123,12 +126,18 @@ void Riff::fetch( const api::NetConfiguration& ncfg, endlesss::cache::Stems& ste
 
                 endlesss::live::Stem* loopStemRaw = loopStemPtr.get();
 
-                // if this was a fresh stem, enqueue it for loading
+                // if this was a fresh stem, enqueue it for loading via task graph
                 if ( loopStemRaw->m_state == endlesss::live::Stem::State::Empty )
                 {
-                    stemLoadFlow.emplace( [&, loopStemRaw]() {
+                    stemLoadFlow.emplace( [&, loopStemRaw]()
+                    {
                         loopStemRaw->fetch( ncfg, stemCache.getCachePathForStem( stemData.couchID ) );
-                        } );
+                    });
+                    stemAnalysisFlow.emplace( [loopStemRaw]()
+                    {
+                        loopStemRaw->fft();
+                    });
+                    stemsWithAsyncAnalysis.push_back( loopStemRaw );
                 }
                 m_stemPtrs.push_back( loopStemRaw );
 
@@ -146,9 +155,15 @@ void Riff::fetch( const api::NetConfiguration& ncfg, endlesss::cache::Stems& ste
             }
         }
 
-        // load the stem data via job system
-        taskExecutor.run( stemLoadFlow );
-        taskExecutor.wait_for_all();
+        // spread out stem loading across task system
+        auto stemLoadFuture = taskExecutor.run( stemLoadFlow );
+        stemLoadFuture.wait();
+
+        // with data loaded, enqueue the post-process analysis tasks; shift ownership of the graph and return
+        // a future that all stems can wait() on pre-destruction to ensure the underlying data isn't tossed before the tasks complete
+        std::shared_future<void> stemSharedAnalysis( taskExecutor.run( std::move(stemAnalysisFlow) ) );
+        for ( endlesss::live::Stem* rawStem : stemsWithAsyncAnalysis )
+            rawStem->keepFuture( stemSharedAnalysis );
 
         // once stems are loaded, work out their final lengths so we can determine the shape of the riff
         for ( auto stemI = 0; stemI < m_stemPtrs.size(); stemI++ )
@@ -232,6 +247,8 @@ void Riff::fetch( const api::NetConfiguration& ncfg, endlesss::cache::Stems& ste
         m_syncState = SyncState::Success;
         return;
     }
+
+    // #HDD todo; this fn can "only succeed", need to check if / how we return stem sync issues
     m_syncState = SyncState::Failed;
 }
 
@@ -249,27 +266,31 @@ void Riff::exportToDisk( const std::function< ssp::SampleStreamProcessorInstance
              stemGain <= 0.0f )
             continue;
 
-        const int32_t sampleCount     = stemPtr->m_sampleCount;
-        const int32_t sampleCountTst  = (int32_t)( (double)sampleCount / stemTimeStretch);
-
-        auto exportChannelLeft  = mem::malloc16AsSet<float>( sampleCountTst, 0.0f );
-        auto exportChannelRight = mem::malloc16AsSet<float>( sampleCountTst, 0.0f );
-
-        for ( int32_t sampleWrite = 0; sampleWrite < sampleCountTst; sampleWrite++ )
+        // diskWriter could be null for dry-run mode
+        auto diskWriter = diskWriterForStem( stemI, *stemPtr );
+        if ( diskWriter != nullptr )
         {
-            const int32_t readSampleUnscaled = (int32_t)((double)sampleWrite * stemTimeStretch);
+            const int32_t sampleCount = stemPtr->m_sampleCount;
+            const int32_t sampleCountTst = (int32_t)((double)sampleCount / stemTimeStretch);
 
-            exportChannelLeft[sampleWrite]  = stemPtr->m_channel[0][readSampleUnscaled] * stemGain;
-            exportChannelRight[sampleWrite] = stemPtr->m_channel[1][readSampleUnscaled] * stemGain;
-        }
+            auto exportChannelLeft = mem::malloc16AsSet<float>( sampleCountTst, 0.0f );
+            auto exportChannelRight = mem::malloc16AsSet<float>( sampleCountTst, 0.0f );
 
-        {
-            const auto diskWriter = diskWriterForStem( stemI, *stemPtr );
+            for ( int32_t sampleWrite = 0; sampleWrite < sampleCountTst; sampleWrite++ )
+            {
+                const int32_t readSampleUnscaled = (int32_t)((double)sampleWrite * stemTimeStretch);
+
+                exportChannelLeft[sampleWrite] = stemPtr->m_channel[0][readSampleUnscaled] * stemGain;
+                exportChannelRight[sampleWrite] = stemPtr->m_channel[1][readSampleUnscaled] * stemGain;
+            }
+
+            // output to disk, force flush immediately
             diskWriter->appendSamples( exportChannelLeft, exportChannelRight, sampleCountTst );
-        }
+            diskWriter.reset();
 
-        mem::free16( exportChannelLeft );
-        mem::free16( exportChannelRight );
+            mem::free16( exportChannelLeft );
+            mem::free16( exportChannelRight );
+        }
     }
 }
 

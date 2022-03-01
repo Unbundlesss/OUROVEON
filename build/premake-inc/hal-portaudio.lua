@@ -66,7 +66,6 @@ project "hal-portaudio"
     }
 
     filter "system:Windows"
-    defines { "_CRT_SECURE_NO_WARNINGS" }
     includedirs
     {
         Root_PORTAUDIO() .. "src/os/win",

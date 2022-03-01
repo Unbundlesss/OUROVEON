@@ -28,11 +28,70 @@
 namespace app {
 
 // ---------------------------------------------------------------------------------------------------------------------
+// some ImGui helpers for displaying combos of values|labels where the selection is driven from matching the value
+// to a configuration variable + handling if the value doesn't match any of our defaults
+//
+template< size_t _itemCount >
+std::string ValueArrayPreviewString(
+    const std::array< const char*, _itemCount > entryLabels,
+    const std::array< uint32_t,    _itemCount > entryValues,
+    uint32_t&       variable )
+{
+    for ( size_t optI = 0; optI < _itemCount; optI++ )
+    {
+        if ( entryValues[optI] == variable )
+            return entryLabels[optI];
+    }
+    return fmt::format( "{} (Custom)", variable );
+}
+
+template< size_t _itemCount >
+bool ValueArrayImGuiCombo(
+    const char*     title,
+    const char*     label,
+    const std::array< const char*, _itemCount > entryLabels,
+    const std::array< uint32_t,    _itemCount > entryValues,
+    uint32_t&       variable,
+    std::string&    previewString,
+    const bool      addYOffset)
+{
+    ImGui::TextUnformatted( title );
+    ImGui::SameLine();
+
+    if ( addYOffset )
+        ImGui::SetCursorPosY( ImGui::GetCursorPosY() - 3.0f );
+
+    bool changed = false;
+    if ( ImGui::BeginCombo( label, previewString.c_str() ) )
+    {
+        for ( size_t optI = 0; optI < _itemCount; optI++ )
+        {
+            const bool selected = ( entryValues[optI] == variable );
+            if ( ImGui::Selectable( entryLabels[optI], selected ) )
+            {
+                variable        = entryValues[optI];
+                previewString   = ValueArrayPreviewString( entryLabels, entryValues, variable );
+                changed         = true;
+            }
+            if ( selected )
+                ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+
+    return changed;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 // run a loop with a dedicated configuration page for choosing output device per session; once done, we jump to the app code
 //
 int OuroApp::EntrypointGUI()
 {
-    const std::array< uint32_t, 3 > cSampleRates { 44100, 48000, 88200 };
+    static constexpr std::array< const char*, 4 > cSampleRateLabels { "44100", "48000", "88200", "96000" };
+    static constexpr std::array< uint32_t,    4 > cSampleRateValues {  44100 ,  48000 ,  88200 ,  96000  };
+    static constexpr std::array< const char*, 5 > cBufferSizeLabels {  "Auto",   "256",   "512",  "1024",  "2048" };
+    static constexpr std::array< uint32_t,    5 > cBufferSizeValues {      0 ,    256 ,    512 ,   1024 ,   2048  };
+
 
     // try and fetch last audio settings from the stash; doesn't really matter if we can't, it is just saved defaults
     // for the config screen
@@ -42,6 +101,10 @@ int OuroApp::EntrypointGUI()
     {
         blog::cfg( "No default audio settings found, using defaults" );
     }
+
+    // get default value strings for saved config values to display in the UI; these are updated if selection changes
+    std::string previewSampleRate = ValueArrayPreviewString( cSampleRateLabels, cSampleRateValues, audioConfig.sampleRate );
+    std::string previewBufferSize = ValueArrayPreviewString( cBufferSizeLabels, cBufferSizeValues, audioConfig.bufferSize );
 
 
     // load any saved configs
@@ -140,7 +203,7 @@ int OuroApp::EntrypointGUI()
     bool successfulBreakFromLoop = false;
 
     // configuration preflight
-    while ( beginInterfaceLayout(CoreGUI::ViewportMode::BasicViewport) )
+    while ( beginInterfaceLayout( CoreGUI::VF_None ) )
     {
         std::string popupErrorMessageToDisplay;
 
@@ -391,30 +454,29 @@ int OuroApp::EntrypointGUI()
                         m_mdFrontEnd->titleText( "Audio Engine" );
                         ImGui::Indent( perBlockIndent );
 
-                        // choose a sample rate; changing causes device options to be reconsidered
-                        {
-                            ImGui::TextUnformatted( "Desired Sample Rate :" );
-
-                            std::string sampleRateLabel;
-                            for ( const auto sampleRateOption : cSampleRates )
-                            {
-                                sampleRateLabel = fmt::format( "{}  ", sampleRateOption );
-                                if ( ImGui::RadioButton( sampleRateLabel.c_str(), audioConfig.sampleRate == sampleRateOption ) )
-                                {
-                                    audioConfig.sampleRate = sampleRateOption;
-                                    fnUpdateDeviceQuery();
-                                } 
-                                ImGui::SameLine();
-                            }
-                            ImGui::TextUnformatted( "" );
-                        }
-                        ImGui::Spacing();
                         {
                             if ( ImGui::Checkbox( "Prefer Low Latency", &audioConfig.lowLatency ) )
                                 fnUpdateDeviceQuery();
+
+                            ImGui::Spacing();
+                            ImGui::Spacing();
                         }
-                        ImGui::Spacing();
-                        ImGui::Spacing();
+
+                        ImGui::PushItemWidth( ImGui::GetContentRegionAvail().x * 0.22f );
+                        {
+                            // choose a sample rate; changing causes device options to be reconsidered
+                            if ( ValueArrayImGuiCombo( "Sample Rate :", "##smpr", cSampleRateLabels, cSampleRateValues, audioConfig.sampleRate, previewSampleRate, true ) )
+                            {
+                                fnUpdateDeviceQuery();
+                            }
+                            ImGui::SameLine( 0, 25.0f );
+                            ValueArrayImGuiCombo( "Buffer Size :", "##buff", cBufferSizeLabels, cBufferSizeValues, audioConfig.bufferSize, previewBufferSize, false );
+
+                            ImGui::Spacing();
+                            ImGui::Spacing();
+                        }
+                        ImGui::PopItemWidth();
+
 
                         ImGui::TextUnformatted( "Output Device :" );
                         ImGui::PushItemWidth( ImGui::GetContentRegionAvail().x - 20.0f );
@@ -591,7 +653,7 @@ int OuroApp::EntrypointGUI()
                             if ( !m_jamLibrary.hasJamData() )
                                 progressionInhibitionReason = "No jam metadata found";
 
-                            ImGui::BeginDisabledControls( jamsAreUpdating || endlesssAuthExpired );
+                            ImGui::BeginDisabledControls( jamsAreUpdating );
                             {
                                 if ( ImGui::IconButton( ICON_FA_SYNC ) )
                                 {
@@ -608,7 +670,7 @@ int OuroApp::EntrypointGUI()
                                 ImGui::CompactTooltip( "Sync and update your list of jams\nand current publics" );
                                 ImGui::SameLine( 0, 12.0f );
                             }
-                            ImGui::EndDisabledControls( jamsAreUpdating || endlesssAuthExpired );
+                            ImGui::EndDisabledControls( jamsAreUpdating );
 
                             {
                                 switch ( asyncFetchState )
@@ -619,7 +681,7 @@ int OuroApp::EntrypointGUI()
                                     break;
 
                                 case endlesss::cache::Jams::AsyncFetchState::Working:
-                                    ImGui::Spinner( "##syncing", true, ImGui::GetTextLineHeight() * 0.4f, 3.0f, ImGui::GetColorU32( ImGuiCol_Text ) );
+                                    ImGui::Spinner( "##syncing", true, ImGui::GetTextLineHeight() * 0.4f, 3.0f, 0.0f, ImGui::GetColorU32( ImGuiCol_Text ) );
                                     ImGui::SameLine( 0, 8.0f );
                                     ImGui::TextUnformatted( asyncState.c_str() );
                                     progressionInhibitionReason = "Busy fetching metadata";
@@ -728,109 +790,5 @@ int OuroApp::EntrypointGUI()
     return EntrypointOuro();
 }
 
-/*
-// ---------------------------------------------------------------------------------------------------------------------
-// standard modal UI to paw through the jams available to our account, picking one if you please
-//
-void OuroApp::modalJamBrowser(
-    const char* title,
-    const endlesss::cache::Jams& jamLibrary,
-    const std::function<const endlesss::types::JamCouchID()>& getCurrentSelection,
-    const std::function<void( const endlesss::types::JamCouchID& )>& changeSelection )
-{
-    const ImVec2 configWindowSize = ImVec2( 800.0f, 420.0f ); // blaze it
-    ImGui::SetNextWindowContentSize( configWindowSize );
-
-    ImGui::PushStyleColor( ImGuiCol_PopupBg, ImGui::GetStyleColorVec4( ImGuiCol_ChildBg ) );
-
-    if ( ImGui::BeginPopupModal( title, nullptr, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize ) )
-    {
-        static ImGuiTextFilter jamNameFilter;
-        static int32_t jamSortOption = endlesss::cache::Jams::eIterateSortByTime;
-
-        bool shouldClosePopup = false;
-
-        endlesss::types::JamCouchID selectedDbID;
-        if ( getCurrentSelection )
-            selectedDbID = getCurrentSelection();
-
-        // wrap up the search function for filtering between public/private jams
-        bool iterationPublic = true;
-        const auto iterationFn = [&]( const endlesss::cache::Jams::Data& jamData ) 
-        {
-            if ( jamData.m_isPublic == iterationPublic )
-            {
-                if ( !jamNameFilter.PassFilter( jamData.m_displayName.c_str() ) )
-                    return;
-
-                bool isCurrentSelection = ( !selectedDbID.empty() && selectedDbID == jamData.m_jamCID );
-
-                ImGui::TableNextColumn();
-                if ( ImGui::ClickableText( jamData.m_displayName.c_str() ) )
-                {
-                    if ( changeSelection )
-                        changeSelection( jamData.m_jamCID );
-
-                    shouldClosePopup = true;
-                }
-            }
-        };
-
-        jamNameFilter.Draw( "##NameFilter", 200.0f );
-
-        ImGui::SameLine( 0, 2.0f );
-        if ( ImGui::Button( ICON_FA_TIMES_CIRCLE ) )
-            jamNameFilter.Clear();
-
-        ImGui::SameLine();
-        ImGui::TextUnformatted( "Name Filter" );
-
-        ImGui::SameLine( 0, 220.0f );
-        ImGui::TextUnformatted( "Sort By " );
-
-        ImGui::SameLine();
-        ImGui::RadioButton( "Join Time ", &jamSortOption, endlesss::cache::Jams::eIterateSortDefault );
-        ImGui::SameLine();
-        ImGui::RadioButton( "Name", &jamSortOption, endlesss::cache::Jams::eIterateSortByName );
-
-        const auto panelRegionAvailable = ImGui::GetContentRegionAvail();
-
-        // one half table for publics ...
-        ImGui::BeginChild( "##publics", ImVec2( 400.0f, panelRegionAvailable.y - 30.0f ) );
-        if ( ImGui::BeginTable( "##publicJams", 1, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg ) )
-        {
-            ImGui::TableSetupColumn( "Public" );
-            ImGui::TableHeadersRow();
-
-            jamLibrary.iterateJams( iterationFn, jamSortOption );
-
-            ImGui::EndTable();
-        }
-        ImGui::EndChild();
-        
-        // other half table for privates ...
-        ImGui::SameLine(0.0f, 2.0f);
-
-        ImGui::BeginChild( "##privates", ImVec2( 400.0f, panelRegionAvailable.y - 30.0f ) );
-        if ( ImGui::BeginTable( "##privateJams", 1, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg ) )
-        {
-            ImGui::TableSetupColumn( "Private" );
-            ImGui::TableHeadersRow();
-
-            iterationPublic = false;
-            jamLibrary.iterateJams( iterationFn, jamSortOption );
-
-            ImGui::EndTable();
-        }
-        ImGui::EndChild();
-
-        if ( ImGui::Button( " Close " ) || shouldClosePopup )
-            ImGui::CloseCurrentPopup();
-
-        ImGui::EndPopup();
-    }
-    ImGui::PopStyleColor();
-}
-*/
 
 } // namespace app

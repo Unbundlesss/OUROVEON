@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "base/utils.h"
+#include "math/rng.h"
 #include "buffer/mix.h"
 #include "spacetime/moment.h"
 
@@ -15,8 +16,8 @@
 #include "ux/diskrecorder.h"
 #include "ux/cache.jams.browser.h"
 
-#include "ssp/wav.h"
-#include "ssp/flac.h"
+#include "ssp/ssp.file.wav.h"
+#include "ssp/ssp.file.flac.h"
 
 #include "discord/discord.bot.ui.h"
 
@@ -328,6 +329,9 @@ struct MixEngine : public app::module::MixerInterface,
             beatEx.m_stemPulse[stemI]  = m_stemBeats[stemI].m_pulse;
             beatEx.m_stemEnergy[stemI] = m_stemEnergy[stemI];
         }
+
+        for ( auto layer = 0U; layer < 8; layer++ )
+            m_multiTrackOutputsToDestroyOnMainThread[layer].reset();
     }
 
     struct StemBeats
@@ -373,14 +377,17 @@ public:
 
         fs::path recordingsPath{ outputPath };
 
-        // set up 8 WAV output streams, one for each Endlesss channel
+        math::RNG32 writeBufferShuffleRNG;
+
+        // set up 8 WAV output streams, one for each Endlesss layer
         for ( auto i = 0; i < 8; i++ )
         {
             auto recordFile = recordingsPath / fmt::format( "{}beam_channel{}.flac", filePrefix, i );
             m_multiTrackOutputs[i] = ssp::FLACWriter::Create(
                 recordFile.string(),
                 m_audioSampleRate,
-                i );
+                writeBufferShuffleRNG.genFloat( 0.75f, 1.75f ) );   // randomise the write buffer sizes to avoid all
+                                                                    // outputs flushing outputs simultaneously
         }
 
         // tell the worker thread to begin writing to our streams
@@ -434,12 +441,14 @@ public:
 
 private:
 
-    using MultiTrackStreams = std::array < std::unique_ptr<ssp::FLACWriter>, 8 >;
+    using MultiTrackStreams = std::array < std::shared_ptr<ssp::FLACWriter>, 8 >;
 
     bool                m_multiTrackInFlux;
     bool                m_multiTrackWaitingToRecordOnRiffEdge;
     bool                m_multiTrackRecording;
-    MultiTrackStreams   m_multiTrackOutputs;
+    MultiTrackStreams   m_multiTrackOutputs;                        // currently live recorders
+    MultiTrackStreams   m_multiTrackOutputsToDestroyOnMainThread;   // recorders ready to decommission on main thread
+
 
     // multitrack "repetition compression" (RepCom) 
 
@@ -524,9 +533,15 @@ void MixEngine::update(
                     m_multiTrackRecording                 = false;
                     m_multiTrackInFlux                    = false;
 
-                    // on deletion, files will commit and release
+                    // move recorders over to destroy on the main thread, avoid any stalls
+                    // from whatever may be required to tie off recording
                     for ( auto i = 0; i < 8; i++ )
+                    {
+                        assert( m_multiTrackOutputsToDestroyOnMainThread[i] == nullptr );
+
+                        m_multiTrackOutputsToDestroyOnMainThread[i] = m_multiTrackOutputs[i];
                         m_multiTrackOutputs[i].reset();
+                    }
 
                     blog::mix( "[ Multitrack ] ... Stopped" );
                 }
@@ -825,8 +840,11 @@ void MixEngine::update(
             const uint64_t bitBlock = finalSampleIdx >> 6;
             const uint64_t bitBit   = finalSampleIdx - (bitBlock << 6);
 
-            stemHasBeat[stemI] |= ( stemInst->m_sampleBeat[bitBlock] >> bitBit ) != 0;
-            stemEnergy[stemI]   = std::max( stemEnergy[stemI], stemInst->m_sampleEnergy[finalSampleIdx] );
+            if ( stemInst->isAnalysisComplete() )
+            {
+                stemHasBeat[stemI] |= (stemInst->m_sampleBeat[bitBlock] >> bitBit) != 0;
+                stemEnergy[stemI] = std::max( stemEnergy[stemI], stemInst->m_sampleEnergy[finalSampleIdx] );
+            }
 
             m_mixChannelLeft[stemI][sI]  = stemInst->m_channel[0][finalSampleIdx] * stemGain;
             m_mixChannelRight[stemI][sI] = stemInst->m_channel[1][finalSampleIdx] * stemGain;
@@ -940,9 +958,9 @@ struct BeamApp : public app::OuroApp
     BeamApp()
         : app::OuroApp()
     {
-#if OURO_FEATURES_VST
+#if OURO_FEATURE_VST24
         data::providers::registerDefaults( m_dataBus.m_providerFactory, m_dataBus.m_providerNames );
-#endif // OURO_FEATURES_VST
+#endif // OURO_FEATURE_VST24
 
         m_discordBotUI = std::make_unique<discord::BotWithUI>( *this, m_configDiscord );
     }
@@ -983,10 +1001,10 @@ protected:
 
     MixEngine::RepComConfiguration          m_repComConfig;
 
-#if OURO_FEATURES_VST
+#if OURO_FEATURE_VST24
     data::DataBus                           m_dataBus;
     std::unique_ptr< effect::EffectStack >  m_effectStack;
-#endif // OURO_FEATURES_VST
+#endif // OURO_FEATURE_VST24
 
     spacetime::Moment                       m_lastAutoMemoryReclaimationMoment;
 
@@ -1001,7 +1019,7 @@ int BeamApp::EntrypointOuro()
     MixEngine mixEngine( m_mdAudio );
     m_mdAudio->blockUntil( m_mdAudio->installMixer( &mixEngine ) );
 
-#if OURO_FEATURES_VST
+#if OURO_FEATURE_VST24
     // custom databus providers
     {
         data::providers::registerProvider< Providers::RiffPercentage >(
@@ -1021,7 +1039,7 @@ int BeamApp::EntrypointOuro()
     // VSTs for audio engine
     m_effectStack = std::make_unique<effect::EffectStack>( m_mdAudio.get(), &mixEngine.m_unifiedTimeInfo, "beam" );
     m_effectStack->load( m_appConfigPath );
-#endif // OURO_FEATURES_VST
+#endif // OURO_FEATURE_VST24
 
 
     // == SNOOP ========================================================================================================
@@ -1080,9 +1098,10 @@ int BeamApp::EntrypointOuro()
 
     // == MAIN LOOP ====================================================================================================
 
-    const auto callbackMainMenu = std::bind( &BeamApp::customMainMenu, this );
-    const auto callbackStatusBar = std::bind( &BeamApp::customStatusBar, this );
-    while ( beginInterfaceLayout( app::CoreGUI::ViewportMode::DockingViewport, callbackMainMenu, callbackStatusBar ) )
+    while ( beginInterfaceLayout( (app::CoreGUI::ViewportFlags)(
+        app::CoreGUI::VF_WithDocking   |
+        app::CoreGUI::VF_WithMainMenu  |
+        app::CoreGUI::VF_WithStatusBar ) ) )
     {
         // process and blank out Exchange data ready to re-write it
         emitAndClearExchangeData();
@@ -1121,7 +1140,7 @@ int BeamApp::EntrypointOuro()
 
         ImGuiPerformanceTracker();
 
-#if OURO_FEATURES_VST
+#if OURO_FEATURE_VST24
 
         m_dataBus.update();
         m_dataBus.imgui();
@@ -1133,7 +1152,7 @@ int BeamApp::EntrypointOuro()
             ImGui::End();
         }
 
-#endif // OURO_FEATURES_VST
+#endif // OURO_FEATURE_VST24
 
         m_discordBotUI->imgui( *m_mdFrontEnd );
 
@@ -1142,11 +1161,11 @@ int BeamApp::EntrypointOuro()
 
             const auto panelRegionAvailable = ImGui::GetContentRegionAvail();
 
-            // expose volume control
+            // expose gain control
             {
-                float volumeF = m_mdAudio->getMasterVolume() * 1000.0f;
-                if ( ImGui::KnobFloat( "Volume", 24.0f, &volumeF, 0.0f, 1000.0f, 2000.0f ) )
-                    m_mdAudio->setMasterVolume( volumeF * 0.001f );
+                float gainF = m_mdAudio->getMasterGain() * 1000.0f;
+                if ( ImGui::KnobFloat( "Gain", 24.0f, &gainF, 0.0f, 1000.0f, 2000.0f ) )
+                    m_mdAudio->setMasterGain( gainF * 0.001f );
             }
             ImGui::SameLine( 0, 8.0f );
             // button to toggle end-chain mute on audio engine (but leave processing, WAV output etc intact)
@@ -1377,7 +1396,7 @@ int BeamApp::EntrypointOuro()
                     ImGui::PopStyleColor();
                 }
 
-                ImGui::Spinner( "##syncing", riffSyncInProgress, currentLineHeight * 0.4f, 3.0f, ImGui::GetColorU32( ImGuiCol_Text ) );
+                ImGui::Spinner( "##syncing", riffSyncInProgress, currentLineHeight * 0.4f, 3.0f, 0.0f, ImGui::GetColorU32( ImGuiCol_Text ) );
                 ImGui::SameLine();
                 if ( riffSyncInProgress )
                     ImGui::TextUnformatted( " Fetching Stems ..." );
@@ -1483,10 +1502,10 @@ int BeamApp::EntrypointOuro()
 
     m_mdAudio->blockUntil( m_mdAudio->installMixer( nullptr ) );
 
-#if OURO_FEATURES_VST
+#if OURO_FEATURE_VST24
     m_dataBus.save( m_appConfigPath );
     m_effectStack->save( m_appConfigPath );
-#endif // OURO_FEATURES_VST
+#endif // OURO_FEATURE_VST24
 
     return 0;
 }

@@ -3,9 +3,9 @@
 function _Freetype_Include()
 
     filter "system:Windows"
-    includedirs
+    sysincludedirs
     {
-        SrcDir() .. "r0.sys/freetype/include/",
+        GetPrebuiltLibs_Win64() .. "freetype/include/",
     }
     filter {}
 
@@ -29,31 +29,25 @@ ModuleRefInclude["freetype"] = _Freetype_Include
 -- ==============================================================================
 function _Freetype_LinkPrebuilt()
 
+    -- windows has debug/release static builds
     filter "system:Windows"
-    -- https://github.com/ubawurinna/freetype-windows-binaries/releases/tag/v2.11.1
-    libdirs
-    {
-        SrcDir() .. "r0.sys/freetype/lib/win64_release_dll"
-    }
-    links
-    {
-        "freetype.lib",
-    }
-    postbuildcommands { "copy $(SolutionDir)..\\..\\" .. GetSourceDir() .. "\\r0.sys\\freetype\\lib\\win64_release_dll\\*.dll $(TargetDir)" }
+    filter "configurations:Release"
+        libdirs ( GetPrebuiltLibs_Win64() .. "freetype/lib/release_static" )
+    filter {}
+    filter "configurations:Debug"
+        libdirs ( GetPrebuiltLibs_Win64() .. "freetype/lib/debug_static" )
+    filter {}
+    links ( "freetype.lib" )
     filter {}
 
+    -- 
     filter "system:linux"
-    links
-    {
-        "freetype",
-    }
+    links ( "freetype" )
     filter {}
 
+    -- 
     filter "system:macosx"
-    libdirs
-    {
-        GetMacOSFatLibs()
-    }
+    libdirs ( GetPrebuiltLibs_MacUniversal() )
     links
     {
         "freetype",

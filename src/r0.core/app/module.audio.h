@@ -12,16 +12,21 @@
 
 #include "base/utils.h"
 #include "base/id.simple.h"
+#include "base/instrumentation.h"
+
+#include "spacetime/moment.h"
+
 #include "rec/irecordable.h"
 #include "ssp/isamplestreamprocessor.h"
 #include "effect/container.h"
+
 
 struct PaStreamCallbackTimeInfo;
 struct PaStreamParameters;
 
 namespace config { struct Audio; }
 namespace vst { class Instance; }
-namespace ssp { class WAVWriter; class FLACWriter; class PagedOpus; }
+namespace ssp { class WAVWriter; class FLACWriter; class OpusStream; }
 
 namespace app {
 
@@ -38,8 +43,8 @@ struct Audio : public Module
     Audio();
     ~Audio();
 
-    constexpr static size_t SampleProcessorSlots = 2;
-    using SampleProcessorInstances = std::array< ssp::SampleStreamProcessorInstance, SampleProcessorSlots >;
+    using SampleProcessorInstances  = std::vector< ssp::SampleStreamProcessorInstance >;
+    using SampleProcessorQueue      = mcc::ReaderWriterQueue< ssp::SampleStreamProcessorInstance >;
 
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -116,12 +121,22 @@ struct Audio : public Module
         enum class ExecutionStage
         {
             Start,
-            Mixer,              // mixer logic
-            VSTs,               // external VST processing
-            Interleave,         // move results into PA buffers
-            RecordToDisk,       // if enabled, pushing buffers out for disk writing
+            Mixer,                  // mixer logic
+            VSTs,                   // external VST processing
+            Interleave,             // move results into PA buffers
+            SampleProcessing,       // pushing new samples out to any attached processors, like record-to-disk or discord-transmit
             Count
         };
+        static constexpr std::array< const char*, (size_t)ExecutionStage::Count > ExecutionStageEventName =
+        {
+            "Start",
+            "Mixer",
+            "VSTs",
+            "Interleave",
+            "SampleProcessing"
+            "Invalid"
+        };
+
         static constexpr size_t     cNumExecutionStages         = (size_t)ExecutionStage::Count;
         static constexpr size_t     cPerfTrackSlots             = 15;
         static constexpr double     cPerfSumRcp                 = 1.0 / (double)cPerfTrackSlots;
@@ -132,8 +147,6 @@ struct Audio : public Module
 
         ExposedState()
         {
-            m_perfCounterFreq       = 0;//_Query_perf_frequency();
-            m_perfCounterFreqRcp    = 1.0 / (double)m_perfCounterFreq;
             m_samplePos             = 0;
             m_perfTraceIndex        = 0;
 
@@ -144,22 +157,32 @@ struct Audio : public Module
                 ca.fill( 0 );
         }
 
+        // called after a block of work has been done to log performance metrics for that stage
         inline void mark( const ExecutionStage es )
         {
-            m_perfCounters[ (size_t)es ][m_perfTraceIndex] = 0;//_Query_perf_counter();
+            const size_t stageIndex = (size_t)es;
+
+            // [Start] is an empty block, so there will be no event running
+            if ( stageIndex > 0 )
+                base::instr::eventEnd();
+
+            m_perfCounters[stageIndex][m_perfTraceIndex] = m_timingMoment.deltaUs().count();
+            m_timingMoment.restart();
 
             // on last phase, cycle trace index
-            if ( es == ExecutionStage::RecordToDisk )
+            if ( stageIndex == cNumExecutionStages - 1 )
             {
                 m_perfTraceIndex++;
                 if ( m_perfTraceIndex >= cPerfTrackSlots )
                     m_perfTraceIndex = 0;
             }
+            else
+            {
+                base::instr::eventBegin( "AUDIOPROC", ExecutionStageEventName[stageIndex + 1] );
+            }
         }
 
-
-        uint64_t            m_perfCounterFreq;
-        double              m_perfCounterFreqRcp;
+        spacetime::Moment   m_timingMoment;
 
         uint64_t            m_samplePos;                // incremented by audio callback, tracks total sample count
         uint32_t            m_maxBufferFillSize;        // tracking range of min/max audio buffer fill request sizes
@@ -173,8 +196,8 @@ struct Audio : public Module
     inline const ExposedState& getState() const { return m_state; }
     double getAudioEngineCPULoadPercent() const;
 
-    inline float getMasterVolume() const { return m_volume; }
-    inline void setMasterVolume( const float v ) { m_volume = v; }
+    inline float getMasterGain() const { return m_gain; }
+    inline void setMasterGain( const float v ) { m_gain = v; }
 
     AsyncCommandCounter toggleMute();
     inline bool isMuted() const { return m_mute; }
@@ -189,8 +212,8 @@ private:
         ClearAllVSTs,
         ToggleVSTBypass,
         ToggleMute,
-        InstallSampleProcessor,
-        ClearSampleProcessor
+        AttachSampleProcessor,
+        DetatchSampleProcessor
     };
     struct MixThreadCommandData : public base::BasicCommandType<MixThreadCommand> { using BasicCommandType::BasicCommandType; };
     using MixThreadCommandQueue = mcc::ReaderWriterQueue<MixThreadCommandData>;
@@ -211,34 +234,35 @@ private:
         unsigned long framesPerBuffer,
         const PaStreamCallbackTimeInfo* timeInfo );
 
-    MixThreadCommandQueue           m_mixThreadCommandQueue;
-    std::atomic_uint32_t            m_mixThreadCommandsIssued   = 0;
-    std::atomic_uint32_t            m_mixThreadCommandsComplete = 0;
+    MixThreadCommandQueue               m_mixThreadCommandQueue;
+    std::atomic_uint32_t                m_mixThreadCommandsIssued   = 0;
+    std::atomic_uint32_t                m_mixThreadCommandsComplete = 0;
 
     // active output 
-    int32_t                         m_paDeviceIndex     = -1;
-    void*                           m_paStream          = nullptr;
-    uint32_t                        m_sampleRate        = 0;
-    OutputBuffer*                   m_mixerBuffers      = nullptr;      // the aligned intermediate buffer, filled by the configurable mixer process
-    bool                            m_mute              = false;
+    int32_t                             m_paDeviceIndex     = -1;
+    void*                               m_paStream          = nullptr;
+    uint32_t                            m_sampleRate        = 0;
+    OutputBuffer*                       m_mixerBuffers      = nullptr;      // the aligned intermediate buffer, filled by the configurable mixer process
+    bool                                m_mute              = false;
 
-    ExposedState                    m_state;
+    ExposedState                        m_state;
 
-#if OURO_FEATURES_VST
+#if OURO_FEATURE_VST24
     using VSTFxSlots = std::vector< vst::Instance* >;
 
-    VSTFxSlots                      m_vstiStack;                    // VST slots, executed in order
-    bool                            m_vstBypass = false;
-#endif // OURO_FEATURES_VST
+    VSTFxSlots                          m_vstiStack;                        // VST slots, executed in order
+    bool                                m_vstBypass = false;
+#endif // OURO_FEATURE_VST24
 
-    std::atomic<float>              m_volume            = 0.5f;         // generic 0..1 global gain control
+    std::atomic<float>                  m_gain            = 0.5f;           // generic 0..1 global gain control
 
-    MixerInterface*                 m_mixerInterface    = nullptr;
+    MixerInterface*                     m_mixerInterface    = nullptr;
 
 
-    SampleProcessorInstances        m_sampleProcessorsToInstall;
-    SampleProcessorInstances        m_sampleProcessorsInstalled;
+    SampleProcessorQueue                m_sampleProcessorsToInstall;
+    SampleProcessorInstances            m_sampleProcessorsInstalled;
 
+    ssp::SampleStreamProcessorInstance  m_currentRecorderProcessor;
 
 public:
 
@@ -267,9 +291,8 @@ public:
 
     AsyncCommandCounter installMixer( MixerInterface* mixIf );
 
-    // #HDD TODO concept of aux processors identified by ID rather than just this anonymous single slot
-    AsyncCommandCounter installAuxSampleProcessor( ssp::SampleStreamProcessorInstance&& sspInstance );
-    AsyncCommandCounter clearAuxSampleProcessor();
+    AsyncCommandCounter attachSampleProcessor( ssp::SampleStreamProcessorInstance sspInstance );
+    AsyncCommandCounter detachSampleProcessor( ssp::StreamProcessorInstanceID sspID );
 
     void blockUntil( AsyncCommandCounter counter );
 };

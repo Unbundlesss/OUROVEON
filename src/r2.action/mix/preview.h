@@ -34,9 +34,9 @@ struct Preview : public app::module::MixerInterface,
         const float         outputVolume,
         const uint32_t      samplesToWrite,
         const uint64_t      samplePosition ) override;
+
     virtual void imgui( const app::StoragePaths& storagePaths ) override;
 
-    void exportRiff( const app::StoragePaths& storagePaths, const endlesss::live::RiffPtr& riffPtr );
 
     // main thread requests for a new riff; this queue is not deep - the preview mixer reacts immediately to jump
     // to new riffs as requested during the audio thread update(), the queue is just a lockfree buffer

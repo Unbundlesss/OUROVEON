@@ -9,7 +9,7 @@
 
 #pragma once
 
-#if OURO_FEATURES_VST
+#if OURO_FEATURE_VST24
 
 namespace app { struct AudioPlaybackTimeInfo; namespace midi { struct Message; } }
 namespace vst {
@@ -95,4 +95,4 @@ struct ScopedInitialiseVSTHosting
 
 } // namespace vst
 
-#endif // OURO_FEATURES_VST
+#endif // OURO_FEATURE_VST24

@@ -5,7 +5,7 @@ function _OpenSSL_Include()
     filter "system:Windows"
     sysincludedirs
     {
-        SrcDir() .. "r0.sys/openssl-1.1.1j/win64/include"
+        GetPrebuiltLibs_Win64() .. "openssl/include"
     }
     filter {}
 
@@ -23,16 +23,13 @@ ModuleRefInclude["openssl"] = _OpenSSL_Include
 function _OpenSSL_LinkPrebuilt()
 
     filter "system:Windows"
-    libdirs
-    {
-        SrcDir() .. "r0.sys/openssl-1.1.1j/win64/lib"
-    }
+    libdirs ( GetPrebuiltLibs_Win64() .. "openssl/lib" )
     links
     {
-        "libcrypto.lib",
-        "libssl.lib",
+        "libcrypto-1_1.lib",
+        "libssl-1_1.lib",
     }
-    postbuildcommands { "copy $(SolutionDir)..\\..\\" .. GetSourceDir() .. "\\r0.sys\\openssl-1.1.1j\\win64\\bin\\*.dll $(TargetDir)" }
+    postbuildcommands { "copy \"" .. GetPrebuiltLibs_Win64_VSMacro() .. "openssl\\bin\\*.dll\" \"$(TargetDir)\"" }
     filter {}
 
     filter "system:linux"
@@ -44,10 +41,7 @@ function _OpenSSL_LinkPrebuilt()
     filter {}
 
     filter "system:macosx"
-    libdirs
-    {
-        GetMacOSFatLibs()
-    }
+    libdirs ( GetPrebuiltLibs_MacUniversal() )
     links
     {
         "ssl",

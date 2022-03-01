@@ -181,18 +181,19 @@ using FrontendModule = std::unique_ptr<module::Frontend>;
 //
 struct CoreGUI : public Core
 {
-    struct PerfData
-    {
-        spacetime::Moment   m_moment;
+    // UI injection for inserting custom things into generic structure - eg. main menu items, status bar blocks
+    using UIInjectionHandle     = uint32_t;
+    using UIInjectionCallback   = std::function< void() >;
 
-        double              m_uiLastMicrosecondsPreRender;
-        double              m_uiLastMicrosecondsPostRender;
-    };
+    using ModalPopupExecutor    = std::function< void( const char* ) >;
 
-    enum class ViewportMode
+
+    enum ViewportFlags
     {
-        BasicViewport,
-        DockingViewport
+        VF_None             = 0,
+        VF_WithDocking      = 1 << 1,
+        VF_WithMainMenu     = 1 << 2,
+        VF_WithStatusBar    = 1 << 3,
     };
 
     using MainLoopCallback = std::function<void()>;
@@ -200,10 +201,58 @@ struct CoreGUI : public Core
     // ImGui panel displaying gathered performance metrics in a table
     void ImGuiPerformanceTracker();
 
+
+    enum class StatusBarAlignment
+    {
+        Left,
+        Right
+    };
+
+    UIInjectionHandle registerStatusBarBlock( const StatusBarAlignment alignment, const float size, const UIInjectionCallback& callback );
+    bool unregisterStatusBarBlock( const UIInjectionHandle handle );
+
+    UIInjectionHandle registerMainMenuEntry( const int32_t ordering, const std::string& menuName, const UIInjectionCallback& callback );
+    bool unregisterMainMenuEntry( const UIInjectionHandle handle );
+
+
+    void activateModalPopup( const char* label, const ModalPopupExecutor& executor );
+
+
+
 protected:
 
+    struct StatusBarBlock
+    {
+        StatusBarBlock( const UIInjectionHandle& handle,
+                        const float size,
+                        const UIInjectionCallback& callback )
+            : m_handle( handle )
+            , m_size( size )
+            , m_callback( callback )
+        {}
+
+        UIInjectionHandle       m_handle;
+        float                   m_size;
+        UIInjectionCallback     m_callback;
+    };
+    using StatusBarBlockList = std::vector< StatusBarBlock >;
+
+    struct MenuMenuEntry
+    {
+        int32_t                             m_ordering = 0;
+        std::string                         m_name;
+        std::vector< UIInjectionHandle >    m_handles;
+        std::vector< UIInjectionCallback >  m_callbacks;
+    };
+    using MenuMenuEntryList     = std::vector< MenuMenuEntry >;
+
+
+    // generic modal-popup tracking types to simplify client code opening and running dialog boxes
+    using ModalPopupsWaiting    = std::vector< std::string >;
+    using ModalPopupsActive     = std::vector< std::tuple< std::string, ModalPopupExecutor > >;
+
     // to avoid flickering values on the status bar; distracting and not particularly useful
-    using AudioLoadAverage = base::RollingAverage< 60 >;
+    using AudioLoadAverage      = base::RollingAverage< 60 >;
 
 
     // app can declare its own frontend configuration blob
@@ -218,23 +267,48 @@ protected:
     virtual int EntrypointGUI() = 0;
 
 
+    // call inside app main loop to perform pre/post core functions (eg. checking for exit, submitting rendering)
+    bool beginInterfaceLayout( const ViewportFlags viewportFlags );
+    void submitInterfaceLayout();
+
+    static constexpr bool hasViewportFlag( const ViewportFlags viewportFlags, ViewportFlags vFlag )
+    {
+        return ( viewportFlags & vFlag ) == vFlag;
+    }
+
+
+    struct PerfData
+    {
+        spacetime::Moment   m_moment;
+
+        double              m_uiLastMicrosecondsPreRender;
+        double              m_uiLastMicrosecondsPostRender;
+    };
+
     config::Frontend        m_configFrontend;
+    app::FrontendModule     m_mdFrontEnd;       // UI canvas management
 
     PerfData                m_perfData;
     AudioLoadAverage        m_audoLoadAverage;
 
-    app::FrontendModule     m_mdFrontEnd;       // UI canvas management
 
+    UIInjectionHandle       m_injectionHandleCounter;
 
-    // #HDD TODO refactor 
-    // call inside app main loop to perform pre/post core functions (eg. checking for exit, submitting rendering)
-    bool beginInterfaceLayout(
-        const ViewportMode viewportMode,                        // choose docking mode or not
-        const MainLoopCallback& mainMenuCallback = nullptr,     // add default main menu and execute this CB to allow 
-                                                                // injection of custom menu items after defaults
-        const MainLoopCallback& statusBarCallback = nullptr );  // same, but for the status bar area
+    // registered new core items like menu entries, status bar sections
+    MenuMenuEntryList       m_mainMenuEntries;
+    StatusBarBlockList      m_statusBarBlocksLeft;
+    StatusBarBlockList      m_statusBarBlocksRight;
 
-    void submitInterfaceLayout();
+    // modal dialog registration to unify the handling of arbitrary popups during input loop
+    ModalPopupsWaiting      m_modalsWaiting;
+    ModalPopupsActive       m_modalsActive;
+
+private:
+
+#if OURO_DEBUG
+    bool                    m_showImGuiDebugWindow    = false;
+#endif // OURO_DEBUG
+    bool                    m_resetLayoutInNextUpdate = false;
 };
 
 } // namespace app

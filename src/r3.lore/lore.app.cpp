@@ -1,9 +1,10 @@
 #include "pch.h"
 
 #include "base/utils.h"
-#include "base/buffer2d.h"
 #include "base/metaenum.h"
 #include "base/instrumentation.h"
+
+#include "buffer/buffer.2d.h"
 
 #include "colour/gradient.h"
 
@@ -240,31 +241,54 @@ struct LoreApp : public app::OuroApp
         {
             midiInput->getInputPorts( m_midiInputPortNames );
         }
-    }
 
-protected:
-
-    void customMainMenu()
-    {
-        if ( ImGui::BeginMenu( "KERNEL" ) )
+        registerMainMenuEntry( 10, "KERNEL", [this]()
         {
             if ( ImGui::MenuItem( "Reclaim Memory" ) )
                 m_stemCache.prune();
+        });
 
-            ImGui::EndMenu();
-        }
-
-        auto* midiInput = m_mdMidi->getInputControl();
-        if ( midiInput != nullptr && !m_midiInputPortNames.empty() )
+        registerMainMenuEntry( 15, "EXPORT", [this]()
         {
-            uint32_t openedIndex;
-            const bool hasOpenPort = midiInput->getOpenPortIndex( openedIndex );
+            endlesss::live::RiffPtr currentRiffPtr = m_nowPlayingRiff;
 
-            if ( ImGui::BeginMenu( "MIDI" ) )
+            if ( currentRiffPtr != nullptr )
             {
+                if ( ImGui::MenuItem( "Current Riff" ) )
+                {
+                    const auto exportedFiles = endlesss::xp::exportRiff( endlesss::xp::ExportMode::Stems,
+                        m_storagePaths.value(),
+                        m_configExportOutput.spec,
+                        currentRiffPtr );
+
+                    for ( const auto& exported : exportedFiles )
+                    {
+                        blog::core( " => {}", exported.string() );
+                    }
+                }
+            }
+            else
+            {
+                ImGui::MenuItem( "Nothing playing", nullptr, nullptr, false );
+            }
+
+            ImGui::Separator();
+            if ( ImGui::MenuItem( "Configure ..." ) )
+            {
+            }
+        });
+
+        registerMainMenuEntry( 20, "MIDI", [this]()
+        {
+            auto* midiInput = m_mdMidi->getInputControl();
+            if ( midiInput != nullptr && !m_midiInputPortNames.empty() )
+            {
+                uint32_t openedIndex;
+                const bool hasOpenPort = midiInput->getOpenPortIndex( openedIndex );
+
                 for ( uint32_t inpIdx = 0; inpIdx < (uint32_t)m_midiInputPortNames.size(); inpIdx++ )
                 {
-                    const bool thisPortIsOpen = hasOpenPort && ( openedIndex == inpIdx );
+                    const bool thisPortIsOpen = hasOpenPort && (openedIndex == inpIdx);
 
                     if ( ImGui::MenuItem( m_midiInputPortNames[inpIdx].c_str(), nullptr, thisPortIsOpen ) )
                     {
@@ -274,26 +298,33 @@ protected:
                             midiInput->openInputPort( inpIdx );
                     }
                 }
-                ImGui::EndMenu();
             }
-        }
+            else
+            {
+                ImGui::MenuItem( "Unavailable", nullptr, nullptr, false );
+            }
+        });
     }
 
-    void customStatusBar()
-    {
-        uint32_t openedIndex;
-        auto* midiInput = m_mdMidi->getInputControl();
-        if ( midiInput != nullptr && midiInput->getOpenPortIndex( openedIndex ) )
-        {
-            const auto& inputPortName = m_midiInputPortNames[openedIndex];
-            {
-                ImGui::Scoped::ToggleButtonLit toggled;
-                ImGui::Button( "MIDI" );
-                ImGui::TextUnformatted( inputPortName );
-            }
-            ImGui::Separator();
-        }
-    }
+protected:
+
+    config::endlesss::Export                m_configExportOutput;
+
+//     void customStatusBar()
+//     {
+//         uint32_t openedIndex;
+//         auto* midiInput = m_mdMidi->getInputControl();
+//         if ( midiInput != nullptr && midiInput->getOpenPortIndex( openedIndex ) )
+//         {
+//             const auto& inputPortName = m_midiInputPortNames[openedIndex];
+//             {
+//                 ImGui::Scoped::ToggleButtonLit toggled;
+//                 ImGui::Button( "MIDI" );
+//                 ImGui::TextUnformatted( inputPortName );
+//             }
+//             ImGui::Separator();
+//         }
+//     }
 
     std::vector< std::string >              m_midiInputPortNames;
 
@@ -301,10 +332,10 @@ protected:
     // discord bot & streaming panel 
     std::unique_ptr< discord::BotWithUI >   m_discordBotUI;
 
-#if OURO_FEATURES_VST
+#if OURO_FEATURE_VST24
     // VST playground
     std::unique_ptr< effect::EffectStack >  m_effectStack;
-#endif // OURO_FEATURES_VST
+#endif // OURO_FEATURE_VST24
 
 
 // riff playback management #HDD build into common module?
@@ -1046,6 +1077,26 @@ int LoreApp::EntrypointOuro()
     };
 
 
+    // fetch any customised stem export spec
+    const auto exportLoadResult = config::load( *this, m_configExportOutput );
+
+
+    // add status bar section to report warehouse activity
+    registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Left, 500.0f, [&warehouse, this]()
+    {
+        // worker thread control / status display
+        {
+            const auto currentLineHeight = ImGui::GetTextLineHeight();
+
+            // show spinner if we're working, and the current reported work state
+            ImGui::Spinner( "##syncing", m_warehouseWorkUnderway, currentLineHeight * 0.4f, 3.0f, 1.5f, ImGui::GetColorU32( ImGuiCol_Text ) );
+            ImGui::Separator();
+
+            ImGui::TextUnformatted( m_warehouseWorkState.c_str() );
+        }
+    });
+
+
     // default to viewing logged-in user in the jam view highlight
     m_jamVisualisation.m_nameHighlighting[0].m_name = m_apiNetworkConfiguration->auth().user_id;
     m_jamVisualisation.m_nameHighlighting[0].m_colour = ImVec4( 1.0f, 0.95f, 0.8f, 1.0f );
@@ -1059,11 +1110,11 @@ int LoreApp::EntrypointOuro()
     mix::Preview mixPreview( m_mdAudio->getMaximumBufferSize(), m_mdAudio->getSampleRate(), std::bind( &LoreApp::handleNewRiffPlaying, this, stdp::_1 ) );
     m_mdAudio->blockUntil( m_mdAudio->installMixer( &mixPreview ) );
 
-#if OURO_FEATURES_VST
+#if OURO_FEATURE_VST24
     // VSTs for audio engine
     m_effectStack = std::make_unique<effect::EffectStack>( m_mdAudio.get(), mixPreview.getTimeInfoPtr(), "preview" );
     m_effectStack->load( m_appConfigPath );
-#endif // OURO_FEATURES_VST
+#endif // OURO_FEATURE_VST24
 
     m_syncAndPlaybackThreadHalt = false;
     m_syncAndPlaybackThread = std::make_unique<std::thread>( [&mixPreview, &warehouse, this]()
@@ -1119,18 +1170,13 @@ int LoreApp::EntrypointOuro()
         } );
 
     // UI core loop begins
-    const auto callbackMainMenu  = std::bind( &LoreApp::customMainMenu, this );
-    const auto callbackStatusBar = std::bind( &LoreApp::customStatusBar, this );
-    while ( beginInterfaceLayout( app::CoreGUI::ViewportMode::DockingViewport, callbackMainMenu, callbackStatusBar ) )
+    while ( beginInterfaceLayout( (app::CoreGUI::ViewportFlags)(
+        app::CoreGUI::VF_WithDocking   |
+        app::CoreGUI::VF_WithMainMenu  |
+        app::CoreGUI::VF_WithStatusBar ) ) )
     {
         // process and blank out Exchange data ready to re-write it
         emitAndClearExchangeData();
-
-        // run modal jam browser window if it's open
-        bool selectNewJamToSyncWithModalBrowser = false;
-        const char* modalJamBrowserTitle = "Select Jam To Sync";
-        ux::modalUniversalJamBrowser( modalJamBrowserTitle, m_jamLibrary, warehouseJamBrowser );
-
 
 
         // run jam slice computation that needs to run on the main thread
@@ -1144,11 +1190,11 @@ int LoreApp::EntrypointOuro()
         {
             ImGui::Begin( "Audio" );
 
-            // expose volume control
+            // expose gain control
             {
-                float volumeF = m_mdAudio->getMasterVolume() * 1000.0f;
-                if ( ImGui::KnobFloat( "Volume", 24.0f, &volumeF, 0.0f, 1000.0f, 2000.0f ) )
-                    m_mdAudio->setMasterVolume( volumeF * 0.001f );
+                float gainF = m_mdAudio->getMasterGain() * 1000.0f;
+                if ( ImGui::KnobFloat( "Gain", 24.0f, &gainF, 0.0f, 1000.0f, 2000.0f ) )
+                    m_mdAudio->setMasterGain( gainF * 0.001f );
             }
             ImGui::SameLine( 0, 8.0f );
             // button to toggle end-chain mute on audio engine (but leave processing, WAV output etc intact)
@@ -1174,12 +1220,12 @@ int LoreApp::EntrypointOuro()
                     ux::widget::DiskRecorder( *mixRecordable, m_storagePaths->outputApp );
             }
 
-#if OURO_FEATURES_VST
+#if OURO_FEATURE_VST24
             ImGui::Spacing();
             ImGui::Spacing();
 
             m_effectStack->imgui( *m_mdFrontEnd );
-#endif // OURO_FEATURES_VST
+#endif // OURO_FEATURE_VST24
 
             ImGui::End();
         }
@@ -1196,9 +1242,6 @@ int LoreApp::EntrypointOuro()
 
 
         const auto currentRiff = currentRiffPtr.get();
-
-        // note if the warehouse is running ops, if not then disable new-task buttons
-        const bool warehouseIsPaused = warehouse.workerIsPaused();
 
 
         m_mdMidi->processMessages( []( const app::midi::Message& ){ } );
@@ -1412,36 +1455,46 @@ int LoreApp::EntrypointOuro()
         {
             ImGui::Begin( "Data Warehouse" );
 
+//             if ( ImGui::IsWindowHovered( ImGuiHoveredFlags_RootAndChildWindows ) && ImGui::IsKeyPressedMap( ImGuiKey_Tab, false ) )
+//             {
+//                 blog::core( "TAB" );
+//             }
+
             {
                 ImGui::Scoped::ButtonTextAlignLeft leftAlign;
                 const ImVec2 toolbarButtonSize{ 140.0f, 0.0f };
 
-                // worker thread control / status display
+                // extra tools in a pile
                 {
-                    const auto currentLineHeight = ImGui::GetTextLineHeight();
+                    // note if the warehouse is running ops, if not then disable new-task buttons
+                    const bool warehouseIsPaused = warehouse.workerIsPaused();
+
                     {
                         // enable or disable the worker thread
                         ImGui::Scoped::ToggleButton highlightButton( !warehouseIsPaused, true );
                         if ( ImGui::Button( warehouseIsPaused ?
-                            ICON_FA_PLAY_CIRCLE  " RESUME  " :
-                            ICON_FA_PAUSE_CIRCLE " RUNNING ", toolbarButtonSize ) )
+                                            ICON_FA_PLAY_CIRCLE  " RESUME  " :
+                                            ICON_FA_PAUSE_CIRCLE " RUNNING ", toolbarButtonSize ) )
                         {
                             warehouse.workerTogglePause();
                         }
                     }
-                    ImGui::SameLine( 0.0f, 16.0f );
+                    
+                    ImGui::SameLine();
 
-                    // show spinner if we're working, and the current reported work state
-                    ImGui::Spinner( "##syncing", m_warehouseWorkUnderway, currentLineHeight * 0.4f, 3.0f, ImGui::GetColorU32( ImGuiCol_Text ) );
-                    ImGui::SameLine( 0.0f, 16.0f );
-
-                    ImGui::TextUnformatted( m_warehouseWorkState.c_str() );
-                }
-                // extra tools in a pile
-                {
                     if ( ImGui::Button( ICON_FA_PLUS_CIRCLE " Add Jam...", toolbarButtonSize ) )
                     {
-                        selectNewJamToSyncWithModalBrowser = true;
+                        // create local copy of the current warehouse jam ID map for use by the popup; avoids
+                        // having to worry about warehouse contents shifting underneath / locking mutex in dialog
+                        {
+                            std::scoped_lock<std::mutex> reportLock( m_warehouseContentsReportMutex );
+                            warehouseJamBrowser.m_warehouseJamIDs = m_warehouseContentsReportJamIDs;
+                        }
+                        // launch modal browser
+                        activateModalPopup( "Select Jam To Sync", [&]( const char* title )
+                        {
+                            ux::modalUniversalJamBrowser( title, m_jamLibrary, warehouseJamBrowser );
+                        });
                     }
                 }
                 {
@@ -1452,42 +1505,48 @@ int LoreApp::EntrypointOuro()
                 }
             }
 
-            const auto dataTableBegin = []( const char* label )
-            {
-                if ( ImGui::BeginTable( label, 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg ) )
-                {
-                    ImGui::TableSetupColumn( "View",        ImGuiTableColumnFlags_WidthFixed, 32.0f );
-                    ImGui::TableSetupColumn( "Jam Name",    ImGuiTableColumnFlags_WidthFixed, 320.0f );
-                    ImGui::TableSetupColumn( "Sync",        ImGuiTableColumnFlags_WidthFixed, 32.0f );
-                    ImGui::TableSetupColumn( "Riffs",       ImGuiTableColumnFlags_WidthFixed, 120.0f );
-                    ImGui::TableSetupColumn( "Stems",       ImGuiTableColumnFlags_WidthFixed, 120.0f );
-                    ImGui::TableSetupColumn( "Wipe",        ImGuiTableColumnFlags_WidthFixed, 32.0f );
-                    return true;
-                }
-                return false;
-            };
 
             ImGui::SeparatorBreak();
-            if ( dataTableBegin("##warehouse_headers") )
-            {
-                ImGui::PushStyleColor( ImGuiCol_Text, ImGui::GetStyleColorVec4( ImGuiCol_ResizeGripHovered ) );
-                ImGui::TableHeadersRow();
-                ImGui::PopStyleColor();
-                ImGui::EndTable();
-            }
+
             static ImVec2 buttonSizeMidTable( 33.0f, 24.0f );
+            static ImGuiTextFilter jamNameFilter;
+
+            ImGui::Dummy( ImVec2( 34.0f, 0.0f ) );
+            ImGui::SameLine();
+
+            jamNameFilter.Draw( "##NameFilter", 300.0f );
+            ImGui::SameLine( 0, 2.0f );
+            if ( ImGui::Button( ICON_FA_TIMES_CIRCLE ) )
+                jamNameFilter.Clear();
 
             if ( ImGui::BeginChild( "##data_child" ) )
             {
-                if ( dataTableBegin("##warehouse_table") )
+                if ( ImGui::BeginTable( "##warehouse_table", 6, 
+                            ImGuiTableFlags_ScrollY         |
+                            ImGuiTableFlags_Borders         |
+                            ImGuiTableFlags_RowBg           |
+                            ImGuiTableFlags_NoSavedSettings ))
                 {
+                    ImGui::TableSetupScrollFreeze( 0, 1 );  // top row always visible
+
+                    ImGui::TableSetupColumn( "View",        ImGuiTableColumnFlags_WidthFixed, 32.0f  );
+                    ImGui::TableSetupColumn( "Jam Name",    ImGuiTableColumnFlags_WidthFixed, 320.0f );
+                    ImGui::TableSetupColumn( "Sync",        ImGuiTableColumnFlags_WidthFixed, 32.0f  );
+                    ImGui::TableSetupColumn( "Riffs",       ImGuiTableColumnFlags_WidthFixed, 120.0f );
+                    ImGui::TableSetupColumn( "Stems",       ImGuiTableColumnFlags_WidthFixed, 120.0f );
+                    ImGui::TableSetupColumn( "Wipe",        ImGuiTableColumnFlags_WidthFixed, 32.0f  );
+                    ImGui::TableHeadersRow();
+
                     // lock the data report so it isn't whipped away from underneath us mid-render
                     std::scoped_lock<std::mutex> reportLock( m_warehouseContentsReportMutex );
 
                     for ( size_t jamIdx = 0; jamIdx < m_warehouseContentsReport.m_jamCouchIDs.size(); jamIdx++ )
                     {
-                        const std::size_t jI = m_warehouseContentsSortedIndices[jamIdx];
+                        const std::size_t jI   = m_warehouseContentsSortedIndices[jamIdx];
                         const bool isJamInFlux = m_warehouseContentsReportJamInFlux[jI];
+
+                        if ( !jamNameFilter.PassFilter( m_warehouseContentsReportJamTitles[jI].c_str() ) )
+                            continue;
 
                         ImGui::PushID( (int32_t)jI );
 
@@ -1522,6 +1581,7 @@ int LoreApp::EntrypointOuro()
                         ImGui::BeginDisabledControls( isJamInFlux );
                         if ( ImGui::PrecisionButton( ICON_FA_SYNC, buttonSizeMidTable, 1.0f ) )
                         {
+                            m_warehouseContentsReportJamInFlux[jI] = true;
                             warehouse.addOrUpdateJamSnapshot( m_warehouseContentsReport.m_jamCouchIDs[jI] );
                         }
                         ImGui::EndDisabledControls( isJamInFlux );
@@ -1571,17 +1631,6 @@ int LoreApp::EntrypointOuro()
         }
 
 
-        if ( selectNewJamToSyncWithModalBrowser )
-        {
-            // create local copy of the current warehouse jam ID map for use by the popup; avoids
-            // having to worry about warehouse contents shifting underneath / locking mutex in dialog
-            {
-                std::scoped_lock<std::mutex> reportLock( m_warehouseContentsReportMutex );
-                warehouseJamBrowser.m_warehouseJamIDs = m_warehouseContentsReportJamIDs;
-            }
-            ImGui::OpenPopup( modalJamBrowserTitle );
-        }
-
         submitInterfaceLayout();
     }
 
@@ -1594,11 +1643,11 @@ int LoreApp::EntrypointOuro()
     // remove the mixer and ensure the async op has taken before leaving scope
     m_mdAudio->blockUntil( m_mdAudio->installMixer( nullptr ) );
 
-#if OURO_FEATURES_VST
+#if OURO_FEATURE_VST24
     // serialize effects
     m_effectStack->save( m_appConfigPath );
     m_effectStack.reset();
-#endif // OURO_FEATURES_VST
+#endif // OURO_FEATURE_VST24
 
 
     return 0;

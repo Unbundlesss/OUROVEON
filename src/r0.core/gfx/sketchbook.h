@@ -10,7 +10,7 @@
 #pragma once
 
 #include "base/macro.h"
-#include "base/buffer2d.h"
+#include "buffer/buffer.2d.h"
 
 #ifdef _DEBUG
 #define OURO_SKETCH_VERBOSE(...)         blog::gfx( __VA_ARGS__ )
