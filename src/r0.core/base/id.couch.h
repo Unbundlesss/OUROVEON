@@ -33,6 +33,7 @@ struct StringWrapper
     inline bool empty() const { return _value.empty(); }
     inline const char* c_str() const { return _value.c_str(); }
     inline std::size_t size() const { return _value.size(); }
+    inline std::string substr( size_t len ) const { return _value.substr( 0, len ); }
 
     template <class Archive,
         cereal::traits::EnableIf<cereal::traits::is_text_archive<Archive>::value>
