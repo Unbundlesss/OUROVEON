@@ -348,9 +348,11 @@ finline void asciifyString( const std::string& source, std::string& dest, const 
 inline std::string humaniseByteSize( const char* prefix, const uint64_t bytes )
 {
     if ( bytes == 0 )
-        return "0 bytes";
+        return fmt::format( "{} 0 bytes", prefix );
+    else 
     if ( bytes == 1 )
-        return "1 byte";
+        return fmt::format( "{} 1 byte", prefix );
+    else
     {
         auto exponent = (int32_t)(std::log( bytes ) / std::log( 1024 ));
         auto quotient = double( bytes ) / std::pow( 1024, exponent );
@@ -359,11 +361,11 @@ inline std::string humaniseByteSize( const char* prefix, const uint64_t bytes )
         switch ( exponent)
         {
             case 0: return fmt::format( "{}{:.0f} bytes", prefix, quotient );
-            case 1: return fmt::format( "{}{:.0f} kB", prefix, quotient );
-            case 2: return fmt::format( "{}{:.1f} MB", prefix, quotient );
-            case 3: return fmt::format( "{}{:.2f} GB", prefix, quotient );
-            case 4: return fmt::format( "{}{:.2f} TB", prefix, quotient );
-            case 5: return fmt::format( "{}{:.2f} PB", prefix, quotient );
+            case 1: return fmt::format( "{}{:.0f} kB",    prefix, quotient );
+            case 2: return fmt::format( "{}{:.1f} MB",    prefix, quotient );
+            case 3: return fmt::format( "{}{:.2f} GB",    prefix, quotient );
+            case 4: return fmt::format( "{}{:.2f} TB",    prefix, quotient );
+            case 5: return fmt::format( "{}{:.2f} PB",    prefix, quotient );
             default:
                 return "unknown";
                 break;
