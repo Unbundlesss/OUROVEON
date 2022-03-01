@@ -34,6 +34,11 @@ struct Moment
         return std::chrono::duration_cast<std::chrono::milliseconds>(now() - m_initialTime);
     }
 
+    inline std::chrono::microseconds deltaUs()
+    {
+        return std::chrono::duration_cast<std::chrono::microseconds>(now() - m_initialTime);
+    }
+
 protected:
     HighResTimePoint    m_initialTime;
 };
