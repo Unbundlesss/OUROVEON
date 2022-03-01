@@ -65,34 +65,35 @@ struct Midi::State : public Midi::InputControl
         if ( message && message->size() <= 4 )
         {
             const uint8_t controlMessage = message->at( 0 );
-            const uint8_t portedMessage  = ( controlMessage & 0xF0 );
+            const uint8_t channelNumber  = ( controlMessage & 0x0F );
+            const uint8_t channelMessage = ( controlMessage & 0xF0 );
            
-            if ( portedMessage == midi::NoteOn::u7Type )
+            if ( channelMessage == midi::NoteOn::u7Type )
             {
                 const uint8_t u7OnKey = message->at( 1 ) & 0x7F;
                 const uint8_t u7OnVel = message->at( 2 ) & 0x7F;
 
-                blog::core( "midi::NoteOn [{}] [{}]", u7OnKey, u7OnVel );
+                blog::core( "midi::NoteOn  (#{}) [{}] [{}]", channelNumber, u7OnKey, u7OnVel );
 
                 state->m_midiMessageQueue.emplace( timeStamp, midi::Message::Type::NoteOn, u7OnKey, u7OnVel );
             }
             else
-            if ( portedMessage == midi::NoteOff::u7Type )
+            if ( channelMessage == midi::NoteOff::u7Type )
             {
                 const uint8_t u7OffKey = message->at( 1 ) & 0x7F;
                 const uint8_t u7OffVel = message->at( 2 ) & 0x7F;
 
-                blog::core( "midi::NoteOff [{}] [{}]", u7OffKey, u7OffVel );
+                blog::core( "midi::NoteOff (#{}) [{}] [{}]", channelNumber, u7OffKey, u7OffVel );
 
-                state->m_midiMessageQueue.emplace( timeStamp, midi::Message::Type::NoteOff, u7OffKey, 0 );
+                state->m_midiMessageQueue.emplace( timeStamp, midi::Message::Type::NoteOff, u7OffKey, u7OffVel );
             }
             else
-            if ( portedMessage == midi::ControlChange::u7Type )
+            if ( channelMessage == midi::ControlChange::u7Type )
             {
                 const uint8_t u7CtrlNum = message->at( 1 ) & 0x7F;
                 const uint8_t u7CtrlVal = message->at( 2 ) & 0x7F;
 
-                blog::core( "midi::ControlChange [{}]", u7CtrlNum );
+                blog::core( "midi::ControlChange(#{}) [{}] = {}", channelNumber, u7CtrlNum, u7CtrlVal );
 
                 state->m_midiMessageQueue.emplace( timeStamp, midi::Message::Type::ControlChange, u7CtrlNum, u7CtrlVal );
             }
