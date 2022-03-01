@@ -148,7 +148,12 @@ void ssl_client::connect()
 	int status = getaddrinfo(hostname.c_str(), port.c_str(), &hints, &addrs);
 	if ( status != 0 )
 	{
+		// #HDD force A version on win
+#ifdef _MSC_VER
+		std::string gai = gai_strerrorA( status );
+#else
 		std::string gai = gai_strerror( status );
+#endif // _MSC_VER
 		throw dpp::exception( fmt::format( "getaddrinfo (host={}, port={}): ", hostname, port, gai ) );
 	}
 
