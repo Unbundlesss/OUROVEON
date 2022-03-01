@@ -442,7 +442,7 @@ template <typename Char> struct ansi_color_escape {
 
  private:
   static constexpr size_t num_emphases = 8;
-  Char buffer[7u + 3u * num_emphases + 1u];
+  Char buffer[7u + 3u * num_emphases + 1u] = { 0 };
 
   static FMT_CONSTEXPR void to_esc(uint8_t c, Char* out,
                                    char delimiter) FMT_NOEXCEPT {
