@@ -226,6 +226,9 @@ public:                                                                         
 #define REFLECT_ENUM(_enumName, _storageType, _macroWorker) \
   _TL_CREATE_METAENUM(_enumName, _storageType, Enum, _macroWorker, METAENUM_DEF_ENUM, METAENUM_DEF_ENUM, METAENUM_DEF_FIDX, METAENUM_DEF_VALID, METAENUM_DEF_TOSTR, METAENUM_DEF_FROMSTR, METAENUM_DEF_NEXTWRAP, METAENUM_DEF_NEXTVALID, Count)
 
+#define REFLECT_ENUM_CUSTOM_STRCONV(_enumName, _storageType, _macroWorker, _toStr, _fromStr) \
+  _TL_CREATE_METAENUM(_enumName, _storageType, Enum, _macroWorker, METAENUM_DEF_ENUM, METAENUM_DEF_ENUM, METAENUM_DEF_FIDX, METAENUM_DEF_VALID, _toStr, _fromStr, METAENUM_DEF_NEXTWRAP, METAENUM_DEF_NEXTVALID, Count)
+
 #define REFLECT_ENUM_IDS(_enumName, _storageType, _macroWorker) \
   _TL_CREATE_METAENUM(_enumName, _storageType, Enum, _macroWorker, METAENUM_DEF_ENUM_ID_TYPE, METAENUM_DEF_ENUM_ID, METAENUM_DEF_FIDX_ID, METAENUM_DEF_VALID_ID, METAENUM_DEF_TOSTR_ID, METAENUM_DEF_FROMSTR_ID, METAENUM_DEF_NEXTWRAP_ID, METAENUM_DEF_NEXTVALID_ID, Count)
 
