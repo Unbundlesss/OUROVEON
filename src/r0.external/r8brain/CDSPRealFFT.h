@@ -20,6 +20,12 @@
 
 #include "r8bbase.h"
 
+#ifdef _MSC_VER
+// #hdd shut up warnings about float/dbl conversion
+#pragma warning( push )
+#pragma warning( disable : 4244 )
+#endif // _MSC_VER
+
 #if !R8B_IPP && !R8B_PFFFT && !R8B_PFFFT_DOUBLE
 	#include "fft4g.h"
 #endif // !R8B_IPP && !R8B_PFFFT && !R8B_PFFFT_DOUBLE
@@ -735,7 +741,7 @@ inline void calcMinPhaseTransform( double* const Kernel, const int KernelLen,
 	#if R8B_FLOATFFT
 		float* const aip = (float*) &ip[ 0 ];
 		float* const aip2 = (float*) &ip2[ 0 ];
-		const float nzbias = 1e-35;
+		const float nzbias = 1e-35f;
 	#else // R8B_FLOATFFT
 		double* const aip = &ip[ 0 ];
 		double* const aip2 = &ip2[ 0 ];
@@ -816,5 +822,10 @@ inline void calcMinPhaseTransform( double* const Kernel, const int KernelLen,
 }
 
 } // namespace r8b
+
+#ifdef _MSC_VER
+// #hdd
+#pragma warning( pop )
+#endif // _MSC_VER
 
 #endif // VOX_CDSPREALFFT_INCLUDED
