@@ -21,7 +21,7 @@ namespace instr {
 void setThreadName( const char* name );
 
 // generic profiler event staking
-void eventBegin( const char* name, const char* context = nullptr, uint8_t colorR = 255, uint8_t colorG = 200, uint8_t colorB = 100 );
+void eventBegin( const char* name, const char* context = nullptr, uint8_t colorR = 255, uint8_t colorG = 220, uint8_t colorB = 170 );
 void eventEnd();
 
 enum class PresetColour

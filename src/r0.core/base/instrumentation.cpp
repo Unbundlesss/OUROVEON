@@ -10,14 +10,15 @@
 
 #include "base/instrumentation.h"
 
-namespace base {
-namespace instr {
-
-#ifdef PERF_SUPERLUMINAL
+// ---------------------------------------------------------------------------------------------------------------------
+#ifdef OURO_FEATURE_SUPERLUMINAL
 
 #define PERFORMANCEAPI_ENABLED 1
 
 #include "Superluminal/PerformanceAPI_capi.h"
+
+namespace base {
+namespace instr {
 
 void setThreadName( const char* name )
 {
@@ -34,18 +35,28 @@ void eventEnd()
     PerformanceAPI_EndEvent();
 }
 
-#else
-
-void setThreadName( const char* name ) {}
-void eventBegin( const char* name, const char* context, uint8_t colorR, uint8_t colorG, uint8_t colorB ) {}
-void eventEnd() {}
-
-#endif
-
 } // namespace instr
 } // namespace base
 
 
+// ---------------------------------------------------------------------------------------------------------------------
+#else
+
+namespace base {
+namespace instr {
+
+// null stubs for no profiler
+void setThreadName( const char* name ) {}
+void eventBegin( const char* name, const char* context, uint8_t colorR, uint8_t colorG, uint8_t colorB ) {}
+void eventEnd() {}
+
+} // namespace instr
+} // namespace base
+
+#endif
+
+
+// ---------------------------------------------------------------------------------------------------------------------
 namespace tf
 {
     // injected from taskflow executor, name the worker threads 
