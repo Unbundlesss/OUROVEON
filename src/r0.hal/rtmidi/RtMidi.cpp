@@ -2728,7 +2728,7 @@ void MidiInWinMM :: openPort( unsigned int portNumber, const std::string &/*port
 
   // Allocate and init the sysex buffers.
   data->sysexBuffer.resize( inputData_.bufferCount );
-  for ( int i=0; i < inputData_.bufferCount; ++i ) {
+  for ( unsigned int i=0; i < inputData_.bufferCount; ++i ) {
     data->sysexBuffer[i] = (MIDIHDR*) new char[ sizeof(MIDIHDR) ];
     data->sysexBuffer[i]->lpData = new char[ inputData_.bufferSize ];
     data->sysexBuffer[i]->dwBufferLength = inputData_.bufferSize;
