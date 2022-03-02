@@ -42,7 +42,7 @@ struct InterleavingQuantiseBuffer
         m_interleavedQuant = nullptr;
     }
 
-    void quantise();
+    inline void quantise();
 
     const uint32_t      m_maximumSamples;
     uint32_t            m_currentSamples    = 0;
@@ -52,7 +52,7 @@ struct InterleavingQuantiseBuffer
 
 // ---------------------------------------------------------------------------------------------------------------------
 template<>
-void InterleavingQuantiseBuffer<int16_t, 16>::quantise()
+inline void InterleavingQuantiseBuffer<int16_t, 16>::quantise()
 {
     static constexpr float   fScaler16  = (float)0x7fffL;
     static constexpr int32_t fInt16Max  = ( 0x7fffL        );
@@ -68,7 +68,7 @@ using IQ16Buffer = InterleavingQuantiseBuffer< int16_t, 16 >;
 
 // ---------------------------------------------------------------------------------------------------------------------
 template<>
-void InterleavingQuantiseBuffer<int32_t, 24>::quantise()
+inline void InterleavingQuantiseBuffer<int32_t, 24>::quantise()
 {
     static constexpr float   fScaler24  = (float)0x7fffffL;
     static constexpr int32_t fInt24Max  = (  0x7fffffL     );
