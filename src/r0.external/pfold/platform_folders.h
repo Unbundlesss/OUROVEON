@@ -46,6 +46,10 @@ void appendExtraFoldersTokenizer(const char* envName, const char* envValue, std:
 std::string win32_utf16_to_utf8(const wchar_t* wstr);
 #endif
 }
+#ifdef _WIN32
+std::string GetWindowsProgramFiles();
+#endif
+
 #endif  //DOXYGEN_SHOULD_SKIP_THIS
 
 /**

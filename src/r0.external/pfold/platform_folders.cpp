@@ -143,6 +143,15 @@ static std::string GetAppDataCommon() {
 static std::string GetAppDataLocal() {
 	return GetKnownWindowsFolder(FOLDERID_LocalAppData, "LocalAppData could not be found");
 }
+
+// #hdd
+namespace sago {
+std::string GetWindowsProgramFiles() {
+    return GetKnownWindowsFolder( FOLDERID_ProgramFilesX64, "ProgramFilesX64 could not be found" );
+}
+} // namespace sago
+
+
 #elif defined(__APPLE__)
 #else
 #include <map>
