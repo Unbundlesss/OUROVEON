@@ -364,33 +364,6 @@ void Frontend::applyBorderless()
     glfwSetWindowAttrib( m_GlfwWindow, GLFW_RESIZABLE, m_isBorderless ? 0 : 1 );
 }
 
-
-// ---------------------------------------------------------------------------------------------------------------------
-bool Frontend::showFilePicker( const char* spec, std::string& fileResult ) const
-{
-    
-    char filename[MAX_PATH];
-
-    OPENFILENAMEA ofn;
-    ZeroMemory( &filename, sizeof( filename ) );
-    ZeroMemory( &ofn, sizeof( ofn ) );
-    ofn.lStructSize = sizeof( ofn );
-    ofn.hwndOwner = nullptr;
-    ofn.lpstrFilter = spec;
-    ofn.lpstrFile   = filename;
-    ofn.nMaxFile    = MAX_PATH;
-    ofn.lpstrTitle  = "Select file";
-    ofn.Flags       = OFN_DONTADDTORECENT | OFN_FILEMUSTEXIST;
-
-    if ( GetOpenFileNameA( &ofn ) )
-    {
-        fileResult = filename;
-        return true;
-    }
-    
-    return false;
-}
-
 // ---------------------------------------------------------------------------------------------------------------------
 void Frontend::titleText( const char* label )
 {

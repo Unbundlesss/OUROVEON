@@ -210,6 +210,7 @@ ADD_BLOG( stem,     0xe65ea9,    "STEM" )
 #include "imbezier.h"
 #include "imnodes.h"
 #include "implot.h"
+#include "ImGuiFileDialog.h"
 
 // sqlite
 #include "sqlite3.h"

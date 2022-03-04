@@ -106,6 +106,37 @@ int OuroApp::EntrypointGUI()
     std::string previewSampleRate = ValueArrayPreviewString( cSampleRateLabels, cSampleRateValues, audioConfig.sampleRate );
     std::string previewBufferSize = ValueArrayPreviewString( cBufferSizeLabels, cBufferSizeValues, audioConfig.bufferSize );
 
+    // stash current TZ
+    const auto timezoneLocal = date::current_zone();
+    const auto timezoneUTC = date::locate_zone( "Etc/UTC" );
+
+    // add UTC/Server time on left of status bar
+    const auto timeStatusLeftID = registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Left, 500.0f, [=]()
+    {
+        auto t  = date::make_zoned( timezoneUTC, std::chrono::system_clock::now() );
+        auto tf = date::format( spacetime::defaultDisplayTimeFormatTZ, t );
+        const auto servertTime = fmt::format( FMT_STRING( "{} | {}" ), timezoneUTC->name(), tf );
+
+        ImGui::PushStyleColor( ImGuiCol_Text, IM_COL32_WHITE );
+        ImGui::TextUnformatted( servertTime );
+        ImGui::PopStyleColor();
+    });
+    // add local timezone time on right 
+    const auto timeStatusRightID = registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Right, 500.0f, [=]()
+    {
+        auto t  = date::make_zoned( timezoneLocal, std::chrono::system_clock::now() );
+        auto tf = date::format( spacetime::defaultDisplayTimeFormatTZ, t );
+        const auto localTime = fmt::format( FMT_STRING( "{} | {}" ), tf, timezoneLocal->name() );
+
+        // right-align
+        const auto localTimeLength = ImGui::CalcTextSize( localTime );
+        ImGui::Dummy( ImVec2( 475.0f - localTimeLength.x, 0.0f ) );
+
+        ImGui::PushStyleColor( ImGuiCol_Text, IM_COL32_WHITE );
+        ImGui::TextUnformatted( localTime );
+        ImGui::PopStyleColor();
+    });
+
 
     // load any saved configs
     config::endlesss::Auth endlesssAuth;
@@ -113,6 +144,7 @@ int OuroApp::EntrypointGUI()
     const auto discordLoadResult = config::load( *this, m_configDiscord );
 
     // #HDD check and do something with config load results?
+
 
     app::AudioDeviceQuery adq;
     int32_t chosenDeviceIndex;
@@ -195,15 +227,11 @@ int OuroApp::EntrypointGUI()
     std::string popupErrorMessage;
 
 
-    // stash current TZ
-    const auto timezoneLocal = date::current_zone();
-    const auto timezoneUTC   = date::locate_zone( "Etc/UTC" );
-
 
     bool successfulBreakFromLoop = false;
 
     // configuration preflight
-    while ( beginInterfaceLayout( CoreGUI::VF_None ) )
+    while ( beginInterfaceLayout( CoreGUI::VF_WithStatusBar ) )
     {
         std::string popupErrorMessageToDisplay;
 
@@ -226,7 +254,7 @@ int OuroApp::EntrypointGUI()
 
         const float  configWindowColumn1 = 500.0f;
         const float  configWindowColumn2 = 500.0f;
-        const ImVec2 configWindowSize = ImVec2( configWindowColumn1 + configWindowColumn2, 600.0f );
+        const ImVec2 configWindowSize = ImVec2( configWindowColumn1 + configWindowColumn2, 610.0f );
         const ImVec2 viewportWorkSize = ImGui::GetMainViewport()->GetCenter();
 
         ImGui::SetNextWindowPos( viewportWorkSize - ( configWindowSize * 0.5f ) );
@@ -420,20 +448,149 @@ int OuroApp::EntrypointGUI()
                 else
                 {
                     // ---------------------------------------------------------------------------------------------------------
-                    // where are you and what time is it?
+                    // check in on our configured access to Endlesss' services
 
+                    bool endlesssAuthExpired = false;
                     {
-                        m_mdFrontEnd->titleText( "Spacetime" );
+                        m_mdFrontEnd->titleText( "Endlesss Accesss" );
                         ImGui::Indent( perBlockIndent );
+
+                        const auto authExpiryUnixTime = endlesssAuth.expires / 1000;
+
+                        uint32_t expireDays, expireHours, expireMins, expireSecs;
+                        endlesssAuthExpired = !spacetime::datestampUnixExpiryFromNow( authExpiryUnixTime, expireDays, expireHours, expireMins, expireSecs );
+
+                        if ( endlesssAuthExpired )
                         {
-                            auto t = date::make_zoned( timezoneUTC, std::chrono::system_clock::now() );
-                            auto tf = date::format( spacetime::defaultDisplayTimeFormatTZ, t );
-                            ImGui::Text( "SERVER | %-24s %s", timezoneUTC->name().c_str(), tf.c_str() );
+                            ImGui::TextColored(
+                                ImVec4( 1.0f, 0.2f, 0.2f, 1.0f ),
+                                "Authentication expired, please sign in to refresh" );
                         }
+                        else
                         {
-                            auto t = date::make_zoned( timezoneLocal, std::chrono::system_clock::now() );
-                            auto tf = date::format( spacetime::defaultDisplayTimeFormatTZ, t );
-                            ImGui::Text( " LOCAL | %-24s %s", timezoneLocal->name().c_str(), tf.c_str() );
+                            if ( ImGui::IconButton( ICON_FA_SIGN_OUT_ALT ) )
+                            {
+                                // zero out the disk copy and our local cache
+                                config::endlesss::Auth emptyAuth;
+                                config::save( *this, emptyAuth );
+                                config::load( *this, endlesssAuth );
+                            }
+                            ImGui::CompactTooltip( "Log out" );
+                            ImGui::SameLine( 0, 12.0f );
+
+                            ImGui::TextUnformatted( "Authentication expires in" );
+                            ImGui::SameLine();
+                            ImGui::TextColored(
+                                ImGui::GetStyleColorVec4( ImGuiCol_SliderGrabActive ),
+                                "%u day(s), %u hours", expireDays, expireHours );
+                        }
+
+                        if ( endlesssAuthExpired )
+                            progressionInhibitionReason = "Endlesss log-in has expired";
+
+                        ImGui::Spacing();
+
+                        // allow direct login to endlesss services; this is the same path as the website and app takes
+                        if ( endlesssAuthExpired )
+                        {
+                            static char localLoginName[64];
+                            static char localLoginPass[64];
+
+                            ImGui::TextUnformatted( "User/Pass :" );
+                            ImGui::SameLine();
+                            ImGui::PushItemWidth( 140.0f );
+                            ImGui::InputText( "##username", localLoginName, 60 );
+                            ImGui::SameLine();
+                            ImGui::InputText( "##password", localLoginPass, 60, ImGuiInputTextFlags_Password );
+                            ImGui::PopItemWidth();
+                            ImGui::SameLine();
+                            if ( ImGui::Button( "Login" ) )
+                            {
+                                auto dataClient = std::make_unique< httplib::SSLClient >( "api.endlesss.fm" );
+
+                                dataClient->set_ca_cert_path( m_configEndlesssAPI.certBundleRelative.c_str() );
+                                dataClient->enable_server_certificate_verification( true );
+
+                                // post user/pass to /auth/login as a json object
+                                auto authBody = fmt::format( R"({{ "username" : "{}", "password" : "{}" }})", localLoginName, localLoginPass );
+                                auto res = dataClient->Post(
+                                    "/auth/login",
+                                    authBody,
+                                    "application/json" );
+
+                                // the expected result is a json document that config::endlesss::Auth is a subset of
+                                // so we deserialize direct into that
+                                const auto memoryLoadResult = config::loadFromMemory( res->body, endlesssAuth );
+                                if ( memoryLoadResult != config::LoadResult::Success )
+                                {
+                                    blog::error::cfg( "Unable to parse Endlesss credentials from json" );
+                                    blog::error::cfg( res->body );
+                                }
+                                else
+                                {
+                                    // .. if parsing was successful, save the key bits we need back to disk for future use
+                                    const auto authSaveResult = config::save( *this, endlesssAuth );
+                                    if ( authSaveResult != config::SaveResult::Success )
+                                    {
+                                        blog::error::cfg( "Unable to re-save Endlesss authentication data" );
+                                    }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // at this point in the flow, check if we have a NetConfiguration block - the data used
+                            // for all other endlesss network queries; create one if required
+                            if ( !m_apiNetworkConfiguration.has_value() )
+                            {
+                                m_apiNetworkConfiguration = endlesss::api::NetConfiguration( m_configEndlesssAPI, endlesssAuth, m_sharedDataPath );
+                            }
+
+                            const bool jamsAreUpdating = (asyncFetchState == endlesss::cache::Jams::AsyncFetchState::Working);
+
+                            // stop closing the boot window if we're running background threads or we have no jam data
+                            if ( !m_jamLibrary.hasJamData() )
+                                progressionInhibitionReason = "No jam metadata found";
+
+                            ImGui::BeginDisabledControls( jamsAreUpdating );
+                            {
+                                if ( ImGui::IconButton( ICON_FA_SYNC ) )
+                                {
+                                    m_jamLibrary.asyncCacheRebuild( m_apiNetworkConfiguration.value(), taskFlow, [&]( const endlesss::cache::Jams::AsyncFetchState state, const std::string& status )
+                                        {
+                                            asyncFetchState = state;
+                                            asyncState      = status;
+
+                                            if ( state == endlesss::cache::Jams::AsyncFetchState::Success )
+                                                m_jamLibrary.save( *this );
+                                        });
+                                    m_taskExecutor.run( taskFlow );
+                                }
+                                ImGui::CompactTooltip( "Sync and update your list of jams\nand current publics" );
+                                ImGui::SameLine( 0, 12.0f );
+                            }
+                            ImGui::EndDisabledControls( jamsAreUpdating );
+
+                            {
+                                switch ( asyncFetchState )
+                                {
+                                case endlesss::cache::Jams::AsyncFetchState::Success:
+                                case endlesss::cache::Jams::AsyncFetchState::None:
+                                    ImGui::TextUnformatted( m_jamLibrary.getCacheFileState().c_str() );
+                                    break;
+
+                                case endlesss::cache::Jams::AsyncFetchState::Working:
+                                    ImGui::Spinner( "##syncing", true, ImGui::GetTextLineHeight() * 0.4f, 3.0f, 0.0f, ImGui::GetColorU32( ImGuiCol_Text ) );
+                                    ImGui::SameLine( 0, 8.0f );
+                                    ImGui::TextUnformatted( asyncState.c_str() );
+                                    progressionInhibitionReason = "Busy fetching metadata";
+                                    break;
+
+                                case endlesss::cache::Jams::AsyncFetchState::Failed:
+                                    ImGui::TextUnformatted( asyncState.c_str() );
+                                    break;
+                                }
+                            }
                         }
 
                         ImGui::Unindent( perBlockIndent );
@@ -443,9 +600,13 @@ int OuroApp::EntrypointGUI()
                     }
 
 
-                    ImGui::Unindent( perColumnIndent );
-                    ImGui::TableNextColumn();
-                    ImGui::Indent( perColumnIndent );
+                    // ---------------------------------------------------------------------------------------------------------
+                    {
+                        ImGui::Unindent( perColumnIndent );
+                        ImGui::TableNextColumn();
+                        ImGui::Indent( perColumnIndent );
+                    }
+
 
                     // ---------------------------------------------------------------------------------------------------------
                     // configure how we'll be making noise
@@ -514,9 +675,8 @@ int OuroApp::EntrypointGUI()
 
                     // ---------------------------------------------------------------------------------------------------------
                     // i love to chat and friends
-
                     {
-                        m_mdFrontEnd->titleText( "Discord" );
+                        m_mdFrontEnd->titleText( "Discord Streaming" );
                         ImGui::Indent( perBlockIndent );
 
                         ImGui::PushItemWidth( configWindowColumn1 * 0.75f );
@@ -553,158 +713,13 @@ int OuroApp::EntrypointGUI()
                         ImGui::ColumnSeparatorBreak();
                     }
 
-                    // ---------------------------------------------------------------------------------------------------------
-                    // check in on our configured access to Endlesss' services
-
-                    bool endlesssAuthExpired = false;
-                    {
-                        m_mdFrontEnd->titleText( "Endlesss Accesss" );
-                        ImGui::Indent( perBlockIndent );
-
-                        const auto authExpiryUnixTime = endlesssAuth.expires / 1000;
-
-                        uint32_t expireDays, expireHours, expireMins, expireSecs;
-                        endlesssAuthExpired = !spacetime::datestampUnixExpiryFromNow( authExpiryUnixTime, expireDays, expireHours, expireMins, expireSecs );
-
-                        if ( endlesssAuthExpired )
-                        {
-                            ImGui::TextColored(
-                                ImVec4( 1.0f, 0.2f, 0.2f, 1.0f ),
-                                "Authentication expired, please sign in to refresh" );
-                        }
-                        else
-                        {
-                            if ( ImGui::IconButton( ICON_FA_SIGN_OUT_ALT ) )
-                            {
-                                // zero out the disk copy and our local cache
-                                config::endlesss::Auth emptyAuth;
-                                config::save( *this, emptyAuth );
-                                config::load( *this, endlesssAuth );
-                            }
-                            ImGui::CompactTooltip( "Log out" );
-                            ImGui::SameLine( 0, 12.0f );
-
-                            ImGui::TextUnformatted( "Authentication expires in" );
-                            ImGui::SameLine();
-                            ImGui::TextColored(
-                                ImGui::GetStyleColorVec4( ImGuiCol_SliderGrabActive ),
-                                "%u day(s), %u hours", expireDays, expireHours );
-                        }
-
-                        if ( endlesssAuthExpired )
-                            progressionInhibitionReason = "Endlesss log-in has expired";
-
-                        ImGui::Spacing();
-
-                        if ( endlesssAuthExpired )
-                        {
-                            static char localLoginName[64];
-                            static char localLoginPass[64];
-
-                            ImGui::TextUnformatted( "User/Pass :" );
-                            ImGui::SameLine();
-                            ImGui::PushItemWidth( 140.0f );
-                            ImGui::InputText( "##username", localLoginName, 60 );
-                            ImGui::SameLine();
-                            ImGui::InputText( "##password", localLoginPass, 60, ImGuiInputTextFlags_Password );
-                            ImGui::PopItemWidth();
-                            ImGui::SameLine();
-                            if ( ImGui::Button( "Login" ) )
-                            {
-                                auto dataClient = std::make_unique< httplib::SSLClient >( "api.endlesss.fm" );
-
-                                dataClient->set_ca_cert_path( m_configEndlesssAPI.certBundleRelative.c_str() );
-                                dataClient->enable_server_certificate_verification( true );
-
-                                auto authBody = fmt::format( R"({{ "username" : "{}", "password" : "{}" }})", localLoginName, localLoginPass );
-
-                                // post the query, we expect a single document stream back
-                                auto res = dataClient->Post(
-                                    "/auth/login",
-                                    authBody,
-                                    "application/json" );
-
-                                const auto memoryLoadResult = config::loadFromMemory( res->body, endlesssAuth );
-                                if ( memoryLoadResult != config::LoadResult::Success )
-                                {
-                                    blog::error::cfg( "Unable to parse Endlesss credentials from json" );
-                                    blog::error::cfg( res->body );
-                                }
-                                else
-                                {
-                                    const auto authSaveResult = config::save( *this, endlesssAuth );
-                                    if ( authSaveResult != config::SaveResult::Success )
-                                    {
-                                        blog::error::cfg( "Unable to re-save Endlesss authentication data" );
-                                    }
-                                }
-                            }
-                        }
-                        else
-                        {
-                            if ( !m_apiNetworkConfiguration.has_value() )
-                            {
-                                m_apiNetworkConfiguration = endlesss::api::NetConfiguration( m_configEndlesssAPI, endlesssAuth, m_sharedDataPath );
-                            }
-
-                            const bool jamsAreUpdating = (asyncFetchState == endlesss::cache::Jams::AsyncFetchState::Working);
-
-                            // stop closing the boot window if we're running background threads or we have no jam data
-                            if ( !m_jamLibrary.hasJamData() )
-                                progressionInhibitionReason = "No jam metadata found";
-
-                            ImGui::BeginDisabledControls( jamsAreUpdating );
-                            {
-                                if ( ImGui::IconButton( ICON_FA_SYNC ) )
-                                {
-                                    m_jamLibrary.asyncCacheRebuild( m_apiNetworkConfiguration.value(), taskFlow, [&]( const endlesss::cache::Jams::AsyncFetchState state, const std::string& status )
-                                        {
-                                            asyncFetchState = state;
-                                            asyncState      = status;
-
-                                            if ( state == endlesss::cache::Jams::AsyncFetchState::Success )
-                                                m_jamLibrary.save( *this );
-                                        });
-                                    m_taskExecutor.run( taskFlow );
-                                }
-                                ImGui::CompactTooltip( "Sync and update your list of jams\nand current publics" );
-                                ImGui::SameLine( 0, 12.0f );
-                            }
-                            ImGui::EndDisabledControls( jamsAreUpdating );
-
-                            {
-                                switch ( asyncFetchState )
-                                {
-                                case endlesss::cache::Jams::AsyncFetchState::Success:
-                                case endlesss::cache::Jams::AsyncFetchState::None:
-                                    ImGui::TextUnformatted( m_jamLibrary.getCacheFileState().c_str() );
-                                    break;
-
-                                case endlesss::cache::Jams::AsyncFetchState::Working:
-                                    ImGui::Spinner( "##syncing", true, ImGui::GetTextLineHeight() * 0.4f, 3.0f, 0.0f, ImGui::GetColorU32( ImGuiCol_Text ) );
-                                    ImGui::SameLine( 0, 8.0f );
-                                    ImGui::TextUnformatted( asyncState.c_str() );
-                                    progressionInhibitionReason = "Busy fetching metadata";
-                                    break;
-
-                                case endlesss::cache::Jams::AsyncFetchState::Failed:
-                                    ImGui::TextUnformatted( asyncState.c_str() );
-                                    break;
-                                }
-                            }
-                        }
-
-                        ImGui::Unindent( perBlockIndent );
-                        ImGui::Spacing();
-                        ImGui::Spacing();
-                    }
-
                     ImGui::Unindent( perColumnIndent );
                     ImGui::EndTable();
+
                 } // phase-2 configuration blocks
             } // table
 
-
+            // quit | continue button block at the base of the screen
             {
                 const ImVec2 buttonSize( 260.0f, 36.0f );
 
@@ -786,6 +801,10 @@ int OuroApp::EntrypointGUI()
     // boot stem cache now we have paths & audio configured
     if ( !m_stemCache.initialise( m_storagePaths->cacheCommon, m_mdAudio->getSampleRate() ) )
         return -1;
+
+    // unplug status bar bits
+    unregisterStatusBarBlock( timeStatusLeftID );
+    unregisterStatusBarBlock( timeStatusRightID );
 
     return EntrypointOuro();
 }

@@ -186,6 +186,9 @@ struct CoreGUI : public Core
     using UIInjectionCallback   = std::function< void() >;
 
     using ModalPopupExecutor    = std::function< void( const char* ) >;
+    
+    using FileDialogInst        = std::unique_ptr<ImGuiFileDialog>;
+    using FileDialogCallback    = std::function< void( ImGuiFileDialog& ) >;
 
 
     enum ViewportFlags
@@ -215,8 +218,21 @@ struct CoreGUI : public Core
     bool unregisterMainMenuEntry( const UIInjectionHandle handle );
 
 
+    // push a popup label to execute in the edges of the main loop, with [executor] being called to actually display
+    // whatever popup window you have in mind.
     void activateModalPopup( const char* label, const ModalPopupExecutor& executor );
 
+    // submit an ImGui file dialog instance for display as part of the main loop; we can only have one live at once
+    bool activateFileDialog( FileDialogInst&& dialogInstance, const FileDialogCallback& onOK )
+    {
+        if ( m_activeFileDialog == nullptr )
+        {
+            m_activeFileDialog       = std::move(dialogInstance);
+            m_fileDialogCallbackOnOK = onOK;
+            return true;
+        }
+        return false;
+    }
 
 
 protected:
@@ -250,6 +266,7 @@ protected:
     // generic modal-popup tracking types to simplify client code opening and running dialog boxes
     using ModalPopupsWaiting    = std::vector< std::string >;
     using ModalPopupsActive     = std::vector< std::tuple< std::string, ModalPopupExecutor > >;
+
 
     // to avoid flickering values on the status bar; distracting and not particularly useful
     using AudioLoadAverage      = base::RollingAverage< 60 >;
@@ -302,6 +319,9 @@ protected:
     // modal dialog registration to unify the handling of arbitrary popups during input loop
     ModalPopupsWaiting      m_modalsWaiting;
     ModalPopupsActive       m_modalsActive;
+
+    FileDialogInst          m_activeFileDialog;
+    FileDialogCallback      m_fileDialogCallbackOnOK;
 
 private:
 

@@ -52,9 +52,6 @@ struct Frontend : public Module
     finline int32_t getLargestTextureDim() const{ return m_largestTextureDimension; }
 
 
-    // open a platform file picker, returns true on success
-    bool showFilePicker( const char* spec, std::string& fileResult ) const;
-
     void titleText( const char* label );
 
     enum class FontChoice

@@ -14,7 +14,7 @@
 #include "app/module.midi.msg.h"
 
 namespace vst { class Instance; }
-namespace app { struct AudioPlaybackTimeInfo; namespace module { struct Frontend; } }
+namespace app { struct AudioPlaybackTimeInfo; struct CoreGUI; }
 namespace data { struct DataBus; }
 
 namespace effect {
@@ -146,6 +146,8 @@ struct EffectStack
         std::vector< std::string >  vstStateData;
         std::vector< bool >         vstActive;
 
+        std::string                 lastBrowsedPath;
+
         template<class Archive>
         void serialize( Archive& archive )
         {
@@ -153,7 +155,8 @@ struct EffectStack
                 CEREAL_NVP( vstIDs ),
                 CEREAL_NVP( vstPaths ),
                 CEREAL_NVP( vstStateData ),
-                CEREAL_NVP( vstActive )
+                CEREAL_NVP( vstActive ),
+                CEREAL_OPTIONAL_NVP( lastBrowsedPath )
             );
         }
     };
@@ -174,14 +177,14 @@ struct EffectStack
     vst::Instance* addVST( const char* vstFilename, const int64_t vstLoadID, const bool haltUntilLoaded = false );
 
     // pop file selector to load a new plugin
-    void chooseNewVST( const app::module::Frontend& appFrontend );
+    void chooseNewVST( app::CoreGUI& coreGUI );
 
     // unload a plugin by the load-id
     bool removeVST( const int64_t loadID );
 
 
     // render management ui
-    void imgui( const app::module::Frontend& appFrontend, const data::DataBus* dataBus = nullptr );
+    void imgui( app::CoreGUI& coreGUI, const data::DataBus* dataBus = nullptr );
 
 
     void syncToDataBus( const data::DataBus& bus )
@@ -214,6 +217,8 @@ private:
     std::vector< int64_t >                              m_order;                // list of the VSTs in play, in order of application in the audio engine
     std::unordered_map< int64_t, vst::Instance* >       m_instances;            // lookup plugin instance by load-id
     std::unordered_map< int64_t, ParameterSet >         m_parameters;           // lookup extracted automated parameters by load-id
+
+    std::string                                         m_lastBrowsedPath;      // last path we explored with file dialog, persisted in session json
 };
 
 } // namespace effect

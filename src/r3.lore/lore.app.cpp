@@ -1224,7 +1224,7 @@ int LoreApp::EntrypointOuro()
             ImGui::Spacing();
             ImGui::Spacing();
 
-            m_effectStack->imgui( *m_mdFrontEnd );
+            m_effectStack->imgui( *this );
 #endif // OURO_FEATURE_VST24
 
             ImGui::End();

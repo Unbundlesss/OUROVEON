@@ -15,7 +15,8 @@ function _ImGui_Include()
 
         Root_IMGUI() .. "-ex/",
         Root_IMGUI() .. "-nodes/",
-        Root_IMGUI() .. "-implot/"
+        Root_IMGUI() .. "-implot/",
+        Root_IMGUI() .. "-filedlg/",
     }
     ModuleRefInclude["freetype"]()
 end
@@ -53,7 +54,10 @@ project "ext-imgui"
         Root_IMGUI() .. "-nodes/*.h",
 
         Root_IMGUI() .. "-implot/*.cpp",
-        Root_IMGUI() .. "-implot/*.h"
+        Root_IMGUI() .. "-implot/*.h",
+
+        Root_IMGUI() .. "-filedlg/*.cpp",
+        Root_IMGUI() .. "-filedlg/*.h",
     }
 
 function _ImGui_LinkProject()

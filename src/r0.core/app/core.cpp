@@ -417,13 +417,14 @@ bool CoreGUI::beginInterfaceLayout( const ViewportFlags viewportFlags )
             //      iteration to add the expected spacing - note there is no clipping yet so right-aligned things may overflow
 
             constexpr float audioLoadBlockSize = 90.0f;
+            const float contentRemainingWidth = ImGui::GetContentRegionAvail().x;
 
             float cursorSave = ImGui::GetCursorPosX();
             float rightLoad  = audioLoadBlockSize;
 
             // add the audio load indicator first, far right
             {
-                ImGui::Dummy( ImVec2( ImGui::GetContentRegionAvail().x - audioLoadBlockSize, 0.0f ) );
+                ImGui::Dummy( ImVec2( contentRemainingWidth - audioLoadBlockSize, 0.0f ) );
                 ImGui::Separator();
 
                 const double audioEngineLoad = m_mdAudio->getAudioEngineCPULoadPercent();
@@ -436,17 +437,13 @@ bool CoreGUI::beginInterfaceLayout( const ViewportFlags viewportFlags )
             {
                 ImGui::SetCursorPosX( cursorSave );
 
-                ImGui::Dummy( ImVec2( ImGui::GetContentRegionAvail().x - ( statusBlock.m_size + rightLoad ), 0.0f ) );
+                ImGui::Dummy( ImVec2( contentRemainingWidth - ( statusBlock.m_size + rightLoad ), 0.0f ) );
                 ImGui::Separator();
 
                 statusBlock.m_callback();
 
                 rightLoad += statusBlock.m_size;
             }
-
-
-            ImGui::Separator();
-
 
             ImGui::PopStyleColor();
             ImGui::EndStatusBar();
@@ -481,6 +478,28 @@ bool CoreGUI::beginInterfaceLayout( const ViewportFlags viewportFlags )
             blog::core( "modal discard : [{}]", std::get<0>( *it ) );
         }
         m_modalsActive.erase( new_end, m_modalsActive.end() );
+    }
+
+    // run file dialog
+    if ( m_activeFileDialog != nullptr )
+    {
+        ImGuiIO& io = ImGui::GetIO();
+        const auto maxSize = ImVec2( io.DisplaySize.x, io.DisplaySize.y );
+        const auto minSize = ImVec2( maxSize.x * 0.75f, maxSize.y * 0.5f );
+
+        const auto dialogKey = m_activeFileDialog->GetOpenedKey();
+        if ( m_activeFileDialog->Display( dialogKey.c_str(), ImGuiWindowFlags_NoCollapse, minSize, maxSize ) )
+        {
+            if ( m_activeFileDialog->IsOk() )
+            {
+                m_fileDialogCallbackOnOK( *m_activeFileDialog );
+            }
+
+            m_activeFileDialog->Close();
+
+            m_activeFileDialog       = nullptr;
+            m_fileDialogCallbackOnOK = nullptr;
+        }
     }
 
 

@@ -1148,7 +1148,7 @@ int BeamApp::EntrypointOuro()
         {
             ImGui::Begin( "Effects" );
             m_effectStack->syncToDataBus( m_dataBus );
-            m_effectStack->imgui( *m_mdFrontEnd, &m_dataBus );
+            m_effectStack->imgui( *this, &m_dataBus );
             ImGui::End();
         }
 

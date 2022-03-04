@@ -17,9 +17,10 @@
 #include "app/module.frontend.h"
 #include "app/module.frontend.fonts.h"
 #include "app/module.audio.h"
+#include "app/core.h"
 
 #include "effect/vst2/host.h"
-
+#include "platform_folders.h"
 
 namespace effect {
 
@@ -37,6 +38,11 @@ static fs::path getParamsPath( const fs::path& appStashPath, const std::string& 
 void EffectStack::load( const fs::path& appStashPath )
 {
     fs::path sessionPath = getSessionPath( appStashPath, m_stackName );
+
+    m_lastBrowsedPath = ".";
+#if OURO_PLATFORM_WIN
+    m_lastBrowsedPath = sago::GetWindowsProgramFiles();
+#endif
 
     Session sessionData;
     if ( fs::exists( sessionPath ) )
@@ -73,6 +79,9 @@ void EffectStack::load( const fs::path& appStashPath )
 
                 vstInst->requestActivationChange( sessionData.vstActive[vI] );
             }
+
+            if ( !sessionData.lastBrowsedPath.empty() )
+                m_lastBrowsedPath = sessionData.lastBrowsedPath;
         }
         catch ( cereal::Exception& cEx )
         {
@@ -165,13 +174,17 @@ vst::Instance* EffectStack::addVST( const char* vstFilename, const int64_t vstLo
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void EffectStack::chooseNewVST( const app::module::Frontend& appFrontend )
+void EffectStack::chooseNewVST( app::CoreGUI& coreGUI )
 {
-    std::string chosenFile;
-    if ( appFrontend.showFilePicker( "VST 2.x Plugin (*.dll)\0*.dll\0Any File\0*.*\0", chosenFile ) )
+    auto fileDialog = std::make_unique< ImGuiFileDialog >();
+
+    fileDialog->OpenModal( "FxFileDlg", "Choose VST 2.x Plugin", ".dll", m_lastBrowsedPath.c_str() );
+    coreGUI.activateFileDialog( std::move(fileDialog), [this]( ImGuiFileDialog& dlg )
     {
-        addVST( chosenFile.c_str(), m_incrementalLoadId++ );
-    }
+        addVST( dlg.GetFilePathName().c_str(), m_incrementalLoadId++ );
+
+        m_lastBrowsedPath = dlg.GetCurrentPath();
+    });
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -218,6 +231,8 @@ void EffectStack::saveSession( const fs::path& appStashPath )
         sessionData.vstStateData.emplace_back( vstInst->serialize() );
         sessionData.vstActive.emplace_back( vstInst->isActive() );
     }
+    sessionData.lastBrowsedPath = m_lastBrowsedPath;
+
     {
         try
         {
@@ -257,8 +272,8 @@ void EffectStack::saveParameters( const fs::path& appStashPath )
 
 // ---------------------------------------------------------------------------------------------------------------------
 void EffectStack::imgui(
-    const app::module::Frontend&        appFrontend,
-    const data::DataBus*                dataBus )
+    app::CoreGUI&           coreGUI,
+    const data::DataBus*    dataBus )
 {
     // set buttons to match checkbox size and unify, ignoring button icon contents for a neater look
     const ImVec2 commonSquareSize = ImVec2( ImGui::GetFrameHeight(), ImGui::GetFrameHeight() );
@@ -298,7 +313,7 @@ void EffectStack::imgui(
             ImGui::Scoped::ButtonTextAlignLeft leftAlign;
             if ( ImGui::Button( ICON_FA_PLUS_SQUARE " Append VST...", ImVec2( appendButtonWidth, 0.0f ) ) )
             {
-                chooseNewVST( appFrontend );
+                chooseNewVST( coreGUI );
             }
         }
         ImGui::Spacing();
