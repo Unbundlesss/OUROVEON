@@ -10,7 +10,6 @@
 #pragma once
 
 #include "base/utils.h"
-#include "app/imgui.ext.h"
 
 namespace app { struct ICoreServices; namespace module { struct Frontend; } }
 namespace config { namespace discord { struct Connection; } }
@@ -36,7 +35,6 @@ private:
     const config::discord::Connection&          m_config;
 
     base::RollingAverage< 20 >                  m_avg;
-    ImGui::RingBufferedGraph< int32_t, 100 >    m_bandwidth;
 };
 
 } // namespace discord

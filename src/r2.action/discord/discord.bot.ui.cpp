@@ -26,7 +26,6 @@ namespace discord {
 BotWithUI::BotWithUI( app::ICoreServices& coreServices, const config::discord::Connection& configConnection ) 
     : m_services( coreServices )
     , m_config( configConnection )
-    , m_bandwidth( 0 )
 {
 }
 
@@ -56,11 +55,7 @@ void BotWithUI::imgui( const app::module::Frontend& frontend )
         discord::Bot::DispatchStats stats;
         m_discordBot->update( stats );
 
-        if ( stats.m_packetsSentBytes > 0 )
-        {
-            m_avg.update( (double)stats.m_packetsSentBytes );
-            m_bandwidth.append( (int32_t)m_avg.m_average );
-        }
+        m_avg.update( (double)stats.m_averagePacketSize );
 
 
         const auto botPhase = m_discordBot->getConnectionPhase();
@@ -174,13 +169,7 @@ void BotWithUI::imgui( const app::module::Frontend& frontend )
             else
             {
                 ImGui::Text( "Transmission active" );
-
-                ImPlot::SetNextPlotLimits( 0, 100.0, 0.0, 3000.0 );
-                if ( ImPlot::BeginPlot( "Traffic" ) )
-                {
-                    m_bandwidth.imgui( "Payload [avg]" );
-                    ImPlot::EndPlot();
-                }
+                ImGui::Text( "Packet Size (avg) : %i", (int32_t)m_avg.m_average );
             }
         }
     }
@@ -192,24 +181,24 @@ void BotWithUI::imgui( const app::module::Frontend& frontend )
         }
         else
         {
-            static std::string lastConnectResult;
-
-            ImGui::TextDisabled( "[ Not Running ]" );
-            ImGui::TextUnformatted( lastConnectResult.c_str() );
-
-            if ( ImGui::Button( "Connect", ImVec2( -1.0f, 30.0f ) ) )
+            if ( m_config.botToken.empty() ||
+                 m_config.guildSID.empty() )
             {
-                // discord bot connection
-                if ( m_config.botToken.empty() ||
-                    m_config.guildSID.empty() )
-                {
-                    lastConnectResult = (ICON_FA_EXCLAMATION_TRIANGLE " Discord configuration data missing");
-                }
+                ImGui::TextDisabled( ICON_FA_EXCLAMATION_TRIANGLE " Discord configuration data missing" );
+            }
+            else
+            {
+                static std::string lastConnectResult;
+
+                ImGui::TextDisabled( "[ Not Running ]" );
+                ImGui::TextUnformatted( lastConnectResult.c_str() );
+
+                if ( ImGui::Button( "Connect", ImVec2( -1.0f, 30.0f ) ) )
                 {
                     m_discordBot = std::make_unique<discord::Bot>();
                     if ( !m_discordBot->initialise( m_services, m_config ) )
                     {
-                        lastConnectResult = (ICON_FA_EXCLAMATION_TRIANGLE " initialisation failed");
+                        lastConnectResult = ( ICON_FA_EXCLAMATION_TRIANGLE " initialisation failed" );
                         m_discordBot.reset();
                     }
                 }

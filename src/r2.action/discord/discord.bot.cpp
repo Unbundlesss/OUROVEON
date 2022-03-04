@@ -42,15 +42,16 @@ struct Bot::State
 
 
     State( app::ICoreServices& coreServices, const config::discord::Connection& configConnection )
-        :     m_appCoreServices( coreServices )
-        ,               m_phase( Bot::ConnectionPhase::Uninitialised )
-        ,             m_cluster( configConnection.botToken )
-        ,      m_commandHandler( &m_cluster )
-        ,            m_guildSID( std::stoull( configConnection.guildSID ) )
-        ,           m_liveVoice( nullptr )
-        ,          m_voiceState( Bot::VoiceState::NoConnection )
-        ,  m_voiceChannelLiveID( 0 )
-        , m_opusDispatchRunning( false )
+        :       m_appCoreServices( coreServices )
+        ,                 m_phase( Bot::ConnectionPhase::Uninitialised )
+        ,               m_cluster( configConnection.botToken )
+        ,        m_commandHandler( &m_cluster )
+        ,              m_guildSID( std::stoull( configConnection.guildSID ) )
+        , m_opusStreamProcessorID( ssp::StreamProcessorInstanceID::invalid() )
+        ,             m_liveVoice( nullptr )
+        ,            m_voiceState( Bot::VoiceState::NoConnection )
+        ,    m_voiceChannelLiveID( 0 )
+        ,   m_opusDispatchRunning( false )
     {
         m_commandHandler.add_prefix( "." )
                         .add_prefix( "/" );
@@ -60,7 +61,7 @@ struct Bot::State
     {
         m_appCoreServices.getAudioModule()->blockUntil(
             m_appCoreServices.getAudioModule()->detachSampleProcessor( m_opusStreamProcessorID ) );
-
+        
         m_phase = Bot::ConnectionPhase::Uninitialised;
     }
 
@@ -396,7 +397,7 @@ void Bot::State::update( DispatchStats& stats )
             if ( !m_opusDispatchRunning )
             {
                 const auto queueLength = m_opusQueue.size_approx();
-                if ( queueLength >= 3 &&
+                if ( queueLength >= 2 &&
                      m_opusPacketInProgress &&
                      m_opusPacketInReserve )
                     m_opusDispatchRunning = true;
@@ -407,7 +408,7 @@ void Bot::State::update( DispatchStats& stats )
                         stats.m_bufferingProgress++;
                     if ( m_opusPacketInReserve )
                         stats.m_bufferingProgress++;
-                    stats.m_bufferingProgress /= 5.0f;
+                    stats.m_bufferingProgress /= 4.0f;
                 }
             }
             if ( m_opusDispatchRunning && 
@@ -425,6 +426,7 @@ void Bot::State::update( DispatchStats& stats )
 
                     stats.m_packetsSentCount++;
                     stats.m_packetsSentBytes += (uint32_t)packetLength;
+                    stats.m_averagePacketSize = m_opusPacketInProgress->m_averagePacketSize;
                 }
 
                 if ( m_opusPacketInProgress->m_dispatchedPackets >= m_opusPacketInProgress->m_opusPacketSizes.size() )

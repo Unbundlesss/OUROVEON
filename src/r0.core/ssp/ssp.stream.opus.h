@@ -54,7 +54,7 @@ public:
 
     // should make this configurable later
     static constexpr uint32_t   cFrameSize      = 2880;
-    static constexpr uint32_t   cBufferedFrames = 80;
+    static constexpr uint32_t   cBufferedFrames = 50;
 
     ~OpusStream();
 

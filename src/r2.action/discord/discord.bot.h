@@ -67,6 +67,8 @@ struct Bot
         uint32_t    m_packetsSentCount = 0;
         uint32_t    m_packetsSentBytes = 0;
 
+        uint32_t    m_averagePacketSize = 0;
+
         float       m_bufferingProgress = 0;
         bool        m_dispatchRunning   = false;
     };
