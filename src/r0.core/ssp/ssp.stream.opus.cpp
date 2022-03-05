@@ -95,9 +95,8 @@ struct OpusStream::StreamInstance : public AsyncBufferProcessorIQ16
         opus_encoder_ctl( m_opusEncoder, OPUS_SET_COMPLEXITY( 10 ) );
         opus_encoder_ctl( m_opusEncoder, OPUS_SET_SIGNAL( OPUS_SIGNAL_MUSIC ) );
 
-        opus_encoder_ctl( m_opusEncoder, OPUS_SET_BITRATE( 96000 ) );
+        opus_encoder_ctl( m_opusEncoder, OPUS_SET_BITRATE( 64000 ) );
 
-        opus_encoder_ctl( m_opusEncoder, OPUS_SET_PACKET_LOSS_PERC( 1 ) );
 
         opus_int32 rate;
         opus_encoder_ctl( m_opusEncoder, OPUS_GET_BITRATE( &rate ) );

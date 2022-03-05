@@ -17,8 +17,6 @@
 
 #include "config/frontend.h"
 
-#include <commdlg.h>
-
 // bits from imgui internals
 #include "imgui_internal.h"
 
@@ -373,6 +371,7 @@ void Frontend::titleText( const char* label )
     ImGui::Spacing();
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
 void Frontend::reloadImguiLayoutFromDefault()
 {
     ImGui::LoadIniSettingsFromDisk( "../layout.default.ini" );

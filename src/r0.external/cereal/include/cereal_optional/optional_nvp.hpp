@@ -57,7 +57,9 @@ struct OptionalNameValuePair<T, void> {
   
   
   OptionalNameValuePair(const char *name, T &&value)
-      : name(name), value(std::forward<T>(value)) { }
+      : value(std::forward<T>(value))
+      , name(name)
+      { }
   
   /// Delete default copy constructor
   OptionalNameValuePair(const OptionalNameValuePair &) = delete;

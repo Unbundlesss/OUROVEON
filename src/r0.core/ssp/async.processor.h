@@ -32,7 +32,7 @@ struct AsyncBufferProcessor
         m_reservePage   = new _bufferType( bufferSampleSize );
     }
 
-    ~AsyncBufferProcessor()
+    virtual ~AsyncBufferProcessor()
     {
         terminateProcessorThread();
 

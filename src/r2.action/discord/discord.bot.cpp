@@ -373,7 +373,7 @@ struct Bot::State
 // ---------------------------------------------------------------------------------------------------------------------
 void Bot::State::update( DispatchStats& stats )
 {
-    static const size_t maxPacketsDispatchedPerUpdate = 3;
+    static const size_t maxPacketsDispatchedPerUpdate = 1;
 
     stats.m_packetsSentBytes    = 0;
     stats.m_packetsSentCount    = 0;

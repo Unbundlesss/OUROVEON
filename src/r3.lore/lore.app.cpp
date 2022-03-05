@@ -652,7 +652,7 @@ protected:
                 gfx::Dimensions extents( viewWidth, (cellY + 1) * cJamBitmapGridCell );
 
                 activeSketch->setExtents( extents );
-                m_textures.emplace_back( std::move( sketchbook.scheduleBufferUploadToGPU( std::move( activeSketch ) ) ) );
+                m_textures.emplace_back( sketchbook.scheduleBufferUploadToGPU( std::move( activeSketch ) ) );
             };
 
             const auto incrementCellY = [&]()
@@ -1082,7 +1082,7 @@ int LoreApp::EntrypointOuro()
 
 
     // add status bar section to report warehouse activity
-    registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Left, 500.0f, [&warehouse, this]()
+    registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Left, 500.0f, [this]()
     {
         // worker thread control / status display
         {

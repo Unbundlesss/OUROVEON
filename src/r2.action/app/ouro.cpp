@@ -140,8 +140,8 @@ int OuroApp::EntrypointGUI()
 
     // load any saved configs
     config::endlesss::Auth endlesssAuth;
-    const auto authLoadResult    = config::load( *this, endlesssAuth );
-    const auto discordLoadResult = config::load( *this, m_configDiscord );
+    /* const auto authLoadResult    = */ config::load( *this, endlesssAuth );
+    /* const auto discordLoadResult = */ config::load( *this, m_configDiscord );
 
     // #HDD check and do something with config load results?
 

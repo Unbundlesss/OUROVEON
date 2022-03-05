@@ -321,10 +321,10 @@ constexpr const size_t codecvt_result<CodeUnit>::max_size;
 template <typename CodeUnit>
 void write_codecvt(codecvt_result<CodeUnit>& out, string_view in_buf,
                    const std::locale& loc) {
-  using codecvt = std::codecvt<CodeUnit, char, std::mbstate_t>;
 #if FMT_CLANG_VERSION
 #  pragma clang diagnostic push
 #  pragma clang diagnostic ignored "-Wdeprecated"
+  using codecvt = std::codecvt<CodeUnit, char, std::mbstate_t>;
   auto& f = std::use_facet<codecvt>(loc);
 #  pragma clang diagnostic pop
 #else

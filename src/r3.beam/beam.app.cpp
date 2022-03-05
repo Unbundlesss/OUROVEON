@@ -1456,7 +1456,7 @@ int BeamApp::EntrypointOuro()
                             ImGui::TableNextColumn(); ImGui::Text( "%.2f", bpsDiff );
                             ImGui::TableNextColumn(); ImGui::Text( "%ix", currentRiff->m_stemRepetitions[sI] );
                             ImGui::TableNextColumn(); ImGui::Text( "%i", stem->m_data.sampleRate );
-                            ImGui::TableNextColumn(); ImGui::Text( stem->m_data.getInstrumentName() );
+                            ImGui::TableNextColumn(); ImGui::TextUnformatted( stem->m_data.getInstrumentName() );
                             ImGui::TableNextColumn(); ImGui::TextUnformatted( stem->m_data.preset.c_str() );
 
                             ImGui::PushStyleColor( ImGuiCol_PlotHistogram, m_endlesssExchange.m_stemColour[sI] );

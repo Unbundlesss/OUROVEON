@@ -31,29 +31,27 @@ function _Freetype_LinkPrebuilt()
 
     -- windows has debug/release static builds
     filter "system:Windows"
-    filter "configurations:Release"
-        libdirs ( GetPrebuiltLibs_Win64() .. "freetype/lib/release_static" )
-    filter {}
-    filter "configurations:Debug"
-        libdirs ( GetPrebuiltLibs_Win64() .. "freetype/lib/debug_static" )
-    filter {}
-    links ( "freetype.lib" )
+        links ( "freetype.lib" )
+        filter { "system:Windows", "configurations:Release" }
+            libdirs ( GetPrebuiltLibs_Win64() .. "freetype/lib/release_static" )
+        filter { "system:Windows", "configurations:Debug" }
+            libdirs ( GetPrebuiltLibs_Win64() .. "freetype/lib/debug_static" )
     filter {}
 
     -- 
     filter "system:linux"
-    links ( "freetype" )
+        links ( "freetype" )
     filter {}
 
     -- 
     filter "system:macosx"
-    libdirs ( GetPrebuiltLibs_MacUniversal() )
-    links
-    {
-        "freetype",
-        "png",
-        "bz2",
-    }
+        libdirs ( GetPrebuiltLibs_MacUniversal() )
+        links
+        {
+            "freetype",
+            "png",
+            "bz2",
+        }
     filter {}
 end
 

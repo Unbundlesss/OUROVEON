@@ -55,7 +55,8 @@ void BotWithUI::imgui( const app::module::Frontend& frontend )
         discord::Bot::DispatchStats stats;
         m_discordBot->update( stats );
 
-        m_avg.update( (double)stats.m_averagePacketSize );
+        if ( stats.m_averagePacketSize > 0 )
+            m_avg.update( (double)stats.m_averagePacketSize );
 
 
         const auto botPhase = m_discordBot->getConnectionPhase();
