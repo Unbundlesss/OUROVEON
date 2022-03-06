@@ -44,6 +44,9 @@ void Preview::renderCurrentRiff(
     const uint32_t      samplesToWrite,
     const uint64_t      samplePosition )
 {
+    if ( samplesToWrite == 0 )
+        return;
+
     std::array< float, 8 >                  stemTimeStretch;
     std::array< float, 8 >                  stemGains;
     std::array< endlesss::live::Stem*, 8 >  stemPtr;
@@ -144,6 +147,8 @@ void Preview::update(
 
         // update enqueued state now we just removed something from the pile
         riffEnqueued = ( m_riffQueue.peek() != nullptr );
+
+        m_riffTransitionedInMix = true;
     };
 
     const bool riffEmpty = ( m_riffCurrent == nullptr ||
@@ -176,9 +181,21 @@ void Preview::update(
             }
         }
 
-        const auto shiftTransisionSample = m_lockTransitionOnBeat * (m_riffCurrent->m_timingDetails.m_lengthInSamplesPerBar / m_riffCurrent->m_timingDetails.m_quarterBeats);
+        const auto shiftTransisionSample = m_lockTransitionOnBeat * ( m_riffCurrent->m_timingDetails.m_lengthInSamplesPerBar / m_riffCurrent->m_timingDetails.m_quarterBeats );
 
-        const auto segmentLengthInSamples = (int64_t)m_riffCurrent->m_timingDetails.m_lengthInSamplesPerBar * m_lockTransitionBarCount;
+        auto segmentLengthInSamples = (int64_t)m_riffCurrent->m_timingDetails.m_lengthInSamplesPerBar;
+        switch ( m_lockTransitionBarCount )
+        {
+            case TransitionBarCount::Eighth:    segmentLengthInSamples /= 8; break;
+            case TransitionBarCount::Quarter:   segmentLengthInSamples /= 4; break;
+            case TransitionBarCount::Half:      segmentLengthInSamples /= 2; break;
+            case TransitionBarCount::Two:       segmentLengthInSamples *= 2; break;
+            case TransitionBarCount::Four:      segmentLengthInSamples *= 4; break;
+            default:
+            case TransitionBarCount::One:
+                break;
+        }
+        
 
         auto shiftedPlaybackSample = m_riffPlaybackSample - shiftTransisionSample;
         if ( shiftedPlaybackSample < 0 )
@@ -188,7 +205,7 @@ void Preview::update(
 
         auto samplesUntilNextSegment = (uint32_t)(segmentLengthInSamples - (shiftedPlaybackSample % segmentLengthInSamples));
 
-        if ( samplesUntilNextSegment >= samplesToWrite )
+        if ( samplesUntilNextSegment > samplesToWrite )
         {
             renderCurrentRiff( 0, samplesToWrite, samplePosition );
         }
@@ -243,14 +260,31 @@ void Preview::update(
     mixChannelsToOutput( outputBuffer, outputVolume, samplesToWrite );
 }
 
+ImVec4 GetTransitionColourVec4( const float lerpT )
+{
+    const auto colour1 = ImGui::GetStyleColorVec4( ImGuiCol_PlotHistogram );
+    const auto colour2 = ImGui::GetStyleColorVec4( ImGuiCol_Text );
+    return lerpVec4( colour1, colour2, lerpT );
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 void Preview::imgui( const app::StoragePaths& storagePaths )
 {
-    const auto panelVolumeModule = 105.0f;
+    const auto panelVolumeModule = 75.0f;
 
     const auto panelRegionAvailable = ImGui::GetContentRegionAvail();
     if ( panelRegionAvailable.x < panelVolumeModule )
         return;
+
+    // simple pulse from a riff change in the mixer, pulse our transition bits
+    m_riffTransitionedUI += ( 0.0f - m_riffTransitionedUI ) * 0.165f;
+    if ( m_riffTransitionedInMix )
+    {
+        m_riffTransitionedUI = 1.0f;
+        m_riffTransitionedInMix = false;
+    }
+
+    const auto riffTransitColourU32 = ImGui::GetColorU32( GetTransitionColourVec4( m_riffTransitionedUI ) );
 
     // for rendering state from the current riff;
     // take a shared ptr copy here, just in case the riff is swapped out mid-tick
@@ -284,20 +318,22 @@ void Preview::imgui( const app::StoragePaths& storagePaths )
         ImGui::SetColumnWidth( 0, panelVolumeModule );
         ImGui::SetColumnWidth( 1, panelRegionAvailable.x - panelVolumeModule );
 
-        // toggle transition mode
+        // toggle transition mode; take copy of atomic to update/use in ui
+        bool lockTransitionLocal = m_lockTransitionToNextBar.load();
         {
             {
-                ImGui::Scoped::ToggleButton highlightButton( m_lockTransitionToNextBar, true );
-                if ( ImGui::Button( ICON_FA_RULER_HORIZONTAL ) )
+                ImGui::Scoped::ToggleButton highlightButton( lockTransitionLocal, true );
+                if ( ImGui::Button( ICON_FA_RULER_HORIZONTAL, ImVec2( 30.0f, 0.0f ) ) )
                 {
-                    m_lockTransitionToNextBar = !m_lockTransitionToNextBar;
+                    lockTransitionLocal = !lockTransitionLocal;
+                    m_lockTransitionToNextBar = lockTransitionLocal;
                 }
             }
-            ImGui::CompactTooltip( m_lockTransitionToNextBar ? "Transition Timing : On Chosen Bar" : "Transition Timing : Instant" );
+            ImGui::CompactTooltip( lockTransitionLocal ? "Transition Timing : On Chosen Bar" : "Transition Timing : Instant" );
             ImGui::SameLine();
 
             ImGui::BeginDisabledControls( !currentRiffIsValid );
-            if ( ImGui::Button( ICON_FA_STOP ) )
+            if ( ImGui::Button( ICON_FA_STOP, ImVec2( 30.0f, 0.0f ) ) )
             {
                 stop();
             }
@@ -311,27 +347,83 @@ void Preview::imgui( const app::StoragePaths& storagePaths )
         {
             ImGui::BeatSegments( "##beats", currentRiff->m_timingDetails.m_quarterBeats, m_riffPlaybackBarSegment );
             ImGui::ProgressBar( (float)m_riffPlaybackPercentage, ImVec2( -1, 3.0f ), "" );
-            ImGui::BeatSegments( "##bars_play", currentRiff->m_timingDetails.m_barCount, m_riffPlaybackBar, 3.0f, ImGui::GetColorU32( ImGuiCol_PlotHistogram ) );
+            ImGui::BeatSegments( "##bars_play", currentRiff->m_timingDetails.m_barCount, m_riffPlaybackBar, 3.0f, riffTransitColourU32 );
         }
 
-        ImGui::Columns( 1 );
 
-        if ( currentRiffIsValid )
         {
             ImGui::Spacing();
             ImGui::Spacing();
-            ImGui::BeginDisabledControls( !m_lockTransitionToNextBar );
-            {
-                ImGui::TextUnformatted( "Transition On Beat" );
-                ImGui::SameLine(); ImGui::SliderInt( "##tob", &m_lockTransitionOnBeat, 0, currentRiff->m_timingDetails.m_quarterBeats - 1 );
+            ImGui::BeginDisabledControls( !lockTransitionLocal );
 
-                ImGui::TextUnformatted( "Minimum Bars Before Transition" );
-                ImGui::SameLine(); ImGui::RadioButton( "1x", &m_lockTransitionBarCount, 1 );
-                ImGui::SameLine(); ImGui::RadioButton( "2x", &m_lockTransitionBarCount, 2 );
-                ImGui::SameLine(); ImGui::RadioButton( "4x", &m_lockTransitionBarCount, 4 );
+            ImGui::NextColumn();
+            ImGui::TextUnformatted( "Offset" );
+            ImGui::NextColumn();
+            {
+                if ( currentRiffIsValid )
+                {
+                    float barBlockArea = ImGui::GetContentRegionAvail().x;
+                    switch ( m_lockTransitionBarCount )
+                    {
+                        case TransitionBarCount::Eighth:    barBlockArea *= 0.125f; break;
+                        case TransitionBarCount::Quarter:   barBlockArea *= 0.25f;  break;
+                        case TransitionBarCount::Half:      barBlockArea *= 0.5f;   break;
+                        default:
+                            break;
+                    }
+                    const float barButtonWidth  = 10.0f;
+                    const float barBlockWidth   = ( barBlockArea - barButtonWidth ) / (float)currentRiff->m_timingDetails.m_quarterBeats;
+                    const float barSpacerWidth  = ( barBlockWidth - barButtonWidth );
+
+                    const auto barButtonDim = ImVec2( barButtonWidth, ImGui::GetTextLineHeight() );
+
+                    for ( auto qb = 0; qb < currentRiff->m_timingDetails.m_quarterBeats; qb++ )
+                    {
+                        if ( qb > 0 )
+                            ImGui::SameLine( 0, barSpacerWidth );
+
+                        ImGui::PushID( qb );
+                        ImGui::Scoped::ToggleButtonLit lit( m_lockTransitionOnBeat == qb, riffTransitColourU32 );
+                        if ( ImGui::Button( "##btr", barButtonDim ) )
+                        {
+                            m_lockTransitionOnBeat = qb;
+                        }
+                        ImGui::PopID();
+                    }
+                    {
+                        ImGui::SameLine( 0, barSpacerWidth );
+                        ImGui::BeginDisabledControls( true );
+                        ImGui::Button( "##endpt", barButtonDim );
+                        ImGui::EndDisabledControls( true );
+                    }
+                }
+                else
+                {
+                    ImGui::TextUnformatted( "" );
+                }
+
+                ImGui::NextColumn();
+                ImGui::TextUnformatted( "Repeat" );
+                ImGui::NextColumn();
+
+                const auto buttonSize = ImVec2( ( ImGui::GetContentRegionAvail().x - ( 4.0f * 5.0f ) ) / 6.0f, ImGui::GetTextLineHeight() * 1.25f );
+
+                META_FOREACH( TransitionBarCount, lb )
+                {
+                    if ( lb != TransitionBarCount::Eighth )
+                        ImGui::SameLine(0, 4.0f);
+
+                    ImGui::Scoped::ToggleButtonLit lit( m_lockTransitionBarCount == lb, riffTransitColourU32 );
+                    if ( ImGui::Button( TransitionBarCount::toString( lb ), buttonSize ) )
+                    {
+                        m_lockTransitionBarCount = lb;
+                    }
+                }
             }
-            ImGui::EndDisabledControls( !m_lockTransitionToNextBar );
+            ImGui::EndDisabledControls( !lockTransitionLocal );
         }
+
+        ImGui::Columns( 1 );
     }
 }
 

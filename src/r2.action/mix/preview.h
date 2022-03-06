@@ -6,6 +6,7 @@
 //
 
 #include "base/utils.h"
+#include "base/metaenum.h"
 
 #include "mix/common.h"
 #include "app/module.audio.h"
@@ -65,6 +66,15 @@ protected:
         const uint32_t      samplesToWrite,
         const uint64_t      samplePosition );
 
+#define _TX_BARS(_action)   \
+        _action(Eighth)     \
+        _action(Quarter)    \
+        _action(Half)       \
+        _action(One)        \
+        _action(Two)        \
+        _action(Four)
+    REFLECT_ENUM( TransitionBarCount, uint32_t, _TX_BARS );
+#undef _TX_BARS
 
     RiffQueue                   m_riffQueue;                        // lf interface between main and audio threads for new riff requests
     endlesss::live::RiffPtr     m_riffCurrent;                      // what we're playing; this is managed by the audio thread
@@ -75,8 +85,11 @@ protected:
     int32_t                     m_riffPlaybackBarSegment    = 0;
 
     int32_t                     m_lockTransitionOnBeat      = 0;
-    int32_t                     m_lockTransitionBarCount    = 1;
-    bool                        m_lockTransitionToNextBar   = false;
+    TransitionBarCount::Enum    m_lockTransitionBarCount    = TransitionBarCount::One;
+    std::atomic_bool            m_lockTransitionToNextBar   = false;
+
+    std::atomic_bool            m_riffTransitionedInMix     = false;
+    float                       m_riffTransitionedUI        = 0.0f;
 
     std::atomic_bool            m_drainQueueAndStop         = false;
 
