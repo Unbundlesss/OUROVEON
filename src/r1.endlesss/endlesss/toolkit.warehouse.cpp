@@ -741,8 +741,7 @@ Warehouse::Warehouse( const app::StoragePaths& storagePaths, const api::NetConfi
 
 #if OURO_PLATFORM_WIN
     ::SetThreadPriority( m_workerThread->native_handle(), THREAD_PRIORITY_BELOW_NORMAL );
-#endif 
-
+#endif
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

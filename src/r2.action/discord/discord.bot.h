@@ -9,6 +9,10 @@
 
 #pragma once
 
+#include "base/metaenum.h"
+
+#include "ssp/ssp.stream.opus.h"
+
 namespace config { namespace discord { struct Connection; } }
 namespace app {
     struct ICoreServices;
@@ -60,17 +64,28 @@ struct Bot
         Joined                  // we're on the mic
     };
 
+    // mapping timing tuning values added to DPP; declared as meta so we get easy imgui support
+#define _UDP_TUNING(_action) \
+      _action(Default)       \
+      _action(Delicate)      \
+      _action(Optimistic)    \
+      _action(Aggressive)
+    REFLECT_ENUM( UdpTuning, uint32_t, _UDP_TUNING );
+#undef _UDP_TUNING
+
+
     struct DispatchStats
     {
         uint32_t    m_packetBlobQueueLength = 0;
 
-        uint32_t    m_packetsSentCount = 0;
-        uint32_t    m_packetsSentBytes = 0;
+        uint32_t    m_packetsSentCount      = 0;
+        uint32_t    m_packetsSentBytes      = 0;
 
-        uint32_t    m_averagePacketSize = 0;
+        uint32_t    m_voiceBufferQueueState = 0;
+        uint32_t    m_averagePacketSize     = 0;
 
-        float       m_bufferingProgress = 0;
-        bool        m_dispatchRunning   = false;
+        float       m_bufferingProgress     = 0;
+        bool        m_dispatchRunning       = false;
     };
 
     Bot();
@@ -109,6 +124,14 @@ struct Bot
     // ask to leave our current channel, if VoiceState is Joined
     bool leaveVoiceChannel();
 
+
+    // change UDP tuning
+    bool getUdpTuning( UdpTuning::Enum& tuning ) const;
+    bool setUdpTuning( const UdpTuning::Enum& tuning );
+
+    // tunnel through to set Opus compressor tuning
+    bool getCurrentCompressionSetup( ssp::OpusStream::CompressionSetup& setup ) const;
+    bool setCompressionSetup( const ssp::OpusStream::CompressionSetup& setup );
 
 protected:
 

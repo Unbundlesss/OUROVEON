@@ -49,6 +49,12 @@ struct Bot::State
         ,              m_guildSID( std::stoull( configConnection.guildSID ) )
         , m_opusStreamProcessorID( ssp::StreamProcessorInstanceID::invalid() )
         ,             m_liveVoice( nullptr )
+        , m_voiceBufferQueueState( 0 )
+#if OURO_PLATFORM_OSX
+        ,        m_voiceUdpTuning( Bot::UdpTuning::Delicate )
+#else
+        ,        m_voiceUdpTuning( Bot::UdpTuning::Default )
+#endif
         ,            m_voiceState( Bot::VoiceState::NoConnection )
         ,    m_voiceChannelLiveID( 0 )
         ,   m_opusDispatchRunning( false )
@@ -72,6 +78,8 @@ struct Bot::State
 
     bool initialise()
     {
+        blog::discord( "init {}", DPP_VERSION_TEXT );
+
         if ( m_phase != Bot::ConnectionPhase::Uninitialised )
         {
             blog::error::discord( "already initialised / cannot start" );
@@ -158,6 +166,11 @@ struct Bot::State
             onGuildData();
         });
 
+        m_cluster.on_voice_buffer_send( [this]( dpp::voice_buffer_send_t bufferSend )
+        {
+            m_voiceBufferQueueState = bufferSend.buffer_size;
+        });
+
         // create and install an OPUS sample processor that points back to this bot instance; we will accept and
         // handle the blocks of packets it returns.
         // nb. 48000 hz sample rate is required by Discord and should be enforced by the UI / app boot process if you want to use the bot interface
@@ -173,8 +186,6 @@ struct Bot::State
     {
         if ( m_voiceState != Bot::VoiceState::Joined )
             return;
-
-        blog::discord( "[ OPUS ] new packet stream enqueued" );
 
         m_opusQueue.enqueue( std::move( packets ) );
     }
@@ -358,6 +369,8 @@ struct Bot::State
     std::mutex                              m_liveVoiceGuard;       // defense against the packet processing loop on main thread getting
                                                                     // blindsided by voice channel disconnection 
     dpp::discord_voice_client*              m_liveVoice;
+    std::atomic_uint32_t                    m_voiceBufferQueueState;
+    Bot::UdpTuning::Enum                    m_voiceUdpTuning;
 
     std::atomic< Bot::VoiceState >          m_voiceState;
     std::atomic< dpp::snowflake >           m_voiceChannelLiveID;   // if VoiceState is Joined, this is the ID of the one we're on
@@ -373,27 +386,43 @@ struct Bot::State
 // ---------------------------------------------------------------------------------------------------------------------
 void Bot::State::update( DispatchStats& stats )
 {
-    static const size_t maxPacketsDispatchedPerUpdate = 1;
-
     stats.m_packetsSentBytes    = 0;
     stats.m_packetsSentCount    = 0;
     stats.m_bufferingProgress   = -1;
+
+    stats.m_voiceBufferQueueState = m_voiceBufferQueueState;
+
+    const size_t maxPacketsDispatchedPerUpdate = 1;
 
     // packet dispatch
     {
         std::lock_guard<std::mutex> voiceLock( m_liveVoiceGuard );
         if ( m_voiceState == Bot::VoiceState::Joined && m_liveVoice != nullptr )
         {
+            // translate our UDP tuning value into the enum in dpp
+            switch ( m_voiceUdpTuning )
+            {
+                default:
+                case Bot::UdpTuning::Default:    m_liveVoice->udpSendTiming = dpp::discord_voice_client::UdpSendTiming::Default;     break;
+                case Bot::UdpTuning::Delicate:   m_liveVoice->udpSendTiming = dpp::discord_voice_client::UdpSendTiming::Delicate;    break;
+                case Bot::UdpTuning::Optimistic: m_liveVoice->udpSendTiming = dpp::discord_voice_client::UdpSendTiming::Optimistic;  break;
+                case Bot::UdpTuning::Aggressive: m_liveVoice->udpSendTiming = dpp::discord_voice_client::UdpSendTiming::Aggressive;  break;
+            }
+            
+            // no current packet block being drained? switch in the reserve
             if ( m_opusPacketInProgress == nullptr )
             {
                 if ( m_opusPacketInReserve != nullptr )
                     std::swap( m_opusPacketInProgress, m_opusPacketInReserve );
             }
+            // reserve empty? try dequeing one from the compressor thread's pile
             if ( m_opusPacketInReserve == nullptr )
             {
                 m_opusQueue.try_dequeue( m_opusPacketInReserve );
             }
 
+            // pre-buffer stage - wait until we've got a bunch of packets to begin working with before 
+            // starting for real
             if ( !m_opusDispatchRunning )
             {
                 const auto queueLength = m_opusQueue.size_approx();
@@ -411,6 +440,8 @@ void Bot::State::update( DispatchStats& stats )
                     stats.m_bufferingProgress /= 4.0f;
                 }
             }
+
+            // voice transmission is live, continuously stream packets to Discord
             if ( m_opusDispatchRunning && 
                  m_opusPacketInProgress )
             {
@@ -429,6 +460,7 @@ void Bot::State::update( DispatchStats& stats )
                     stats.m_averagePacketSize = m_opusPacketInProgress->m_averagePacketSize;
                 }
 
+                // depleted the current block of packets; this will be swapped out the next time through
                 if ( m_opusPacketInProgress->m_dispatchedPackets >= m_opusPacketInProgress->m_opusPacketSizes.size() )
                 {
                     m_opusPacketInProgress.reset();
@@ -517,6 +549,46 @@ bool Bot::leaveVoiceChannel()
     if ( getConnectionPhase() == Bot::ConnectionPhase::Ready )
         return m_state->leaveVoiceChannel();
 
+    return false;
+}
+
+bool Bot::getUdpTuning( Bot::UdpTuning::Enum& tuning ) const
+{
+    if ( m_state )
+    {
+        tuning = m_state->m_voiceUdpTuning;
+        return true;
+    }
+    return false;
+}
+
+bool Bot::setUdpTuning( const Bot::UdpTuning::Enum& tuning )
+{
+    if ( m_state )
+    {
+        m_state->m_voiceUdpTuning = tuning;
+        return true;
+    }
+    return false;
+}
+
+bool Bot::getCurrentCompressionSetup( ssp::OpusStream::CompressionSetup& setup ) const
+{
+    if ( m_state )
+    {
+        setup = m_state->m_opusStreamProcessor->getCurrentCompressionSetup();
+        return true;
+    }
+    return false;
+}
+
+bool Bot::setCompressionSetup( const ssp::OpusStream::CompressionSetup& setup )
+{
+    if ( m_state )
+    {
+        m_state->m_opusStreamProcessor->setCompressionSetup( setup );
+        return true;
+    }
     return false;
 }
 

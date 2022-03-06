@@ -174,6 +174,10 @@ void discord_voice_client::run()
 {
 	this->runner = new std::thread(&discord_voice_client::thread_run, this);
 	this->thread_id = runner->native_handle();
+
+#if _MSC_VER
+    ::SetThreadPriority( runner->native_handle(), THREAD_PRIORITY_ABOVE_NORMAL );
+#endif // _MSC_VER
 }
 
 int discord_voice_client::udp_send(const char* data, size_t length)
@@ -539,6 +543,20 @@ void discord_voice_client::write_ready()
 	if (duration) {
 		std::chrono::nanoseconds latency = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - last_timestamp);
 		std::chrono::nanoseconds sleep_time = std::chrono::nanoseconds(duration) - latency;
+
+		static constexpr auto delicateAdjustment   = std::chrono::nanoseconds(   100000 );
+		static constexpr auto optimisticAdjustment = std::chrono::nanoseconds( 10000000 );
+        static constexpr auto aggressiveAdjustment = std::chrono::nanoseconds( 50000000 );
+		switch ( udpSendTiming )
+		{
+			default:
+			case UdpSendTiming::Default:
+				break;
+			case UdpSendTiming::Delicate:	sleep_time -= delicateAdjustment;	break;
+			case UdpSendTiming::Optimistic: sleep_time -= optimisticAdjustment; break;
+			case UdpSendTiming::Aggressive: sleep_time -= aggressiveAdjustment; break;
+		}
+
 		if (sleep_time.count() > 0) {
 			std::this_thread::sleep_for(sleep_time);
 		}
@@ -820,8 +838,8 @@ discord_voice_client& discord_voice_client::send_audio_raw(uint16_t* audio_data,
 
 discord_voice_client& discord_voice_client::send_audio_opus(uint8_t* opus_packet, const size_t length) {
 #if DPP_ENABLE_VOICE
-	int samples = opus_packet_get_nb_samples(opus_packet, (opus_int32)length, 48000);
-	uint64_t duration = (samples / 48) / (timescale / 1000000);
+	const int samples = opus_packet_get_nb_samples(opus_packet, (opus_int32)length, 48000);
+	const uint64_t duration = (samples / 48) / (timescale / 1000000);
 	send_audio_opus(opus_packet, length, duration);
 #else
 	throw dpp::voice_exception("Voice support not enabled in this build of D++");
@@ -831,7 +849,7 @@ discord_voice_client& discord_voice_client::send_audio_opus(uint8_t* opus_packet
 
 discord_voice_client& discord_voice_client::send_audio_opus(uint8_t* opus_packet, const size_t length, uint64_t duration) {
 #if DPP_ENABLE_VOICE
-	int frameSize = (int)(48 * duration * (timescale / 1000000));
+	const int frameSize = (int)(48 * duration * (timescale / 1000000));
 	opus_int32 encodedAudioMaxLength = (opus_int32)length;
 	std::vector<uint8_t> encodedAudioData(encodedAudioMaxLength);
 	size_t encodedAudioLength = encodedAudioMaxLength;

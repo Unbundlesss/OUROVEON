@@ -1154,7 +1154,7 @@ int BeamApp::EntrypointOuro()
 
 #endif // OURO_FEATURE_VST24
 
-        m_discordBotUI->imgui( *m_mdFrontEnd );
+        m_discordBotUI->imgui( *this );
 
         {
             ImGui::Begin( "System" );

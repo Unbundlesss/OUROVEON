@@ -234,6 +234,8 @@ struct CoreGUI : public Core
         return false;
     }
 
+    inline const app::FrontendModule& getFrontend() const { return m_mdFrontEnd; }
+
 
 protected:
 
@@ -309,7 +311,7 @@ protected:
     AudioLoadAverage        m_audoLoadAverage;
 
 
-    UIInjectionHandle       m_injectionHandleCounter;
+    UIInjectionHandle       m_injectionHandleCounter = 0;
 
     // registered new core items like menu entries, status bar sections
     MenuMenuEntryList       m_mainMenuEntries;

@@ -54,7 +54,8 @@ public:
 
     // should make this configurable later
     static constexpr uint32_t   cFrameSize      = 2880;
-    static constexpr uint32_t   cBufferedFrames = 50;
+    static constexpr uint32_t   cBufferedFrames = 25;
+    static constexpr float      cFrameTimeSec   = ( 1.0f / 48000.0f ) * (float)cFrameSize;
 
     ~OpusStream();
 
@@ -67,6 +68,15 @@ public:
 
     void appendSamples( float* buffer0, float* buffer1, const uint32_t sampleCount ) override;
     uint64_t getStorageUsageInBytes() const override;
+
+
+    struct CompressionSetup
+    {
+        int32_t     m_bitrate                   = 0;
+        int32_t     m_expectedPacketLossPercent = 0;
+    };
+    CompressionSetup getCurrentCompressionSetup() const;
+    void setCompressionSetup( const CompressionSetup& setup );
 
 
 private:

@@ -672,7 +672,7 @@ void CoreGUI::ImGuiPerformanceTracker()
 
 app::CoreGUI::UIInjectionHandle CoreGUI::registerStatusBarBlock( const StatusBarAlignment alignment, const float size, const UIInjectionCallback& callback )
 {
-    const auto newHandle = m_injectionHandleCounter++;
+    const auto newHandle = ++m_injectionHandleCounter;
 
     if ( alignment == StatusBarAlignment::Left )
         m_statusBarBlocksLeft.emplace_back( newHandle, size, callback );
@@ -711,7 +711,7 @@ bool CoreGUI::unregisterStatusBarBlock( const UIInjectionHandle handle )
 
 app::CoreGUI::UIInjectionHandle CoreGUI::registerMainMenuEntry( const int32_t ordering, const std::string& menuName, const UIInjectionCallback& callback )
 {
-    const auto newHandle = m_injectionHandleCounter++;
+    const auto newHandle = ++m_injectionHandleCounter;
 
     MenuMenuEntry* menuEntry = nullptr;
 

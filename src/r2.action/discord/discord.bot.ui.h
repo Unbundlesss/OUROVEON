@@ -9,9 +9,9 @@
 
 #pragma once
 
+#include "app/core.h"
 #include "base/utils.h"
 
-namespace app { struct ICoreServices; namespace module { struct Frontend; } }
 namespace config { namespace discord { struct Connection; } }
 
 namespace discord {
@@ -24,7 +24,7 @@ struct BotWithUI
     BotWithUI( app::ICoreServices& coreServices, const config::discord::Connection& configConnection );
     ~BotWithUI();
 
-    void imgui( const app::module::Frontend& frontend );
+    void imgui( app::CoreGUI& coreGUI );
 
 
 private:
@@ -34,7 +34,9 @@ private:
     app::ICoreServices&                         m_services;
     const config::discord::Connection&          m_config;
 
-    base::RollingAverage< 20 >                  m_avg;
+    base::RollingAverage< 10 >                  m_avgPacketSize;
+    uint64_t                                    m_trafficOutBytes;
+    std::optional< app::CoreGUI::UIInjectionHandle >                   m_statusBarHandle;
 };
 
 } // namespace discord

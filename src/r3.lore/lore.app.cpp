@@ -272,10 +272,10 @@ struct LoreApp : public app::OuroApp
                 ImGui::MenuItem( "Nothing playing", nullptr, nullptr, false );
             }
 
-            ImGui::Separator();
-            if ( ImGui::MenuItem( "Configure ..." ) )
-            {
-            }
+//             ImGui::Separator();
+//             if ( ImGui::MenuItem( "Configure ..." ) )
+//             {
+//             }
         });
 
         registerMainMenuEntry( 20, "MIDI", [this]()
@@ -1247,7 +1247,7 @@ int LoreApp::EntrypointOuro()
         m_mdMidi->processMessages( []( const app::midi::Message& ){ } );
 
         {
-            m_discordBotUI->imgui( *m_mdFrontEnd );
+            m_discordBotUI->imgui( *this );
         }
         {
             ImGui::Begin( "Playback Engine" );

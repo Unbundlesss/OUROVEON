@@ -14,7 +14,6 @@
 #include "discord/discord.bot.h"
 #include "discord/config.h"
 
-#include "app/core.h"
 #include "app/module.frontend.h"
 #include "app/module.frontend.fonts.h"
 #include "app/module.audio.h"
@@ -26,6 +25,7 @@ namespace discord {
 BotWithUI::BotWithUI( app::ICoreServices& coreServices, const config::discord::Connection& configConnection ) 
     : m_services( coreServices )
     , m_config( configConnection )
+    , m_trafficOutBytes( 0 )
 {
 }
 
@@ -33,13 +33,16 @@ BotWithUI::~BotWithUI()
 {
 }
 
-void BotWithUI::imgui( const app::module::Frontend& frontend )
+void BotWithUI::imgui( app::CoreGUI& coreGUI )
 {
     const auto pulseColour = ImGui::GetPulseColourVec4();
 
     const bool isBotBusy = ( m_discordBot && m_discordBot->isBotBusy() );
 
     ImGui::Begin( "Discord" );
+
+    const float discordViewWidth = ImGui::GetContentRegionAvail().x;
+
     ImGui::TextUnformatted( ICON_FA_ROBOT " Discord Bot Interface  " );
     {
         ImGui::SameLine();
@@ -56,7 +59,9 @@ void BotWithUI::imgui( const app::module::Frontend& frontend )
         m_discordBot->update( stats );
 
         if ( stats.m_averagePacketSize > 0 )
-            m_avg.update( (double)stats.m_averagePacketSize );
+            m_avgPacketSize.update( (double)stats.m_averagePacketSize );
+
+        m_trafficOutBytes += stats.m_packetsSentBytes;
 
 
         const auto botPhase = m_discordBot->getConnectionPhase();
@@ -81,6 +86,14 @@ void BotWithUI::imgui( const app::module::Frontend& frontend )
 
         if ( botPhase == discord::Bot::ConnectionPhase::Ready )
         {
+            if ( !m_statusBarHandle.has_value() )
+            {
+                m_statusBarHandle = coreGUI.registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Right, 120.0f, [=]()
+                {
+                    ImGui::Text( ICON_FA_UPLOAD " %s", base::humaniseByteSize( "", m_trafficOutBytes ).c_str() );
+                });
+            }
+
             static const ImVec2 channelButtonSize( 68.0f, 20.0f );
 
             // fetch voice status for UI
@@ -94,7 +107,7 @@ void BotWithUI::imgui( const app::module::Frontend& frontend )
             ImGui::Spacing();
 
             {
-                ImGui::PushFont( frontend.getFont( app::module::Frontend::FontChoice::MediumTitle ) );
+                ImGui::PushFont( coreGUI.getFrontend()->getFont( app::module::Frontend::FontChoice::MediumTitle ) );
                 const auto& guild = m_discordBot->getGuildMetadata();
                 ImGui::TextUnformatted( guild->m_name.c_str() );
                 ImGui::PopFont();
@@ -169,8 +182,50 @@ void BotWithUI::imgui( const app::module::Frontend& frontend )
             }
             else
             {
-                ImGui::Text( "Transmission active" );
-                ImGui::Text( "Packet Size (avg) : %i", (int32_t)m_avg.m_average );
+                // latency estimation based on how many packets are sat in the DPP send queue
+                const float minimumLatency = (float)stats.m_voiceBufferQueueState * ssp::OpusStream::cFrameTimeSec;
+
+                ImGui::Text( "Voice Buffer Queue : %3u ( + ~%.1fs latency )", stats.m_voiceBufferQueueState, minimumLatency );
+                ImGui::Text( "Packet Size  (avg) : %4i bytes", (int32_t)m_avgPacketSize.m_average );
+
+                ImGui::PushItemWidth( discordViewWidth * 0.65f );
+
+                discord::Bot::UdpTuning::Enum udpTuning;
+                if ( m_discordBot->getUdpTuning( udpTuning ) )
+                {
+                    if ( discord::Bot::UdpTuning::ImGuiCombo( " Dispatch Tuning", udpTuning ) )
+                    {
+                        m_discordBot->setUdpTuning( udpTuning );
+                    }
+                    ImGui::CompactTooltip( "Control of voice buffer transmission timing; bumping up may help solve gaps in audio stream" );
+                }
+
+                ssp::OpusStream::CompressionSetup setup;
+                bool setupChanged = false;
+                if ( m_discordBot->getCurrentCompressionSetup( setup ) )
+                {
+                    // technically "500 to 512000" is viable, discord or dpp seems to have problems about 150k
+                    setupChanged |= ImGui::SliderInt( " Target Bitrate",      &setup.m_bitrate, 20000, 150000 );
+                                    ImGui::CompactTooltip( "OPUS compressor target bitrate" );
+
+/* EPL doesn't seem to do much?
+                    setupChanged |= ImGui::SliderInt( "Expected Packet Loss", &setup.m_expectedPacketLossPercent, 0, 100, "%d%%" );
+                                    ImGui::CompactTooltip( "Hint to OPUS about potential packet loss to try and workaround" );
+*/
+                }
+                if ( setupChanged )
+                    m_discordBot->setCompressionSetup( setup );
+
+                ImGui::PopItemWidth();
+            }
+        } // botPhase == Ready
+        else
+        {
+            // remove status bar chunk when not live
+            if ( m_statusBarHandle.has_value() )
+            {
+                coreGUI.unregisterStatusBarBlock( m_statusBarHandle.value() );
+                m_statusBarHandle.reset();
             }
         }
     }

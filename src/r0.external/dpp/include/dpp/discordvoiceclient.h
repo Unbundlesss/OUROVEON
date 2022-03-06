@@ -335,6 +335,15 @@ class DPP_EXPORT discord_voice_client : public websocket_client
 
 public:
 
+	// #hdd
+	enum class UdpSendTiming
+	{
+		Default,		// existing attempt at sleeping between sends
+		Delicate,		// trim sleep value slightly
+		Optimistic,		// trim sleep value more
+		Aggressive		// halve it
+	}	udpSendTiming = UdpSendTiming::Default;
+
 	/** Owning cluster */
 	class dpp::cluster* creator;
 

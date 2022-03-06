@@ -60,7 +60,7 @@ OpusPacketData::~OpusPacketData()
 struct OpusStream::StreamInstance : public AsyncBufferProcessorIQ16
 {
     StreamInstance()
-        : AsyncBufferProcessorIQ16( OpusStream::cFrameSize* OpusStream::cBufferedFrames, "OPUS" )
+        : AsyncBufferProcessorIQ16( OpusStream::cFrameSize * OpusStream::cBufferedFrames, "OPUS" )
     {
         launchProcessorThread();
     }
@@ -96,12 +96,10 @@ struct OpusStream::StreamInstance : public AsyncBufferProcessorIQ16
         opus_encoder_ctl( m_opusEncoder, OPUS_SET_SIGNAL( OPUS_SIGNAL_MUSIC ) );
 
         opus_encoder_ctl( m_opusEncoder, OPUS_SET_BITRATE( 64000 ) );
+        opus_encoder_ctl( m_opusEncoder, OPUS_GET_BITRATE( &m_compressionSetup.m_bitrate ) );
 
-
-        opus_int32 rate;
-        opus_encoder_ctl( m_opusEncoder, OPUS_GET_BITRATE( &rate ) );
-
-        blog::core( "OPUS bitrate : {}", rate );
+        opus_encoder_ctl( m_opusEncoder, OPUS_SET_PACKET_LOSS_PERC( 0 ) );
+        opus_encoder_ctl( m_opusEncoder, OPUS_GET_PACKET_LOSS_PERC( &m_compressionSetup.m_expectedPacketLossPercent ) );
 
         m_opusRepacketizer = opus_repacketizer_create();
 
@@ -125,6 +123,9 @@ struct OpusStream::StreamInstance : public AsyncBufferProcessorIQ16
         float* fltInput = buffer.m_interleavedFloat;
         opus_int16* pcmInput = (opus_int16*)(buffer.m_interleavedQuant);
         uint8_t* opusOut = packetDataInstance->m_opusData;
+
+        memset( threadEncoderBuffer, 0, cEncodeBufferSize );
+
         for ( uint32_t pk = 0; pk < packetsInStream; pk ++ )
         {
             int ret = opus_encode( m_opusEncoder, pcmInput, OpusStream::cFrameSize, threadEncoderBuffer, cEncodeBufferSize );
@@ -172,7 +173,7 @@ struct OpusStream::StreamInstance : public AsyncBufferProcessorIQ16
         m_newDataCallback( std::move( packetDataInstance ) );
     }
 
-
+    CompressionSetup                m_compressionSetup;
 
     OpusEncoder*                    m_opusEncoder           = nullptr;
     OpusRepacketizer*               m_opusRepacketizer      = nullptr;
@@ -208,6 +209,30 @@ void OpusStream::appendSamples( float* buffer0, float* buffer1, const uint32_t s
 uint64_t OpusStream::getStorageUsageInBytes() const
 {
     return OpusStream::cFrameSize * OpusStream::cBufferedFrames * 2;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+OpusStream::CompressionSetup OpusStream::getCurrentCompressionSetup() const
+{
+    return m_state->m_compressionSetup;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void OpusStream::setCompressionSetup( const OpusStream::CompressionSetup& setup )
+{
+    if ( m_state->m_compressionSetup.m_bitrate != setup.m_bitrate )
+    {
+        opus_encoder_ctl( m_state->m_opusEncoder, OPUS_SET_BITRATE( setup.m_bitrate ) );
+        blog::core( "OPUS_SET_BITRATE({})", setup.m_bitrate );
+    }
+    if ( m_state->m_compressionSetup.m_expectedPacketLossPercent != setup.m_expectedPacketLossPercent )
+    {
+        opus_encoder_ctl( m_state->m_opusEncoder, OPUS_SET_INBAND_FEC( setup.m_expectedPacketLossPercent > 0 ? 1 : 0 ) );
+        opus_encoder_ctl( m_state->m_opusEncoder, OPUS_SET_PACKET_LOSS_PERC( setup.m_expectedPacketLossPercent ) );
+        blog::core( "OPUS_SET_PACKET_LOSS_PERC({})", setup.m_expectedPacketLossPercent );
+    }
+
+    m_state->m_compressionSetup = setup;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
