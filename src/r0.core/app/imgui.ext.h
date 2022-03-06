@@ -140,8 +140,11 @@ private:
 // ---------------------------------------------------------------------------------------------------------------------
 struct ToggleButtonLit
 {
-    ToggleButtonLit();
+    ToggleButtonLit( const bool active, const uint32_t colourU32 );
     ~ToggleButtonLit();
+
+private:
+    bool    m_active;
 };
 
 // ---------------------------------------------------------------------------------------------------------------------

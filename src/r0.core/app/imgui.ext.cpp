@@ -446,18 +446,23 @@ ToggleTab::~ToggleTab()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-ToggleButtonLit::ToggleButtonLit()
+ToggleButtonLit::ToggleButtonLit( const bool active, const uint32_t colourU32 )
+    : m_active( active )
 {
-    const auto buttonColour = ImGui::GetColorU32( ImGuiCol_TabActive );
-    ImGui::PushStyleColor( ImGuiCol_Button,         buttonColour );
-    ImGui::PushStyleColor( ImGuiCol_ButtonHovered,  buttonColour );
-    ImGui::PushStyleColor( ImGuiCol_ButtonActive,   buttonColour );
+    if ( m_active )
+    {
+        ImGui::PushStyleColor( ImGuiCol_Button, colourU32 );
+        ImGui::PushStyleColor( ImGuiCol_ButtonHovered, colourU32 );
+        ImGui::PushStyleColor( ImGuiCol_ButtonActive, colourU32 );
+        ImGui::PushStyleColor( ImGuiCol_Text, IM_COL32_BLACK );
+    }
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 ToggleButtonLit::~ToggleButtonLit()
 {
-    ImGui::PopStyleColor( 3 );
+    if ( m_active )
+        ImGui::PopStyleColor( 4 );
 }
 
 } // namespace Scoped
