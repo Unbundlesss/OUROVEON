@@ -166,7 +166,7 @@ void Riff::fetch( const api::NetConfiguration& ncfg, endlesss::cache::Stems& ste
             rawStem->keepFuture( stemSharedAnalysis );
 
         // once stems are loaded, work out their final lengths so we can determine the shape of the riff
-        for ( auto stemI = 0; stemI < m_stemPtrs.size(); stemI++ )
+        for ( std::size_t stemI = 0; stemI < m_stemPtrs.size(); stemI++ )
         {
             auto* loopStem = m_stemPtrs[stemI];
             auto  stemTimeScale = m_stemTimeScales[stemI];
@@ -178,7 +178,7 @@ void Riff::fetch( const api::NetConfiguration& ncfg, endlesss::cache::Stems& ste
                 continue;
             }
 
-            const auto timeScaledSampleCount = (uint32_t)((double)loopStem->m_sampleCount * (1.0 / stemTimeScale));
+            const auto timeScaledSampleCount = (uint32_t)( (double)loopStem->m_sampleCount * (1.0 / (double)stemTimeScale) );
             const auto timeScaledStemLength = (double)timeScaledSampleCount / (double)m_targetSampleRate;
 
             m_stemLengthInSec.push_back( (float)timeScaledStemLength );
@@ -206,7 +206,7 @@ void Riff::fetch( const api::NetConfiguration& ncfg, endlesss::cache::Stems& ste
         blog::riff( "---------------------------------------------------------------------" );
 
 
-        for ( auto stemI = 0; stemI < m_stemPtrs.size(); stemI++ )
+        for ( std::size_t stemI = 0; stemI < m_stemPtrs.size(); stemI++ )
         {
             auto* loopStem = m_stemPtrs[stemI];
 
@@ -271,14 +271,14 @@ void Riff::exportToDisk( const std::function< ssp::SampleStreamProcessorInstance
         if ( diskWriter != nullptr )
         {
             const int32_t sampleCount = stemPtr->m_sampleCount;
-            const int32_t sampleCountTst = (int32_t)((double)sampleCount / stemTimeStretch);
+            const int32_t sampleCountTst = (int32_t)( (double)sampleCount / (double)stemTimeStretch );
 
-            auto exportChannelLeft = mem::malloc16AsSet<float>( sampleCountTst, 0.0f );
+            auto exportChannelLeft  = mem::malloc16AsSet<float>( sampleCountTst, 0.0f );
             auto exportChannelRight = mem::malloc16AsSet<float>( sampleCountTst, 0.0f );
 
             for ( int32_t sampleWrite = 0; sampleWrite < sampleCountTst; sampleWrite++ )
             {
-                const int32_t readSampleUnscaled = (int32_t)((double)sampleWrite * stemTimeStretch);
+                const int32_t readSampleUnscaled = (int32_t)( (double)sampleWrite * (double)stemTimeStretch );
 
                 exportChannelLeft[sampleWrite] = stemPtr->m_channel[0][readSampleUnscaled] * stemGain;
                 exportChannelRight[sampleWrite] = stemPtr->m_channel[1][readSampleUnscaled] * stemGain;

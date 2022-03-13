@@ -13,7 +13,7 @@
 
 #include "ssp/ssp.stream.opus.h"
 
-namespace config { namespace discord { struct Connection; } }
+namespace config::discord { struct Connection; }
 namespace app {
     struct ICoreServices;
     namespace module { struct Audio; }
@@ -40,13 +40,15 @@ using VoiceChannelsAtomic   = VoiceChannelsPtr; // #HDD CXX20 atomic shared_ptr 
 
 struct GuildMetadata
 {
-    uint32_t        m_shardID;
+    uint32_t        m_shardID = 0;
     std::string     m_name;
 };
 using GuildMetadataOptional = std::optional< GuildMetadata >;
 
 struct Bot
 {
+    DeclareUncopyable( Bot );
+
     enum class ConnectionPhase
     {
         Uninitialised,
@@ -92,7 +94,7 @@ struct Bot
     ~Bot();
 
     bool initialise( app::ICoreServices& coreServices, const config::discord::Connection& configConnection );
-    inline bool isInitialised() const { return m_initialised && m_state != nullptr; }
+    constexpr bool isInitialised() const { return m_initialised && m_state != nullptr; }
 
 
     // call from main thread to let bot do regular main-thread processing tasks
@@ -139,7 +141,6 @@ protected:
 
     struct State;
     std::unique_ptr< State >    m_state;
-
 };
 
 } // namespace discord

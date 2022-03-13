@@ -12,12 +12,13 @@
 #include "app/core.h"
 #include "base/utils.h"
 
-namespace config { namespace discord { struct Connection; } }
+namespace config::discord { struct Connection; }
 
 namespace discord {
 
 struct Bot;
 
+// ---------------------------------------------------------------------------------------------------------------------
 // little wrapper around running the discord bot interface via an imgui panel
 struct BotWithUI
 {
@@ -29,14 +30,15 @@ struct BotWithUI
 
 private:
 
-    std::unique_ptr< discord::Bot >             m_discordBot;
+    std::unique_ptr< Bot >                  m_discordBot;
 
-    app::ICoreServices&                         m_services;
-    const config::discord::Connection&          m_config;
+    app::ICoreServices&                     m_services;
+    const config::discord::Connection&      m_config;
 
-    base::RollingAverage< 10 >                  m_avgPacketSize;
-    uint64_t                                    m_trafficOutBytes;
-    std::optional< app::CoreGUI::UIInjectionHandle >                   m_statusBarHandle;
+    base::RollingAverage< 10 >              m_avgPacketSize;
+
+    uint64_t                                m_trafficOutBytes;
+    app::CoreGUI::UIInjectionHandleOptional m_trafficOutBytesStatusHandle;
 };
 
 } // namespace discord

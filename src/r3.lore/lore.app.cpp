@@ -712,7 +712,7 @@ protected:
                         case JamVisualisation::LineBreakOn::ChangedBPM:
                         {
                             if ( riffI == 0 ||
-                                lastBPM != riffBPM )
+                                !base::floatAlmostEqualRelative( lastBPM, riffBPM, 0.001f ) )
                             {
                                 addLineBreak( fmt::format( "-=> {} BPM", riffBPM ) );
                             }
@@ -757,7 +757,7 @@ protected:
                         break;
 
                     case JamVisualisation::RiffGapOn::ChangedBPM:
-                        addRiffGap = (riffI > 0 && slice.m_bpms[riffI - 1] != slice.m_bpms[riffI]);
+                        addRiffGap = (riffI > 0 && !base::floatAlmostEqualRelative( slice.m_bpms[riffI - 1], slice.m_bpms[riffI], 0.001f ) );
                         break;
                     case JamVisualisation::RiffGapOn::ChangedScaleOrRoot:
                         addRiffGap = (riffI > 0 && (slice.m_roots[riffI - 1] != slice.m_roots[riffI]

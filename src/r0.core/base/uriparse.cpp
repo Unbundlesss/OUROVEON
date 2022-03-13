@@ -23,12 +23,12 @@ struct UriParse::ParsedData
 
     UriUriA m_uriParsed;
 
-    std::string fromRange( const UriTextRangeA& rng ) const
+    static std::string fromRange( const UriTextRangeA& rng )
     {
         return std::string( rng.first, rng.afterLast );
     }
 
-    std::string fromList( UriPathSegmentA* xs, const std::string& delim ) const
+    static std::string fromList( UriPathSegmentA* xs, const std::string& delim )
     {
         UriPathSegmentStructA* head( xs );
         std::string accum;
@@ -43,7 +43,7 @@ struct UriParse::ParsedData
     }
 };
 
-UriParse::UriParse( std::string uri ) 
+UriParse::UriParse( const std::string& uri ) 
     : m_data( std::make_unique<ParsedData>() )
     , m_uri( uri )
     , m_valid( false )

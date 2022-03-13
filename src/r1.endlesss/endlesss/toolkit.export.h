@@ -19,7 +19,7 @@ namespace endlesss {
 namespace xp {
 
 #define _TOKEN_TOSTR(_ty)                 case _ty: return "[" #_ty "]";
-#define _TOKEN_FROMSTR(_ty)               if ( cx_strcmp(str, "[" #_ty "]" ) == 0) return _ty; else
+#define _TOKEN_FROMSTR(_ty)               if ( const_str::compare(str, "[" #_ty "]" ) == 0) return _ty; else
 #define _OUTPUT_TOKENS(_action)                                                                \
     _action( Jam_Name )                 /* 'CoolTimesAhoy'      (path sanitised)            */ \
     _action( Jam_UniqueID )             /* b7eca81...           (customisable length)       */ \

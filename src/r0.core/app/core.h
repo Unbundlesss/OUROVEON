@@ -182,13 +182,14 @@ using FrontendModule = std::unique_ptr<module::Frontend>;
 struct CoreGUI : public Core
 {
     // UI injection for inserting custom things into generic structure - eg. main menu items, status bar blocks
-    using UIInjectionHandle     = uint32_t;
-    using UIInjectionCallback   = std::function< void() >;
+    using UIInjectionHandle         = uint32_t;
+    using UIInjectionHandleOptional = std::optional< UIInjectionHandle >;
+    using UIInjectionCallback       = std::function< void() >;
 
-    using ModalPopupExecutor    = std::function< void( const char* ) >;
+    using ModalPopupExecutor        = std::function< void( const char* ) >;
     
-    using FileDialogInst        = std::unique_ptr<ImGuiFileDialog>;
-    using FileDialogCallback    = std::function< void( ImGuiFileDialog& ) >;
+    using FileDialogInst            = std::unique_ptr<ImGuiFileDialog>;
+    using FileDialogCallback        = std::function< void( ImGuiFileDialog& ) >;
 
 
     enum ViewportFlags
