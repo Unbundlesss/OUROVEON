@@ -64,7 +64,7 @@ struct ScopedEvent
     }
 
 private:
-    void init( const char* name, const char* context, const PresetColour col )
+    static void init( const char* name, const char* context, const PresetColour col )
     {
         switch ( col )
         {

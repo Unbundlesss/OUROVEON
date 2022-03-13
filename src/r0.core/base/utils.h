@@ -70,40 +70,40 @@ finline void free16( void* ptr )
 namespace base {
 
 // ---------------------------------------------------------------------------------------------------------------------
-template< typename _CmdEnum > 
+template< typename TCmdEnum > 
 struct BasicCommandType
 {
-    inline BasicCommandType()
-        : m_command( _CmdEnum::Invalid )
+    constexpr BasicCommandType()
+        : m_command( TCmdEnum::Invalid )
         , m_i64( 0 )
         , m_ptr( nullptr )
     {}
-    inline BasicCommandType( const _CmdEnum command )
+    constexpr BasicCommandType( const TCmdEnum command )
         : m_command( command )
         , m_i64( 0 )
         , m_ptr( nullptr )
     {}
-    explicit inline BasicCommandType( const _CmdEnum command, void* ptr )
+    explicit constexpr BasicCommandType( const TCmdEnum command, void* ptr )
         : m_command( command )
         , m_i64( 0 )
         , m_ptr( ptr )
     {}
-    explicit inline BasicCommandType( const _CmdEnum command, const int64_t i64 )
+    explicit constexpr BasicCommandType( const TCmdEnum command, const int64_t i64 )
         : m_command( command )
         , m_i64( i64 )
         , m_ptr( nullptr )
     {}
 
-    inline _CmdEnum getCommand() const { return m_command; }
-    inline int64_t getI64() const { return m_i64; }
-    inline void* getPtr() const { return m_ptr; }
+    constexpr TCmdEnum getCommand() const { return m_command; }
+    constexpr int64_t getI64() const { return m_i64; }
+    constexpr void* getPtr() const { return m_ptr; }
     
     template< typename _CType >
-    inline _CType* getPtrAs() const { return static_cast<_CType*>(m_ptr); }
+    constexpr _CType* getPtrAs() const { return static_cast<_CType*>(m_ptr); }
 
 private:
 
-    _CmdEnum    m_command;
+    TCmdEnum    m_command;
     int64_t     m_i64;
     void*       m_ptr;
 };

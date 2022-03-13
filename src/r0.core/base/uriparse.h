@@ -13,10 +13,10 @@ namespace base {
 class UriParse
 {
 public:
-    UriParse(std::string uri);
+    UriParse( const std::string& uri );
     ~UriParse();
 
-    bool isValid() const { return m_valid; }
+    inline bool isValid() const { return m_valid; }
 
     std::string scheme()   const;
     std::string host()     const;

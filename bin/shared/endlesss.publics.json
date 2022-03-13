@@ -5422,6 +5422,226 @@
       "latest_unixtime": 1645927508,
       "estimated_days_of_activity": 60,
       "total_riffs": 2315
+    },
+    {
+      "band_id": "band3c51bce22e",
+      "invite_id": "6fb8483095e51e3f4699fa817b1e98a2fcac3968181f9c8e5b092cdf3e6ad253",
+      "jam_name": "Speed Wave - RPM Challenge",
+      "earliest_user": "elling",
+      "latest_user": "hhgxv",
+      "earliest_unixtime": 1631454887,
+      "latest_unixtime": 1646547470,
+      "estimated_days_of_activity": 174,
+      "total_riffs": 5098
+    },
+    {
+      "band_id": "band6b0818baf0",
+      "invite_id": "592e149e9ba8b9a6058af7d47d09525772b6746069bff999c3d6da111d065ee",
+      "jam_name": "Night Drive - RPM Challenge",
+      "earliest_user": "elling",
+      "latest_user": "hhgxv",
+      "earliest_unixtime": 1630245467,
+      "latest_unixtime": 1646548439,
+      "estimated_days_of_activity": 188,
+      "total_riffs": 5146
+    },
+    {
+      "band_id": "band588a33edbb",
+      "invite_id": "6e9b56720566c7eb3aba6c9da8269f92f4732ecf47c693212cfd2f544b3a3a5b",
+      "jam_name": "Sunlight Vibes - RPM Challenge",
+      "earliest_user": "elling",
+      "latest_user": "infinate_sorrow",
+      "earliest_unixtime": 1641848674,
+      "latest_unixtime": 1646557784,
+      "estimated_days_of_activity": 54,
+      "total_riffs": 6544
+    },
+    {
+      "band_id": "band1d1eeddf26",
+      "invite_id": "b94f253e87a0b9064c0a751e7df3eb524ff878f901f4061a9e5bbeb913e5b5b",
+      "jam_name": "Ambient Only",
+      "earliest_user": "",
+      "latest_user": "muxmool",
+      "earliest_unixtime": 0,
+      "latest_unixtime": 1646766222,
+      "estimated_days_of_activity": 0,
+      "total_riffs": 316
+    },
+    {
+      "band_id": "band26e6eeef40",
+      "invite_id": "65403f288a0d455cada28f085af20b1fefc28e4c21f703521416cc85e40de0ec",
+      "jam_name": "alt-default",
+      "earliest_user": "holler",
+      "latest_user": "holler",
+      "earliest_unixtime": 1639969211,
+      "latest_unixtime": 1640184890,
+      "estimated_days_of_activity": 2,
+      "total_riffs": 18
+    },
+    {
+      "band_id": "band9046ca4e93",
+      "invite_id": "2c6c84e06968f2168c7c019c55650382dbb2a70020188a8307a60f8a9e1f3f6b",
+      "jam_name": "LOT",
+      "earliest_user": "sephrim",
+      "latest_user": "stoic",
+      "earliest_unixtime": 1638456364,
+      "latest_unixtime": 1639281840,
+      "estimated_days_of_activity": 9,
+      "total_riffs": 2281
+    },
+    {
+      "band_id": "bandce1edc8de3",
+      "invite_id": "3f9c77739e3f93d9c286d3730376f572bdcf5ff1213140ea2c3d425c4036817e",
+      "jam_name": "holler",
+      "earliest_user": "tpj",
+      "latest_user": "tpj",
+      "earliest_unixtime": 1629769320,
+      "latest_unixtime": 1642115835,
+      "estimated_days_of_activity": 142,
+      "total_riffs": 629
+    },
+    {
+      "band_id": "bandf5be28b69d",
+      "invite_id": "47697e6bbad1193a9a842373a398a8c271cac3ae9113daf8475962393611bb6f",
+      "jam_name": "strange-frequencies",
+      "earliest_user": "galletly",
+      "latest_user": "slowgaffle",
+      "earliest_unixtime": 1583390301,
+      "latest_unixtime": 1646375213,
+      "estimated_days_of_activity": 728,
+      "total_riffs": 183
+    },
+    {
+      "band_id": "band80d52083f1",
+      "invite_id": "482377854798aa723cfea1136e3244c8b87230d3027f0171ab3ed95040ec7559",
+      "jam_name": "CSL-ENVIRONMENT",
+      "earliest_user": "holler",
+      "latest_user": "holler",
+      "earliest_unixtime": 1586389013,
+      "latest_unixtime": 1629928108,
+      "estimated_days_of_activity": 503,
+      "total_riffs": 33
+    },
+    {
+      "band_id": "band9e05676a39",
+      "invite_id": "48620d1034ad9abb5487af38972f88e2a6d84d137fb917d1058b7450994dd2aa",
+      "jam_name": "kids-r-us",
+      "earliest_user": "holler",
+      "latest_user": "holler",
+      "earliest_unixtime": 1618321853,
+      "latest_unixtime": 1636420242,
+      "estimated_days_of_activity": 209,
+      "total_riffs": 64
+    },
+    {
+      "band_id": "band7e2c7ad6c3",
+      "invite_id": "293e67bccf04b8d736a2686f23b3458f0eb3e1ca1f02d727f78eea9b28f1702",
+      "jam_name": "My Corona",
+      "earliest_user": "greenbluespiral",
+      "latest_user": "firephly",
+      "earliest_unixtime": 1600822809,
+      "latest_unixtime": 1646546411,
+      "estimated_days_of_activity": 529,
+      "total_riffs": 2613
+    },
+    {
+      "band_id": "bandabe79fb923",
+      "invite_id": "3fd2164f17dac774c63ec5a39e42e1bda6019dfe400c1200052d8524a1ec0f11",
+      "jam_name": "mods-synths-and-analog",
+      "earliest_user": "holler",
+      "latest_user": "pre5et",
+      "earliest_unixtime": 1612722852,
+      "latest_unixtime": 1635996483,
+      "estimated_days_of_activity": 269,
+      "total_riffs": 86
+    },
+    {
+      "band_id": "banddef8caa76b",
+      "invite_id": "23122eb3cf1d026b45d3d18725fe8030ff6467804511ee17baf8ee2b594ce454",
+      "jam_name": "Election Fra*d Vocals (irregularities)",
+      "earliest_user": "",
+      "latest_user": "",
+      "earliest_unixtime": 0,
+      "latest_unixtime": 0,
+      "estimated_days_of_activity": 0,
+      "total_riffs": 0
+    },
+    {
+      "band_id": "band83811b9d84",
+      "invite_id": "407322de8492fdaf2d75fc8e51393b3484c527ad736f2bfc79d802489d1adff5",
+      "jam_name": "12 Step Program",
+      "earliest_user": "ludi",
+      "latest_user": "redskylullaby",
+      "earliest_unixtime": 1570539609,
+      "latest_unixtime": 1643861830,
+      "estimated_days_of_activity": 848,
+      "total_riffs": 320
+    },
+    {
+      "band_id": "bandabf07cf83d",
+      "invite_id": "4e77ae1aca785f48994a838a8e74abb9a6fc80df61f4b337638a90607e557074",
+      "jam_name": "anxiety-cometh",
+      "earliest_user": "theau",
+      "latest_user": "pre5et",
+      "earliest_unixtime": 1570294049,
+      "latest_unixtime": 1645391914,
+      "estimated_days_of_activity": 869,
+      "total_riffs": 682
+    },
+    {
+      "band_id": "band0a80543b66",
+      "invite_id": "6978be79bc38a47f43226c1e1578ae79cfd20250deee3ced5768e5f2def71ea6",
+      "jam_name": "beat-box",
+      "earliest_user": "theau",
+      "latest_user": "pre5et",
+      "earliest_unixtime": 1558443887,
+      "latest_unixtime": 1636330547,
+      "estimated_days_of_activity": 901,
+      "total_riffs": 368
+    },
+    {
+      "band_id": "bandab74b2b685",
+      "invite_id": "1a9fb43b9d55ab08b7d91d01b65fa2942fcf8691b278451e014a2f0344f58ef",
+      "jam_name": "negative space",
+      "earliest_user": "ludi",
+      "latest_user": "pre5et",
+      "earliest_unixtime": 1555549412,
+      "latest_unixtime": 1635995909,
+      "estimated_days_of_activity": 931,
+      "total_riffs": 1763
+    },
+    {
+      "band_id": "band8c279d8138",
+      "invite_id": "e855128d27b55e826cdcd3088d892f53e79e1632033cb7aeeb9ba099e1fde8d",
+      "jam_name": "timbralism",
+      "earliest_user": "ludi",
+      "latest_user": "badrico",
+      "earliest_unixtime": 1564698655,
+      "latest_unixtime": 1565816925,
+      "estimated_days_of_activity": 12,
+      "total_riffs": 137
+    },
+    {
+      "band_id": "band513a41fb3d",
+      "invite_id": "378efcb30feafb1431c2a9fa7fa197d2e5bb3bcfa689bab8145ba62f6e6f4ca2",
+      "jam_name": "Take Five",
+      "earliest_user": "mikew",
+      "latest_user": "ninjaloanz",
+      "earliest_unixtime": 1573236352,
+      "latest_unixtime": 1646683516,
+      "estimated_days_of_activity": 850,
+      "total_riffs": 4185
+    },
+    {
+      "band_id": "band424e698e89",
+      "invite_id": "2eeb9f18755272bf083a9f706d7054d40b9a8cce79dba6d23e89e5b5d2500d2e",
+      "jam_name": "Sloppy Joes Quantise Free Jamboree",
+      "earliest_user": "unclehomunculus",
+      "latest_user": "pre5et",
+      "earliest_unixtime": 1557177547,
+      "latest_unixtime": 1637383720,
+      "estimated_days_of_activity": 928,
+      "total_riffs": 745
     }
   ]
 }

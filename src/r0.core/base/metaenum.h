@@ -38,22 +38,25 @@
 #define META_MACRO_DO_JOIN(_lhs, _rhs)    META_MACRO_DO_JOIN2(_lhs, _rhs)
 #define META_MACRO_DO_JOIN2(_lhs, _rhs)   _lhs##_rhs
 
+namespace const_str
+{
 
 // ---------------------------------------------------------------------------------------------------------------------
-constexpr int cx_strcmp( const char* a, const char* b )
+constexpr int compare( const char* a, const char* b )
 {
-  return *a == 0 && *b == 0 ? 0 :
-    *a == 0 ? -1 :
-    *b == 0 ? 1 :
-    *a < *b ? -1 :
-    *a > *b ? 1 :
-    *a == *b ? strcmp( a + 1, b + 1 ) :
-    throw "strcmp_fail";
+    return *a == 0 && *b == 0 ? 0 :
+        *a == 0 ? -1 :
+        *b == 0 ? 1 :
+        *a < *b ? -1 :
+        *a > *b ? 1 :
+        *a == *b ? compare( a + 1, b + 1 ) :
+        throw "strcmp_fail";
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
 // process an input string into a buffer, turning "SomeTitleCase" into "Some Title Case" .. with spacing
 template< std::size_t _buflen >
-inline void cx_titleize( const char* tcin, char (&buffer)[_buflen] )
+inline void titleize( const char* tcin, char( &buffer )[_buflen] )
 {
     const auto tcin_len = std::min( strlen( tcin ), _buflen - 1 );
     std::size_t buf_pt = 0;
@@ -61,7 +64,7 @@ inline void cx_titleize( const char* tcin, char (&buffer)[_buflen] )
     for ( auto i = 0; i < tcin_len; i++ )
     {
         if ( tcin[i] >= 'A' &&
-             tcin[i] <= 'Z' )
+            tcin[i] <= 'Z' )
         {
             if ( !lastWasUpper )
                 buffer[buf_pt++] = ' ';
@@ -75,6 +78,8 @@ inline void cx_titleize( const char* tcin, char (&buffer)[_buflen] )
     buffer[buf_pt] = '\0';
 }
 
+} // namespace const_str
+
 // ---------------------------------------------------------------------------------------------------------------------
 // these are the actions used within the enum creation macro to produce output per-entry
 // we break out the _ID ones to avoid triggering errors when using Clang in -Wall mode
@@ -83,7 +88,7 @@ inline void cx_titleize( const char* tcin, char (&buffer)[_buflen] )
 #define METAENUM_DEF_TOSTR(_ty)                 case _ty: return #_ty;
 #define METAENUM_DEF_FIDX(_ty)                  case _ty: return _ty;
 #define METAENUM_DEF_VALID(_ty)                 case _ty: return true;
-#define METAENUM_DEF_FROMSTR(_ty)               if ( cx_strcmp(str, #_ty ) == 0) return _ty; else 
+#define METAENUM_DEF_FROMSTR(_ty)               if ( const_str::compare(str, #_ty ) == 0) return _ty; else 
 #define METAENUM_DEF_NEXTWRAP(_ty)              return _ty; case _ty: 
 #define METAENUM_DEF_NEXTVALID(_ty)             return true; case _ty: 
 
@@ -202,13 +207,13 @@ public:                                                                         
     {                                                                                                                                                                                                        \
         char titleCasingBuffer[128];                                                                                                                                                                         \
         bool wasChanged = false;                                                                                                                                                                             \
-        cx_titleize( toString( evalue ), titleCasingBuffer );                                                                                                                                                \
+        const_str::titleize( toString( evalue ), titleCasingBuffer );                                                                                                                                        \
         if ( ImGui::BeginCombo( label, titleCasingBuffer, 0 ) )                                                                                                                                              \
         {                                                                                                                                                                                                    \
             META_FOREACH( _enumName, lb )                                                                                                                                                                    \
             {                                                                                                                                                                                                \
                 const bool selected = (evalue == lb);                                                                                                                                                        \
-                cx_titleize( toString( lb ), titleCasingBuffer );                                                                                                                                            \
+                const_str::titleize( toString( lb ), titleCasingBuffer );                                                                                                                                    \
                 if ( ImGui::Selectable( titleCasingBuffer, selected ) )                                                                                                                                      \
                 {                                                                                                                                                                                            \
                     evalue = lb;                                                                                                                                                                             \

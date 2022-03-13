@@ -56,25 +56,25 @@ struct Riff
             currentBarSegment = (int32_t)(segmentPercentage * (double)m_quarterBeats);
         }
 
-        int32_t         m_quarterBeats;     // X / 4 time signature
-        int32_t         m_barCount;         // how many bars that represent a riff; note that this can be both <=> 8 given
+        int32_t     m_quarterBeats = 0;     // X / 4 time signature
+        int32_t     m_barCount = 0;         // how many bars that represent a riff; note that this can be both <=> 8 given
                                             // that endlesss supports having longer stems from (say) a 16/4 riff present in a 4/4 and
                                             // they appear to play in their entirety. It also has a maximum length of 60 sec (i think) 
                                             // for stems, so sometimes we have to clamp to < 8
-        float           m_bps;
-        float           m_bpm;
+        float       m_bps = 0;
+        float       m_bpm = 0;
         
         // length in seconds
-        double          m_lengthInSec;
-        double          m_lengthInSecPerBar;
+        double      m_lengthInSec = 0;
+        double      m_lengthInSecPerBar = 0;
 
         // length in samples
-        uint32_t        m_lengthInSamples;
-        uint32_t        m_lengthInSamplesPerBar;
+        uint32_t    m_lengthInSamples = 0;
+        uint32_t    m_lengthInSamplesPerBar = 0;
 
-        int32_t         m_longestStemInBars;
+        int32_t     m_longestStemInBars = 0;
 
-        double          m_rcpSampleRate;
+        double      m_rcpSampleRate = 0;
     };
 
     inline const RiffTimingDetails& getTimingDetails() const { return m_timingDetails; }

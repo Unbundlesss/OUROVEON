@@ -19,9 +19,9 @@
 #include "app/module.audio.h"
 
 
-
 namespace discord {
 
+// ---------------------------------------------------------------------------------------------------------------------
 BotWithUI::BotWithUI( app::ICoreServices& coreServices, const config::discord::Connection& configConnection ) 
     : m_services( coreServices )
     , m_config( configConnection )
@@ -29,10 +29,12 @@ BotWithUI::BotWithUI( app::ICoreServices& coreServices, const config::discord::C
 {
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
 BotWithUI::~BotWithUI()
 {
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
 void BotWithUI::imgui( app::CoreGUI& coreGUI )
 {
     const auto pulseColour = ImGui::GetPulseColourVec4();
@@ -86,9 +88,9 @@ void BotWithUI::imgui( app::CoreGUI& coreGUI )
 
         if ( botPhase == discord::Bot::ConnectionPhase::Ready )
         {
-            if ( !m_statusBarHandle.has_value() )
+            if ( !m_trafficOutBytesStatusHandle.has_value() )
             {
-                m_statusBarHandle = coreGUI.registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Right, 120.0f, [=]()
+                m_trafficOutBytesStatusHandle = coreGUI.registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Right, 120.0f, [this]()
                 {
                     ImGui::Text( ICON_FA_UPLOAD " %s", base::humaniseByteSize( "", m_trafficOutBytes ).c_str() );
                 });
@@ -222,10 +224,10 @@ void BotWithUI::imgui( app::CoreGUI& coreGUI )
         else
         {
             // remove status bar chunk when not live
-            if ( m_statusBarHandle.has_value() )
+            if ( m_trafficOutBytesStatusHandle.has_value() )
             {
-                coreGUI.unregisterStatusBarBlock( m_statusBarHandle.value() );
-                m_statusBarHandle.reset();
+                coreGUI.unregisterStatusBarBlock( m_trafficOutBytesStatusHandle.value() );
+                m_trafficOutBytesStatusHandle.reset();
             }
         }
     }
