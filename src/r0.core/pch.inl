@@ -26,13 +26,45 @@
 #include <mutex>
 #include <concepts>
 
+// abseil
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
+#include "absl/container/inlined_vector.h"
+
+// rpm
+#include "rpmalloc.h"
+
+// thread scope functions, used to name them for instrumentation and ensure rpmalloc per-thread init happens
+extern void ouroveonThreadEntry( const char* name );
+extern void ouroveonThreadExit();
+
+// the above, but automatic via RAII
+struct OuroveonThreadScope
+{
+    OuroveonThreadScope( const char* threadName );
+    ~OuroveonThreadScope();
+private:
+    char* m_name;
+};
+
+
+
 #ifdef OURO_CXX20_SEMA
 #include <semaphore>
 #include <barrier>
 #include <latch>
 #endif // OURO_CXX20_SEMA
 
+
+// nb we include windows here as part of the order-dependent mess that is gl/glad/glfw/et/al
+// similarly, pushing APIENTRY as it gets undeffed (ok, fine) and then restored once glfw is done
 #if OURO_PLATFORM_WIN
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif // WIN32_LEAN_AND_MEAN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif // NOMINMAX
 #include <windows.h>
 #pragma push_macro("APIENTRY")
 #endif // OURO_PLATFORM_WIN
@@ -50,8 +82,6 @@
 #pragma pop_macro("APIENTRY")
 #endif // OURO_PLATFORM_WIN
 
-// absl
-#include "absl/container/flat_hash_map.h"
 
 // github.com/HowardHinnant/date
 #include "date/date.h"
@@ -159,7 +189,7 @@ namespace detail {
 ADD_BLOG( core,     0xFD971F,    "CORE" )
 ADD_BLOG( gfx,      0xb05279,    " GFX" )
 ADD_BLOG( app,      0xA6E22E,    " APP" )
-ADD_BLOG( perf,     0xAEEF1A,    "PERF" )
+ADD_BLOG( instr,    0xAEEF1A,    "INST" )
 ADD_BLOG( cfg,      0xe6a637,    " CFG" )
 ADD_BLOG( cache,    0xe6d738,    "  C$" )
 ADD_BLOG( api,      0xa2e65a,    " API" )

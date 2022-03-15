@@ -600,7 +600,7 @@ void Instance::Data::runOnVstThread()
         m_product = m_product.substr( 0, m_product.size() - 4 );
     }
 
-    base::instr::setThreadName( fmt::format( OURO_THREAD_PREFIX "VST::{}", m_product ).c_str() );
+    OuroveonThreadScope ots( fmt::format( OURO_THREAD_PREFIX "VST::{}", m_product ).c_str() );
 
     // update on first time through
     m_updateIOChannels = true;
@@ -712,8 +712,6 @@ void Instance::Data::runOnVstThread()
     m_vstFilterInstance = nullptr;
 
     FreeLibrary( m_vstModule );
-
-    blog::vst( "VST thread exit for [{}]", m_path );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

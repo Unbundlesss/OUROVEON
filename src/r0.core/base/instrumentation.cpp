@@ -54,14 +54,3 @@ void eventEnd() {}
 } // namespace base
 
 #endif
-
-
-// ---------------------------------------------------------------------------------------------------------------------
-namespace tf
-{
-    // injected from taskflow executor, name the worker threads 
-    void _taskflow_worker_thread_init( size_t threadID )
-    {
-        base::instr::setThreadName( fmt::format( OURO_THREAD_PREFIX "TaskFlow:{}", threadID ).c_str() );
-    }
-}

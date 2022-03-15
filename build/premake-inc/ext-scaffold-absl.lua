@@ -20,10 +20,22 @@ project "ext-abseil"
 
     ModuleRefInclude["abseil"]()
 
+    -- https://abseil.io/docs/cpp/platforms/compilerflags
+
     filter "system:macosx"
     defines 
     {
         "ABSL_USING_CLANG",
+    }
+    filter {}
+
+    filter "system:windows"
+    warnings "default"
+    disablewarnings { "4005", "4068", "4244", "4267", "4800" }
+    defines 
+    {
+        "WIN32_LEAN_AND_MEAN",
+        "NOMINMAX",
     }
     filter {}
 

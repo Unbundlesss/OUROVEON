@@ -173,6 +173,13 @@ int Audio::PortAudioCallback(
     void* userData )
 {
     app::module::Audio* audioModule = static_cast<app::module::Audio*>(userData);
+
+    if ( !audioModule->m_threadInitOnce )
+    {
+        ouroveonThreadEntry( OURO_THREAD_PREFIX "AudioMix" );
+        audioModule->m_threadInitOnce = true;
+    }
+
     return audioModule->PortAudioCallbackInternal( outputBuffer, framesPerBuffer, timeInfo );
 }
 

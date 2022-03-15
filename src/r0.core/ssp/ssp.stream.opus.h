@@ -39,7 +39,7 @@ using OpusPacketDataInstance = std::unique_ptr< OpusPacketData >;
 class OpusStream : public ISampleStreamProcessor
 {
 public:
-    DeclareUncopyable( OpusStream )
+    DeclareUncopyable( OpusStream );
 
     // permitted Opus frame sizes for 48 kHz sample rate
     enum class FrameSize

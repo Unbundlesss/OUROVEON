@@ -96,8 +96,6 @@ workspace ("ouroveon_" .. _ACTION)
         {
             "WIN32",
             "_WINDOWS",
-            "WIN32_LEAN_AND_MEAN",
-            "NOMINMAX",
 
             "OURO_PLATFORM_WIN=1",
             "OURO_PLATFORM_OSX=0",
@@ -177,10 +175,15 @@ include "premake-inc/hal-portaudio.lua"
 include "premake-inc/hal-rtmidi.lua"
 
 group ""
+group "external-scaffold"
+
+include "premake-inc/ext-scaffold-absl.lua"
+include "premake-inc/ext-scaffold-rpmalloc.lua"
+
+group ""
 group "external"
 
 include "premake-inc/ext-imgui.lua"
-include "premake-inc/ext-scaffold-absl.lua"
 
 
 -- ------------------------------------------------------------------------------

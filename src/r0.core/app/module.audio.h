@@ -243,6 +243,7 @@ private:
     void*                               m_paStream          = nullptr;
     uint32_t                            m_sampleRate        = 0;
     OutputBuffer*                       m_mixerBuffers      = nullptr;      // the aligned intermediate buffer, filled by the configurable mixer process
+    bool                                m_threadInitOnce    = false;        // as PA controls the actual mix thread work, this is checked to let us do any once-on-init code inside the callback code
     bool                                m_mute              = false;
 
     ExposedState                        m_state;

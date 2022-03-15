@@ -19,7 +19,7 @@ namespace ssp {
 class WAVWriter : public ISampleStreamProcessor
 {
 public:
-    DeclareUncopyable( WAVWriter )
+    DeclareUncopyable( WAVWriter );
 
     ~WAVWriter();
 

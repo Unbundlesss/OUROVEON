@@ -824,6 +824,7 @@ inline int Executor::this_worker_id() const {
 
 // #HDD let client code have a taste (so we can tag and name it)
 extern void _taskflow_worker_thread_init( size_t tid );
+extern void _taskflow_worker_thread_exit( size_t tid );
 
 // Procedure: _spawn
 inline void Executor::_spawn(size_t N) {
@@ -856,7 +857,7 @@ inline void Executor::_spawn(size_t N) {
 
       Node* t = nullptr;
 
-      _taskflow_worker_thread_init(n);
+      _taskflow_worker_thread_init( n );
 
       // must use 1 as condition instead of !done
       while(1) {
@@ -869,7 +870,9 @@ inline void Executor::_spawn(size_t N) {
           break;
         }
       }
-      
+
+      _taskflow_worker_thread_exit( n );
+
     }, std::ref(_workers[id]), std::ref(mutex), std::ref(cond), std::ref(n));
   }
 

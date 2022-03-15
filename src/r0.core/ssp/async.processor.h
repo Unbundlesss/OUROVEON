@@ -132,7 +132,7 @@ private:
     inline void processorThreadWorker()
     {
         const auto threadName = fmt::format( "{}{}:Processor", OURO_THREAD_PREFIX, m_identifier );
-        base::instr::setThreadName( threadName.c_str() );
+        OuroveonThreadScope ots( threadName.c_str() );
 
         blog::core( "[{}] processor thread launched", m_identifier );
 
@@ -154,8 +154,6 @@ private:
 
             lock.unlock();
         }
-
-        blog::core( "[{}] processor thread closing", m_identifier );
     }
 
 

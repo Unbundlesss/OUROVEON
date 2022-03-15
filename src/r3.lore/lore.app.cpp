@@ -1121,7 +1121,7 @@ int LoreApp::EntrypointOuro()
         {
             using namespace std::chrono_literals;
 
-            base::instr::setThreadName( OURO_THREAD_PREFIX "LORE::riff-sync" );
+            OuroveonThreadScope ots( OURO_THREAD_PREFIX "LORE::riff-sync" );
 
             endlesss::live::RiffCacheLRU liveRiffMiniCache{ 50 };
             endlesss::types::RiffCouchID riffCouchID;
@@ -1130,11 +1130,11 @@ int LoreApp::EntrypointOuro()
             for (;;)
             {
                 if ( m_syncAndPlaybackThreadHalt )
-                    return;
+                    break;
 
 #if OURO_CXX20_SEMA
                 if ( m_syncAndPlaybackSem.try_acquire_for( 200ms ) )
-#endif // OURO_CXX20_SEMA                
+#endif // OURO_CXX20_SEMA
                 {
                     base::instr::ScopedEvent se( "riff-load", base::instr::PresetColour::Emerald );
 
@@ -1166,7 +1166,6 @@ int LoreApp::EntrypointOuro()
                 }
                 std::this_thread::yield();
             }
-            blog::app( "background riff sync thread [exit]" );
         } );
 
     // UI core loop begins

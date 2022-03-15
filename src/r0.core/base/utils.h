@@ -33,22 +33,15 @@ namespace mem {
 template< typename _T >
 finline _T* malloc16As( const size_t numElements )
 {
-#ifdef WIN32
-    return reinterpret_cast<_T*>(_aligned_malloc( sizeof( _T ) * numElements, 16 ));
-#else
-    return reinterpret_cast<_T*>(malloc( sizeof( _T ) * numElements ));
-#endif
+    return reinterpret_cast<_T*>( rpmalloc( sizeof( _T ) * numElements ) );
 }
 
 // allocate numElements of _T aligned to 16 bytes
 template< typename _T >
 finline _T* malloc16AsSet( const size_t numElements, const _T defaultValue )
 {
-#ifdef WIN32
-    _T* mblock = reinterpret_cast<_T*>(_aligned_malloc( sizeof( _T ) * numElements, 16 ));
-#else
-    _T* mblock = reinterpret_cast<_T*>(malloc( sizeof( _T ) * numElements ));
-#endif
+    _T* mblock = reinterpret_cast<_T*>( rpmalloc( sizeof( _T ) * numElements ) );
+
     for ( size_t kI = 0; kI < numElements; kI++ )
         mblock[kI] = defaultValue;
 
@@ -58,11 +51,7 @@ finline _T* malloc16AsSet( const size_t numElements, const _T defaultValue )
 // free memory allocated with allocateAlign16
 finline void free16( void* ptr )
 {
-#ifdef WIN32
-    return _aligned_free( ptr );
-#else
-    return free( ptr );
-#endif
+    return rpfree( ptr );
 }
 
 } // namespace mem

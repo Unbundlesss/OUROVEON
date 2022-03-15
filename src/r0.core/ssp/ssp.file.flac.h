@@ -18,7 +18,7 @@ namespace ssp {
 class FLACWriter : public ISampleStreamProcessor
 {
 public:
-    DeclareUncopyable( FLACWriter )
+    DeclareUncopyable( FLACWriter );
 
     ~FLACWriter();
 

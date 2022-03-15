@@ -37,6 +37,51 @@
 #endif 
 
 
+// ---------------------------------------------------------------------------------------------------------------------
+// pch global function implementations
+
+void ouroveonThreadEntry( const char* name )
+{
+    rpmalloc_thread_initialize();
+    base::instr::setThreadName( name );
+}
+
+void ouroveonThreadExit()
+{
+    rpmalloc_thread_finalize( 1 );
+}
+
+OuroveonThreadScope::OuroveonThreadScope( const char* threadName )
+{
+    ouroveonThreadEntry( threadName );
+    m_name = static_cast<char*>( rpmalloc(strlen(threadName) + 1) );
+    strcpy( m_name, threadName );
+
+    blog::instr( FMT_STRING("{{thread}} => {}"), m_name );
+}
+
+OuroveonThreadScope::~OuroveonThreadScope()
+{
+    blog::instr( FMT_STRING( "{{thread}} <= {}" ), m_name );
+    rpfree( m_name );
+    ouroveonThreadExit();
+}
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+namespace tf
+{
+    // injected from taskflow executor, name the worker threads 
+    void _taskflow_worker_thread_init( size_t threadID )
+    {
+        ouroveonThreadEntry( fmt::format( OURO_THREAD_PREFIX "TaskFlow:{}", threadID ).c_str() );
+    }
+    void _taskflow_worker_thread_exit( size_t threadID )
+    {
+        ouroveonThreadExit();
+    }
+}
+
 namespace app {
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -78,14 +123,28 @@ bool StoragePaths::tryToCreateAndValidate() const
 
 
 // ---------------------------------------------------------------------------------------------------------------------
-Core::Core()
-    : m_taskExecutor( std::clamp( std::thread::hardware_concurrency(), 2U, 8U ) )
+CoreStart::CoreStart()
 {
-    base::instr::setThreadName( OURO_THREAD_PREFIX "$::main-thread" );
+    rpmalloc_initialize();
+    ouroveonThreadEntry( OURO_THREAD_PREFIX "$::main-thread" );
+}
+
+CoreStart::~CoreStart()
+{
+    ouroveonThreadExit();
+    rpmalloc_finalize();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+Core::Core()
+    : CoreStart()
+    , m_taskExecutor( std::clamp( std::thread::hardware_concurrency(), 2U, 8U ) )
+{
 }
 
 Core::~Core()
 {
+    
 }
 
 #if OURO_PLATFORM_OSX
@@ -564,7 +623,7 @@ void CoreGUI::submitInterfaceLayout()
     // keep track of perf for the main loop
     {
         auto uiElapsed = m_perfData.m_moment.deltaMs();
-        m_perfData.m_uiLastMicrosecondsPreRender = (double)std::chrono::duration_cast<std::chrono::microseconds>(uiElapsed).count() * 0.001;
+        m_perfData.m_uiLastMicrosecondsPreRender = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(uiElapsed).count()) * 0.001;
     }
 
     m_mdFrontEnd->appRenderBegin();
@@ -577,7 +636,7 @@ void CoreGUI::submitInterfaceLayout()
     // perf post imgui render dispatch
     {
         auto uiElapsed = m_perfData.m_moment.deltaMs();
-        m_perfData.m_uiLastMicrosecondsPostRender = (double)std::chrono::duration_cast<std::chrono::microseconds>(uiElapsed).count() * 0.001;
+        m_perfData.m_uiLastMicrosecondsPostRender = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(uiElapsed).count()) * 0.001;
     }
 
 //     if ( postImguiRenderCallback )

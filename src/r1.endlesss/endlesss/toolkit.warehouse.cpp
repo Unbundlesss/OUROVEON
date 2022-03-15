@@ -840,8 +840,7 @@ void Warehouse::workerTogglePause()
 // ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::threadWorker()
 {
-    blog::api( "Warehouse::threadWorker start" );
-    base::instr::setThreadName( OURO_THREAD_PREFIX "Warehouse::Work" );
+    OuroveonThreadScope ots( OURO_THREAD_PREFIX "Warehouse::Work" );
 
     math::RNG32 rng;
 
@@ -995,8 +994,6 @@ void Warehouse::threadWorker()
 
     if ( m_cbWorkUpdate )
         m_cbWorkUpdate( false, "" );
-
-    blog::api( "Warehouse::threadWorker exit" );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

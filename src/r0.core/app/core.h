@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include "base/macro.h"
 #include "spacetime/moment.h"
 
 #include "config/data.h"
@@ -63,9 +64,17 @@ using AudioModule = std::unique_ptr<module::Audio>;
 using MidiModule  = std::unique_ptr<module::Midi>;
 
 
-// some access to Core app instances without having to hand over the keys
+// initial thread startup wrapper
+struct CoreStart
+{
+    CoreStart();
+    virtual ~CoreStart();
+};
+
+// some access to Core app instances without having to hand over everything
 struct ICoreServices
 {
+    virtual ~ICoreServices() {}
     virtual app::AudioModule& getAudioModule() = 0;
     virtual const endlesss::Exchange& getEndlesssExchange() = 0;
 };
@@ -73,11 +82,14 @@ struct ICoreServices
 // ---------------------------------------------------------------------------------------------------------------------
 // application base class that implements basic services for headless use
 //
-struct Core : public config::IPathProvider,
-              public ICoreServices
+struct Core : CoreStart,
+              config::IPathProvider,
+              ICoreServices
 {
+    DeclareUncopyable( Core );
+
     Core();
-    virtual ~Core();
+    ~Core();
 
     // high-level entrypoint, called by main()
     int Run();

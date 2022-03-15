@@ -11,4 +11,4 @@
 
 #define DeclareUncopyable( _classname )                         \
     _classname & operator=(const _classname&) = delete;         \
-    _classname( const _classname& ) = delete;
+    _classname( const _classname& ) = delete

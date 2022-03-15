@@ -17,14 +17,14 @@ ScopedTimer::~ScopedTimer()
     if ( m_running )
     {
         const auto duration = stop();
-        blog::perf( "{} took {}", m_context, duration );
+        blog::instr( "{} took {}", m_context, duration );
     }
 }
 
 void ScopedTimer::stage( const char* name )
 {
     const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>( now() - m_initialTime );
-    blog::perf( "{} [{}] took {}", m_context, name, duration );
+    blog::instr( "{} [{}] took {}", m_context, name, duration );
 }
 
 } // namespace spacetime

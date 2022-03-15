@@ -68,6 +68,8 @@ void Sentinel::stopTracking()
 // ---------------------------------------------------------------------------------------------------------------------
 void Sentinel::checkerThreadFn()
 {
+    OuroveonThreadScope ots( "JamSentinel" );
+
     // now we should be doing this with couch longpoll and such but ah well
     // pull the current sequence ID
     {
