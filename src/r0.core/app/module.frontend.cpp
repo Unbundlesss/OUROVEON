@@ -93,13 +93,6 @@ void ApplyOuroveonImGuiStyle()
     colors[ImGuiCol_ModalWindowDimBg]      = ImVec4( 0.80f, 0.80f, 0.80f, 0.35f );
 }
 
-static constexpr char const* cImGuiFontFixed    = "../../shared/fonts/FiraCode-Regular.ttf";
-static constexpr char const* cImGuiFontAwesome  = "../../shared/fonts/icons/" FONT_ICON_FILE_NAME_FAS;
-static constexpr char const* cImGuiFontTitle    = "../../shared/fonts/stentiga.ttf";
-static constexpr char const* cImGuiFontMedium   = "../../shared/fonts/Oswald-Light.ttf";
-static constexpr char const* cImGuiFontBanner   = "../../shared/fonts/JosefinSans-Regular.ttf";
-
-
 // ---------------------------------------------------------------------------------------------------------------------
 Frontend::Frontend( const config::Frontend& feConfig, const char* name )
     : m_feConfigCopy( feConfig )
@@ -127,18 +120,43 @@ static void glfwErrorCallback( int error, const char* description )
 
 // NB https://stackoverflow.com/questions/67345946/problem-with-imgui-when-using-glfw-opengl
 
+enum FontSlots
+{
+    FsFixed,
+    FsFontAwesome,
+    FsTitle,
+    FsMedium,
+    FsBanner,
+    FsCount
+};
+
 // ---------------------------------------------------------------------------------------------------------------------
 bool Frontend::create( const app::Core& appCore )
 {
-    // preflight checks on the font data
-    if ( !fs::exists( cImGuiFontFixed )   ||
-         !fs::exists( cImGuiFontAwesome ) ||
-         !fs::exists( cImGuiFontTitle )   ||
-         !fs::exists( cImGuiFontMedium )
-        )
+    const auto fontLoadpath = appCore.getSharedDataPath() / "fonts";
+
+    auto fontAt = [&fontLoadpath](const char* localPath)
     {
-        blog::error::core( "Unable to find required font files, [{}] for example", cImGuiFontFixed );
-        return false;
+        return (fontLoadpath / fs::path(localPath) );
+    };
+
+    std::array< fs::path, FsCount > fontFilesSlots;
+    fontFilesSlots[ FsFixed ]       = fontAt( "FiraCode-Regular.ttf" );
+    fontFilesSlots[ FsFontAwesome ] = fontLoadpath / "icons" / fs::path(FONT_ICON_FILE_NAME_FAS);
+    fontFilesSlots[ FsTitle ]       = fontAt( "stentiga.ttf" );
+    fontFilesSlots[ FsMedium ]      = fontAt( "Oswald-Light.ttf" );
+    fontFilesSlots[ FsBanner ]      = fontAt( "JosefinSans-Regular.ttf" );
+
+    #define FONT_AT( _idx ) fontFilesSlots[_idx].string().c_str()
+
+    // preflight checks on the font data
+    for ( const auto& fontPath : fontFilesSlots )
+    {
+        if ( !fs::exists( fontPath ) )
+        {
+            blog::error::core( "Unable to find required font file [{}]", fontPath.string() );
+            return false;
+        }
     }
 
     glfwSetErrorCallback( glfwErrorCallback );
@@ -264,7 +282,7 @@ bool Frontend::create( const app::Core& appCore )
                     0,
                 };
 
-                m_fontFixed = io.Fonts->AddFontFromFileTTF( cImGuiFontFixed, 16.0f, nullptr, fontRange );
+                m_fontFixed = io.Fonts->AddFontFromFileTTF( FONT_AT(FsFixed), 16.0f, nullptr, fontRange );
             }
 
             // embed FontAwesome glyphs into default font so we can use them without switching
@@ -275,18 +293,19 @@ bool Frontend::create( const app::Core& appCore )
                 faIconConfig.PixelSnapH         = true;
                 faIconConfig.GlyphOffset        = ImVec2( 0.0f, 2.0f );
                 faIconConfig.GlyphExtraSpacing  = ImVec2( 1.0f, 0.0f );
-                io.Fonts->AddFontFromFileTTF( cImGuiFontAwesome, 15.0f, &faIconConfig, faIconRange );
+                io.Fonts->AddFontFromFileTTF( FONT_AT(FsFontAwesome), 15.0f, &faIconConfig, faIconRange );
             }
             m_fixedSmaller = io.Fonts->AddFontDefault();
-            m_fixedLarger  = io.Fonts->AddFontFromFileTTF( cImGuiFontFixed, 24.0f );
-            m_fontLogo     = io.Fonts->AddFontFromFileTTF( cImGuiFontTitle, 50.0f );
-            m_fontMedium   = io.Fonts->AddFontFromFileTTF( cImGuiFontMedium, 50.0f );
-            m_fontBanner   = io.Fonts->AddFontFromFileTTF( cImGuiFontBanner, 40.0f );
+            m_fixedLarger  = io.Fonts->AddFontFromFileTTF( FONT_AT(FsFixed), 24.0f );
+            m_fontLogo     = io.Fonts->AddFontFromFileTTF( FONT_AT(FsTitle), 50.0f );
+            m_fontMedium   = io.Fonts->AddFontFromFileTTF( FONT_AT(FsMedium), 50.0f );
+            m_fontBanner   = io.Fonts->AddFontFromFileTTF( FONT_AT(FsBanner), 40.0f );
 
             ImGuiFreeType::BuildFontAtlas( io.Fonts, ImGuiFreeType::LightHinting );
         }
     }
 
+    #undef FONT_AT
     return true;
 }
 

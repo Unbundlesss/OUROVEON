@@ -88,6 +88,28 @@ Core::~Core()
 {
 }
 
+#if OURO_PLATFORM_OSX
+std::string osxGetBundlePath()
+{
+    CFURLRef url;
+    CFStringRef CFExePath;
+    CFBundleRef Bundle;
+
+    Bundle = CFBundleGetMainBundle();
+    url = CFBundleCopyExecutableURL(Bundle);
+
+    CFExePath = CFURLCopyFileSystemPath( url, kCFURLPOSIXPathStyle );
+
+    char exeBuffer[1024];
+    CFStringGetCString( CFExePath, exeBuffer, 1024, kCFStringEncodingISOLatin1 );
+
+    CFRelease( url );
+    CFRelease( CFExePath );
+
+    return std::string( exeBuffer );
+}
+#endif // OURO_PLATFORM_OSX
+
 // ---------------------------------------------------------------------------------------------------------------------
 int Core::Run()
 {
@@ -99,26 +121,45 @@ int Core::Run()
     // http://www.cplusplus.com/reference/ios/ios_base/sync_with_stdio/
     std::ios_base::sync_with_stdio( false );
 
-    // point at TZ database
-    date::set_install( "../../shared/timezone" );
-
     // sup
     blog::core( "Hello from OUROVEON {} [{}]", GetAppNameWithVersion(), getOuroveonPlatform() );
 
     // big and wide
     blog::core( "launched taskflow {} with {} worker threads", tf::version(), m_taskExecutor.num_workers() );
 
-
     // we load configuration data from the known system config directory
     m_sharedConfigPath  = fs::path( sago::getConfigHome() ) / cOuroveonRootName;
     m_appConfigPath     = m_sharedConfigPath / GetAppCacheName();
 
-    m_sharedDataPath    = fs::current_path().parent_path().parent_path() / "shared";
+#if OURO_PLATFORM_OSX
+    // on MacOS we may be running as a THING.app bundle with our own copy of the 
+    // shared resources files in a local /Contents/Resources tree - check for this first
+    const auto osxBundlePath = osxGetBundlePath();
+    auto sharedResRoot = ( fs::path( osxBundlePath ).parent_path().parent_path() ) / "Resources";
+
+    // if running outside of a distribution bundle, assume the unpacked file structure
+    if ( !fs::exists(sharedResRoot) )
+    {
+        blog::core( "osx launched unpacked" );
+        sharedResRoot = fs::current_path().parent_path().parent_path();
+    }
+    else
+    {
+        blog::core( "osx bundle path : {}", osxBundlePath );
+    }
+#else
+    const auto sharedResRoot = fs::current_path().parent_path().parent_path();
+#endif 
+
+    m_sharedDataPath    = sharedResRoot / "shared";
 
     blog::core( "core filesystem :" );
     blog::core( "  shared config : {}", m_sharedConfigPath.string() );
     blog::core( "     app config : {}", m_appConfigPath.string() );
     blog::core( "    shared data : {}", m_sharedDataPath.string() );
+
+    // point at TZ database
+    date::set_install( ( m_sharedDataPath / "timezone" ).string() );
 
     // ensure all core directories exist or we can't continue
     {
