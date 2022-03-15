@@ -12,6 +12,8 @@ premake.override(premake.vstudio.vc2010, "languageStandard", function(base, cfg)
     premake.vstudio.vc2010.element("LanguageStandard", nil, 'stdcpp20')
 end)
 
+LibRoot = {}
+
 -- ==============================================================================
 
 -- stash the starting directory upfront to use as a reference root 
@@ -94,6 +96,8 @@ workspace ("ouroveon_" .. _ACTION)
         {
             "WIN32",
             "_WINDOWS",
+            "WIN32_LEAN_AND_MEAN",
+            "NOMINMAX",
 
             "OURO_PLATFORM_WIN=1",
             "OURO_PLATFORM_OSX=0",
@@ -140,7 +144,7 @@ workspace ("ouroveon_" .. _ACTION)
 
         platforms       { "universal" }
         architecture      "universal"
-        systemversion     "11.0"
+        systemversion     "10.15"
         
         defines
         {
@@ -158,6 +162,14 @@ workspace ("ouroveon_" .. _ACTION)
         }
     filter {}
 
+    filter { "system:macosx", "configurations:Release" }
+    xcodebuildsettings 
+    {
+        ["ENABLE_HARDENED_RUNTIME"] = "YES",
+        ["LLVM_LTO"] = "YES_THIN",
+    }
+    filter {}
+
 group "external-hal"
 
 include "premake-inc/hal-glfw.lua"
@@ -168,6 +180,7 @@ group ""
 group "external"
 
 include "premake-inc/ext-imgui.lua"
+include "premake-inc/ext-scaffold-absl.lua"
 
 
 -- ------------------------------------------------------------------------------
@@ -862,6 +875,15 @@ project "ext-dpp"
 
 group ""
 
+function XcodeConfigureApp( layerName )
+    if ( os.host() == "macosx" ) then
+        xcodebuildsettings 
+        {
+            ["PRODUCT_BUNDLE_IDENTIFIER"] = "com.reasonandnightmare." .. layerName,
+        }
+    end    
+end
+
 -- ------------------------------------------------------------------------------
 function SetupOuroveonLayer( isFinalRing, layerName )
 
@@ -873,10 +895,10 @@ function SetupOuroveonLayer( isFinalRing, layerName )
 
     if isFinalRing == true then
        targetdir ( GetBuildRootToken() .. "../../bin/" .. layerName .. "/%{cfg.system}_%{cfg.shortname}" )
+       XcodeConfigureApp( layerName )
     else
        targetdir ( GetBuildRootToken() .. "_artefact/ouro/_" .. layerName .. "/%{cfg.system}_%{cfg.shortname}" )
     end
-
 
     defines 
     {
@@ -925,7 +947,7 @@ function SetupOuroveonLayer( isFinalRing, layerName )
         SrcDir() .. "r2.action",
     }
 
-    -- sdk layer compiles all code
+    -- sdk layer compiles all library code; app layers then just link sdk
     if isFinalRing == false then
     files 
     { 
@@ -1007,7 +1029,7 @@ function CommonAppLink()
     if ( os.host() == "macosx" ) then
         for libName, libFn in pairs(ModuleRefLinkOSX) do
             libFn()
-        end
+        end     
     end    
 
     filter "system:Windows"

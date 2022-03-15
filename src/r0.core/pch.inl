@@ -7,7 +7,7 @@
 //  
 //
 
-#define OURO_FRAMEWORK_VERSION    "0.6.3"
+#define OURO_FRAMEWORK_VERSION    "0.6.4"
 
 // std
 #include <bitset>
@@ -33,8 +33,6 @@
 #endif // OURO_CXX20_SEMA
 
 #if OURO_PLATFORM_WIN
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
 #include <windows.h>
 #pragma push_macro("APIENTRY")
 #endif // OURO_PLATFORM_WIN
@@ -52,7 +50,8 @@
 #pragma pop_macro("APIENTRY")
 #endif // OURO_PLATFORM_WIN
 
-
+// absl
+#include "absl/container/flat_hash_map.h"
 
 // github.com/HowardHinnant/date
 #include "date/date.h"
