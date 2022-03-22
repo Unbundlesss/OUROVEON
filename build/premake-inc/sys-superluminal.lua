@@ -1,7 +1,7 @@
 
 
--- ------------------------------------------------------------------------------
-function _Superluminal_Include()
+-- ==============================================================================
+ModuleRefInclude["superluminal"] = function()
 
     if ( os.host() == "windows" ) then
         defines 
@@ -16,22 +16,17 @@ function _Superluminal_Include()
 
 end
 
-ModuleRefInclude["superluminal"] = _Superluminal_Include
+-- ==============================================================================
+ModuleRefLinkWin["superluminal"] = function()
 
+    libdirs
+    {
+        GetPrebuiltLibs_Win64() .. "superluminal/lib/x64"
+    }
 
--- ------------------------------------------------------------------------------
-function _Superluminal_LinkPrebuilt()
-
-        libdirs
-        {
-            GetPrebuiltLibs_Win64() .. "superluminal/lib/x64"
-        }
-
-        filter "configurations:Debug"
-            links ( "PerformanceAPI_MDd.lib" )
-        filter "configurations:Release"
-            links ( "PerformanceAPI_MD.lib" )
-        filter {}
+    filter "configurations:Debug"
+        links ( "PerformanceAPI_MDd.lib" )
+    filter "configurations:Release"
+        links ( "PerformanceAPI_MD.lib" )
+    filter {}
 end
-
-ModuleRefLinkWin["superluminal"]      = _Superluminal_LinkPrebuilt

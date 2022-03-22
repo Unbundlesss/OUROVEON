@@ -1,6 +1,5 @@
-
--- ------------------------------------------------------------------------------
-function _OpenSSL_Include()
+-- ==============================================================================
+ModuleRefInclude["openssl"] = function()
 
     filter "system:Windows"
     sysincludedirs
@@ -17,10 +16,8 @@ function _OpenSSL_Include()
     filter {}
 end
 
-ModuleRefInclude["openssl"] = _OpenSSL_Include
-
 -- ==============================================================================
-function _OpenSSL_LinkPrebuilt()
+ModuleRefLink["openssl"] = function()
 
     filter "system:Windows"
     libdirs ( GetPrebuiltLibs_Win64() .. "openssl/lib" )
@@ -49,5 +46,3 @@ function _OpenSSL_LinkPrebuilt()
     }
     filter {}
 end
-
-ModuleRefLink["openssl"] = _OpenSSL_LinkPrebuilt

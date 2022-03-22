@@ -1,6 +1,5 @@
-
--- ------------------------------------------------------------------------------
-function _Freetype_Include()
+-- ==============================================================================
+ModuleRefInclude["freetype"] = function()
 
     filter "system:Windows"
     sysincludedirs
@@ -24,11 +23,9 @@ function _Freetype_Include()
     filter {}
 end
 
-ModuleRefInclude["freetype"] = _Freetype_Include
-
 -- ==============================================================================
-function _Freetype_LinkPrebuilt()
-
+ModuleRefLink["freetype"] = function()
+    
     -- windows has debug/release static builds
     filter "system:Windows"
         links ( "freetype.lib" )
@@ -54,5 +51,3 @@ function _Freetype_LinkPrebuilt()
         }
     filter {}
 end
-
-ModuleRefLink["freetype"] = _Freetype_LinkPrebuilt
