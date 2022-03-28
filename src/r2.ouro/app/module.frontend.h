@@ -52,7 +52,7 @@ struct Frontend : public Module
     finline int32_t getLargestTextureDim() const{ return m_largestTextureDimension; }
 
 
-    void titleText( const char* label );
+    void titleText( const char* label ) const;
 
     enum class FontChoice
     {
@@ -80,16 +80,17 @@ struct Frontend : public Module
         return nullptr;
     }
 
-    static void reloadImguiLayoutFromDefault();
+    void reloadImguiLayoutFromDefault() const;
 
 private:
 
     // push actual window attributes for borderless mode
-    void applyBorderless();
+    void applyBorderless() const;
 
     config::Frontend    m_feConfigCopy;
     std::string         m_appName;
 
+    fs::path            m_imguiLayoutDefaultPath;
     char*               m_imguiLayoutIni;
 
     GLFWwindow*         m_GlfwWindow;

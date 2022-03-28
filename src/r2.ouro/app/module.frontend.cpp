@@ -97,6 +97,7 @@ void ApplyOuroveonImGuiStyle()
 Frontend::Frontend( const config::Frontend& feConfig, const char* name )
     : m_feConfigCopy( feConfig )
     , m_appName( name )
+    , m_imguiLayoutIni( nullptr )
     , m_GlfwWindow( nullptr )
     , m_largestTextureDimension( 0 )
     , m_fontFixed( nullptr )
@@ -109,6 +110,8 @@ Frontend::Frontend( const config::Frontend& feConfig, const char* name )
 // ---------------------------------------------------------------------------------------------------------------------
 Frontend::~Frontend()
 {
+    delete[]m_imguiLayoutIni;
+
     if ( m_GlfwWindow != nullptr )
         destroy();
 }
@@ -117,8 +120,6 @@ static void glfwErrorCallback( int error, const char* description )
 {
     blog::error::core( "[glfw] error %i : %s", error, description );
 }
-
-// NB https://stackoverflow.com/questions/67345946/problem-with-imgui-when-using-glfw-opengl
 
 enum FontSlots
 {
@@ -168,6 +169,7 @@ bool Frontend::create( const app::Core& appCore )
         return false;
     }
 
+    // NB https://stackoverflow.com/questions/67345946/problem-with-imgui-when-using-glfw-opengl
     // GL 3.2 + GLSL 150
     glfwWindowHint( GLFW_CONTEXT_VERSION_MAJOR,     3 );
     glfwWindowHint( GLFW_CONTEXT_VERSION_MINOR,     2 );
@@ -252,6 +254,13 @@ bool Frontend::create( const app::Core& appCore )
 
         // configure where imgui will stash layout persistence
         {
+            // default layouts are stashed in the shared/layouts path, eg. lore.default.ini
+            m_imguiLayoutDefaultPath = appCore.getSharedDataPath() / "layouts" / fs::path( fmt::format( "{}.default.ini", appCore.GetAppCacheName() ) );
+            if ( !fs::exists( m_imguiLayoutDefaultPath ) )
+            {
+                blog::error::core( "missing default layout .ini fallback [{}]", m_imguiLayoutDefaultPath.string() );
+            }
+
             static constexpr size_t layoutPathMax = 256;
 
             m_imguiLayoutIni = new char[layoutPathMax];
@@ -375,14 +384,14 @@ void Frontend::toggleBorderless()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void Frontend::applyBorderless()
+void Frontend::applyBorderless() const
 {
     glfwSetWindowAttrib( m_GlfwWindow, GLFW_DECORATED, m_isBorderless ? 0 : 1 );
     glfwSetWindowAttrib( m_GlfwWindow, GLFW_RESIZABLE, m_isBorderless ? 0 : 1 );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void Frontend::titleText( const char* label )
+void Frontend::titleText( const char* label ) const
 {
     ImGui::PushFont( getFont( app::module::Frontend::FontChoice::MediumTitle ) );
     ImGui::TextUnformatted( label );
@@ -391,9 +400,9 @@ void Frontend::titleText( const char* label )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void Frontend::reloadImguiLayoutFromDefault()
+void Frontend::reloadImguiLayoutFromDefault() const
 {
-    ImGui::LoadIniSettingsFromDisk( "../layout.default.ini" );
+    ImGui::LoadIniSettingsFromDisk( m_imguiLayoutDefaultPath.string().c_str() );
     ImGui::MarkIniSettingsDirty();
 }
 
