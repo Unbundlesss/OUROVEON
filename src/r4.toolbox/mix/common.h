@@ -39,7 +39,11 @@ struct RiffMixerBase
 
     inline const app::AudioPlaybackTimeInfo* getTimeInfoPtr() const { return &m_timeInfo; }
 
-protected: 
+protected:
+
+    void mixChannelsWriteSilence(
+        const uint32_t offset,
+        const uint32_t samplesToWrite );
 
     // mash all 8+8 channels down into a stereo output buffer
     void mixChannelsToOutput(

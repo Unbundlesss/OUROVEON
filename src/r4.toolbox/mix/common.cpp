@@ -12,6 +12,20 @@
 
 namespace mix {
 
+void RiffMixerBase::mixChannelsWriteSilence(
+    const uint32_t offset, 
+    const uint32_t samplesToWrite)
+{
+    for ( auto chIndex = 0U; chIndex < 8; chIndex++ )
+    {
+        for ( auto sI = offset; sI < offset + samplesToWrite; sI++ )
+        {
+            m_mixChannelLeft[chIndex][sI] = 0;
+            m_mixChannelRight[chIndex][sI] = 0;
+        }
+    }
+}
+
 void RiffMixerBase::mixChannelsToOutput( 
     const app::module::Audio::OutputBuffer& outputBuffer, 
     const float globalMultiplier,
