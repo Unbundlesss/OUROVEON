@@ -32,8 +32,8 @@ namespace app {
 //
 template< size_t _itemCount >
 std::string ValueArrayPreviewString(
-    const std::array< const char*, _itemCount > entryLabels,
-    const std::array< uint32_t,    _itemCount > entryValues,
+    const std::array< const char*, _itemCount >& entryLabels,
+    const std::array< uint32_t,    _itemCount >& entryValues,
     uint32_t&       variable )
 {
     for ( size_t optI = 0; optI < _itemCount; optI++ )
@@ -48,8 +48,8 @@ template< size_t _itemCount >
 bool ValueArrayImGuiCombo(
     const char*     title,
     const char*     label,
-    const std::array< const char*, _itemCount > entryLabels,
-    const std::array< uint32_t,    _itemCount > entryValues,
+    const std::array< const char*, _itemCount >& entryLabels,
+    const std::array< uint32_t,    _itemCount >& entryValues,
     uint32_t&       variable,
     std::string&    previewString,
     const bool      addYOffset)
@@ -88,8 +88,8 @@ int OuroApp::EntrypointGUI()
 {
     static constexpr std::array< const char*, 4 > cSampleRateLabels { "44100", "48000", "88200", "96000" };
     static constexpr std::array< uint32_t,    4 > cSampleRateValues {  44100 ,  48000 ,  88200 ,  96000  };
-    static constexpr std::array< const char*, 5 > cBufferSizeLabels {  "Auto",   "256",   "512",  "1024",  "2048" };
-    static constexpr std::array< uint32_t,    5 > cBufferSizeValues {      0 ,    256 ,    512 ,   1024 ,   2048  };
+    static constexpr std::array< const char*, 6 > cBufferSizeLabels {  "Auto",    "64",   "256",   "512",  "1024",  "2048" };
+    static constexpr std::array< uint32_t,    6 > cBufferSizeValues {      0 ,     64 ,    256 ,    512 ,   1024 ,   2048  };
 
 
     // try and fetch last audio settings from the stash; doesn't really matter if we can't, it is just saved defaults
