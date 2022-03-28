@@ -87,7 +87,7 @@ Shader::~Shader()
         glDeleteProgram( m_handle );
 }
 
-std::shared_ptr<Shader> Shader::loadFromFiles( const std::string& context, const std::string& vsh, const std::string psh )
+std::shared_ptr<Shader> Shader::loadFromFiles( const std::string& context, const std::string& vsh, const std::string& psh )
 {
     auto newId = compileProgram( context.c_str(), vsh.c_str(), psh.c_str() );
     if ( newId <= 0 )

@@ -18,7 +18,7 @@ struct Shader
     {}
     ~Shader();
 
-    static std::shared_ptr<Shader> loadFromFiles( const std::string& context, const std::string& vsh, const std::string psh );
+    static std::shared_ptr<Shader> loadFromFiles( const std::string& context, const std::string& vsh, const std::string& psh );
 
     int32_t getHandle() const { return m_handle; }
 
