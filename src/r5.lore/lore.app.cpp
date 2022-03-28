@@ -1454,10 +1454,10 @@ int LoreApp::EntrypointOuro()
         {
             ImGui::Begin( "Data Warehouse" );
 
-//             if ( ImGui::IsWindowHovered( ImGuiHoveredFlags_RootAndChildWindows ) && ImGui::IsKeyPressedMap( ImGuiKey_Tab, false ) )
-//             {
-//                 blog::core( "TAB" );
-//             }
+            if ( ImGui::IsWindowHovered( ImGuiHoveredFlags_RootAndChildWindows ) && ImGui::IsKeyPressedMap( ImGuiKey_Tab, false ) )
+            {
+                blog::core( "TAB" );
+            }
 
             {
                 ImGui::Scoped::ButtonTextAlignLeft leftAlign;
@@ -1548,9 +1548,14 @@ int LoreApp::EntrypointOuro()
                             continue;
 
                         ImGui::PushID( (int32_t)jI );
-
                         ImGui::TableNextColumn();
-                        
+
+                        // highlight or lowlight column based on state
+                        if ( isJamInFlux )
+                            ImGui::TableSetBgColor( ImGuiTableBgTarget_RowBg0, ImGui::GetColorU32( ImGuiCol_TableRowBgAlt, 0.0f ) );
+                        if ( m_currentViewedJam == m_warehouseContentsReport.m_jamCouchIDs[jI] )
+                            ImGui::TableSetBgColor( ImGuiTableBgTarget_RowBg0, ImGui::GetColorU32( ImGuiCol_TableRowBgAlt, 2.5f ) );
+
                         ImGui::BeginDisabledControls( isJamInFlux );
                         if ( ImGui::PrecisionButton( ICON_FA_EYE, buttonSizeMidTable, 1.0f ) )
                         {

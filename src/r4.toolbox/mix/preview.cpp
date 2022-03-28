@@ -9,12 +9,11 @@
 
 #include "mix/preview.h"
 
-#include "ssp/ssp.file.wav.h"
-#include "ssp/ssp.file.flac.h"
-
 #include "app/core.h"
 #include "app/imgui.ext.h"
 #include "app/module.frontend.fonts.h"
+
+#include "vx/stembeats.h"
 
 #include "endlesss/core.constants.h"
 #include "endlesss/live.stem.h"
@@ -26,23 +25,30 @@ namespace mix {
 // ---------------------------------------------------------------------------------------------------------------------
 Preview::Preview( const int32_t maxBufferSize, const int32_t sampleRate, const RiffChangeCallback& riffChangeCallback )
     : RiffMixerBase( maxBufferSize, sampleRate )
-    , m_riffPlaybackSample( 0 )
     , m_riffChangeCallback( riffChangeCallback )
 {
+    m_txBlendCacheLeft.fill( 0 );
+    m_txBlendCacheRight.fill( 0 );
+    m_txBlendActiveLeft.fill( 0 );
+    m_txBlendActiveRight.fill( 0 );
 
+    const auto blendDelta = 1.0 / (double)txBlendBufferSize;
+          auto blendValue = 1.0;
+
+    // precompute the lerp values for each blend sample in the buffer
+    for ( size_t bI = 0; bI < txBlendBufferSize; bI++, blendValue -= blendDelta )
+        m_txBlendInterp[bI] = (float)( blendValue * blendValue );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 Preview::~Preview()
 {
-
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 void Preview::renderCurrentRiff(
     const uint32_t      outputOffset,
-    const uint32_t      samplesToWrite,
-    const uint64_t      samplePosition )
+    const uint32_t      samplesToWrite)
 {
     if ( samplesToWrite == 0 )
         return;
@@ -75,20 +81,26 @@ void Preview::renderCurrentRiff(
         const auto  stemInst = stemPtr[stemI];
         const float stemGain = stemGains[stemI];
 
+        m_txBlendCacheLeft[stemI]  = 0;
+        m_txBlendCacheRight[stemI] = 0;
+
         // any stem problem -> silence
         if ( stemInst == nullptr || 
              stemInst->hasFailed() )
         {
             for ( auto sI = 0U; sI < samplesToWrite; sI++ )
             {
-                m_mixChannelLeft[stemI][sI]  = 0;
-                m_mixChannelRight[stemI][sI] = 0;
+                m_mixChannelLeft[stemI][outputOffset + sI] = 0;
+                m_mixChannelRight[stemI][outputOffset + sI] = 0;
             }
             continue;
         }
 
         // get sample position in context of the riff
         uint64_t riffSample = riffWrappedSampleStart;
+
+        float lastSampleLeft  = 0;
+        float lastSampleRight = 0;
 
         for ( auto sI = 0U; sI < samplesToWrite; sI++ )
         {
@@ -97,22 +109,65 @@ void Preview::renderCurrentRiff(
 
             if (stemTimeStretch[stemI] != 1.0f)
             {
-                double scaleSample = (double)finalSampleIdx * stemTimeStretch[stemI];
+                const double scaleSample = (double)finalSampleIdx * stemTimeStretch[stemI];
                 finalSampleIdx = (uint64_t)scaleSample;
             }
             finalSampleIdx %= sampleCount;
 
-
-            m_mixChannelLeft[stemI][outputOffset + sI]  = stemInst->m_channel[0][finalSampleIdx] * stemGain;
-            m_mixChannelRight[stemI][outputOffset + sI] = stemInst->m_channel[1][finalSampleIdx] * stemGain;
+            lastSampleLeft  = stemInst->m_channel[0][finalSampleIdx] * stemGain;
+            lastSampleRight = stemInst->m_channel[1][finalSampleIdx] * stemGain;
+            m_mixChannelLeft[stemI][outputOffset + sI]  = lastSampleLeft;
+            m_mixChannelRight[stemI][outputOffset + sI] = lastSampleRight;
 
             riffSample++;
             if ( riffSample >= riffLengthInSamples )
                 riffSample -= riffLengthInSamples;
         }
+
+        m_txBlendCacheLeft[stemI]  = lastSampleLeft;
+        m_txBlendCacheRight[stemI] = lastSampleRight;
     }
 
     m_riffPlaybackSample += samplesToWrite;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void Preview::applyBlendBuffer( const uint32_t outputOffset, const uint32_t samplesToWrite )
+{
+    if ( m_txBlendSamplesRemaining <= 0 || samplesToWrite == 0 )
+        return;
+
+    // txIntepIndex requires this or it will underflow (and it should never be > the buffer size)
+    ABSL_ASSERT( m_txBlendSamplesRemaining <= txBlendBufferSize );
+
+    // work out minimum number of values to walk
+    const auto maxSamplesToWrite = std::min( samplesToWrite, m_txBlendSamplesRemaining );
+
+    // find where to read from our blend-amount array, offset how many samples we've already used (in previous update()s)
+    const auto txIntepIndex = txBlendBufferSize - m_txBlendSamplesRemaining;
+
+    for ( auto stemI = 0U; stemI < 8; stemI++ )
+    {
+        for ( auto sI = 0U; sI < maxSamplesToWrite; sI++ )
+        {
+            const float existingLeft  = m_mixChannelLeft[stemI][outputOffset + sI];
+            const float existingRight = m_mixChannelRight[stemI][outputOffset + sI];
+
+            m_mixChannelLeft[stemI][outputOffset + sI]  = std::lerp( existingLeft,  m_txBlendActiveLeft[stemI],  m_txBlendInterp[txIntepIndex + sI] );
+            m_mixChannelRight[stemI][outputOffset + sI] = std::lerp( existingRight, m_txBlendActiveRight[stemI], m_txBlendInterp[txIntepIndex + sI] );
+
+#ifdef PRV_DEBUG
+            // enable to view transition blocks in audacity or whatnot
+            if ( sI == 0 )
+                m_mixChannelRight[stemI][outputOffset + sI] = 1.0f;
+            if ( sI == maxSamplesToWrite - 1 )
+                m_mixChannelRight[stemI][outputOffset + sI] = -1.0f;
+#endif
+        }
+    }
+
+    m_txBlendSamplesRemaining -= maxSamplesToWrite;
+    ABSL_ASSERT( m_txBlendSamplesRemaining <= txBlendBufferSize );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -151,6 +206,16 @@ void Preview::update(
         m_riffTransitionedInMix = true;
     };
 
+    const auto addTxBlend = [this]
+    {
+        for ( auto stemI = 0U; stemI < 8; stemI++ )
+        {
+            m_txBlendActiveLeft[stemI]  = m_txBlendCacheLeft[stemI];
+            m_txBlendActiveRight[stemI] = m_txBlendCacheRight[stemI];
+        }
+        m_txBlendSamplesRemaining = txBlendBufferSize;
+    };
+
     const bool riffEmpty = ( m_riffCurrent == nullptr ||
                              m_riffCurrent->m_timingDetails.m_lengthInSamples == 0 );
 
@@ -158,6 +223,10 @@ void Preview::update(
     if ( riffEmpty && !riffEnqueued )
     {
         outputBuffer.applySilence();
+
+        // blank out tx cache
+        m_txBlendCacheLeft.fill( 0 );
+        m_txBlendCacheRight.fill( 0 );
 
         // reset computed riff playback variables
         m_riffPlaybackPercentage = 0;
@@ -167,78 +236,90 @@ void Preview::update(
         return;
     }
 
+    uint32_t txOffset = 0;
+    uint32_t txSampleLimit = samplesToWrite;
 
     if ( riffEnqueued )
     {
+        // instant transition mode?
         if ( riffEmpty || m_lockTransitionToNextBar == false )
         {
             dequeNextRiff();
 
+            // in case of a null enqueue (ie. a command to stop playing)
+            // revert to silence and bail 
             if ( m_riffCurrent == nullptr )
             {
-                outputBuffer.applySilence();
-                return;
+                mixChannelsWriteSilence( 0, samplesToWrite );
             }
-        }
 
-        const auto shiftTransisionSample = m_lockTransitionOnBeat * ( m_riffCurrent->m_timingDetails.m_lengthInSamplesPerBar / m_riffCurrent->m_timingDetails.m_quarterBeats );
-
-        auto segmentLengthInSamples = (int64_t)m_riffCurrent->m_timingDetails.m_lengthInSamplesPerBar;
-        switch ( m_lockTransitionBarCount )
-        {
-            case TransitionBarCount::Eighth:    segmentLengthInSamples /= 8; break;
-            case TransitionBarCount::Quarter:   segmentLengthInSamples /= 4; break;
-            case TransitionBarCount::Half:      segmentLengthInSamples /= 2; break;
-            case TransitionBarCount::Two:       segmentLengthInSamples *= 2; break;
-            case TransitionBarCount::Four:      segmentLengthInSamples *= 4; break;
-            default:
-            case TransitionBarCount::One:
-                break;
-        }
-        
-
-        auto shiftedPlaybackSample = m_riffPlaybackSample - shiftTransisionSample;
-        if ( shiftedPlaybackSample < 0 )
-        {
-            shiftedPlaybackSample += segmentLengthInSamples;
-        }
-
-        auto samplesUntilNextSegment = (uint32_t)(segmentLengthInSamples - (shiftedPlaybackSample % segmentLengthInSamples));
-
-        if ( samplesUntilNextSegment > samplesToWrite )
-        {
-            renderCurrentRiff( 0, samplesToWrite, samplePosition );
+            addTxBlend();
         }
         else
         {
-            if ( samplesUntilNextSegment > 0 )
-                renderCurrentRiff( 0, samplesUntilNextSegment, samplePosition );
+            const auto shiftTransisionSample = m_lockTransitionOnBeat * (m_riffCurrent->m_timingDetails.m_lengthInSamplesPerBar / m_riffCurrent->m_timingDetails.m_quarterBeats);
 
-            if ( riffEnqueued )
-                dequeNextRiff();
-
-            // in the case where we paused playback, write silence from the current offset
-            if ( m_riffCurrent == nullptr )
+            auto segmentLengthInSamples = (int64_t)m_riffCurrent->m_timingDetails.m_lengthInSamplesPerBar;
+            switch ( m_lockTransitionBarCount )
             {
-                for ( auto stemI = 0U; stemI < 8; stemI++ )
-                {
-                    for ( auto sI = samplesUntilNextSegment; sI < samplesToWrite - samplesUntilNextSegment; sI++ )
-                    {
-                        m_mixChannelLeft[stemI][sI] = 0;
-                        m_mixChannelRight[stemI][sI] = 0;
-                    }
-                }
+            case TransitionBarCount::Eighth:    segmentLengthInSamples /= 8; break;
+            case TransitionBarCount::Quarter:   segmentLengthInSamples /= 4; break;
+            case TransitionBarCount::Half:      segmentLengthInSamples /= 2; break;
+            case TransitionBarCount::Many:      segmentLengthInSamples *= m_lockTransitionBarMultiple; break;
+            default:
+            case TransitionBarCount::Once:
+                break;
+            }
+
+
+            auto shiftedPlaybackSample = m_riffPlaybackSample - shiftTransisionSample;
+            if ( shiftedPlaybackSample < 0 )
+            {
+                shiftedPlaybackSample += segmentLengthInSamples;
+            }
+
+            const auto samplesUntilNextSegment = (uint32_t)(segmentLengthInSamples - (shiftedPlaybackSample % segmentLengthInSamples));
+
+            if ( samplesUntilNextSegment > samplesToWrite )
+            {
+                renderCurrentRiff( 0, samplesToWrite );
             }
             else
             {
-                renderCurrentRiff( samplesUntilNextSegment, samplesToWrite - samplesUntilNextSegment, samplePosition );
+                if ( samplesUntilNextSegment > 0 )
+                    renderCurrentRiff( 0, samplesUntilNextSegment );
+
+                if ( riffEnqueued )
+                    dequeNextRiff();
+
+                addTxBlend();
+
+                const auto samplesRemainingToWrite = samplesToWrite - samplesUntilNextSegment;
+
+                // in the case where we paused playback, write silence from the current offset
+                if ( m_riffCurrent == nullptr )
+                {
+                    mixChannelsWriteSilence( samplesUntilNextSegment, samplesRemainingToWrite );
+                }
+                else
+                {
+                    renderCurrentRiff( samplesUntilNextSegment, samplesRemainingToWrite );
+                }
+
+                // set the transition blending to start at this point in the buffer
+                txOffset      = samplesUntilNextSegment;
+                txSampleLimit = samplesRemainingToWrite;
             }
         }
     }
+    // nothing queued up to transition to, we just play on whatever we got
     else
     {
-        renderCurrentRiff( 0, samplesToWrite, samplePosition );
+        renderCurrentRiff( 0, samplesToWrite );
     }
+
+    // if we have some cached transition smoothing values in play, shlonk them in
+    applyBlendBuffer( txOffset, txSampleLimit );
 
 
     // compute where we are (roughly) for the UI
@@ -304,15 +385,18 @@ void Preview::imgui( const app::StoragePaths& storagePaths )
             ImGui::TextUnformatted( currentRiff->m_uiDetails.c_str() );
             ImGui::Spacing();
             ImGui::Text( "%s | %s", currentRiff->m_uiIdentity.c_str(), riffTimeDelta.asPastTenseString( 3 ).c_str() );
-            ImGui::TextUnformatted( currentRiff->m_uiTimestamp.c_str() );
+            ImGui::SameLine();
+            ImGui::TextDisabled( "[?]" );
+            ImGui::CompactTooltip( currentRiff->m_uiTimestamp.c_str() );
         }
         else
         {
             ImGui::TextUnformatted( "" );
             ImGui::Spacing();
             ImGui::TextUnformatted( "" );
-            ImGui::TextUnformatted( "" );
         }
+        ImGui::Spacing();
+        ImGui::Spacing();
 
         ImGui::Columns( 2, nullptr, false );
         ImGui::SetColumnWidth( 0, panelVolumeModule );
@@ -330,7 +414,7 @@ void Preview::imgui( const app::StoragePaths& storagePaths )
                 }
             }
             ImGui::CompactTooltip( lockTransitionLocal ? "Transition Timing : On Chosen Bar" : "Transition Timing : Instant" );
-            ImGui::SameLine();
+            ImGui::SameLine( 0, 2.0f );
 
             ImGui::BeginDisabledControls( !currentRiffIsValid );
             if ( ImGui::Button( ICON_FA_STOP, ImVec2( 30.0f, 0.0f ) ) )
@@ -352,13 +436,16 @@ void Preview::imgui( const app::StoragePaths& storagePaths )
 
 
         {
-            ImGui::Spacing();
-            ImGui::Spacing();
             ImGui::BeginDisabledControls( !lockTransitionLocal );
 
             ImGui::NextColumn();
+            ImGui::Spacing();
+            ImGui::Spacing();
             ImGui::TextUnformatted( "Offset" );
+
             ImGui::NextColumn();
+            ImGui::Spacing();
+            ImGui::Spacing();
             {
                 if ( currentRiffIsValid )
                 {
@@ -399,25 +486,41 @@ void Preview::imgui( const app::StoragePaths& storagePaths )
                 }
                 else
                 {
-                    ImGui::TextUnformatted( "" );
+                    ImGui::Dummy( ImVec2( 20.0f, ImGui::GetTextLineHeight() ) );
                 }
 
                 ImGui::NextColumn();
                 ImGui::TextUnformatted( "Repeat" );
                 ImGui::NextColumn();
 
-                const auto buttonSize = ImVec2( ( ImGui::GetContentRegionAvail().x - ( 4.0f * 5.0f ) ) / 6.0f, ImGui::GetTextLineHeight() * 1.25f );
+                const auto repeatSliderWidth = ImGui::GetContentRegionAvail().x * 0.3f;
+                const auto buttonBarAreaWidth = ImGui::GetContentRegionAvail().x - repeatSliderWidth;
+
+                const auto buttonGap   = 4.0f;
+                const auto buttonCount = (float)TransitionBarCount::Count;
+                const auto buttonSize  = ImVec2( (buttonBarAreaWidth - (buttonGap * (buttonCount - 1.0f) ) ) / buttonCount, ImGui::GetTextLineHeight() * 1.25f );
 
                 META_FOREACH( TransitionBarCount, lb )
                 {
                     if ( lb != TransitionBarCount::Eighth )
-                        ImGui::SameLine(0, 4.0f);
+                        ImGui::SameLine( 0, buttonGap );
 
                     ImGui::Scoped::ToggleButtonLit lit( m_lockTransitionBarCount == lb, riffTransitColourU32 );
                     if ( ImGui::Button( TransitionBarCount::toString( lb ), buttonSize ) )
                     {
                         m_lockTransitionBarCount = lb;
                     }
+                }
+                ImGui::SameLine( 0, buttonGap );
+                {
+                    ImGui::SetNextItemWidth( repeatSliderWidth );
+
+                    const bool disableMultipleSlider = (m_lockTransitionBarCount != TransitionBarCount::Many);
+                    ImGui::BeginDisabledControls( disableMultipleSlider );
+                    int32_t localMultipleValue = m_lockTransitionBarMultiple;
+                    if ( ImGui::SliderInt( "##mlti", &localMultipleValue, 2, 12, "%d", ImGuiSliderFlags_AlwaysClamp ) )
+                        m_lockTransitionBarMultiple = localMultipleValue;
+                    ImGui::EndDisabledControls( disableMultipleSlider );
                 }
             }
             ImGui::EndDisabledControls( !lockTransitionLocal );
