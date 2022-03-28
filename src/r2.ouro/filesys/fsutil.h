@@ -13,10 +13,7 @@ namespace filesys {
 
 bool recursiveSearchBackwards( const char* filenameToFind, fs::path& resultPath );
 
-// TODO absl
-bool ensureDirectoryExists( const fs::path& path );
-
-bool appendAndCreateSubDir( fs::path& path, const char* suffix );
+absl::Status ensureDirectoryExists( const fs::path& path );
 
 } // namespace filesys
 

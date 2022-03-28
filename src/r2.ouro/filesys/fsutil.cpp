@@ -39,62 +39,34 @@ bool recursiveSearchBackwards( const fs::path& startPath, const char* filenameTo
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-bool ensureDirectoryExists( const fs::path& path )
+absl::Status ensureDirectoryExists( const fs::path& path )
 {
-    if ( fs::exists( path ) )
+    std::error_code stdError;
+
+    if ( fs::exists( path, stdError ) )
     {
-        return true;
+        return absl::OkStatus();
     }
     else
     {
+        // we use try/catch here due to the dumb way that msvc currently handles return values from create_directories
+        // https://developercommunity.visualstudio.com/t/stdfilesystemcreate-directories-returns-false-if-p/278829
         try
         {
             fs::create_directories( path );
         }
         catch ( fs::filesystem_error& fsE )
         {
-            // TODO return fsE.what instead of dumping to the log
-            blog::error::core( fsE.what() );
-            return false;
+            return absl::UnknownError( fsE.what() );
         }
     }
 
-    if ( !fs::exists( path ) )
+    if ( !fs::exists( path, stdError ) )
     {
-        blog::error::core( "could not validate created directory" );
-        return false;
+        return absl::NotFoundError( fmt::format("could not validate created directory (err:{})", stdError.message() ) );
     }
 
-    return true;
-}
-
-// ---------------------------------------------------------------------------------------------------------------------
-bool appendAndCreateSubDir( fs::path& path, const char* suffix )
-{
-    fs::path startPath( path );
-
-    const auto extendedPathFs = ( startPath / suffix );
-    if ( !fs::exists( extendedPathFs ) )
-    {
-        try
-        {
-            fs::create_directories( extendedPathFs );
-        }
-        catch ( fs::filesystem_error& fsE )
-        {
-            blog::error::cfg( "unable to create directory [{}], {}", extendedPathFs.string(), fsE.what() );
-            return false;
-        }
-    }
-
-    if ( !fs::is_directory( extendedPathFs ) )
-    {
-        blog::error::cfg( "cannot create / validate local config path '{}'", extendedPathFs.string() );
-        return false;
-    }
-
-    path = extendedPathFs.string();
-    return true;
+    return absl::OkStatus();
 }
 
 } // namespace filesys

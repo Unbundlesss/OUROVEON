@@ -10,11 +10,10 @@
 #include "pch.h"
 
 #include "app/module.frontend.h"
-#include "config/frontend.h"
 
 #include "filesys/fsutil.h"
+#include "spacetime/moment.h"
 
-#include "endlesss/api.h"
 #include "endlesss/cache.stems.h"
 #include "endlesss/live.stem.h"
 
@@ -23,21 +22,28 @@ namespace endlesss {
 namespace cache {
 
 // ---------------------------------------------------------------------------------------------------------------------
+Stems::Stems()
+{
+    m_stems.reserve( 2048 );
+    m_usages.reserve( 2048 );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 bool Stems::initialise( const fs::path& cachePath, const uint32_t targetSampleRate )
 {
-    m_cacheStemRoot     = cachePath;
+    static const fs::path stemSubdir( "stem" );
+
+    m_cacheStemRoot     = cachePath / stemSubdir;
     m_targetSampleRate  = targetSampleRate;
 
-    if ( !filesys::appendAndCreateSubDir( m_cacheStemRoot, "stem" ) )
+    const auto stemRootStatus = filesys::ensureDirectoryExists( m_cacheStemRoot );
+    if ( !stemRootStatus.ok() )
     {
-        blog::error::stem( "Failed to create stem cache directory inside [{}]", m_cacheStemRoot.string() );
+        blog::error::stem( "Failed to create stem cache directory inside [{}], {}", m_cacheStemRoot.string(), stemRootStatus.ToString() );
         return false;
     }
 
     m_stemGeneration = 0;
-
-    m_stems.reserve( 2048 );
-    m_usages.reserve( 2048 );
 
     return true;
 }
@@ -62,7 +68,7 @@ endlesss::live::StemPtr Stems::request( const endlesss::types::Stem& stemData )
     }
     else
     {
-        assert( m_usages.find( stemDocumentID ) != m_usages.end() );
+        ABSL_ASSERT( m_usages.find( stemDocumentID ) != m_usages.end() );
         m_usages[ stemDocumentID ] = m_stemGeneration;
 
         return stemIter->second;
@@ -78,7 +84,7 @@ void Stems::prune( const uint32_t generationsToKeep )
         return;
     }
 
-    auto t1 = std::chrono::high_resolution_clock::now();
+    spacetime::Moment pruneTimer;
 
     {
         std::scoped_lock<std::mutex> lock( m_pruneLock );
@@ -88,14 +94,14 @@ void Stems::prune( const uint32_t generationsToKeep )
         StemDictionary keptStems;
         StemUsage      keptUsages;
 
-        uint32_t pruneGenerationsTo = m_stemGeneration - generationsToKeep;
+        const uint32_t pruneGenerationsTo = m_stemGeneration - generationsToKeep;
 
         for ( const auto& currentUsage : m_usages )
         {
             bool keepThisStem = true;
 
             auto stemIter = m_stems.find( currentUsage.first );
-            assert( stemIter != m_stems.end() );
+            ABSL_ASSERT( stemIter != m_stems.end() );
 
             if ( currentUsage.second < pruneGenerationsTo )
             {
@@ -120,23 +126,18 @@ void Stems::prune( const uint32_t generationsToKeep )
         blog::stem( "stem cache prune : ... now has {}", m_stems.size() );
     }
 
-    auto t2 = std::chrono::high_resolution_clock::now();
-
-    blog::stem( "stem cache prune took {}",
-        std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1) );
+    blog::stem( "stem cache prune took {}", pruneTimer.deltaMs() );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 // produce a path to store the stem 
 fs::path Stems::getCachePathForStem( const endlesss::types::StemCouchID& stemDocumentID ) const
 {
-    std::string stemRoot   = stemDocumentID.value().substr(0,1);
-    fs::path    outputPath = m_cacheStemRoot;
+    // pluck the first character from the couch ID to partition the cache folder
+    const std::string stemRoot = stemDocumentID.value().substr(0, 1);
 
-    if ( !filesys::appendAndCreateSubDir( outputPath, stemRoot.c_str() ) )
-        blog::error::stem( "Unable to create subdirectory in stem cache [{}] for {}", outputPath.string(), stemRoot );
-
-    return outputPath;
+    // append to the base cache directory
+    return (m_cacheStemRoot / stemRoot);
 }
 
 } // namespace cache

@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include "base/macro.h"
 #include "endlesss/core.types.h"
 
 namespace endlesss {
@@ -21,12 +22,9 @@ namespace cache {
 // ---------------------------------------------------------------------------------------------------------------------
 struct Stems
 {
-    Stems() = default;
+    DeclareUncopyable( Stems );
 
-    // inhibit accidental copying of the whole cache
-    Stems( const Stems& rhs ) = delete;
-    Stems& operator=( const Stems& ) = delete;
-
+    Stems();
 
     bool initialise( 
         const fs::path& cachePath,          // the root path of where to build the stored stems
@@ -40,6 +38,7 @@ struct Stems
 
     // given a stem ID, return a suitable path to write the cached data to
     fs::path getCachePathForStem( const endlesss::types::StemCouchID& stemDocumentID ) const;
+
 
 private:
     
