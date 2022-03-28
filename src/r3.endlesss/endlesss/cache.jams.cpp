@@ -253,7 +253,7 @@ void Jams::postProcessNewData()
         }
 
         for ( Data& data : m_jamDataJoinIn )
-            data.m_timestampOrderingDescription = "";
+            data.m_timestampOrderingDescription.clear();
 
         for ( Data& data : m_jamDataUserSubscribed )
             data.m_timestampOrderingDescription = spacetime::datestampStringFromUnix( data.m_timestampOrdering );

@@ -92,9 +92,9 @@ struct Jams
         CacheIndex& operator=( const CacheIndex& ) = default;
         CacheIndex( const CacheIndex& ) = default;
 
-        constexpr JamType type() const { return m_type;  }
-        constexpr size_t index() const { return m_index; }
-        constexpr bool valid()   const { return m_valid; }
+        ouro_nodiscard constexpr JamType type() const { return m_type;  }
+        ouro_nodiscard constexpr size_t index() const { return m_index; }
+        ouro_nodiscard constexpr bool valid()   const { return m_valid; }
     private:
         JamType m_type;
         size_t  m_index;
@@ -106,10 +106,10 @@ struct Jams
     bool load( const config::IPathProvider& pathProvider );
     bool save( const config::IPathProvider& pathProvider );
 
-    inline bool hasJamData() const
+    ouro_nodiscard constexpr bool hasJamData() const
     { 
         return !m_jamDataJoinIn.empty() &&
-            !m_jamDataUserSubscribed.empty();
+               !m_jamDataUserSubscribed.empty();
     }
 
 
@@ -125,11 +125,11 @@ struct Jams
     // fetch the users' latest jam membership state + list of active publics from the servers
     void asyncCacheRebuild( const endlesss::api::NetConfiguration& apiCfg, tf::Taskflow& taskFlow, const AsyncCallback& asyncCallback );
 
-    inline const std::string& getCacheFileState() const { return m_cacheFileState; }
+    ouro_nodiscard constexpr const std::string& getCacheFileState() const { return m_cacheFileState; }
 
 
 
-    inline bool getCacheIndexForDatabaseID( const endlesss::types::JamCouchID& couchID, CacheIndex& outIndex ) const
+    ouro_nodiscard bool getCacheIndexForDatabaseID( const endlesss::types::JamCouchID& couchID, CacheIndex& outIndex ) const
     {
         const auto indexIter = m_jamCouchIDToJamIndexMap.find( couchID );
         if ( indexIter != m_jamCouchIDToJamIndexMap.end() )
@@ -143,7 +143,7 @@ struct Jams
     bool loadDataForCacheIndex( const CacheIndex& index, Data& result ) const;
 
     // convenience function to go from couchID to data without fetching cache index
-    inline bool loadDataForDatabaseID( const endlesss::types::JamCouchID& couchID, Data& result ) const
+    ouro_nodiscard bool loadDataForDatabaseID( const endlesss::types::JamCouchID& couchID, Data& result ) const
     {
         CacheIndex ci;
         if ( getCacheIndexForDatabaseID( couchID, ci ) )
@@ -226,7 +226,7 @@ private:
     void postProcessNewData();
 
 
-    const std::vector< Data >* getArrayPtrForType( const JamType type ) const
+    ouro_nodiscard constexpr const std::vector< Data >* getArrayPtrForType( const JamType type ) const
     {
         switch ( type )
         {
