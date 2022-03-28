@@ -31,6 +31,15 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/container/inlined_vector.h"
 #include "absl/hash/hash.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+
+#if ABSL_HAVE_CPP_ATTRIBUTE(nodiscard) || _MSC_VER >= 1911
+#define ouro_nodiscard  [[nodiscard]]
+#else
+#define ouro_nodiscard  
+#endif
+
 
 // rpm
 #include "rpmalloc.h"
@@ -45,7 +54,7 @@ struct OuroveonThreadScope
     OuroveonThreadScope( const char* threadName );
     ~OuroveonThreadScope();
 private:
-    char* m_name;
+    char* m_name = nullptr;
 };
 
 
