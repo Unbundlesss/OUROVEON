@@ -168,6 +168,7 @@ workspace ("ouroveon_" .. _ACTION)
     {
         ["ENABLE_HARDENED_RUNTIME"] = "YES",
         ["LLVM_LTO"] = "YES_THIN",
+        ["CODE_SIGN_IDENTITY"] = ""
     }
     filter {}
 
