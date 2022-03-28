@@ -14,6 +14,7 @@
 #include "dsp/fft.h"
 #include "app/module.frontend.h"
 #include "base/utils.h"
+#include "filesys/fsutil.h"
 
 #include "endlesss/live.stem.h"
 
@@ -58,6 +59,15 @@ Stem::~Stem()
 // ---------------------------------------------------------------------------------------------------------------------
 void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
 {
+    // ensure we have a space to write the stem back out to
+    const absl::Status cachePathAvailable = filesys::ensureDirectoryExists( cachePath );
+    if ( !cachePathAvailable.ok() )
+    {
+        blog::error::stem( "Unable to create sub-directory in stem cache [{}], {}", cachePath.string(), cachePathAvailable.ToString() );
+        m_state = State::Failed_CacheDirectory;
+        return;
+    }
+
     m_state = State::WorkEnqueued;
 
     spacetime::ScopedTimer stemTiming( "stem finalize" );

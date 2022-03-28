@@ -30,6 +30,7 @@ struct Stem
         Failed_DataUnderflow,
         Failed_DataOverflow,
         Failed_Vorbis,
+        Failed_CacheDirectory,
     };
 
     Stem( const types::Stem& stemData, const uint32_t targetSampleRate );
@@ -57,7 +58,8 @@ struct Stem
         return ( m_state == State::Failed_Http          ||
                  m_state == State::Failed_DataUnderflow ||
                  m_state == State::Failed_DataOverflow  ||
-                 m_state == State::Failed_Vorbis );
+                 m_state == State::Failed_Vorbis        ||
+                 m_state == State::Failed_CacheDirectory );
     }
 
 private:
