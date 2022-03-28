@@ -88,12 +88,17 @@ std::vector<fs::path> exportRiff(
     }
     rootPathString += "/";
 
-    const auto rootPath = fs::path{ storagePaths.outputApp } /
-                          fs::path{ rootPathString };
+    const auto rootPath = fs::absolute( fs::path{ storagePaths.outputApp } /
+                                        fs::path{ rootPathString } );
 
     if ( exportMode != ExportMode::DryRun )
     {
-        filesys::ensureDirectoryExists( rootPath );
+        const auto rootPathStatus = filesys::ensureDirectoryExists( rootPath );
+        if ( !rootPathStatus.ok() )
+        {
+            blog::error::core( "unable to create output path [{}], {}", rootPath.string(), rootPathStatus.ToString() );
+            return outputFiles;
+        }
 
         // export the raw metadata out along with the stem data
         const auto riffMetadataPath = rootPath / "metadata.json";
@@ -106,7 +111,8 @@ std::vector<fs::path> exportRiff(
         }
         catch ( const std::exception& ex )
         {
-            blog::error::cfg( "exportRiff was unable to save metadata, {}", ex.what() );
+            blog::error::core( "exportRiff was unable to save metadata, {}", ex.what() );
+            // not a fatal case
         }
     }
 
@@ -144,10 +150,10 @@ std::vector<fs::path> exportRiff(
                     break;
             }
 
-            const auto stemPath = fs::path{ rootPath } /
-                                  fs::path{ stemPathString };
+            const auto stemPath = fs::absolute( fs::path{ rootPath } /
+                                                fs::path{ stemPathString } );
 
-            const auto finalFilename = fs::absolute( stemPath ).string();
+            const auto finalFilename = stemPath.string();
             outputFiles.emplace_back( finalFilename );
 
             if ( exportMode != ExportMode::DryRun )
@@ -155,14 +161,18 @@ std::vector<fs::path> exportRiff(
                 auto stemPathNoFile = stemPath;
                      stemPathNoFile.remove_filename();
 
-                filesys::ensureDirectoryExists( stemPathNoFile );
+                const auto stemPathStatus = filesys::ensureDirectoryExists( stemPathNoFile );
+                if ( !stemPathStatus.ok() )
+                {
+                    return nullptr;
+                }
 
                 switch ( outputSpec.format )
                 {
                     case AudioFormat::FLAC: return ssp::FLACWriter::Create( finalFilename, exportSampleRate, 60.0f );
                     case AudioFormat::WAV:  return ssp::WAVWriter::Create( finalFilename, exportSampleRate, 60 );
                     default:
-                        assert( 0 );
+                        ABSL_ASSERT( 0 );
                         break;
                 }
             }
