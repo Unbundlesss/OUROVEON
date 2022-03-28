@@ -82,7 +82,8 @@ void Sketchbook::processGPUTask( GPUTask* task )
     glChecked( glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE  ) );
     glChecked( glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE  ) );
 
-    const base::U32Buffer& bitmapBuffer = glTask->getBufferPtr()->get();
+    const auto& bufferPtr    = glTask->getBufferPtr();
+    const auto& bitmapBuffer = bufferPtr->get();
 
     glChecked( glPixelStorei( GL_UNPACK_ROW_LENGTH, bitmapBuffer.getWidth() ) );
     glChecked( glTexImage2D(
@@ -100,8 +101,8 @@ void Sketchbook::processGPUTask( GPUTask* task )
 
     // populate the generic state block that will be used by ImGui
     glTask->m_validState.m_imTextureID          = (void*)(intptr_t)textureHandle;
-    glTask->m_validState.m_textureDimensions    = glTask->getBufferPtr()->dim();
-    glTask->m_validState.m_usageDimensions      = glTask->getBufferPtr()->extents();
+    glTask->m_validState.m_textureDimensions    = bufferPtr->dim();
+    glTask->m_validState.m_usageDimensions      = bufferPtr->extents();
 
     // produce UV coordinates representing the given extents
     ImVec2 textureDimF( (float)glTask->m_validState.m_textureDimensions.width(), (float)glTask->m_validState.m_textureDimensions.height() );
