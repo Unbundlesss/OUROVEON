@@ -26,16 +26,16 @@ struct NetConfiguration
         const config::endlesss::Auth& auth,
         const fs::path& tempDir );                  // writable temp location for verbose/debug logging if enabled
 
-    inline const config::endlesss::API&  api()  const { return m_api; }
-    inline const config::endlesss::Auth& auth() const { return m_auth; }
+    ouro_nodiscard constexpr const config::endlesss::API&  api()  const { return m_api; }
+    ouro_nodiscard constexpr const config::endlesss::Auth& auth() const { return m_auth; }
 
 
     // spin an RNG to produce a new LB=live## cookie value
-    std::string generateRandomLoadBalancerCookie() const;
+    ouro_nodiscard std::string generateRandomLoadBalancerCookie() const;
 
     // when doing comprehensive traffic capture, ask for a full path to a file to write to; this will include
     // some kind of timestamp or order differentiator
-    std::string getVerboseCaptureFilename( const char* context ) const;
+    ouro_nodiscard std::string getVerboseCaptureFilename( const char* context ) const;
 
 private:
 
@@ -103,7 +103,7 @@ inline static bool deserializeJson( const NetConfiguration& ncfg, const httplib:
 
         const auto exportFilename = ncfg.getVerboseCaptureFilename( "json_parse_error" );
         {
-            FILE* fExport = fopen( exportFilename.c_str(), "wt" );            
+            FILE* fExport = fopen( exportFilename.c_str(), "wt" );
             fprintf( fExport, "%s\n\n", cEx.what() );
             fprintf( fExport, "%s\n\n", functionContext.c_str() );
             fprintf( fExport, "%s\n", bodyText.c_str() );
@@ -640,11 +640,11 @@ struct LatestRiffInJam
         }
     }
 
-    inline bool hasLoadedSuccessfully() const { return m_loadedSuccessfully; }
+    ouro_nodiscard constexpr bool hasLoadedSuccessfully() const { return m_loadedSuccessfully; }
 
-    inline const endlesss::api::JamLatestState& getJamState() const { return m_dataJamLatestState; }
-    inline const endlesss::api::RiffDetails& getRiffDetails() const { return m_dataRiffDetails; }
-    inline const endlesss::api::StemDetails& getStemDetails() const { return m_dataStemDetails; }
+    ouro_nodiscard constexpr const endlesss::api::JamLatestState& getJamState() const { return m_dataJamLatestState; }
+    ouro_nodiscard constexpr const endlesss::api::RiffDetails& getRiffDetails() const { return m_dataRiffDetails; }
+    ouro_nodiscard constexpr const endlesss::api::StemDetails& getStemDetails() const { return m_dataStemDetails; }
 
     const endlesss::types::JamCouchID   m_jamCouchID;
     const std::string                   m_jamDisplayName;
