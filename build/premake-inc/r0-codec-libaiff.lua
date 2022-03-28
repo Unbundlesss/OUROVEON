@@ -3,7 +3,7 @@ LibRoot.Aiff = SrcDir() .. "r0.codec/libaiff"
 
 -- ==============================================================================
 ModuleRefInclude["libaiff"] = function()
-    includedirs
+    sysincludedirs
     {
         LibRoot.Aiff,
     }

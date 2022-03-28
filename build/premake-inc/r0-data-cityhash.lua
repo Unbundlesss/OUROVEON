@@ -3,7 +3,7 @@ LibRoot.Cityhash = SrcDir() .. "r0.data/cityhash"
 
 -- ==============================================================================
 ModuleRefInclude["cityhash"] = function()
-    includedirs
+    sysincludedirs
     {
         LibRoot.Cityhash,
     }
