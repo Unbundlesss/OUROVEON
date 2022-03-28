@@ -54,6 +54,9 @@ void ouroveonThreadExit()
 OuroveonThreadScope::OuroveonThreadScope( const char* threadName )
 {
     ouroveonThreadEntry( threadName );
+
+    // we save the name to report it in the dtor but also this helps track
+    // threads that don't get properly shutdown as rpmalloc will report them as leaks
     m_name = static_cast<char*>( rpmalloc(strlen(threadName) + 1) );
     strcpy( m_name, threadName );
 
@@ -69,6 +72,8 @@ OuroveonThreadScope::~OuroveonThreadScope()
 
 
 // ---------------------------------------------------------------------------------------------------------------------
+// external threading hooks for naming & rpmalloc tls
+//
 namespace tf
 {
     // injected from taskflow executor, name the worker threads 
@@ -81,7 +86,17 @@ namespace tf
         ouroveonThreadExit();
     }
 }
+void _discord_dpp_thread_init( const char* name )
+{
+    ouroveonThreadEntry( fmt::format( OURO_THREAD_PREFIX "DPP:{}", name ).c_str() );
+}
+void _discord_dpp_thread_exit()
+{
+    ouroveonThreadExit();
+}
 
+
+// ---------------------------------------------------------------------------------------------------------------------
 namespace app {
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -98,23 +113,23 @@ bool StoragePaths::tryToCreateAndValidate() const
     blog::core( "  storage paths :" );
 
     blog::core( "      app cache : {}", cacheApp.string() );
-    if ( filesys::ensureDirectoryExists( cacheApp ) == false )
+    if ( !filesys::ensureDirectoryExists( cacheApp ).ok() )
     {
-        blog::error::core( "unable to create or find storage directory" );
+        blog::error::core( "unable to create or find directory" );
         return false;
     }
 
     blog::core( "   common cache : {}", cacheCommon.string() );
-    if ( filesys::ensureDirectoryExists( cacheCommon ) == false )
+    if ( !filesys::ensureDirectoryExists( cacheCommon ).ok() )
     {
-        blog::error::core( "unable to create or find storage directory" );
+        blog::error::core( "unable to create or find directory" );
         return false;
     }
 
     blog::core( "     app output : {}", outputApp.string() );
-    if ( filesys::ensureDirectoryExists( outputApp ) == false )
+    if ( !filesys::ensureDirectoryExists( outputApp ).ok() )
     {
-        blog::error::core( "unable to create or find storage directory" );
+        blog::error::core( "unable to create or find directory" );
         return false;
     }
 
@@ -222,16 +237,21 @@ int Core::Run()
     // ensure all core directories exist or we can't continue
     {
         blog::core( "ensuring core paths are viable ..." );
-        if ( filesys::ensureDirectoryExists( m_sharedConfigPath ) == false )
+
+        const auto sharedConfigPathStatus = filesys::ensureDirectoryExists( m_sharedConfigPath );
+        if ( !sharedConfigPathStatus.ok() )
         {
-            blog::error::core( "unable to create or find shared config directory, aborting\n[{}]", m_sharedConfigPath.string() );
+            blog::error::core( "unable to create or find shared config directory, aborting\n[{}] ({})", m_sharedConfigPath.string(), sharedConfigPathStatus.ToString() );
             return -2;
         }
-        if ( filesys::ensureDirectoryExists( m_appConfigPath ) == false )
+
+        const auto appConfigPathStatus = filesys::ensureDirectoryExists( m_appConfigPath );
+        if ( !appConfigPathStatus.ok() )
         {
-            blog::error::core( "unable to create or find app config directory, aborting\n[{}]", m_appConfigPath.string() );
+            blog::error::core( "unable to create or find app config directory, aborting\n[{}] ({})", m_appConfigPath.string(), appConfigPathStatus.ToString() );
             return -2;
         }
+
         if ( !fs::exists( m_sharedDataPath ) )
         {
             blog::error::core( "cannot find shared data directory, aborting" );
@@ -432,7 +452,7 @@ bool CoreGUI::beginInterfaceLayout( const ViewportFlags viewportFlags )
     {
         blog::core( "resetting layout from default ..." );
 
-        app::module::Frontend::reloadImguiLayoutFromDefault();
+        m_mdFrontEnd->reloadImguiLayoutFromDefault();
         m_resetLayoutInNextUpdate = false;
     }
 

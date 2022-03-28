@@ -94,27 +94,28 @@ struct Core : CoreStart,
     // high-level entrypoint, called by main()
     int Run();
 
-    static void waitForConsoleKey();
+    // used for visual identity as well as cache path differentiation
+    virtual const char* GetAppName() const = 0;             // 'FOO'
+    virtual const char* GetAppNameWithVersion() const = 0;  // 'FOO 0.1.2-beta'
+    virtual const char* GetAppCacheName() const = 0;        // 'foo' - must be filename/path friendly
 
     const fs::path& getSharedConfigPath() const { return m_sharedConfigPath; }
     const fs::path& getSharedDataPath() const   { return m_sharedDataPath;   }
     const fs::path& getAppConfigPath() const    { return m_appConfigPath;    }
+
+
+    static void waitForConsoleKey();
 
 protected:
 
     // called once basic initial configuration is done for the application to continue work
     virtual int Entrypoint() = 0;
 
-    // used for visual identity as well as cache path differentiation
-    virtual const char* GetAppName() const = 0;             // 'FOO'
-    virtual const char* GetAppNameWithVersion() const = 0;  // 'FOO 0.1.2-beta'
-    virtual const char* GetAppCacheName() const = 0;        // must be filename/path friendly
-
     inline const char* getOuroveonPlatform() const {
 #if OURO_PLATFORM_WIN
-        return "Win64";
+        return "Windows";
 #elif OURO_PLATFORM_OSX
-        return "OSX";
+        return "MacOS";
 #elif OURO_PLATFORM_NIX
         return "Linux";
 #else

@@ -128,6 +128,8 @@ void discord_client::end_zlib()
 
 void discord_client::thread_run()
 {
+	_discord_dpp_thread_init( "discord_client" );
+
 	setup_zlib();
 	do {
 		bool error = false;
@@ -151,6 +153,8 @@ void discord_client::thread_run()
 			}
 		} while (error);
 	} while( runner_run );
+
+	_discord_dpp_thread_exit();
 }
 
 void discord_client::run()

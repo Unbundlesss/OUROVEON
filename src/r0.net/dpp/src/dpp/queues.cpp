@@ -246,6 +246,8 @@ request_queue::~request_queue()
 
 void request_queue::in_loop()
 {
+	_discord_dpp_thread_init( "request_queue::in_loop" );
+
 	while (!terminating) {
 		std::mutex mtx;
 		std::unique_lock<std::mutex> lock{ mtx };			
@@ -342,10 +344,14 @@ void request_queue::in_loop()
 		}
 	}
 	creator->log(ll_debug, "REST in-queue shutting down");
+
+	_discord_dpp_thread_exit();
 }
 
 void request_queue::out_loop()
 {
+	_discord_dpp_thread_init( "request_queue::out_loop" );
+
 	while (!terminating) {
 
 		std::mutex mtx;
@@ -378,6 +384,8 @@ void request_queue::out_loop()
 		}
 	}
 	creator->log(ll_debug, "REST out-queue shutting down");
+
+	_discord_dpp_thread_exit();
 }
 
 /* Post a http_request into the queue */

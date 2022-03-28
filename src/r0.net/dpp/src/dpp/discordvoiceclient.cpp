@@ -160,6 +160,8 @@ bool discord_voice_client::is_playing() {
 
 void discord_voice_client::thread_run()
 {
+	_discord_dpp_thread_init( "discord_voice_client" );
+
 	do {
 		ssl_client::read_loop();
 		ssl_client::close();
@@ -168,6 +170,8 @@ void discord_voice_client::thread_run()
 			websocket_client::connect();
 		}
 	} while(!terminating);
+
+	_discord_dpp_thread_exit();
 }
 
 void discord_voice_client::run()

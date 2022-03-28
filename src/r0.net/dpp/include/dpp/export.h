@@ -27,6 +27,10 @@
 
 #define DPP_EXPORT
 
+// #HDD we want to know about threads for memory and profiling reasons
+extern void _discord_dpp_thread_init( const char* name );
+extern void _discord_dpp_thread_exit();
+
 
 #ifndef _WIN32
 	#define SOCKET int
