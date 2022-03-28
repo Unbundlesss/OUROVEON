@@ -46,17 +46,22 @@ struct FLACWriter::StreamInstance : public FLAC::Encoder::File,
         launchProcessorThread();
     }
 
-    ~StreamInstance()
+    ~StreamInstance() override
     {
         // slam the breaks on the thread, allowing any active processing to finish
         terminateProcessorThread();
 
         // if the active page has straggling samples, append those too before we finalise
-        const auto* activeBuffer = getActiveBuffer();
+        auto* activeBuffer = getActiveBuffer();
         if ( activeBuffer &&
              activeBuffer->m_currentSamples > 0 )
         {
+            ABSL_ASSERT( activeBuffer->m_committed == false ); // the buffer should not have been marked as committed
+                                                               // otherwise that means it has already been through processBufferedSamplesFromThread
             m_commitsBeforeFlush = 0;
+
+            // finalise the remainders and write it out
+            activeBuffer->quantise();
             processBufferedSamplesFromThread( *activeBuffer );
         }
 
