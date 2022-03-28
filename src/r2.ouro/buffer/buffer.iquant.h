@@ -40,6 +40,8 @@ struct InterleavingQuantiseBuffer
         if ( m_interleavedQuant != nullptr )
             mem::free16( m_interleavedQuant );
         m_interleavedQuant = nullptr;
+
+        m_committed = false;
     }
 
     inline void quantise();
@@ -48,6 +50,7 @@ struct InterleavingQuantiseBuffer
     uint32_t            m_currentSamples    = 0;
     float*              m_interleavedFloat  = nullptr;
     _quantisedType*     m_interleavedQuant  = nullptr;
+    bool                m_committed         = false;
 };
 
 // ---------------------------------------------------------------------------------------------------------------------

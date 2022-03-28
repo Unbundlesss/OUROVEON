@@ -101,6 +101,7 @@ struct AsyncBufferProcessor
 
             // buffer complete - launch processor stage on background thread and swap to other buffer to continue work
             {
+                // #HDD remove this lock
                 std::unique_lock<std::mutex> lock( m_processorMutex );
 
                 std::swap( m_activePage, m_reservePage );
@@ -117,6 +118,7 @@ struct AsyncBufferProcessor
         }
 
         m_activePage->m_currentSamples += samplesRemaining;
+        m_activePage->m_committed = false;
     }
 
 
@@ -150,6 +152,7 @@ private:
 
                 m_reservePage->quantise();
                 processBufferedSamplesFromThread( *m_reservePage );
+                m_reservePage->m_committed = true;
             }
 
             lock.unlock();
