@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDisplayName</key>
+  <string>OUROVEON BEAM</string>
+  <key>CFBundleName</key>
+  <string>BEAM</string>
+  <key>CFBundleIdentifier</key>
+  <string>com.reasonandnightmare.beam</string>
+  <key>CFBundleVersion</key>
+  <string>0.6.4</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleExecutable</key>
+  <string>BEAM</string>
+  <key>CFBundleSignature</key>
+  <string>beam</string>
+  <key>CFBundleIconFile</key>
+  <string>BEAM.icns</string>
+</dict>
+</plist>
