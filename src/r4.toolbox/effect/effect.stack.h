@@ -66,7 +66,7 @@ struct EffectStack
         float       low;
         float       high;
 
-        inline bool isValid() const { return pidx >= 0; }
+        constexpr bool isValid() const { return pidx >= 0; }
     };
 
     struct ParameterBinding
