@@ -26,7 +26,7 @@ At time of writing the only difference between the platforms is **VST support**,
 
 *Get the very best out of your live Endlesss performances*
 
-![](doc/ui_beam_1.png)
+![](doc/ui_beam_live1.gif)
 
 _BEAM_ connects to a chosen jam, watches for changes, syncs live stems and produces a high-quality broadcastable mix with additional features like
 
