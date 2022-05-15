@@ -1,26 +1,22 @@
-## OUROVEON
-
-![](doc/L1.jpg) ![](doc/L2.jpg) ![](doc/L3.jpg) ![](doc/L4.jpg)
+![](doc/ouroveon_ftype.png)
 
 Experimental audio projects built to interact with data from [Endlesss](https://endlesss.fm). **OUROVEON** is a set of interconnected apps, slowly being built from modular components around an evolving "Endlesss SDK"; one part a learning exercise in audio coding and one part laboratory for ideas that build upon Endlesss' particular data model.
 
-#### NOTE
-
-These are experimental toys, not finished products (yet). That said, a lot of love, care and real-world testing has been put into their development - just do be aware that functionality and UI is subject to change rapidly and randomly as the potentials are explored!
+NB. These are experimental toys, not finished products (yet), so please set your expectations accordingly. That said, a lot of love, care and substantial real-world testing has been put into their development - just do be aware that functionality and UI is subject to change rapidly and randomly as the potentials are explored!
 
 <br>
-<br>
 
-# FRAMEWORK
+## PLATFORM SUPPORT & AVAILABILITY
 
-Beyond standard shared components like UI, profiling and logging functionality, the application framework provides a handful of specialised components and utilities, such as
+**OUROVEON** is written in C++20, built using [Premake](premake.github.io) and targets *Windows*, *MacOS 10.15+* (Universal arm64 + x86_64) and *Linux*, although the latter is only being tested on *Ubuntu 21*. *Raspberry Pi 3+* is also hopefully possible.
 
-* **Endlesss SDK** - a robust set of data types, audio processing, asynchronous network management as well as a toolbox of additional utilities (such as offline caching, an sqlite3-based jam archival database system)
+Pre-built releases are made available for **Windows** and **MacOS** (*signed + notarised*); check https://github.com/Unbundlesss/OUROVEON-build
 
-* **Discord Direct** - native low-level connection via the Discord bot interface to stream high-quality, stereo application audio out to a voice channel
+The apps are designed to be largely 'portable' and require minimal configuration, only storing data in the user's configuration directory (eg. `%APPDATA%\OUROVEON` on Windows) and a nominated data storage root.
 
-* **Signal Processing** - VST 2.x hosting, with VST3 to come; FFT and q_lib biquad filters
+At time of writing the only difference between the platforms is **VST support**, which is Windows-only presently. Cross-platform VST3 support is planned, as is VAMP support for stem data analysis.
 
+<hr>
 <br>
 <br>
 
@@ -34,8 +30,8 @@ Beyond standard shared components like UI, profiling and logging functionality, 
 
 _BEAM_ connects to a chosen jam, watches for changes, syncs live stems and produces a high-quality broadcastable mix with additional features like
 
-* **smooth riff transitions** with configurable blending and timing
-* recording-to-disk of both raw multitrack 8-channel Endlesss feed as well as simultaneous final mix output through VST chain
+* **smooth riff transitions** with configurable blending and timing. no more glitchy hard cuts at weird times between riffs.
+* recording-to-disk of both raw (FLAC) multitrack 8-channel Endlesss feed as well as simultaneous final mix output through VST chain
 * "performance compression" mode for multitrack, where the primary changes and 'movement' from a jam session is streamed to disk, producing a focused, less-repetitive souvenir
 * native connection to Discord audio broadcast channels via a Bot interface
 * built-in VST 2.x hosting (on Windows) with configurable automation
@@ -53,27 +49,32 @@ The _BEAM_ live visualisation sync functionality was used along with the [NESTDR
 
 ### __Offline Jam Exploration__
 
+*Jam data supremacy*
+
 ![](doc/ui_lore_1.png)
 
-Browsing large jams in the Endlesss app is a challenge. _LORE_ exists to make discovering all the music hidden inside jams a delight. Passively download jams of any size, explore them interactively with fast preview playback and a full stem caching system. Visualise jam data in ways you've never tried before.
+Browsing large jams in the Endlesss app is a challenge. _LORE_ exists to make discovering all the music hidden inside jams a delight. The largest jams on the platform (40,000+ riffs) can be visualised in their entireity with no lag even on very low-power GPU hardware.
 
-Featuring a simple riff sequencer and timing tool, _LORE_ is also the scaffolding to a future song arrangement editor.
+Robustly download jams of any size from any era (_LORE_ can patch and fix some of the more broken or weird data storage quirks from old versions of Endlesss), explore them interactively with super-fast preview playback and a full stem caching system. Visualise jam data in ways you've never tried before, understand the ebb and flow of jams, find your own riffs trivially (as well as the riffs of your friends)
+
+Featuring a simple riff sequencer and timing tool, _LORE_ is also the scaffolding to a future song arrangement editor and more comprehensive data archival methods.
 
 
 <br>
 <hr>
 <br>
 
+# SDK / APP FRAMEWORK
 
-## PLATFORM SUPPORT
+Beyond standard shared components like UI, profiling and logging functionality, the application framework provides a handful of specialised components and utilities, such as
 
-OUROVEON is written in C++20 and aims to ultimately be buildable on *Windows*, *macOS* (M1 and Intel) and *Linux* including for *Raspberry Pi*. 
+* **Endlesss SDK** - a robust set of data types, audio processing, asynchronous network management as well as a toolbox of additional utilities (such as offline caching, an sqlite3-based jam archival database system)
 
-As of writing, Windows is the primary platform. A parallel refactoring project is underway to provide full cross-platform support.
+* **Discord Direct** - native low-level connection via the Discord bot interface to stream high-quality, stereo application audio out to a voice channel
 
-## PREBUILT BINARIES
+* **Signal Processing** - VST 2.x hosting, with VST3 to come; FFT and q_lib biquad filters
 
-Use the dedicated installer or simply clone https://github.com/Unbundlesss/OUROVEON-build - the apps require minimal configuration and only store data in the user's configuration directory (`%APPDATA%\OUROVEON` on Windows) and a nominated data storage root. 
+
 
 <br>
 <hr>
