@@ -1,4 +1,4 @@
-![](doc/ouroveon_ftype_or.png)
+![](doc/ouroveon_vec.svg)
 
 Experimental audio projects built to interact with data from [Endlesss](https://endlesss.fm). **OUROVEON** is a set of interconnected apps, slowly being built from modular components around an evolving "Endlesss SDK"; one part a learning exercise in audio coding and one part laboratory for ideas that build upon Endlesss' particular data model.
 
