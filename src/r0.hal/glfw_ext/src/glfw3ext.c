@@ -20,7 +20,7 @@ int glfwSetWindowCenter( GLFWwindow* window )
     glfwGetWindowSize( window, &sx, &sy );
     glfwGetWindowPos( window, &px, &py );
 
-    // Iterate throug all monitors
+    // Iterate through all monitors
     GLFWmonitor** m = glfwGetMonitors( &monitor_count );
     if ( !m )
         return 0;
@@ -81,3 +81,35 @@ int glfwSetWindowCenter( GLFWwindow* window )
 #undef _MIN
 #undef _MAX
 
+int glfwIsWindowPositionValid( GLFWwindow* window, int windowX, int windowY )
+{
+    if ( !window )
+        return 0;
+
+    int monitor_count = 0;
+    GLFWmonitor** m = glfwGetMonitors( &monitor_count );
+    if ( !m )
+        return 0;
+
+    int mx = 0, my = 0;
+    int validCount = monitor_count;
+
+    for ( int j = 0; j < monitor_count; ++j )
+    {
+        glfwGetMonitorPos( m[j], &mx, &my );
+        const GLFWvidmode* mode = glfwGetVideoMode( m[j] );
+        if ( !mode )
+            continue;
+
+        if ( windowX < mx ||
+             windowY < my ||
+             windowX >= ( mx + mode->width ) ||
+             windowY >= ( my + mode->height )
+            )
+        {
+            validCount--;
+        }
+    }
+
+    return validCount;
+}
