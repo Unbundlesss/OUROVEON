@@ -34,15 +34,26 @@
       "total_riffs": 3452
     },
     {
+      "band_id": "bandf45efbb8c6",
+      "invite_id": "10691e2b5d208ff7e4b0b86d10857393c0b41715cc4c1dca09f50ab42c2644d2",
+      "jam_name": "Tropical Weekend",
+      "earliest_user": "lovemode",
+      "latest_user": "cryszon",
+      "earliest_unixtime": 1646770528,
+      "latest_unixtime": 1651076780,
+      "estimated_days_of_activity": 49,
+      "total_riffs": 11486
+    },
+    {
       "band_id": "band1424a9f555",
       "invite_id": "10c475df0b5ecde62a9d52450e133501b84c6fa7e768ce27a6275e7ff913132",
       "jam_name": "140 BPM Techno",
       "earliest_user": "datalek",
-      "latest_user": "tpj",
+      "latest_user": "theau",
       "earliest_unixtime": 1580432301,
-      "latest_unixtime": 1652321911,
-      "estimated_days_of_activity": 832,
-      "total_riffs": 428
+      "latest_unixtime": 1659372792,
+      "estimated_days_of_activity": 913,
+      "total_riffs": 565
     },
     {
       "band_id": "band2e751709ac",
@@ -161,9 +172,9 @@
       "earliest_user": "michaelforrest",
       "latest_user": "juicyuiop",
       "earliest_unixtime": 1623578500,
-      "latest_unixtime": 1648514241,
-      "estimated_days_of_activity": 288,
-      "total_riffs": 364
+      "latest_unixtime": 1656868728,
+      "estimated_days_of_activity": 385,
+      "total_riffs": 376
     },
     {
       "band_id": "band5726062d07",
@@ -210,15 +221,26 @@
       "total_riffs": 12907
     },
     {
+      "band_id": "band9617f70427",
+      "invite_id": "13fc6f6006328ba2f716bc79877b91eff830d387f58f5a4a5a17091b8c19db60",
+      "jam_name": "Remix Inspo: Naffk",
+      "earliest_user": "naffk",
+      "latest_user": "creek",
+      "earliest_unixtime": 1645289672,
+      "latest_unixtime": 1650344587,
+      "estimated_days_of_activity": 58,
+      "total_riffs": 1126
+    },
+    {
       "band_id": "band2e9c40ccec",
       "invite_id": "13ff9863b07e5473d920e0aa08381eb66d84431203d3356f4dc57f1c96c938b3",
       "jam_name": "Hollow Earth",
       "earliest_user": "echolox",
-      "latest_user": "theau",
+      "latest_user": "ludi",
       "earliest_unixtime": 1584293764,
-      "latest_unixtime": 1655048775,
-      "estimated_days_of_activity": 818,
-      "total_riffs": 12314
+      "latest_unixtime": 1664420061,
+      "estimated_days_of_activity": 927,
+      "total_riffs": 13730
     },
     {
       "band_id": "bandaa4d4a0e61",
@@ -273,7 +295,7 @@
       "earliest_unixtime": 1590999163,
       "latest_unixtime": 1644332298,
       "estimated_days_of_activity": 617,
-      "total_riffs": 5726
+      "total_riffs": 5727
     },
     {
       "band_id": "bandca02cc586f",
@@ -401,11 +423,11 @@
       "invite_id": "16985f0c61acd8e72f7700d6977c3efa11301ef34fd871e94363957214169d04",
       "jam_name": "Saraswati Beats",
       "earliest_user": "bananepoep",
-      "latest_user": "lionelricht",
+      "latest_user": "syntheshwara",
       "earliest_unixtime": 1626989833,
-      "latest_unixtime": 1639848303,
-      "estimated_days_of_activity": 148,
-      "total_riffs": 29
+      "latest_unixtime": 1662034486,
+      "estimated_days_of_activity": 405,
+      "total_riffs": 30
     },
     {
       "band_id": "band7209cb5ff6",
@@ -474,6 +496,17 @@
       "total_riffs": 421
     },
     {
+      "band_id": "band48bf7a1c63",
+      "invite_id": "17ca3066d42e83cca7c1f2374ac319cb2feddd1b8d63cb6f54b7419b1cb7e281",
+      "jam_name": "Late Night Techno",
+      "earliest_user": "kismet",
+      "latest_user": "peteidm",
+      "earliest_unixtime": 1656892383,
+      "latest_unixtime": 1664402650,
+      "estimated_days_of_activity": 86,
+      "total_riffs": 38237
+    },
+    {
       "band_id": "band008e7884c2",
       "invite_id": "1847b9692b1ce853ae331773d8ddc579ef65e7ec63bb1536568c65b12551f19b",
       "jam_name": "Blurrr",
@@ -494,6 +527,17 @@
       "latest_unixtime": 1623136249,
       "estimated_days_of_activity": 327,
       "total_riffs": 6072
+    },
+    {
+      "band_id": "bandf160af8e6d",
+      "invite_id": "188899252ed367c9072528063b620278832d877917fc26469ac7d48bb0c4fa35",
+      "jam_name": "Vinyl Chops",
+      "earliest_user": "kismet",
+      "latest_user": "juicyuiop",
+      "earliest_unixtime": 1655258595,
+      "latest_unixtime": 1662881299,
+      "estimated_days_of_activity": 88,
+      "total_riffs": 5247
     },
     {
       "band_id": "band2af97767c0",
@@ -522,11 +566,11 @@
       "invite_id": "195b46ed9b040c849f0e858c11aeed592e333a72cacc4a30636b6aeaea9b6e25",
       "jam_name": "GRINDCORE",
       "earliest_user": "failsafe",
-      "latest_user": "futurerad",
+      "latest_user": "fockacha",
       "earliest_unixtime": 1650582148,
-      "latest_unixtime": 1655038489,
-      "estimated_days_of_activity": 51,
-      "total_riffs": 3348
+      "latest_unixtime": 1655374691,
+      "estimated_days_of_activity": 55,
+      "total_riffs": 3498
     },
     {
       "band_id": "banda23588e5d1",
@@ -599,33 +643,33 @@
       "invite_id": "1a44e25bb8d668ccb4ab82ff22656b49a35bda90d05abf07758345f28a7e529a",
       "jam_name": "Royalty-Free Hip-Hop Side B",
       "earliest_user": "bukupanda",
-      "latest_user": "jujub",
+      "latest_user": "crepedigga",
       "earliest_unixtime": 1612763014,
-      "latest_unixtime": 1654838858,
-      "estimated_days_of_activity": 487,
-      "total_riffs": 1543
+      "latest_unixtime": 1661639902,
+      "estimated_days_of_activity": 565,
+      "total_riffs": 1559
     },
     {
       "band_id": "banda9914534e7",
       "invite_id": "1a59935a20061a4ad0c1491183ccff80fdcd57c86fbbeb9a8934574495c412bc",
       "jam_name": "Kings of the West Coast",
       "earliest_user": "echolox",
-      "latest_user": "mrsneefs",
+      "latest_user": "afterlife",
       "earliest_unixtime": 1578667144,
-      "latest_unixtime": 1646257691,
-      "estimated_days_of_activity": 782,
-      "total_riffs": 379
+      "latest_unixtime": 1663120603,
+      "estimated_days_of_activity": 977,
+      "total_riffs": 482
     },
     {
       "band_id": "bandd455c3cce8",
       "invite_id": "1a7def97aea3a24a8d6af1675c5227ceb0a2faef25ef5132753ce9bbb2e4b9ba",
       "jam_name": "Super Slow",
       "earliest_user": "echolox",
-      "latest_user": "clate",
+      "latest_user": "pre5et",
       "earliest_unixtime": 1595844387,
-      "latest_unixtime": 1598596732,
-      "estimated_days_of_activity": 31,
-      "total_riffs": 2711
+      "latest_unixtime": 1659932209,
+      "estimated_days_of_activity": 741,
+      "total_riffs": 2748
     },
     {
       "band_id": "bandab74b2b685",
@@ -744,9 +788,9 @@
       "earliest_user": "jpgob",
       "latest_user": "topse",
       "earliest_unixtime": 1586435918,
-      "latest_unixtime": 1648842556,
-      "estimated_days_of_activity": 722,
-      "total_riffs": 4066
+      "latest_unixtime": 1609896032,
+      "estimated_days_of_activity": 271,
+      "total_riffs": 4176
     },
     {
       "band_id": "band3717661feb",
@@ -786,22 +830,22 @@
       "invite_id": "1cdd9bc33b4de1e42b2294d4094bffb29c0d0dc429af89996a004f7069da7797",
       "jam_name": "Beginner's Jam",
       "earliest_user": "echolox",
-      "latest_user": "dribfunk",
+      "latest_user": "jobbeat",
       "earliest_unixtime": 1598866909,
-      "latest_unixtime": 1625222160,
-      "estimated_days_of_activity": 305,
-      "total_riffs": 22436
+      "latest_unixtime": 1659732569,
+      "estimated_days_of_activity": 704,
+      "total_riffs": 22437
     },
     {
       "band_id": "band0cf70b30fb",
       "invite_id": "1d048262564867ff69d46653d2bdbcf032c20d2bcb3131f40f1b31f30e9b4690",
       "jam_name": "The Stargazers",
       "earliest_user": "slowgaffle",
-      "latest_user": "artofbeedi",
+      "latest_user": "pre5et",
       "earliest_unixtime": 1607598913,
-      "latest_unixtime": 1629805325,
-      "estimated_days_of_activity": 257,
-      "total_riffs": 10621
+      "latest_unixtime": 1659580295,
+      "estimated_days_of_activity": 601,
+      "total_riffs": 10624
     },
     {
       "band_id": "band318a8524b8",
@@ -819,11 +863,22 @@
       "invite_id": "1d73eb0cd85a5133be24cef385091e92427a6fec1da6f277279aea9783fdcffe",
       "jam_name": "Atmospheric Techno",
       "earliest_user": "infinate_sorrow",
-      "latest_user": "jpgob",
+      "latest_user": "pre5et",
       "earliest_unixtime": 1605444258,
-      "latest_unixtime": 1622333514,
-      "estimated_days_of_activity": 195,
-      "total_riffs": 5898
+      "latest_unixtime": 1657766461,
+      "estimated_days_of_activity": 605,
+      "total_riffs": 5902
+    },
+    {
+      "band_id": "bandaabaca3a70",
+      "invite_id": "1d96bcbe49b611d50ba0a232908980a9927dfd1df3c732b3bb7ac5646c97922d",
+      "jam_name": "LOW END THEORY",
+      "earliest_user": "fancyspectacles",
+      "latest_user": "dialekte",
+      "earliest_unixtime": 1650570533,
+      "latest_unixtime": 1655318477,
+      "estimated_days_of_activity": 54,
+      "total_riffs": 8932
     },
     {
       "band_id": "band0d270cbd09",
@@ -852,11 +907,11 @@
       "invite_id": "1e3ce5a77010b3c3b0adab1fadbc26ba62832047e139795e031677f538f3a616",
       "jam_name": "Esss Rhymes",
       "earliest_user": "hollohead",
-      "latest_user": "danielnr",
+      "latest_user": "cangull",
       "earliest_unixtime": 1651370209,
-      "latest_unixtime": 1655016113,
-      "estimated_days_of_activity": 42,
-      "total_riffs": 4249
+      "latest_unixtime": 1655297461,
+      "estimated_days_of_activity": 45,
+      "total_riffs": 5047
     },
     {
       "band_id": "bandba08553c6b",
@@ -868,6 +923,17 @@
       "latest_unixtime": 1597641022,
       "estimated_days_of_activity": 215,
       "total_riffs": 184
+    },
+    {
+      "band_id": "bandc2ff1fdbca",
+      "invite_id": "1e8485eb2f1d0c8dca8b9f7586abe1bfa97297b39fb7712be321c9ac75f32a24",
+      "jam_name": "Beginner Jam #9",
+      "earliest_user": "gstnjk",
+      "latest_user": "hamedmo",
+      "earliest_unixtime": 1645665602,
+      "latest_unixtime": 1649773423,
+      "estimated_days_of_activity": 47,
+      "total_riffs": 4266
     },
     {
       "band_id": "bandbd1ad5577d",
@@ -907,11 +973,11 @@
       "invite_id": "1f06babfd5b205248a8d6f114839fb71b2a3d2caadfa4b214d45755533294a9f",
       "jam_name": "Amen Breaks R Us",
       "earliest_user": "echolox",
-      "latest_user": "bozomich",
+      "latest_user": "thevoidinclusive",
       "earliest_unixtime": 1603816915,
-      "latest_unixtime": 1605834269,
-      "estimated_days_of_activity": 23,
-      "total_riffs": 3150
+      "latest_unixtime": 1662864710,
+      "estimated_days_of_activity": 683,
+      "total_riffs": 3360
     },
     {
       "band_id": "band3eb928a891",
@@ -991,6 +1057,17 @@
       "total_riffs": 118
     },
     {
+      "band_id": "band60ab8853c1",
+      "invite_id": "2116a81038f054395abe15058395c6da367db18848c845aa772324b3cf833563",
+      "jam_name": "Jammer Inspo: Shamanicbeatbox ",
+      "earliest_user": "shamanicbeatbox",
+      "latest_user": "thestuf",
+      "earliest_unixtime": 1655657184,
+      "latest_unixtime": 1661886803,
+      "estimated_days_of_activity": 72,
+      "total_riffs": 3156
+    },
+    {
       "band_id": "band09e827ef8d",
       "invite_id": "21947b4d21061ec8c0a7c6553982fc3d3c5263c4c6824c0a38544a0485398f3a",
       "jam_name": "High Speeed",
@@ -1000,6 +1077,17 @@
       "latest_unixtime": 1584208514,
       "estimated_days_of_activity": 45,
       "total_riffs": 265
+    },
+    {
+      "band_id": "band9b679915e6",
+      "invite_id": "21c67610c32b673c79901535f5656a0095336c3e1ed1fb38b85e687f849aadd7",
+      "jam_name": "Sampler Space",
+      "earliest_user": "nr2",
+      "latest_user": "pulse_wav",
+      "earliest_unixtime": 1650230461,
+      "latest_unixtime": 1651966052,
+      "estimated_days_of_activity": 20,
+      "total_riffs": 1974
     },
     {
       "band_id": "band37f4bdf49e",
@@ -1024,6 +1112,17 @@
       "total_riffs": 5343
     },
     {
+      "band_id": "band650b6acb54",
+      "invite_id": "21e6c123cfec58f49214d11b844c87e2709a103d12047a1dae71ee813394e969",
+      "jam_name": "Tranquil Chill",
+      "earliest_user": "kismet",
+      "latest_user": "mng",
+      "earliest_unixtime": 1658242271,
+      "latest_unixtime": 1663032769,
+      "estimated_days_of_activity": 55,
+      "total_riffs": 7942
+    },
+    {
       "band_id": "bandd876cb75a8",
       "invite_id": "2201e2bba16347595ad0d33b721fcf60983a32bd670ed42d8d1b744a1b7071f4",
       "jam_name": "got the life to f",
@@ -1046,6 +1145,17 @@
       "total_riffs": 10585
     },
     {
+      "band_id": "band014eab919b",
+      "invite_id": "225433a084d480b465fd0dd05f62312990d017c0fae7a0e1b57738906ae3025e",
+      "jam_name": "Rhythm and Drones",
+      "earliest_user": "kismet",
+      "latest_user": "pre5et",
+      "earliest_unixtime": 1655296482,
+      "latest_unixtime": 1659858173,
+      "estimated_days_of_activity": 52,
+      "total_riffs": 7701
+    },
+    {
       "band_id": "bandaee7c41de0",
       "invite_id": "225b654139a28bd3a2ad6663db97d578af90af732e2fd4f9dace1120af4b6176",
       "jam_name": "Subwoofer Test Chamber",
@@ -1055,6 +1165,17 @@
       "latest_unixtime": 1629938287,
       "estimated_days_of_activity": 1,
       "total_riffs": 6879
+    },
+    {
+      "band_id": "bande9b1e81948",
+      "invite_id": "22b7ce50859f9d23a8aac23ec2b23a3886ee7ac3c0472e745ff53f1c0e767a87",
+      "jam_name": "Soundpack Shack",
+      "earliest_user": "kismet",
+      "latest_user": "jtalton",
+      "earliest_unixtime": 1656891895,
+      "latest_unixtime": 1663414855,
+      "estimated_days_of_activity": 75,
+      "total_riffs": 7453
     },
     {
       "band_id": "band9682ff3897",
@@ -1072,11 +1193,11 @@
       "invite_id": "22f746cb56a6d1e3b36e14681eec870545e0a7307596012d0abec796a69d9557",
       "jam_name": "Cinematic Drones",
       "earliest_user": "echolox",
-      "latest_user": "visceralbeing",
+      "latest_user": "pre5et",
       "earliest_unixtime": 1589111058,
-      "latest_unixtime": 1642290035,
-      "estimated_days_of_activity": 615,
-      "total_riffs": 1543
+      "latest_unixtime": 1659799696,
+      "estimated_days_of_activity": 818,
+      "total_riffs": 1545
     },
     {
       "band_id": "banddef8caa76b",
@@ -1109,7 +1230,7 @@
       "earliest_unixtime": 1640733642,
       "latest_unixtime": 1645927508,
       "estimated_days_of_activity": 60,
-      "total_riffs": 2315
+      "total_riffs": 2317
     },
     {
       "band_id": "bandee7a1bd2c7",
@@ -1325,11 +1446,11 @@
       "invite_id": "27ff2d610ca1d2ad8ec92f3973af1fdba7665d7968445d6509b049ded3be684e",
       "jam_name": "Blues Crew - Reconnecting with the soul",
       "earliest_user": "alef",
-      "latest_user": "blue506",
+      "latest_user": "pre5et",
       "earliest_unixtime": 1650872474,
-      "latest_unixtime": 1655039998,
-      "estimated_days_of_activity": 48,
-      "total_riffs": 2058
+      "latest_unixtime": 1659825253,
+      "estimated_days_of_activity": 103,
+      "total_riffs": 2121
     },
     {
       "band_id": "band58c7405f43",
@@ -1376,6 +1497,28 @@
       "total_riffs": 3698
     },
     {
+      "band_id": "bandcc6ec6d354",
+      "invite_id": "286ab66b4bc08b3a60c7770a2e92d62b2a3f8fcafd82b77edd1258102e90c125",
+      "jam_name": "Night Owl, Techno!",
+      "earliest_user": "xoex",
+      "latest_user": "alef",
+      "earliest_unixtime": 1649787848,
+      "latest_unixtime": 1660805469,
+      "estimated_days_of_activity": 127,
+      "total_riffs": 25927
+    },
+    {
+      "band_id": "band9806555752",
+      "invite_id": "286ff0d326ea923cbea1a2604bc6f56bd68f4d0aaf8d108cea19aec4c33582f4",
+      "jam_name": "Remix Inspo: Marky2coats",
+      "earliest_user": "marky2coats",
+      "latest_user": "threelum",
+      "earliest_unixtime": 1645400132,
+      "latest_unixtime": 1652564783,
+      "estimated_days_of_activity": 82,
+      "total_riffs": 1853
+    },
+    {
       "band_id": "banddb08ffac9e",
       "invite_id": "2873abecdecedd95a11abb623b107b17d173fe2c94f811bea8c6df4ad7acf3b9",
       "jam_name": "Bedroom Pop",
@@ -1391,11 +1534,11 @@
       "invite_id": "28988bc4de41b0e25d9b761f8a50de9ae9d1064c6df3965b0503c48a89762a3f",
       "jam_name": "Lo-Fi Beats to study Pt. 3",
       "earliest_user": "woodlands",
-      "latest_user": "honeydisco",
+      "latest_user": "mng",
       "earliest_unixtime": 1602645512,
-      "latest_unixtime": 1627719466,
-      "estimated_days_of_activity": 290,
-      "total_riffs": 34348
+      "latest_unixtime": 1663702828,
+      "estimated_days_of_activity": 706,
+      "total_riffs": 34457
     },
     {
       "band_id": "band9c06eeb89a",
@@ -1413,11 +1556,11 @@
       "invite_id": "293e67bccf04b8d736a2686f23b3458f0eb3e1ca1f02d727f78eea9b28f1702",
       "jam_name": "My Corona",
       "earliest_user": "greenbluespiral",
-      "latest_user": "marky2coats",
+      "latest_user": "oddstar",
       "earliest_unixtime": 1600822809,
-      "latest_unixtime": 1654727241,
-      "estimated_days_of_activity": 623,
-      "total_riffs": 3016
+      "latest_unixtime": 1661570142,
+      "estimated_days_of_activity": 703,
+      "total_riffs": 3137
     },
     {
       "band_id": "band0743883315",
@@ -1490,11 +1633,11 @@
       "invite_id": "2a553bfca6bd3365181765aeafe9462bd99b78c567e398098c10f336f84adf16",
       "jam_name": "Cyberpunk Synthetics",
       "earliest_user": "oddstar",
-      "latest_user": "autorobotica",
+      "latest_user": "pre5et",
       "earliest_unixtime": 1650633051,
-      "latest_unixtime": 1654984308,
-      "estimated_days_of_activity": 50,
-      "total_riffs": 4027
+      "latest_unixtime": 1659825154,
+      "estimated_days_of_activity": 106,
+      "total_riffs": 4055
     },
     {
       "band_id": "band4eaf371df5",
@@ -1545,11 +1688,22 @@
       "invite_id": "2b59ff7bbdd9cd80276b36a108bc46a4340285175452cb36d2f650e69220c434",
       "jam_name": "Glitch 101",
       "earliest_user": "echolox",
-      "latest_user": "m0nk",
+      "latest_user": "pre5et",
       "earliest_unixtime": 1592320466,
-      "latest_unixtime": 1594225523,
-      "estimated_days_of_activity": 22,
-      "total_riffs": 3507
+      "latest_unixtime": 1658110126,
+      "estimated_days_of_activity": 761,
+      "total_riffs": 3521
+    },
+    {
+      "band_id": "bandcdb89cf4f4",
+      "invite_id": "2b74ff9406dc492b19040eb667c2c9fc200292b1cb4a24e90f1c0da58dba247",
+      "jam_name": "Jammer Inspo: Show",
+      "earliest_user": "show",
+      "latest_user": "thestuf",
+      "earliest_unixtime": 1656361035,
+      "latest_unixtime": 1661892803,
+      "estimated_days_of_activity": 64,
+      "total_riffs": 1664
     },
     {
       "band_id": "band7ca4f823a2",
@@ -1666,11 +1820,11 @@
       "invite_id": "2d9c6786b96c13c948befba73a0df09f3952c888028ab45f88ca824944c6d505",
       "jam_name": "A journey through space and time",
       "earliest_user": "sephrim",
-      "latest_user": "mostllyjustj",
+      "latest_user": "pre5et",
       "earliest_unixtime": 1579145216,
-      "latest_unixtime": 1595644008,
-      "estimated_days_of_activity": 190,
-      "total_riffs": 4067
+      "latest_unixtime": 1658182602,
+      "estimated_days_of_activity": 914,
+      "total_riffs": 4075
     },
     {
       "band_id": "band2429b83361",
@@ -1692,7 +1846,7 @@
       "earliest_unixtime": 1615991137,
       "latest_unixtime": 1620109139,
       "estimated_days_of_activity": 47,
-      "total_riffs": 3149
+      "total_riffs": 3150
     },
     {
       "band_id": "band903fe289f1",
@@ -1704,6 +1858,17 @@
       "latest_unixtime": 1585759160,
       "estimated_days_of_activity": 0,
       "total_riffs": 118
+    },
+    {
+      "band_id": "band17f858cdee",
+      "invite_id": "2dd47954ed62a6c106ff39a4e101a16bbb5c0e38f36e0965f53ee4ef29441fc8",
+      "jam_name": "It Was All Yellow",
+      "earliest_user": "lovemode",
+      "latest_user": "jonh2o",
+      "earliest_unixtime": 1646309188,
+      "latest_unixtime": 1650184725,
+      "estimated_days_of_activity": 44,
+      "total_riffs": 1864
     },
     {
       "band_id": "band43de4694c5",
@@ -1761,6 +1926,17 @@
       "total_riffs": 745
     },
     {
+      "band_id": "bandbd44fd956b",
+      "invite_id": "3001c7ada167df75572c18c05f0649c0fff39169ad194ae559c9a57d9269887",
+      "jam_name": "Natural Acoustics",
+      "earliest_user": "thestuf",
+      "latest_user": "breik",
+      "earliest_unixtime": 1652643767,
+      "latest_unixtime": 1655842814,
+      "estimated_days_of_activity": 37,
+      "total_riffs": 1310
+    },
+    {
       "band_id": "band74c1aec7bd",
       "invite_id": "302d1dd2f42d749f8b5abc77005ab784864060ba3be6ba1393a417a5fc2cd920",
       "jam_name": "Royalty-Free Hip-Hop Beats",
@@ -1776,11 +1952,11 @@
       "invite_id": "305edf86fb4427bbc2661075329b78972212aad31b43a0c5ad49315f6ffa6570",
       "jam_name": "Minimalistic Techno #2",
       "earliest_user": "echolox",
-      "latest_user": "guavara",
+      "latest_user": "jimmysandwiches",
       "earliest_unixtime": 1585660427,
-      "latest_unixtime": 1654989442,
-      "estimated_days_of_activity": 802,
-      "total_riffs": 16809
+      "latest_unixtime": 1664259302,
+      "estimated_days_of_activity": 909,
+      "total_riffs": 17824
     },
     {
       "band_id": "band58a09bc6c7",
@@ -1805,6 +1981,17 @@
       "total_riffs": 2065
     },
     {
+      "band_id": "bandbe69429e2a",
+      "invite_id": "31355853291c65b9351c2d2fc24ff5fcd4320f9e810e064c76bd7fb0b008c15c",
+      "jam_name": "ENDLESSS OASIS  7/10/21",
+      "earliest_user": "ninjaloanz",
+      "latest_user": "cng303",
+      "earliest_unixtime": 1625856013,
+      "latest_unixtime": 1625955247,
+      "estimated_days_of_activity": 1,
+      "total_riffs": 1092
+    },
+    {
       "band_id": "band2b664a5263",
       "invite_id": "315e82472bcb81f65cd1298bd78e00c2ce7b8e48eb68a3c7bb5e4ca96c3d7016",
       "jam_name": "chill hop",
@@ -1814,6 +2001,17 @@
       "latest_unixtime": 1650229786,
       "estimated_days_of_activity": 727,
       "total_riffs": 71
+    },
+    {
+      "band_id": "band1b3f6e94f8",
+      "invite_id": "31a448d1cefcb5ebdc9fbf7b35012888bee48a6c7c16593d3288bc56a88ac8dc",
+      "jam_name": "The Garage",
+      "earliest_user": "fancyspectacles",
+      "latest_user": "inphiltrate",
+      "earliest_unixtime": 1654084425,
+      "latest_unixtime": 1658269942,
+      "estimated_days_of_activity": 48,
+      "total_riffs": 5359
     },
     {
       "band_id": "band3ad53c4713",
@@ -1857,7 +2055,7 @@
       "earliest_unixtime": 1626941931,
       "latest_unixtime": 1631597838,
       "estimated_days_of_activity": 53,
-      "total_riffs": 9689
+      "total_riffs": 9691
     },
     {
       "band_id": "band28e2bfb381",
@@ -1904,6 +2102,17 @@
       "total_riffs": 2371
     },
     {
+      "band_id": "bandc667d8118f",
+      "invite_id": "32fc7cbe3fb227fef59c349a1d7f49d173d71eb8a4ec3aab3cd54d6eed8ea34f",
+      "jam_name": "Acoustic Shore",
+      "earliest_user": "unclehomunculus",
+      "latest_user": "ragazzo",
+      "earliest_unixtime": 1650217831,
+      "latest_unixtime": 1654553882,
+      "estimated_days_of_activity": 50,
+      "total_riffs": 2712
+    },
+    {
       "band_id": "band39584a4405",
       "invite_id": "3308a6085a78b98ca9fc6cfa0db4c92cfbdf16a35a7617eb150008beabfb4e09",
       "jam_name": "Lo-Fi Everything",
@@ -1912,7 +2121,7 @@
       "earliest_unixtime": 1595844640,
       "latest_unixtime": 1600227469,
       "estimated_days_of_activity": 50,
-      "total_riffs": 1293
+      "total_riffs": 1297
     },
     {
       "band_id": "band89905428e2",
@@ -1948,6 +2157,28 @@
       "total_riffs": 10
     },
     {
+      "band_id": "band450d2ee145",
+      "invite_id": "3432fb73b6be9ef3b21c3a6f2df1123044b691a00b3d46c8cf41f3d3d19ba340",
+      "jam_name": "Remix Inspo: flugegehaimen",
+      "earliest_user": "flugegehaimen",
+      "latest_user": "caerickson",
+      "earliest_unixtime": 1644530597,
+      "latest_unixtime": 1647318007,
+      "estimated_days_of_activity": 32,
+      "total_riffs": 1028
+    },
+    {
+      "band_id": "bandc549aead5e",
+      "invite_id": "3443f7ffe5f25ea6f5d6e4a0be75475f6bc82a46bdd62d1a228bf4d9fd6c276e",
+      "jam_name": "Jammer Inspo: Xoex",
+      "earliest_user": "xoex",
+      "latest_user": "shapednoise",
+      "earliest_unixtime": 1650998617,
+      "latest_unixtime": 1654494431,
+      "estimated_days_of_activity": 40,
+      "total_riffs": 1218
+    },
+    {
       "band_id": "band262bf04e14",
       "invite_id": "347d082c8216723ca36010c60cd806c315024b9a9c491c29cdf31ab8e113dd02",
       "jam_name": "high dam",
@@ -1963,11 +2194,11 @@
       "invite_id": "349e83802f5951da9711b5465b5b53601760df52dfe7f24720293efcd6fb13e2",
       "jam_name": "Club Sandwich",
       "earliest_user": "echolox",
-      "latest_user": "redskylullaby",
+      "latest_user": "pre5et",
       "earliest_unixtime": 1613729151,
-      "latest_unixtime": 1617163155,
-      "estimated_days_of_activity": 39,
-      "total_riffs": 8755
+      "latest_unixtime": 1659846547,
+      "estimated_days_of_activity": 533,
+      "total_riffs": 8758
     },
     {
       "band_id": "band45ef4bd26f",
@@ -1998,9 +2229,9 @@
       "earliest_user": "stoic",
       "latest_user": "pre5et",
       "earliest_unixtime": 1632554244,
-      "latest_unixtime": 1645187367,
-      "estimated_days_of_activity": 146,
-      "total_riffs": 30809
+      "latest_unixtime": 1659820506,
+      "estimated_days_of_activity": 315,
+      "total_riffs": 30811
     },
     {
       "band_id": "band5c9250526d",
@@ -2020,20 +2251,20 @@
       "earliest_user": "inphiltrate",
       "latest_user": "houdini4",
       "earliest_unixtime": 1652462133,
-      "latest_unixtime": 1654870817,
-      "estimated_days_of_activity": 27,
-      "total_riffs": 816
+      "latest_unixtime": 1664122833,
+      "estimated_days_of_activity": 134,
+      "total_riffs": 2263
     },
     {
       "band_id": "bandd11edf07f1",
       "invite_id": "3666c669b63bd8bf286eebf971f8caa5f1db061cb338698b3d718314c8490683",
       "jam_name": "Damn Son",
       "earliest_user": "galletly",
-      "latest_user": "galletly",
+      "latest_user": "lukeakalilboy",
       "earliest_unixtime": 1584084767,
-      "latest_unixtime": 1650682251,
-      "estimated_days_of_activity": 770,
-      "total_riffs": 326
+      "latest_unixtime": 1661769576,
+      "estimated_days_of_activity": 899,
+      "total_riffs": 433
     },
     {
       "band_id": "band2898269180",
@@ -2069,15 +2300,26 @@
       "total_riffs": 127
     },
     {
+      "band_id": "bandb760a01586",
+      "invite_id": "3760a1b285d635e7202c670a16f3b183b9f94df0a29f075eae22fc90d37f708b",
+      "jam_name": "Organic Harmony",
+      "earliest_user": "lovemode",
+      "latest_user": "seasickcookie",
+      "earliest_unixtime": 1646573261,
+      "latest_unixtime": 1650476778,
+      "estimated_days_of_activity": 45,
+      "total_riffs": 5701
+    },
+    {
       "band_id": "band513a41fb3d",
       "invite_id": "378efcb30feafb1431c2a9fa7fa197d2e5bb3bcfa689bab8145ba62f6e6f4ca2",
       "jam_name": "Take Five",
       "earliest_user": "mikew",
-      "latest_user": "hader",
+      "latest_user": "jimmysandwiches",
       "earliest_unixtime": 1573236352,
-      "latest_unixtime": 1653537856,
-      "estimated_days_of_activity": 929,
-      "total_riffs": 4569
+      "latest_unixtime": 1664445043,
+      "estimated_days_of_activity": 1055,
+      "total_riffs": 5267
     },
     {
       "band_id": "band498ed1463b",
@@ -2128,11 +2370,11 @@
       "invite_id": "384a2128353319b59b67af98572fa496d39dd112cf0009cc0530f61783d34c5c",
       "jam_name": "Dark Wave Cave",
       "earliest_user": "elling",
-      "latest_user": "hax",
+      "latest_user": "shapednoise",
       "earliest_unixtime": 1650551990,
-      "latest_unixtime": 1655040800,
-      "estimated_days_of_activity": 51,
-      "total_riffs": 15725
+      "latest_unixtime": 1663304379,
+      "estimated_days_of_activity": 147,
+      "total_riffs": 16486
     },
     {
       "band_id": "band9abb7536a0",
@@ -2141,20 +2383,20 @@
       "earliest_user": "lovemode",
       "latest_user": "houdini4",
       "earliest_unixtime": 1635376199,
-      "latest_unixtime": 1654684429,
-      "estimated_days_of_activity": 223,
-      "total_riffs": 26441
+      "latest_unixtime": 1664113254,
+      "estimated_days_of_activity": 332,
+      "total_riffs": 27253
     },
     {
       "band_id": "bande58b8673e6",
       "invite_id": "388e1786d137f1c0bf74d966d4cbecf076bc7029f1f9f75bcfe632218bb47bc2",
       "jam_name": "Summer Heat",
       "earliest_user": "wasabifinessed",
-      "latest_user": "wasabifinessed",
+      "latest_user": "andymac",
       "earliest_unixtime": 1591831879,
-      "latest_unixtime": 1644082709,
-      "estimated_days_of_activity": 604,
-      "total_riffs": 1561
+      "latest_unixtime": 1658281974,
+      "estimated_days_of_activity": 769,
+      "total_riffs": 1566
     },
     {
       "band_id": "band14b4663cdf",
@@ -2194,11 +2436,11 @@
       "invite_id": "38b42b662218d55c63ce75a691ffbffa3fbbf97e085ae8729f19b94de6f49b6d",
       "jam_name": "Royalty-Free Horror Score",
       "earliest_user": "elling",
-      "latest_user": "hader",
+      "latest_user": "elling",
       "earliest_unixtime": 1602948084,
-      "latest_unixtime": 1650135564,
-      "estimated_days_of_activity": 546,
-      "total_riffs": 4608
+      "latest_unixtime": 1662410581,
+      "estimated_days_of_activity": 688,
+      "total_riffs": 4660
     },
     {
       "band_id": "band6853475243",
@@ -2223,6 +2465,17 @@
       "total_riffs": 3132
     },
     {
+      "band_id": "band4fd5abf05c",
+      "invite_id": "3a0f4083d93dea98a8cb4c53eabb886d4358f33a101882fcc9f4f7d4a50a05e7",
+      "jam_name": "Jammer Inspo: Jake909",
+      "earliest_user": "jake909",
+      "latest_user": "jamesfinnerty",
+      "earliest_unixtime": 1654475843,
+      "latest_unixtime": 1656475654,
+      "estimated_days_of_activity": 23,
+      "total_riffs": 555
+    },
+    {
       "band_id": "band1e7f4a73f2",
       "invite_id": "3ab12eb0028ea37f437659309c19364931d24b9e69f9b78cb9e21fe7536ea74c",
       "jam_name": "Roof Grooves",
@@ -2242,7 +2495,7 @@
       "earliest_unixtime": 1604612576,
       "latest_unixtime": 1611126107,
       "estimated_days_of_activity": 75,
-      "total_riffs": 1279
+      "total_riffs": 1281
     },
     {
       "band_id": "band760ab1334d",
@@ -2295,9 +2548,9 @@
       "earliest_user": "njlang",
       "latest_user": "pre5et",
       "earliest_unixtime": 1586753350,
-      "latest_unixtime": 1635575190,
-      "estimated_days_of_activity": 565,
-      "total_riffs": 491
+      "latest_unixtime": 1659843622,
+      "estimated_days_of_activity": 845,
+      "total_riffs": 498
     },
     {
       "band_id": "banda29579a203",
@@ -2333,15 +2586,26 @@
       "total_riffs": 99
     },
     {
+      "band_id": "band288678ff4d",
+      "invite_id": "3d3239cab4d5ecda7d922f72c3bc4a1bffdf9294a364343f591f4f04badabb6f",
+      "jam_name": "Balearic Bliss",
+      "earliest_user": "ccb",
+      "latest_user": "tompeak",
+      "earliest_unixtime": 1655254671,
+      "latest_unixtime": 1658223964,
+      "estimated_days_of_activity": 34,
+      "total_riffs": 6495
+    },
+    {
       "band_id": "band45bf5226c5",
       "invite_id": "3d4015f2a0814314201c986116a000c34d2837e8438c9ca8c28779464f8cd6ac",
       "jam_name": "Just Drone",
       "earliest_user": "bondegi",
-      "latest_user": "paul_cine",
+      "latest_user": "vonbongen",
       "earliest_unixtime": 1590927086,
-      "latest_unixtime": 1653604755,
-      "estimated_days_of_activity": 725,
-      "total_riffs": 2569
+      "latest_unixtime": 1660702235,
+      "estimated_days_of_activity": 807,
+      "total_riffs": 2700
     },
     {
       "band_id": "band4d1ef454d7",
@@ -2408,6 +2672,28 @@
       "latest_unixtime": 1588088369,
       "estimated_days_of_activity": 0,
       "total_riffs": 14
+    },
+    {
+      "band_id": "band51b15deb04",
+      "invite_id": "3ef110f36a5b7494d0a92e2119cbc2b5a6b2ce5d4f615788a30c092047562bfd",
+      "jam_name": "Remix Inspo: m_host",
+      "earliest_user": "m_host",
+      "latest_user": "m_host",
+      "earliest_unixtime": 1643649570,
+      "latest_unixtime": 1644322576,
+      "estimated_days_of_activity": 7,
+      "total_riffs": 2
+    },
+    {
+      "band_id": "bandc9c96b5c2a",
+      "invite_id": "3f19b7152d723e6ed43f0e44634160d7cd2fd7e10fa37f8c3be11fa3392aa3d",
+      "jam_name": "Track Club Release Jam",
+      "earliest_user": "firephly",
+      "latest_user": "mvdg",
+      "earliest_unixtime": 1628288313,
+      "latest_unixtime": 1629043917,
+      "estimated_days_of_activity": 8,
+      "total_riffs": 875
     },
     {
       "band_id": "banda5180e8cec",
@@ -2482,20 +2768,31 @@
       "earliest_user": "ludi",
       "latest_user": "redskylullaby",
       "earliest_unixtime": 1570539609,
-      "latest_unixtime": 1643861830,
-      "estimated_days_of_activity": 848,
-      "total_riffs": 320
+      "latest_unixtime": 1662955666,
+      "estimated_days_of_activity": 1069,
+      "total_riffs": 368
     },
     {
       "band_id": "bandb3dd7b6bce",
       "invite_id": "40ae1d582bd4c9bdf8ce25984e738580fc417852a38f6b460d18cc84e4816b29",
       "jam_name": "Amen Breaks R Us",
       "earliest_user": "mlilley2001",
-      "latest_user": "failsafe",
+      "latest_user": "inphiltrate",
       "earliest_unixtime": 1569984902,
-      "latest_unixtime": 1654992862,
-      "estimated_days_of_activity": 983,
-      "total_riffs": 3125
+      "latest_unixtime": 1660693095,
+      "estimated_days_of_activity": 1049,
+      "total_riffs": 3919
+    },
+    {
+      "band_id": "band0dfe0c9678",
+      "invite_id": "4155e809c0d9c3a21a5cb572f2f9b6f3382be1be98e43f7b1e21ea1891b511a2",
+      "jam_name": "SummerFest",
+      "earliest_user": "improvoid",
+      "latest_user": "seasickcookie",
+      "earliest_unixtime": 1656000561,
+      "latest_unixtime": 1658242998,
+      "estimated_days_of_activity": 25,
+      "total_riffs": 3524
     },
     {
       "band_id": "band8b97fb3b8d",
@@ -2586,6 +2883,17 @@
       "total_riffs": 943
     },
     {
+      "band_id": "bandc4a08d2fca",
+      "invite_id": "43bdef539541cfd515d88295980066853dfb2008d1d86c8d3c215596783d3afb",
+      "jam_name": "Jammer Inspo: hollohead",
+      "earliest_user": "hollohead",
+      "latest_user": "jake909",
+      "earliest_unixtime": 1652015623,
+      "latest_unixtime": 1654463750,
+      "estimated_days_of_activity": 28,
+      "total_riffs": 2141
+    },
+    {
       "band_id": "bandad59ee2ca9",
       "invite_id": "442d1ecd71f7ff9652a64bdec7b99ef2627e57754504e17e145f355f5de2292f",
       "jam_name": "What?",
@@ -2645,11 +2953,11 @@
       "invite_id": "454558503e9d9910d1a630e1f1c7ffa8c854670ddae10aa6747966815994e5cd",
       "jam_name": "808s and Hi Hats",
       "earliest_user": "echolox",
-      "latest_user": "panjawel",
+      "latest_user": "pre5et",
       "earliest_unixtime": 1605525473,
-      "latest_unixtime": 1607386526,
-      "estimated_days_of_activity": 21,
-      "total_riffs": 1118
+      "latest_unixtime": 1658111384,
+      "estimated_days_of_activity": 608,
+      "total_riffs": 1123
     },
     {
       "band_id": "bandcc14c63d25",
@@ -2682,7 +2990,7 @@
       "earliest_unixtime": 1600674452,
       "latest_unixtime": 1603732492,
       "estimated_days_of_activity": 35,
-      "total_riffs": 1920
+      "total_riffs": 1922
     },
     {
       "band_id": "bandba722cbd5a",
@@ -2707,6 +3015,39 @@
       "total_riffs": 154
     },
     {
+      "band_id": "band99fee1959b",
+      "invite_id": "45c517bee379530a3213fb97d0deb46bd4a595e97c8eefb9f698d70d3cdd7907",
+      "jam_name": "Big Beat Manifesto",
+      "earliest_user": "sturmmaschine",
+      "latest_user": "jaybishxp",
+      "earliest_unixtime": 1654332642,
+      "latest_unixtime": 1658221380,
+      "estimated_days_of_activity": 45,
+      "total_riffs": 5438
+    },
+    {
+      "band_id": "band1545ec2aec",
+      "invite_id": "45cd350c575fda6df425c6bd9a1b4a8525fc8718b21af544d05e92ed92650074",
+      "jam_name": "Jammer Inspo: herzihelmut",
+      "earliest_user": "herzihelmut",
+      "latest_user": "lindome",
+      "earliest_unixtime": 1646944841,
+      "latest_unixtime": 1654764678,
+      "estimated_days_of_activity": 90,
+      "total_riffs": 1070
+    },
+    {
+      "band_id": "band492d2fbc20",
+      "invite_id": "4615d50f84378687633eb80b45423bdc054714e6a21e6ede5f944da4d0c68783",
+      "jam_name": "Remix Inspo: TPJ",
+      "earliest_user": "oddstar",
+      "latest_user": "slowgaffle",
+      "earliest_unixtime": 1646971569,
+      "latest_unixtime": 1653049871,
+      "estimated_days_of_activity": 70,
+      "total_riffs": 9083
+    },
+    {
       "band_id": "bandcfcd59c74e",
       "invite_id": "4635c3fa529a36e2f4a01b0b8fa6a660e884e2f55c99e4b9c0b097d74fad7e47",
       "jam_name": "Deep Groove",
@@ -2729,6 +3070,17 @@
       "total_riffs": 804
     },
     {
+      "band_id": "banda909a35431",
+      "invite_id": "46e7c4d6255c7a6651438ac8c11ef907cccc42a9cf5f419fc755ff53e0765042",
+      "jam_name": "Acoustic Oceans",
+      "earliest_user": "lovemode",
+      "latest_user": "ignatz",
+      "earliest_unixtime": 1646573261,
+      "latest_unixtime": 1650281540,
+      "estimated_days_of_activity": 42,
+      "total_riffs": 4373
+    },
+    {
       "band_id": "band2fd53e4195",
       "invite_id": "46e983cc18b438fcc624d4a95f30674d8724aeabee5f963c52934cec4bda4db1",
       "jam_name": "june jam 2",
@@ -2744,11 +3096,11 @@
       "invite_id": "473d5c260e599daaec9e1d4d0f29776d57f9f80ebf522ed538fc9e9e24e7064b",
       "jam_name": "Somber walk through the forest",
       "earliest_user": "ios_nudist",
-      "latest_user": "bruceyp",
+      "latest_user": "afterlife",
       "earliest_unixtime": 1579639303,
-      "latest_unixtime": 1581786263,
-      "estimated_days_of_activity": 24,
-      "total_riffs": 170
+      "latest_unixtime": 1658623548,
+      "estimated_days_of_activity": 914,
+      "total_riffs": 197
     },
     {
       "band_id": "bandf5be28b69d",
@@ -2982,6 +3334,17 @@
       "total_riffs": 1364
     },
     {
+      "band_id": "bandfa47977112",
+      "invite_id": "4ab22354119b8a6b8b7777b491a78f27efd07457b82be7e15ec9c49e61656685",
+      "jam_name": "Beginner Jam #10",
+      "earliest_user": "applejaxsx",
+      "latest_user": "lindome",
+      "earliest_unixtime": 1649256576,
+      "latest_unixtime": 1654764895,
+      "estimated_days_of_activity": 63,
+      "total_riffs": 4745
+    },
+    {
       "band_id": "band15e089ce32",
       "invite_id": "4ad2cddfe28a07b3a59678c010baa0b3ccdae6830d42d788fcd3952901c0f989",
       "jam_name": "sleepy cat",
@@ -2991,6 +3354,17 @@
       "latest_unixtime": 1626211853,
       "estimated_days_of_activity": 240,
       "total_riffs": 50
+    },
+    {
+      "band_id": "band33c4a262b0",
+      "invite_id": "4aec55c9a07d4aeff9546711c442e12083a09d2096a56a311fcd83c8bf68da94",
+      "jam_name": "Jammer Inspo: Thevoidinclusive",
+      "earliest_user": "thevoidinclusive",
+      "latest_user": "aryayawe",
+      "earliest_unixtime": 1654444642,
+      "latest_unixtime": 1656334675,
+      "estimated_days_of_activity": 21,
+      "total_riffs": 1483
     },
     {
       "band_id": "band3d03f4036c",
@@ -3120,9 +3494,9 @@
       "earliest_user": "theau",
       "latest_user": "pre5et",
       "earliest_unixtime": 1570294049,
-      "latest_unixtime": 1650251815,
-      "estimated_days_of_activity": 925,
-      "total_riffs": 765
+      "latest_unixtime": 1660183963,
+      "estimated_days_of_activity": 1040,
+      "total_riffs": 869
     },
     {
       "band_id": "bandf5d04008f7",
@@ -3164,9 +3538,9 @@
       "earliest_user": "echolox",
       "latest_user": "alef",
       "earliest_unixtime": 1599575664,
-      "latest_unixtime": 1649595923,
-      "estimated_days_of_activity": 578,
-      "total_riffs": 11235
+      "latest_unixtime": 1663155855,
+      "estimated_days_of_activity": 735,
+      "total_riffs": 11295
     },
     {
       "band_id": "band7065758864",
@@ -3184,11 +3558,22 @@
       "invite_id": "4f7ca36c113a765be3dd3fc65921a5cfcd41553b5a9ee1e416a7df88eb640da1",
       "jam_name": "BreakFastClub",
       "earliest_user": "tompeak",
-      "latest_user": "tompeak",
+      "latest_user": "houdini4",
       "earliest_unixtime": 1616521513,
-      "latest_unixtime": 1653228958,
-      "estimated_days_of_activity": 424,
-      "total_riffs": 2000
+      "latest_unixtime": 1658172060,
+      "estimated_days_of_activity": 482,
+      "total_riffs": 2027
+    },
+    {
+      "band_id": "band0767fe5be3",
+      "invite_id": "4f7f0538f41e81c307ee583ff71b1fe3d1064bb407a3e73bed895ac951812aa1",
+      "jam_name": "Lofi Haze",
+      "earliest_user": "kismet",
+      "latest_user": "feloniousmonk",
+      "earliest_unixtime": 1656892383,
+      "latest_unixtime": 1662733882,
+      "estimated_days_of_activity": 67,
+      "total_riffs": 11359
     },
     {
       "band_id": "band7e72d421a8",
@@ -3211,6 +3596,28 @@
       "latest_unixtime": 1635912073,
       "estimated_days_of_activity": 42,
       "total_riffs": 2069
+    },
+    {
+      "band_id": "band35df3b5d00",
+      "invite_id": "4ff6f98862137abd00cd9fa5d2dacfb59a7acaf799ee86e1bdd7475495b155f7",
+      "jam_name": "Kawaii Hyperpop",
+      "earliest_user": "kismet",
+      "latest_user": "failsafe",
+      "earliest_unixtime": 1655296730,
+      "latest_unixtime": 1658220390,
+      "estimated_days_of_activity": 33,
+      "total_riffs": 3652
+    },
+    {
+      "band_id": "band016acdb282",
+      "invite_id": "501fd2954a64dfd301ea806f9e4f96482d7356fb0312492d8ee37d94a25a67e2",
+      "jam_name": "Bermuda Triangle",
+      "earliest_user": "lovemode",
+      "latest_user": "alef",
+      "earliest_unixtime": 1649792362,
+      "latest_unixtime": 1660806900,
+      "estimated_days_of_activity": 127,
+      "total_riffs": 7137
     },
     {
       "band_id": "band36a15cb319",
@@ -3309,7 +3716,7 @@
       "earliest_unixtime": 1632418504,
       "latest_unixtime": 1635192585,
       "estimated_days_of_activity": 32,
-      "total_riffs": 4615
+      "total_riffs": 4616
     },
     {
       "band_id": "banda56e80a628",
@@ -3411,6 +3818,17 @@
       "total_riffs": 292
     },
     {
+      "band_id": "band7d445e36ff",
+      "invite_id": "544bdef7a002b461d11585846f450fe7443c1a92dadd3de142679ec54079ca3b",
+      "jam_name": "Summer Heatwave",
+      "earliest_user": "kismet",
+      "latest_user": "feloniousmonk",
+      "earliest_unixtime": 1658242482,
+      "latest_unixtime": 1662593768,
+      "estimated_days_of_activity": 50,
+      "total_riffs": 5310
+    },
+    {
       "band_id": "banda2042dd0b5",
       "invite_id": "54791758ec8f42381d7a8d54be488ee91d6c729acf11bba5a92aa82e464814d1",
       "jam_name": "Afro Dizzy Ack",
@@ -3437,11 +3855,11 @@
       "invite_id": "54be855f1c82427f403e81e030daa82a81ffd795917ae67894044843774f1e75",
       "jam_name": "4am In The Club",
       "earliest_user": "endlessslive",
-      "latest_user": "jonh2o",
+      "latest_user": "pre5et",
       "earliest_unixtime": 1626942210,
-      "latest_unixtime": 1632550773,
-      "estimated_days_of_activity": 64,
-      "total_riffs": 26925
+      "latest_unixtime": 1659580404,
+      "estimated_days_of_activity": 377,
+      "total_riffs": 26926
     },
     {
       "band_id": "band39d1145e9b",
@@ -3525,11 +3943,11 @@
       "invite_id": "5650fd3247e8288684247247a834626411adface2dba495b6006cf0a1a9e1a96",
       "jam_name": "Night Drive",
       "earliest_user": "echolox",
-      "latest_user": "seasickcookie",
+      "latest_user": "pre5et",
       "earliest_unixtime": 1615990445,
-      "latest_unixtime": 1619562576,
-      "estimated_days_of_activity": 41,
-      "total_riffs": 7170
+      "latest_unixtime": 1659846956,
+      "estimated_days_of_activity": 507,
+      "total_riffs": 7174
     },
     {
       "band_id": "band0e4cff76ce",
@@ -3565,6 +3983,17 @@
       "total_riffs": 1518
     },
     {
+      "band_id": "band4edbc595dd",
+      "invite_id": "56bf6374ad2dd26befabaef17ef66c0e534a2500c9a920b1c5ef28920c22f8b0",
+      "jam_name": "Broken Chords",
+      "earliest_user": "kismet",
+      "latest_user": "oldboymccoy",
+      "earliest_unixtime": 1656892383,
+      "latest_unixtime": 1663280605,
+      "estimated_days_of_activity": 73,
+      "total_riffs": 3610
+    },
+    {
       "band_id": "band8092a9cf1b",
       "invite_id": "56f5396d10ddc18fbe34d1bb2d6c71a1a0b8935593089b7bbc690f01593fc292",
       "jam_name": "Complextro Catastrophe",
@@ -3574,6 +4003,17 @@
       "latest_unixtime": 1588630634,
       "estimated_days_of_activity": 46,
       "total_riffs": 2109
+    },
+    {
+      "band_id": "band4802eac90a",
+      "invite_id": "5768ffdc595477c2e2db0e90dd5bef896db7b59546e2b66cf12d8627e1dee6b",
+      "jam_name": "Discotheque",
+      "earliest_user": "gonzooin",
+      "latest_user": "lionelricht",
+      "earliest_unixtime": 1658253389,
+      "latest_unixtime": 1663363062,
+      "estimated_days_of_activity": 59,
+      "total_riffs": 8776
     },
     {
       "band_id": "band76669bbc17",
@@ -3595,7 +4035,7 @@
       "earliest_unixtime": 1590780288,
       "latest_unixtime": 1632546206,
       "estimated_days_of_activity": 483,
-      "total_riffs": 35
+      "total_riffs": 37
     },
     {
       "band_id": "band1b6a36f95c",
@@ -3618,6 +4058,17 @@
       "latest_unixtime": 1639945842,
       "estimated_days_of_activity": 622,
       "total_riffs": 544
+    },
+    {
+      "band_id": "band059f98cd76",
+      "invite_id": "5810e2d356b7a2875ad207fe1b21e29dac5aeaeb5c3ed701f36b6dae44090185",
+      "jam_name": "BASSLINE CIRCUS ",
+      "earliest_user": "fancyspectacles",
+      "latest_user": "lionleeruby",
+      "earliest_unixtime": 1643971166,
+      "latest_unixtime": 1650503062,
+      "estimated_days_of_activity": 75,
+      "total_riffs": 8603
     },
     {
       "band_id": "bandac8738b944",
@@ -3675,6 +4126,17 @@
       "total_riffs": 2766
     },
     {
+      "band_id": "band38d39da9f9",
+      "invite_id": "58e4de6916bd075310f378fbf2ace4065e62072799fda993bd8bc1b898670b61",
+      "jam_name": "Industrial Breaks",
+      "earliest_user": "kismet",
+      "latest_user": "c1em06",
+      "earliest_unixtime": 1656892383,
+      "latest_unixtime": 1662732426,
+      "estimated_days_of_activity": 67,
+      "total_riffs": 5430
+    },
+    {
       "band_id": "band9c846e1dc0",
       "invite_id": "58e583080600bb9113c8e8a1bec29bd330d1fb633146a6a2d36776ba1812f9bb",
       "jam_name": "Sax Sample",
@@ -3728,6 +4190,17 @@
       "latest_unixtime": 1636819909,
       "estimated_days_of_activity": 46,
       "total_riffs": 3773
+    },
+    {
+      "band_id": "band570a96da44",
+      "invite_id": "599619e5b01d7f7d4a8613e47039c4df29c7aca026542cad3e66cc689df713d2",
+      "jam_name": "Esssfest",
+      "earliest_user": "kismet",
+      "latest_user": "dasegonz",
+      "earliest_unixtime": 1656039277,
+      "latest_unixtime": 1656459030,
+      "estimated_days_of_activity": 4,
+      "total_riffs": 5920
     },
     {
       "band_id": "band38526cbb70",
@@ -3785,6 +4258,17 @@
       "total_riffs": 83
     },
     {
+      "band_id": "band11306bf2b5",
+      "invite_id": "5b2c995761585bbc8130234d4f41280254f9315b350dccb91b44e4b5061eebb7",
+      "jam_name": "Medieval Quest: Beat a Path to Essstopia!",
+      "earliest_user": "lovemode",
+      "latest_user": "fatribz",
+      "earliest_unixtime": 1634153364,
+      "latest_unixtime": 1652915496,
+      "estimated_days_of_activity": 217,
+      "total_riffs": 4794
+    },
+    {
       "band_id": "bandb4741cc0c8",
       "invite_id": "5b9986660cfbf6c3c78f44a506aaf2e314b11bde2f44f464c07049d7d71b1712",
       "jam_name": "Night Drive - On the run",
@@ -3822,11 +4306,11 @@
       "invite_id": "5bf1cb9255cd3811064f15433b1b4d2a82e7e014e74b6b37d6a98503058a062",
       "jam_name": "Space Drones",
       "earliest_user": "echolox",
-      "latest_user": "nxvhmusic",
+      "latest_user": "pre5et",
       "earliest_unixtime": 1612217469,
-      "latest_unixtime": 1616559824,
-      "estimated_days_of_activity": 50,
-      "total_riffs": 3196
+      "latest_unixtime": 1659807369,
+      "estimated_days_of_activity": 550,
+      "total_riffs": 3200
     },
     {
       "band_id": "bandb9eb4938e8",
@@ -3838,6 +4322,28 @@
       "latest_unixtime": 1586007191,
       "estimated_days_of_activity": 3,
       "total_riffs": 63
+    },
+    {
+      "band_id": "band149d4f97f3",
+      "invite_id": "5bfecb451c27aaa6ffd4bb60cb84d43b5bbca0d860358926e051f9b9a8901666",
+      "jam_name": "From Another Planet",
+      "earliest_user": "kismet",
+      "latest_user": "hulbz",
+      "earliest_unixtime": 1658242142,
+      "latest_unixtime": 1662035662,
+      "estimated_days_of_activity": 43,
+      "total_riffs": 19280
+    },
+    {
+      "band_id": "bandcbf81da8ca",
+      "invite_id": "5c0a061886649001c0a1f0dfac315ed36f74d23fd019752fe87f0fbba2fdee00",
+      "jam_name": "Shamanics LiveStreaming Jam ",
+      "earliest_user": "vonbongen",
+      "latest_user": "shamanicbeatbox",
+      "earliest_unixtime": 1626465569,
+      "latest_unixtime": 1658164132,
+      "estimated_days_of_activity": 366,
+      "total_riffs": 933
     },
     {
       "band_id": "band3a5ba4dc0e",
@@ -3910,11 +4416,11 @@
       "invite_id": "5d3417431e3793a6f973b82285304d5c515582831a22a05518239176780db527",
       "jam_name": "Abandoned Factory",
       "earliest_user": "echolox",
-      "latest_user": "joshjosh",
+      "latest_user": "pre5et",
       "earliest_unixtime": 1603185312,
-      "latest_unixtime": 1605653806,
-      "estimated_days_of_activity": 28,
-      "total_riffs": 2580
+      "latest_unixtime": 1659820225,
+      "estimated_days_of_activity": 655,
+      "total_riffs": 2585
     },
     {
       "band_id": "banda0ea3aeb97",
@@ -3939,15 +4445,26 @@
       "total_riffs": 69
     },
     {
+      "band_id": "banda71ed5dce0",
+      "invite_id": "5dac3da9c4f20218864470fa3fb0c33723abb4907e0d4cc603996d21b3784573",
+      "jam_name": "A Little Waltz",
+      "earliest_user": "kismet",
+      "latest_user": "thevoidinclusive",
+      "earliest_unixtime": 1655258595,
+      "latest_unixtime": 1658419131,
+      "estimated_days_of_activity": 36,
+      "total_riffs": 2381
+    },
+    {
       "band_id": "bandf5cd8f0a20",
       "invite_id": "5db22e8e5e4ee572700ac61c340ec0617b9e45d71764728dd6ed5e141d48fa0f",
       "jam_name": "Aethereal Forest",
       "earliest_user": "lempamo",
       "latest_user": "pre5et",
       "earliest_unixtime": 1607310413,
-      "latest_unixtime": 1645392373,
-      "estimated_days_of_activity": 440,
-      "total_riffs": 5990
+      "latest_unixtime": 1659820625,
+      "estimated_days_of_activity": 607,
+      "total_riffs": 5991
     },
     {
       "band_id": "band1e53d1584b",
@@ -3998,22 +4515,33 @@
       "invite_id": "5e9326870862e4e50f30d84342935b99cd87e9fc98aed79f2c6587fbba2b2923",
       "jam_name": "Ambient Expansion Pt. 2",
       "earliest_user": "bunjumun",
-      "latest_user": "jensfovsholm",
+      "latest_user": "pre5et",
       "earliest_unixtime": 1587332017,
-      "latest_unixtime": 1626814813,
-      "estimated_days_of_activity": 456,
-      "total_riffs": 7199
+      "latest_unixtime": 1657767817,
+      "estimated_days_of_activity": 815,
+      "total_riffs": 7202
+    },
+    {
+      "band_id": "band340163a2a8",
+      "invite_id": "5ebb55b575ac941de83bebaf6da377ef23dab075a6d1cff6b6f178b9fa68af3b",
+      "jam_name": "Jammer Inspo: Dreamo_",
+      "earliest_user": "dreamo__",
+      "latest_user": "dreamo__",
+      "earliest_unixtime": 1653502508,
+      "latest_unixtime": 1657562996,
+      "estimated_days_of_activity": 46,
+      "total_riffs": 622
     },
     {
       "band_id": "bandc39ed7b8ea",
       "invite_id": "5ec94da91886cf9083fc2a834184c180ec0564e0f36bc8f2b713017686b51bcc",
       "jam_name": "House Party",
       "earliest_user": "echolox",
-      "latest_user": "jangomango",
+      "latest_user": "pre5et",
       "earliest_unixtime": 1588681771,
-      "latest_unixtime": 1590592287,
-      "estimated_days_of_activity": 22,
-      "total_riffs": 10946
+      "latest_unixtime": 1658108684,
+      "estimated_days_of_activity": 803,
+      "total_riffs": 10956
     },
     {
       "band_id": "band8acc4ba0fa",
@@ -4068,7 +4596,7 @@
       "earliest_unixtime": 1607341616,
       "latest_unixtime": 1626958914,
       "estimated_days_of_activity": 227,
-      "total_riffs": 38524
+      "total_riffs": 38525
     },
     {
       "band_id": "band353cdfb36b",
@@ -4110,9 +4638,9 @@
       "earliest_user": "lovemode",
       "latest_user": "lionelricht",
       "earliest_unixtime": 1636226845,
-      "latest_unixtime": 1652040831,
-      "estimated_days_of_activity": 183,
-      "total_riffs": 43811
+      "latest_unixtime": 1662762867,
+      "estimated_days_of_activity": 307,
+      "total_riffs": 43982
     },
     {
       "band_id": "banddd82e899ed",
@@ -4207,11 +4735,11 @@
       "invite_id": "6469c2a1c1038c4a31a11f8c457f287a2ada07723cd5c9e13c616ec2bd2f12c4",
       "jam_name": "Lo-Fi Beats to study to",
       "earliest_user": "echolox",
-      "latest_user": "pre5et",
+      "latest_user": "p53ud0",
       "earliest_unixtime": 1586619300,
-      "latest_unixtime": 1635575981,
-      "estimated_days_of_activity": 566,
-      "total_riffs": 12295
+      "latest_unixtime": 1660669206,
+      "estimated_days_of_activity": 857,
+      "total_riffs": 12336
     },
     {
       "band_id": "band241b7f6fbb",
@@ -4223,6 +4751,28 @@
       "latest_unixtime": 1592022090,
       "estimated_days_of_activity": 0,
       "total_riffs": 762
+    },
+    {
+      "band_id": "band1a8e485c9e",
+      "invite_id": "64c7624a8744696fb151b0512ecf3c6e4ad2947a94f0875acdcb68aea2bd0bde",
+      "jam_name": "Remix Inspo: caerickson",
+      "earliest_user": "applejaxsx",
+      "latest_user": "nathanielfowles",
+      "earliest_unixtime": 1647319087,
+      "latest_unixtime": 1655033289,
+      "estimated_days_of_activity": 89,
+      "total_riffs": 3118
+    },
+    {
+      "band_id": "bandc272560d55",
+      "invite_id": "64e5261b8bfd79cce8642bc3dbe6377a64d711c6869cab62a42bb750eb1f782f",
+      "jam_name": "Bangers & KeyMash",
+      "earliest_user": "marky2coats",
+      "latest_user": "tiziano",
+      "earliest_unixtime": 1646518973,
+      "latest_unixtime": 1662391377,
+      "estimated_days_of_activity": 183,
+      "total_riffs": 8918
     },
     {
       "band_id": "band1ed709408a",
@@ -4269,6 +4819,17 @@
       "total_riffs": 1212
     },
     {
+      "band_id": "band2cccde5178",
+      "invite_id": "656e8cff806c8d5cab9238dc729c35b8ac71281db2f2dfef6cc42f496c8c37b0",
+      "jam_name": "Sleeplesss Techno",
+      "earliest_user": "shapednoise",
+      "latest_user": "shapednoise",
+      "earliest_unixtime": 1646518214,
+      "latest_unixtime": 1658808112,
+      "estimated_days_of_activity": 142,
+      "total_riffs": 24070
+    },
+    {
       "band_id": "band9c026279b1",
       "invite_id": "65a683bbf03e565c890023fedf3dfca12a0cf56c0ec77733c2b21465731e8054",
       "jam_name": "Vocals only",
@@ -4277,18 +4838,18 @@
       "earliest_unixtime": 1604312969,
       "latest_unixtime": 1610949990,
       "estimated_days_of_activity": 76,
-      "total_riffs": 751
+      "total_riffs": 753
     },
     {
       "band_id": "band144c89c67f",
       "invite_id": "65bb2c3572439f335f4646729122c6441f2ad7ec3bacf6fdff7f817109753fc3",
       "jam_name": "Glitch Perfect",
       "earliest_user": "echolox",
-      "latest_user": "ishaniii",
+      "latest_user": "njlang",
       "earliest_unixtime": 1596442905,
-      "latest_unixtime": 1648809332,
-      "estimated_days_of_activity": 606,
-      "total_riffs": 17818
+      "latest_unixtime": 1660787497,
+      "estimated_days_of_activity": 744,
+      "total_riffs": 17838
     },
     {
       "band_id": "band9a8984ee3a",
@@ -4311,6 +4872,17 @@
       "latest_unixtime": 1596807280,
       "estimated_days_of_activity": 3,
       "total_riffs": 622
+    },
+    {
+      "band_id": "bandf82955738c",
+      "invite_id": "65da1c8e075f2c9e819e6c594a363c3fa1c31d11b1c4e570f6bc5a10fa0d4da7",
+      "jam_name": "Jammer Inspo: Honeydisco",
+      "earliest_user": "steug135",
+      "latest_user": "swordnspade",
+      "earliest_unixtime": 1654464677,
+      "latest_unixtime": 1656463066,
+      "estimated_days_of_activity": 23,
+      "total_riffs": 4863
     },
     {
       "band_id": "banda05a3bea42",
@@ -4361,11 +4933,11 @@
       "invite_id": "66a41514471171f0099c00a1f0e6c02919609c5da50f47f7ef172b828f3991d5",
       "jam_name": "Ambient Expansion",
       "earliest_user": "sephrim",
-      "latest_user": "cng303",
+      "latest_user": "pre5et",
       "earliest_unixtime": 1585682848,
-      "latest_unixtime": 1588287108,
-      "estimated_days_of_activity": 30,
-      "total_riffs": 4672
+      "latest_unixtime": 1658108424,
+      "estimated_days_of_activity": 838,
+      "total_riffs": 4674
     },
     {
       "band_id": "band60ebc0e871",
@@ -4429,9 +5001,20 @@
       "earliest_user": "marky2coats",
       "latest_user": "slowgaffle",
       "earliest_unixtime": 1593812231,
-      "latest_unixtime": 1654972432,
-      "estimated_days_of_activity": 707,
-      "total_riffs": 1848
+      "latest_unixtime": 1663872692,
+      "estimated_days_of_activity": 810,
+      "total_riffs": 1865
+    },
+    {
+      "band_id": "bandbce88201ae",
+      "invite_id": "67e28deb3bac0f6ec5819b1dd372fcc7a4157d1394a8aca5e6392ef2fd7bd0f9",
+      "jam_name": "Jammer Inspo: Lwlkc",
+      "earliest_user": "lwlkc",
+      "latest_user": "steven91",
+      "earliest_unixtime": 1655725708,
+      "latest_unixtime": 1661958005,
+      "estimated_days_of_activity": 72,
+      "total_riffs": 5767
     },
     {
       "band_id": "band3a20036d91",
@@ -4467,6 +5050,17 @@
       "total_riffs": 3480
     },
     {
+      "band_id": "band329348268e",
+      "invite_id": "68ed1a7326d3244e7fce7fe3c048f0f95db2380d5fed1f6553917954f182bcf9",
+      "jam_name": "TeKnoSomniA",
+      "earliest_user": "steug135",
+      "latest_user": "gitpush",
+      "earliest_unixtime": 1654464677,
+      "latest_unixtime": 1655968477,
+      "estimated_days_of_activity": 17,
+      "total_riffs": 5868
+    },
+    {
       "band_id": "band5d8e02c35d",
       "invite_id": "68ee4a5eb797caab552f81ffaab3c12bec78b4854e3a3d9047ffdf11070532b",
       "jam_name": "Desert Rock City",
@@ -4478,6 +5072,17 @@
       "total_riffs": 301
     },
     {
+      "band_id": "bandf602702ba0",
+      "invite_id": "691b317e86e67e1ff0e5a5ca825d5081dc27425c0915355f91d211711855d46c",
+      "jam_name": "Grunge Rock",
+      "earliest_user": "kismet",
+      "latest_user": "tulio",
+      "earliest_unixtime": 1655296730,
+      "latest_unixtime": 1658232052,
+      "estimated_days_of_activity": 33,
+      "total_riffs": 1030
+    },
+    {
       "band_id": "band1f44f4b322",
       "invite_id": "69225d5d8d773381512256fc7b554c860c856413d3793e7649e65ace4089e357",
       "jam_name": "Remix Inspo: Firephly",
@@ -4487,6 +5092,17 @@
       "latest_unixtime": 1640861112,
       "estimated_days_of_activity": 52,
       "total_riffs": 4970
+    },
+    {
+      "band_id": "bandc4055fccab",
+      "invite_id": "69633db4769e72e7a2ad3d9607cd6b672f037cc4e4dd15ea255e988184b1329d",
+      "jam_name": "Remix Inspo: n0face",
+      "earliest_user": "n0face",
+      "latest_user": "xbackfirex",
+      "earliest_unixtime": 1645804952,
+      "latest_unixtime": 1657983627,
+      "estimated_days_of_activity": 140,
+      "total_riffs": 4397
     },
     {
       "band_id": "band0a80543b66",
@@ -4552,7 +5168,7 @@
       "earliest_unixtime": 1590987456,
       "latest_unixtime": 1628637559,
       "estimated_days_of_activity": 435,
-      "total_riffs": 4661
+      "total_riffs": 4662
     },
     {
       "band_id": "bandd16756fa5c",
@@ -4575,6 +5191,17 @@
       "latest_unixtime": 1635572717,
       "estimated_days_of_activity": 577,
       "total_riffs": 101
+    },
+    {
+      "band_id": "bandccf91cb20b",
+      "invite_id": "6a4fc3ccde791cc6fb27d6b6974d8a312bd9b2903e77e90e043f02b4a003df48",
+      "jam_name": "Remix Inspo: Andymac",
+      "earliest_user": "fancyspectacles",
+      "latest_user": "badcharacter13",
+      "earliest_unixtime": 1647763765,
+      "latest_unixtime": 1652631247,
+      "estimated_days_of_activity": 56,
+      "total_riffs": 6697
     },
     {
       "band_id": "band59b5a769cf",
@@ -4621,6 +5248,17 @@
       "total_riffs": 256
     },
     {
+      "band_id": "band94d6bec0b6",
+      "invite_id": "6b6f8f6d5ff0f04c8a5b3763a1eb25532c75964f3e2c1add363d346339a8534b",
+      "jam_name": "Gym Motivation",
+      "earliest_user": "lovemode",
+      "latest_user": "raptorjesus42",
+      "earliest_unixtime": 1644838091,
+      "latest_unixtime": 1649768018,
+      "estimated_days_of_activity": 57,
+      "total_riffs": 3720
+    },
+    {
       "band_id": "bandd86e8d6b7c",
       "invite_id": "6b7f958f3571cfda1b13a0330b0ea6e5848baf6ac8e81557445795e0404766e7",
       "jam_name": "Morning Melancholia",
@@ -4647,22 +5285,22 @@
       "invite_id": "6b9fd3a6b65270800111150cceea90fd688e46f71c86b03775d6fcbd9a9a3f8",
       "jam_name": "Cybertronics",
       "earliest_user": "echolox",
-      "latest_user": "sadza",
+      "latest_user": "pre5et",
       "earliest_unixtime": 1600070610,
-      "latest_unixtime": 1626119441,
-      "estimated_days_of_activity": 301,
-      "total_riffs": 3501
+      "latest_unixtime": 1659862913,
+      "estimated_days_of_activity": 692,
+      "total_riffs": 3520
     },
     {
       "band_id": "band256ebed606",
       "invite_id": "6bbf6163fdaf3e724c5570d771f579e6dfe7c5144a21687b51a738fb2529169f",
       "jam_name": "Glitch Factory",
       "earliest_user": "echolox",
-      "latest_user": "dsorce",
+      "latest_user": "pre5et",
       "earliest_unixtime": 1613729876,
-      "latest_unixtime": 1618209521,
-      "estimated_days_of_activity": 51,
-      "total_riffs": 7517
+      "latest_unixtime": 1659846743,
+      "estimated_days_of_activity": 533,
+      "total_riffs": 7522
     },
     {
       "band_id": "band1faeba4ece",
@@ -4702,11 +5340,11 @@
       "invite_id": "6c1e3478d23d853514d22200bd73952c8685503863d395e11ff04a6553d09136",
       "jam_name": "Catedral Guadalajara ",
       "earliest_user": "iprogue",
-      "latest_user": "iprogue",
+      "latest_user": "ddelunau112",
       "earliest_unixtime": 1623632040,
-      "latest_unixtime": 1623636902,
-      "estimated_days_of_activity": 0,
-      "total_riffs": 105
+      "latest_unixtime": 1655321166,
+      "estimated_days_of_activity": 366,
+      "total_riffs": 115
     },
     {
       "band_id": "band1d8ca5932c",
@@ -4781,9 +5419,9 @@
       "earliest_user": "exoticwes",
       "latest_user": "foid",
       "earliest_unixtime": 1641590782,
-      "latest_unixtime": 1650314203,
-      "estimated_days_of_activity": 101,
-      "total_riffs": 6510
+      "latest_unixtime": 1663610946,
+      "estimated_days_of_activity": 254,
+      "total_riffs": 6631
     },
     {
       "band_id": "band8c4d4a415b",
@@ -4834,11 +5472,11 @@
       "invite_id": "6e894d000aae49bc492755cc658ab914d288c38b020bf8817a8cb58434c47747",
       "jam_name": "Drumless",
       "earliest_user": "mamboo",
-      "latest_user": "honeydisco",
+      "latest_user": "pre5et",
       "earliest_unixtime": 1615433489,
-      "latest_unixtime": 1621324284,
-      "estimated_days_of_activity": 68,
-      "total_riffs": 2747
+      "latest_unixtime": 1659847731,
+      "estimated_days_of_activity": 514,
+      "total_riffs": 2754
     },
     {
       "band_id": "band588a33edbb",
@@ -4856,11 +5494,11 @@
       "invite_id": "6ebb1ebec052a816aeb5e2ed653f3a64c1e3766bc9ad963d97100939d474f4bf",
       "jam_name": "Halftime Wobbles",
       "earliest_user": "echolox",
-      "latest_user": "richielou",
+      "latest_user": "pre5et",
       "earliest_unixtime": 1589113777,
-      "latest_unixtime": 1591822966,
-      "estimated_days_of_activity": 31,
-      "total_riffs": 1756
+      "latest_unixtime": 1658109180,
+      "estimated_days_of_activity": 798,
+      "total_riffs": 1775
     },
     {
       "band_id": "band559cbf86f4",
@@ -4871,7 +5509,7 @@
       "earliest_unixtime": 1636570677,
       "latest_unixtime": 1646256383,
       "estimated_days_of_activity": 112,
-      "total_riffs": 8391
+      "total_riffs": 8394
     },
     {
       "band_id": "band2bb80c5318",
@@ -4929,6 +5567,17 @@
       "total_riffs": 50
     },
     {
+      "band_id": "band7db520a766",
+      "invite_id": "6f69d69de16bb8b9e272e0f825f0bf580d320650dbf88b896c1cd805276fa085",
+      "jam_name": "Beginner Jam #12",
+      "earliest_user": "gstnjk",
+      "latest_user": "truebluetrue",
+      "earliest_unixtime": 1656868809,
+      "latest_unixtime": 1663440413,
+      "estimated_days_of_activity": 76,
+      "total_riffs": 7339
+    },
+    {
       "band_id": "band5fb699eb53",
       "invite_id": "6f6e218ed2993263df9e7f0c4b3339d79978b58cf9a7145cbda8c7af4708392e",
       "jam_name": "Slow Down and Relax",
@@ -4984,6 +5633,17 @@
       "total_riffs": 1805
     },
     {
+      "band_id": "band983a5d1db4",
+      "invite_id": "711ec89e435656e459b5053238e18941133035bc1a1c3dc36e057fa82862443d",
+      "jam_name": "Insert Coin",
+      "earliest_user": "littlewing",
+      "latest_user": "peactica22",
+      "earliest_unixtime": 1654519378,
+      "latest_unixtime": 1662608493,
+      "estimated_days_of_activity": 93,
+      "total_riffs": 5598
+    },
+    {
       "band_id": "band83f1b4c200",
       "invite_id": "71552bacd7f00e2137176328560ea5e929eb6741f0895760ac50a46f3af3d580",
       "jam_name": "Pre-Skool Kidstep",
@@ -5028,6 +5688,17 @@
       "total_riffs": 2087
     },
     {
+      "band_id": "bandc3b5547613",
+      "invite_id": "71914326b642b2de2230be986b435b61d49657c5e42283f7b0150a7f8cdcf654",
+      "jam_name": "NOHAM | haQ attaQ",
+      "earliest_user": "jakob_haq",
+      "latest_user": "surrealchemist",
+      "earliest_unixtime": 1622053238,
+      "latest_unixtime": 1626369612,
+      "estimated_days_of_activity": 49,
+      "total_riffs": 318
+    },
+    {
       "band_id": "banda3d8120aa9",
       "invite_id": "71e6181aff764f3e4afc46ac601d6cd4da0c77a127d9672e2cea9304c2dd8eaa",
       "jam_name": "Funk Hop",
@@ -5050,6 +5721,17 @@
       "total_riffs": 13334
     },
     {
+      "band_id": "band784fab98d8",
+      "invite_id": "724ce623f477b93aed4dafbf7bdefa856ba70514b2ac732b868133952332ca0d",
+      "jam_name": "Ear Candy",
+      "earliest_user": "kismet",
+      "latest_user": "pre5et",
+      "earliest_unixtime": 1655296944,
+      "latest_unixtime": 1659908023,
+      "estimated_days_of_activity": 53,
+      "total_riffs": 5884
+    },
+    {
       "band_id": "band7ede3db0ae",
       "invite_id": "727cb98c5b09b5ebc88ebfee79738fe3b2bf88f57785b71adf1156060cd48809",
       "jam_name": "Remix Inspo: Elling",
@@ -5065,11 +5747,11 @@
       "invite_id": "72a67d6e5faa6529188f36246527038415d896dfaec752c0157e6aac6b44e9f2",
       "jam_name": "refrigerator swarm",
       "earliest_user": "ilya",
-      "latest_user": "jonh2o",
+      "latest_user": "mlilley2002",
       "earliest_unixtime": 1585910112,
-      "latest_unixtime": 1588026212,
-      "estimated_days_of_activity": 24,
-      "total_riffs": 118
+      "latest_unixtime": 1662940910,
+      "estimated_days_of_activity": 891,
+      "total_riffs": 137
     },
     {
       "band_id": "bandf64feecb27",
@@ -5105,15 +5787,37 @@
       "total_riffs": 200
     },
     {
+      "band_id": "bandec039dfbb4",
+      "invite_id": "7480c169b7d7c42b5fb1284cd75e4b1998de23e3fb9afc5889836d54c3ba1bb2",
+      "jam_name": "Cinematics",
+      "earliest_user": "tornnelly",
+      "latest_user": "anordinaryuser",
+      "earliest_unixtime": 1654363906,
+      "latest_unixtime": 1662654088,
+      "estimated_days_of_activity": 95,
+      "total_riffs": 7543
+    },
+    {
       "band_id": "band4ebcc9d696",
       "invite_id": "74815c2a6de424e9c430deb997676800701df6cb9947fe61fa833cb0cb9b4401",
       "jam_name": "TECHNO DUB SESSION 1",
       "earliest_user": "stoic",
-      "latest_user": "foid",
+      "latest_user": "berta",
       "earliest_unixtime": 1636694373,
-      "latest_unixtime": 1652995153,
-      "estimated_days_of_activity": 188,
-      "total_riffs": 1350
+      "latest_unixtime": 1661231322,
+      "estimated_days_of_activity": 284,
+      "total_riffs": 1401
+    },
+    {
+      "band_id": "bandd07de1fc1c",
+      "invite_id": "74bb5cbb05d09a97a979c84964fba4e1121129ac800df63075bdd088d329e0d4",
+      "jam_name": "Unplugged Acoustics",
+      "earliest_user": "kismet",
+      "latest_user": "feloniousmonk",
+      "earliest_unixtime": 1656892383,
+      "latest_unixtime": 1663683386,
+      "estimated_days_of_activity": 78,
+      "total_riffs": 3825
     },
     {
       "band_id": "bandeb11db454b",
@@ -5168,7 +5872,7 @@
       "earliest_unixtime": 1626942681,
       "latest_unixtime": 1632747567,
       "estimated_days_of_activity": 67,
-      "total_riffs": 19136
+      "total_riffs": 19137
     },
     {
       "band_id": "band4fd159dee0",
@@ -5190,7 +5894,7 @@
       "earliest_unixtime": 1579103141,
       "latest_unixtime": 1629821397,
       "estimated_days_of_activity": 587,
-      "total_riffs": 13803
+      "total_riffs": 13804
     },
     {
       "band_id": "bandb3cfe321bc",
@@ -5202,6 +5906,17 @@
       "latest_unixtime": 1587738211,
       "estimated_days_of_activity": 27,
       "total_riffs": 61
+    },
+    {
+      "band_id": "band74c5bcd527",
+      "invite_id": "76dbd4d6f053288cc6cfc8c48d79354ef5d7d63b3d6d318583cc5a4e3c3fd259",
+      "jam_name": "Love Not War",
+      "earliest_user": "badrico",
+      "latest_user": "zx119",
+      "earliest_unixtime": 1646292132,
+      "latest_unixtime": 1651979340,
+      "estimated_days_of_activity": 65,
+      "total_riffs": 8571
     },
     {
       "band_id": "band2c1a74f2d5",
@@ -5285,11 +6000,33 @@
       "invite_id": "790977cade7a835c66db728fd22aa39877e33e805a877252bb53fe48cbf20ee5",
       "jam_name": "Still Gettin' Funkier",
       "earliest_user": "merlwin",
-      "latest_user": "njlang",
+      "latest_user": "applejaxsx",
       "earliest_unixtime": 1584627530,
-      "latest_unixtime": 1621798121,
-      "estimated_days_of_activity": 430,
-      "total_riffs": 19215
+      "latest_unixtime": 1659297865,
+      "estimated_days_of_activity": 864,
+      "total_riffs": 19238
+    },
+    {
+      "band_id": "band2fed1d091f",
+      "invite_id": "7937384a6472314a048c313770266c20ce33febd2f23ebeb0d1e2e712c757d7e",
+      "jam_name": "Jammer Inspo: Headphase",
+      "earliest_user": "oddstar",
+      "latest_user": "gitpush",
+      "earliest_unixtime": 1655083274,
+      "latest_unixtime": 1661980144,
+      "estimated_days_of_activity": 79,
+      "total_riffs": 2757
+    },
+    {
+      "band_id": "band381afa991e",
+      "invite_id": "7938ba98239902115c83e21ff6c39a0fe8a476e8a87cccc9a271ac974f68854b",
+      "jam_name": "Beginner Jam #11",
+      "earliest_user": "lwlkc",
+      "latest_user": "pandaneptuniano",
+      "earliest_unixtime": 1654516877,
+      "latest_unixtime": 1656890162,
+      "estimated_days_of_activity": 27,
+      "total_riffs": 2230
     },
     {
       "band_id": "band0d57e4513e",
@@ -5318,11 +6055,11 @@
       "invite_id": "7fa88c3be9682bd47f53f07d8c6d0f6a106414bcaf7cadf2c97872c32142dfa",
       "jam_name": "Video Games!!",
       "earliest_user": "echolox",
-      "latest_user": "ernestringold",
+      "latest_user": "pre5et",
       "earliest_unixtime": 1615991574,
-      "latest_unixtime": 1620601356,
-      "estimated_days_of_activity": 53,
-      "total_riffs": 2184
+      "latest_unixtime": 1659847172,
+      "estimated_days_of_activity": 507,
+      "total_riffs": 2203
     },
     {
       "band_id": "bandade5140647",
@@ -5353,9 +6090,9 @@
       "earliest_user": "lovemode",
       "latest_user": "sephrim",
       "earliest_unixtime": 1632430164,
-      "latest_unixtime": 1637270622,
-      "estimated_days_of_activity": 55,
-      "total_riffs": 4264
+      "latest_unixtime": 1659616261,
+      "estimated_days_of_activity": 314,
+      "total_riffs": 4281
     },
     {
       "band_id": "banded5cb0cf47",
@@ -5410,7 +6147,7 @@
       "earliest_unixtime": 1602448946,
       "latest_unixtime": 1602624595,
       "estimated_days_of_activity": 2,
-      "total_riffs": 2241
+      "total_riffs": 2242
     },
     {
       "band_id": "bandd4e16b6c75",
@@ -5443,7 +6180,7 @@
       "earliest_unixtime": 1631629402,
       "latest_unixtime": 1632439629,
       "estimated_days_of_activity": 9,
-      "total_riffs": 1550
+      "total_riffs": 1552
     },
     {
       "band_id": "band883ff3a823",
@@ -5523,6 +6260,17 @@
       "total_riffs": 97
     },
     {
+      "band_id": "band9109858d99",
+      "invite_id": "bfc397346d01c4b9a7f06ac40cea2c046ba6432aa221d404038eb5663b2bdc5",
+      "jam_name": "Fancy's  Live Stream Room",
+      "earliest_user": "fancyspectacles",
+      "latest_user": "ludi",
+      "earliest_unixtime": 1626614078,
+      "latest_unixtime": 1657760286,
+      "estimated_days_of_activity": 360,
+      "total_riffs": 7662
+    },
+    {
       "band_id": "bandabfcbe74f5",
       "invite_id": "bfce7721666be1fb071224dc02d7a70a74139f0a4c4feb3b8e77d81827b7496",
       "jam_name": "Funkadunk",
@@ -5542,18 +6290,18 @@
       "earliest_unixtime": 1612216907,
       "latest_unixtime": 1631777072,
       "estimated_days_of_activity": 226,
-      "total_riffs": 7223
+      "total_riffs": 7226
     },
     {
       "band_id": "bandbc3738ea6e",
       "invite_id": "c1ac3c76875435163146f2ba772e13f9b1f5643d33a4aa8f485d634e6950087",
       "jam_name": "Aura Luna",
       "earliest_user": "littlewing",
-      "latest_user": "pre5et",
+      "latest_user": "discopas",
       "earliest_unixtime": 1581394983,
-      "latest_unixtime": 1635831856,
-      "estimated_days_of_activity": 630,
-      "total_riffs": 389
+      "latest_unixtime": 1661896960,
+      "estimated_days_of_activity": 931,
+      "total_riffs": 450
     },
     {
       "band_id": "band190390383b",
@@ -5573,9 +6321,9 @@
       "earliest_user": "marky2coats",
       "latest_user": "houdini4",
       "earliest_unixtime": 1593700731,
-      "latest_unixtime": 1654908082,
-      "estimated_days_of_activity": 708,
-      "total_riffs": 6464
+      "latest_unixtime": 1662484596,
+      "estimated_days_of_activity": 796,
+      "total_riffs": 7310
     },
     {
       "band_id": "band2f35e21880",
@@ -5628,9 +6376,9 @@
       "earliest_user": "littlewing",
       "latest_user": "pre5et",
       "earliest_unixtime": 1585845152,
-      "latest_unixtime": 1635577078,
-      "estimated_days_of_activity": 575,
-      "total_riffs": 889
+      "latest_unixtime": 1659860741,
+      "estimated_days_of_activity": 856,
+      "total_riffs": 941
     },
     {
       "band_id": "band371a16c6ec",
@@ -5674,7 +6422,7 @@
       "earliest_unixtime": 1591266588,
       "latest_unixtime": 1650246782,
       "estimated_days_of_activity": 682,
-      "total_riffs": 18365
+      "total_riffs": 18366
     },
     {
       "band_id": "band2032f4fa23",
@@ -5697,6 +6445,17 @@
       "latest_unixtime": 1600479260,
       "estimated_days_of_activity": 23,
       "total_riffs": 7826
+    },
+    {
+      "band_id": "bandd23e37b1ed",
+      "invite_id": "e2ba970430d642463fc9744dfdad8406277c5fbee59548383149b5b343d7999",
+      "jam_name": "Jammer Inspo: njlang",
+      "earliest_user": "njlang",
+      "latest_user": "seasickcookie",
+      "earliest_unixtime": 1651276429,
+      "latest_unixtime": 1654366426,
+      "estimated_days_of_activity": 35,
+      "total_riffs": 1724
     },
     {
       "band_id": "bandaf8f054699",
@@ -5736,11 +6495,11 @@
       "invite_id": "f5412176fa94af53d630794aa6945343863bdb317ab211d99fb176ac73dbdca",
       "jam_name": "Only Drums",
       "earliest_user": "echolox",
-      "latest_user": "chao0194",
+      "latest_user": "pre5et",
       "earliest_unixtime": 1619595412,
-      "latest_unixtime": 1627135284,
-      "estimated_days_of_activity": 87,
-      "total_riffs": 15090
+      "latest_unixtime": 1658104701,
+      "estimated_days_of_activity": 445,
+      "total_riffs": 15092
     },
     {
       "band_id": "band7f2f29c8d3",
@@ -5785,402 +6544,6 @@
       "latest_unixtime": 1593832913,
       "estimated_days_of_activity": 11,
       "total_riffs": 33
-    },
-    {
-      "band_id": "bandc3b5547613",
-      "invite_id": "71914326b642b2de2230be986b435b61d49657c5e42283f7b0150a7f8cdcf654",
-      "jam_name": "NOHAM | haQ attaQ",
-      "earliest_user": "jakob_haq",
-      "latest_user": "surrealchemist",
-      "earliest_unixtime": 1622053238,
-      "latest_unixtime": 1626369612,
-      "estimated_days_of_activity": 49,
-      "total_riffs": 318
-    },
-    {
-      "band_id": "bandbe69429e2a",
-      "invite_id": "31355853291c65b9351c2d2fc24ff5fcd4320f9e810e064c76bd7fb0b008c15c",
-      "jam_name": "ENDLESSS OASIS  7/10/21",
-      "earliest_user": "ninjaloanz",
-      "latest_user": "cng303",
-      "earliest_unixtime": 1625856013,
-      "latest_unixtime": 1625955247,
-      "estimated_days_of_activity": 1,
-      "total_riffs": 1092
-    },
-    {
-      "band_id": "bandcbf81da8ca",
-      "invite_id": "5c0a061886649001c0a1f0dfac315ed36f74d23fd019752fe87f0fbba2fdee00",
-      "jam_name": "Shamanics LiveStreaming Jam ",
-      "earliest_user": "vonbongen",
-      "latest_user": "shamanicbeatbox",
-      "earliest_unixtime": 1626465569,
-      "latest_unixtime": 1647354255,
-      "estimated_days_of_activity": 241,
-      "total_riffs": 564
-    },
-    {
-      "band_id": "bandc9c96b5c2a",
-      "invite_id": "3f19b7152d723e6ed43f0e44634160d7cd2fd7e10fa37f8c3be11fa3392aa3d",
-      "jam_name": "Track Club Release Jam",
-      "earliest_user": "firephly",
-      "latest_user": "mvdg",
-      "earliest_unixtime": 1628288313,
-      "latest_unixtime": 1629043917,
-      "estimated_days_of_activity": 8,
-      "total_riffs": 875
-    },
-    {
-      "band_id": "band9109858d99",
-      "invite_id": "bfc397346d01c4b9a7f06ac40cea2c046ba6432aa221d404038eb5663b2bdc5",
-      "jam_name": "Fancy's  Live Stream Room",
-      "earliest_user": "fancyspectacles",
-      "latest_user": "slowgaffle",
-      "earliest_unixtime": 1626614078,
-      "latest_unixtime": 1654616987,
-      "estimated_days_of_activity": 324,
-      "total_riffs": 6649
-    },
-    {
-      "band_id": "bandf45efbb8c6",
-      "invite_id": "10691e2b5d208ff7e4b0b86d10857393c0b41715cc4c1dca09f50ab42c2644d2",
-      "jam_name": "Tropical Weekend",
-      "earliest_user": "lovemode",
-      "latest_user": "cryszon",
-      "earliest_unixtime": 1646770528,
-      "latest_unixtime": 1651076780,
-      "estimated_days_of_activity": 49,
-      "total_riffs": 11486
-    },
-    {
-      "band_id": "banda909a35431",
-      "invite_id": "46e7c4d6255c7a6651438ac8c11ef907cccc42a9cf5f419fc755ff53e0765042",
-      "jam_name": "Acoustic Oceans",
-      "earliest_user": "lovemode",
-      "latest_user": "ignatz",
-      "earliest_unixtime": 1646573261,
-      "latest_unixtime": 1650281540,
-      "estimated_days_of_activity": 42,
-      "total_riffs": 4373
-    },
-    {
-      "band_id": "bandb760a01586",
-      "invite_id": "3760a1b285d635e7202c670a16f3b183b9f94df0a29f075eae22fc90d37f708b",
-      "jam_name": "Organic Harmony",
-      "earliest_user": "lovemode",
-      "latest_user": "seasickcookie",
-      "earliest_unixtime": 1646573261,
-      "latest_unixtime": 1650476778,
-      "estimated_days_of_activity": 45,
-      "total_riffs": 5701
-    },
-    {
-      "band_id": "bandc667d8118f",
-      "invite_id": "32fc7cbe3fb227fef59c349a1d7f49d173d71eb8a4ec3aab3cd54d6eed8ea34f",
-      "jam_name": "Acoustic Shore",
-      "earliest_user": "unclehomunculus",
-      "latest_user": "ragazzo",
-      "earliest_unixtime": 1650217831,
-      "latest_unixtime": 1654553882,
-      "estimated_days_of_activity": 50,
-      "total_riffs": 2712
-    },
-    {
-      "band_id": "bandbd44fd956b",
-      "invite_id": "3001c7ada167df75572c18c05f0649c0fff39169ad194ae559c9a57d9269887",
-      "jam_name": "Natural Acoustics",
-      "earliest_user": "thestuf",
-      "latest_user": "gitpush",
-      "earliest_unixtime": 1652643767,
-      "latest_unixtime": 1654973953,
-      "estimated_days_of_activity": 26,
-      "total_riffs": 861
-    },
-    {
-      "band_id": "band2cccde5178",
-      "invite_id": "656e8cff806c8d5cab9238dc729c35b8ac71281db2f2dfef6cc42f496c8c37b0",
-      "jam_name": "Sleeplesss Techno",
-      "earliest_user": "shapednoise",
-      "latest_user": "bredbax",
-      "earliest_unixtime": 1646518214,
-      "latest_unixtime": 1651161437,
-      "estimated_days_of_activity": 53,
-      "total_riffs": 24065
-    },
-    {
-      "band_id": "bandcc6ec6d354",
-      "invite_id": "286ab66b4bc08b3a60c7770a2e92d62b2a3f8fcafd82b77edd1258102e90c125",
-      "jam_name": "Night Owl, Techno!",
-      "earliest_user": "xoex",
-      "latest_user": "timzet",
-      "earliest_unixtime": 1649787848,
-      "latest_unixtime": 1654529569,
-      "estimated_days_of_activity": 54,
-      "total_riffs": 25811
-    },
-    {
-      "band_id": "band329348268e",
-      "invite_id": "68ed1a7326d3244e7fce7fe3c048f0f95db2380d5fed1f6553917954f182bcf9",
-      "jam_name": "TeKnoSomniA",
-      "earliest_user": "steug135",
-      "latest_user": "applejaxsx",
-      "earliest_unixtime": 1654464677,
-      "latest_unixtime": 1655049732,
-      "estimated_days_of_activity": 6,
-      "total_riffs": 2020
-    },
-    {
-      "band_id": "bandc272560d55",
-      "invite_id": "64e5261b8bfd79cce8642bc3dbe6377a64d711c6869cab62a42bb750eb1f782f",
-      "jam_name": "Bangers & KeyMash",
-      "earliest_user": "marky2coats",
-      "latest_user": "seasickcookie",
-      "earliest_unixtime": 1646518973,
-      "latest_unixtime": 1650626975,
-      "estimated_days_of_activity": 47,
-      "total_riffs": 8888
-    },
-    {
-      "band_id": "band059f98cd76",
-      "invite_id": "5810e2d356b7a2875ad207fe1b21e29dac5aeaeb5c3ed701f36b6dae44090185",
-      "jam_name": "BASSLINE CIRCUS ",
-      "earliest_user": "fancyspectacles",
-      "latest_user": "lionleeruby",
-      "earliest_unixtime": 1643971166,
-      "latest_unixtime": 1650503062,
-      "estimated_days_of_activity": 75,
-      "total_riffs": 8603
-    },
-    {
-      "band_id": "band94d6bec0b6",
-      "invite_id": "6b6f8f6d5ff0f04c8a5b3763a1eb25532c75964f3e2c1add363d346339a8534b",
-      "jam_name": "Gym Motivation",
-      "earliest_user": "lovemode",
-      "latest_user": "raptorjesus42",
-      "earliest_unixtime": 1644838091,
-      "latest_unixtime": 1649768018,
-      "estimated_days_of_activity": 57,
-      "total_riffs": 3720
-    },
-    {
-      "band_id": "band17f858cdee",
-      "invite_id": "2dd47954ed62a6c106ff39a4e101a16bbb5c0e38f36e0965f53ee4ef29441fc8",
-      "jam_name": "It Was All Yellow",
-      "earliest_user": "lovemode",
-      "latest_user": "jonh2o",
-      "earliest_unixtime": 1646309188,
-      "latest_unixtime": 1650184725,
-      "estimated_days_of_activity": 44,
-      "total_riffs": 1864
-    },
-    {
-      "band_id": "band74c5bcd527",
-      "invite_id": "76dbd4d6f053288cc6cfc8c48d79354ef5d7d63b3d6d318583cc5a4e3c3fd259",
-      "jam_name": "Love Not War",
-      "earliest_user": "badrico",
-      "latest_user": "zx119",
-      "earliest_unixtime": 1646292132,
-      "latest_unixtime": 1651979340,
-      "estimated_days_of_activity": 65,
-      "total_riffs": 8571
-    },
-    {
-      "band_id": "band11306bf2b5",
-      "invite_id": "5b2c995761585bbc8130234d4f41280254f9315b350dccb91b44e4b5061eebb7",
-      "jam_name": "Medieval Quest: Beat a Path to Essstopia!",
-      "earliest_user": "lovemode",
-      "latest_user": "fatribz",
-      "earliest_unixtime": 1634153364,
-      "latest_unixtime": 1652915496,
-      "estimated_days_of_activity": 217,
-      "total_riffs": 4794
-    },
-    {
-      "band_id": "band016acdb282",
-      "invite_id": "501fd2954a64dfd301ea806f9e4f96482d7356fb0312492d8ee37d94a25a67e2",
-      "jam_name": "Bermuda Triangle",
-      "earliest_user": "lovemode",
-      "latest_user": "danielnr",
-      "earliest_unixtime": 1649792362,
-      "latest_unixtime": 1655049580,
-      "estimated_days_of_activity": 60,
-      "total_riffs": 6787
-    },
-    {
-      "band_id": "band9b679915e6",
-      "invite_id": "21c67610c32b673c79901535f5656a0095336c3e1ed1fb38b85e687f849aadd7",
-      "jam_name": "Sampler Space",
-      "earliest_user": "nr2",
-      "latest_user": "pulse_wav",
-      "earliest_unixtime": 1650230461,
-      "latest_unixtime": 1651966052,
-      "estimated_days_of_activity": 20,
-      "total_riffs": 1974
-    },
-    {
-      "band_id": "bandc2ff1fdbca",
-      "invite_id": "1e8485eb2f1d0c8dca8b9f7586abe1bfa97297b39fb7712be321c9ac75f32a24",
-      "jam_name": "Beginner Jam #9",
-      "earliest_user": "gstnjk",
-      "latest_user": "hamedmo",
-      "earliest_unixtime": 1645665602,
-      "latest_unixtime": 1649773423,
-      "estimated_days_of_activity": 47,
-      "total_riffs": 4266
-    },
-    {
-      "band_id": "bandfa47977112",
-      "invite_id": "4ab22354119b8a6b8b7777b491a78f27efd07457b82be7e15ec9c49e61656685",
-      "jam_name": "Beginner Jam #10",
-      "earliest_user": "applejaxsx",
-      "latest_user": "lindome",
-      "earliest_unixtime": 1649256576,
-      "latest_unixtime": 1654764895,
-      "estimated_days_of_activity": 63,
-      "total_riffs": 4745
-    },
-    {
-      "band_id": "band381afa991e",
-      "invite_id": "7938ba98239902115c83e21ff6c39a0fe8a476e8a87cccc9a271ac974f68854b",
-      "jam_name": "Beginner Jam #11",
-      "earliest_user": "lwlkc",
-      "latest_user": "roonan",
-      "earliest_unixtime": 1654516877,
-      "latest_unixtime": 1655026686,
-      "estimated_days_of_activity": 5,
-      "total_riffs": 345
-    },
-    {
-      "band_id": "band492d2fbc20",
-      "invite_id": "4615d50f84378687633eb80b45423bdc054714e6a21e6ede5f944da4d0c68783",
-      "jam_name": "Remix Inspo: TPJ",
-      "earliest_user": "oddstar",
-      "latest_user": "slowgaffle",
-      "earliest_unixtime": 1646971569,
-      "latest_unixtime": 1653049871,
-      "estimated_days_of_activity": 70,
-      "total_riffs": 9083
-    },
-    {
-      "band_id": "bandccf91cb20b",
-      "invite_id": "6a4fc3ccde791cc6fb27d6b6974d8a312bd9b2903e77e90e043f02b4a003df48",
-      "jam_name": "Remix Inspo: Andymac",
-      "earliest_user": "fancyspectacles",
-      "latest_user": "badcharacter13",
-      "earliest_unixtime": 1647763765,
-      "latest_unixtime": 1652631247,
-      "estimated_days_of_activity": 56,
-      "total_riffs": 6697
-    },
-    {
-      "band_id": "band1a8e485c9e",
-      "invite_id": "64c7624a8744696fb151b0512ecf3c6e4ad2947a94f0875acdcb68aea2bd0bde",
-      "jam_name": "Remix Inspo: caerickson",
-      "earliest_user": "applejaxsx",
-      "latest_user": "nathanielfowles",
-      "earliest_unixtime": 1647319087,
-      "latest_unixtime": 1655033289,
-      "estimated_days_of_activity": 89,
-      "total_riffs": 3118
-    },
-    {
-      "band_id": "band9806555752",
-      "invite_id": "286ff0d326ea923cbea1a2604bc6f56bd68f4d0aaf8d108cea19aec4c33582f4",
-      "jam_name": "Remix Inspo: Marky2coats",
-      "earliest_user": "marky2coats",
-      "latest_user": "threelum",
-      "earliest_unixtime": 1645400132,
-      "latest_unixtime": 1652564783,
-      "estimated_days_of_activity": 82,
-      "total_riffs": 1853
-    },
-    {
-      "band_id": "band9617f70427",
-      "invite_id": "13fc6f6006328ba2f716bc79877b91eff830d387f58f5a4a5a17091b8c19db60",
-      "jam_name": "Remix Inspo: Naffk",
-      "earliest_user": "naffk",
-      "latest_user": "creek",
-      "earliest_unixtime": 1645289672,
-      "latest_unixtime": 1650344587,
-      "estimated_days_of_activity": 58,
-      "total_riffs": 1126
-    },
-    {
-      "band_id": "band51b15deb04",
-      "invite_id": "3ef110f36a5b7494d0a92e2119cbc2b5a6b2ce5d4f615788a30c092047562bfd",
-      "jam_name": "Remix Inspo: m_host",
-      "earliest_user": "m_host",
-      "latest_user": "m_host",
-      "earliest_unixtime": 1643649570,
-      "latest_unixtime": 1644322576,
-      "estimated_days_of_activity": 7,
-      "total_riffs": 2
-    },
-    {
-      "band_id": "band450d2ee145",
-      "invite_id": "3432fb73b6be9ef3b21c3a6f2df1123044b691a00b3d46c8cf41f3d3d19ba340",
-      "jam_name": "Remix Inspo: flugegehaimen",
-      "earliest_user": "flugegehaimen",
-      "latest_user": "caerickson",
-      "earliest_unixtime": 1644530597,
-      "latest_unixtime": 1647318007,
-      "estimated_days_of_activity": 32,
-      "total_riffs": 1028
-    },
-    {
-      "band_id": "bandc4055fccab",
-      "invite_id": "69633db4769e72e7a2ad3d9607cd6b672f037cc4e4dd15ea255e988184b1329d",
-      "jam_name": "Remix Inspo: n0face",
-      "earliest_user": "n0face",
-      "latest_user": "fancyspectacles",
-      "earliest_unixtime": 1645804952,
-      "latest_unixtime": 1648247744,
-      "estimated_days_of_activity": 28,
-      "total_riffs": 4363
-    },
-    {
-      "band_id": "bandd23e37b1ed",
-      "invite_id": "e2ba970430d642463fc9744dfdad8406277c5fbee59548383149b5b343d7999",
-      "jam_name": "Jammer Inspo: njlang",
-      "earliest_user": "njlang",
-      "latest_user": "seasickcookie",
-      "earliest_unixtime": 1651276429,
-      "latest_unixtime": 1654366426,
-      "estimated_days_of_activity": 35,
-      "total_riffs": 1724
-    },
-    {
-      "band_id": "bandc549aead5e",
-      "invite_id": "3443f7ffe5f25ea6f5d6e4a0be75475f6bc82a46bdd62d1a228bf4d9fd6c276e",
-      "jam_name": "Jammer Inspo: Xoex",
-      "earliest_user": "xoex",
-      "latest_user": "shapednoise",
-      "earliest_unixtime": 1650998617,
-      "latest_unixtime": 1654494431,
-      "estimated_days_of_activity": 40,
-      "total_riffs": 1218
-    },
-    {
-      "band_id": "bandc4a08d2fca",
-      "invite_id": "43bdef539541cfd515d88295980066853dfb2008d1d86c8d3c215596783d3afb",
-      "jam_name": "Jammer Inspo: hollohead",
-      "earliest_user": "hollohead",
-      "latest_user": "jake909",
-      "earliest_unixtime": 1652015623,
-      "latest_unixtime": 1654463750,
-      "estimated_days_of_activity": 28,
-      "total_riffs": 2141
-    },
-    {
-      "band_id": "band1545ec2aec",
-      "invite_id": "45cd350c575fda6df425c6bd9a1b4a8525fc8718b21af544d05e92ed92650074",
-      "jam_name": "Jammer Inspo: herzihelmut",
-      "earliest_user": "herzihelmut",
-      "latest_user": "lindome",
-      "earliest_unixtime": 1646944841,
-      "latest_unixtime": 1654764678,
-      "estimated_days_of_activity": 90,
-      "total_riffs": 1070
     }
   ]
 }
