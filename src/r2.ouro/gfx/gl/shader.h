@@ -8,54 +8,57 @@
 //
 
 #pragma once
+#include "base/construction.h"
+
+namespace filesys { struct Preprocessing; }
 
 namespace gl {
 
+// ---------------------------------------------------------------------------------------------------------------------
+// simple shader instance, built from a vsh/psh file combo
+//
 struct Shader
 {
-    Shader( int32_t handle )
-        : m_handle( handle )
+    Shader( const std::string& name, const int32_t handle )
+        : m_name( name )
+        , m_handle( handle )
     {}
     ~Shader();
 
-    static std::shared_ptr<Shader> loadFromFiles( const std::string& context, const std::string& vsh, const std::string& psh );
+    using SharedPtr = std::shared_ptr<Shader>;
+    using PtrOrStatus = absl::StatusOr< SharedPtr >;
 
-    int32_t getHandle() const { return m_handle; }
+    ouro_nodiscard static PtrOrStatus loadFromDisk(
+        const std::string& shaderName,                  // name for context
+        const filesys::Preprocessing& ppState,          // preprocessing pipeline for shader source text
+        const fs::path& vsh,                            // vertex shader
+        const fs::path& psh );                          // fragment shader
+
+    ouro_nodiscard constexpr const std::string& getName() const { return m_name; }
+    ouro_nodiscard constexpr int32_t getHandle() const { return m_handle; }
 
 private:
 
-    int32_t        m_handle;
+    std::string     m_name;
+    int32_t         m_handle;
 };
-using ShaderInstance = std::shared_ptr<Shader>;
+using ShaderInstance = Shader::SharedPtr;
 
-struct ScopedShader
+
+// ---------------------------------------------------------------------------------------------------------------------
+// swap in a shader, preserving and restoring the currently active one as this goes out of scope
+//
+struct ScopedUseShader
 {
-    ScopedShader() = delete;
-    ScopedShader( ShaderInstance& shaderToSet );
-    ~ScopedShader();
+    DECLARE_NO_COPY_NO_MOVE( ScopedUseShader );
+    ScopedUseShader() = delete;
+
+    ScopedUseShader( const ShaderInstance& shaderToSet );
+    ~ScopedUseShader();
 
 private:
     ShaderInstance  m_shaderInUse;
     int32_t         m_previousHandle;
-};
-
-} // namespace gl
-
-namespace gl {
-
-struct Flatscreen
-{
-    Flatscreen();
-    ~Flatscreen();
-
-    void render();
-
-    ShaderInstance  m_shaderInstance;
-    uint32_t        m_glHandleArrayBuffer;
-    uint32_t        m_glPositionVertex;
-
-    uint32_t        m_glUniformResolution;
-    uint32_t        m_glUniformTime;
 };
 
 } // namespace gl

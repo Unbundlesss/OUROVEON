@@ -16,7 +16,10 @@
 
 #include "nlohmann/json.hpp"
 
-#include "base/utils.h"
+// base64 codec; used for encoding serialized parameters
+#include "base64_rfc4648.hpp"
+
+#include "base/text.h"
 #include "base/instrumentation.h"
 
 #include "effect/vst2/host.h"
@@ -690,7 +693,7 @@ void Instance::Data::runOnVstThread()
         }
         Sleep( 10 );
 
-        if ( m_updateIOChannels )
+         if ( m_updateIOChannels )
         {
             m_midiInputChannels     = (int32_t)safeDispatch( effGetNumMidiInputChannels, 0, 0, nullptr, 0 );
             m_midiOutputChannels    = (int32_t)safeDispatch( effGetNumMidiOutputChannels, 0, 0, nullptr, 0 );

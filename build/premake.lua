@@ -190,6 +190,7 @@ include "premake-inc/r0-scaffold-date.lua"
 include "premake-inc/r0-scaffold-fmt.lua"
 include "premake-inc/r0-scaffold-rpmalloc.lua"
 include "premake-inc/r0-scaffold-stb.lua"
+include "premake-inc/r0-scaffold-simplecpp.lua"
 
 group ""
 group "r0-codec"
@@ -210,12 +211,13 @@ include "premake-inc/r0-data-sodium.lua"
 group ""
 group "r0-dsp"
 
-include "premake-inc/r0-dsp-kissfft.lua"
+include "premake-inc/r0-dsp-mufft.lua"
 include "premake-inc/r0-dsp-r8brain.lua"
 
 group ""
 group "r0-net"
 
+-- include "premake-inc/r0-net-nng.lua"
 include "premake-inc/r0-net-dpp.lua"
 include "premake-inc/r0-net-uriparser.lua"
 
@@ -354,6 +356,7 @@ function CommonAppLink()
         "dxguid",
 
         "ws2_32",
+        "wsock32",
         "shlwapi",
         "version",
         "setupapi",

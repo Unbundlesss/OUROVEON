@@ -9,6 +9,7 @@
 
 #include "pch.h"
 #include "base/instrumentation.h"
+#include "base/text.h"
 #include "math/rng.h"
 #include "spacetime/chronicle.h"
 
@@ -21,6 +22,7 @@
 
 
 namespace endlesss {
+namespace toolkit {
 
 std::string Warehouse::m_databaseFile;
 
@@ -53,7 +55,7 @@ struct Warehouse::INetworkTask : Warehouse::ITask
     {}
     ~INetworkTask() {}
 
-    virtual bool usesNetwork() const { return true; }
+    virtual bool usesNetwork() const override { return true; }
     const api::NetConfiguration& m_netConfig;
 };
 
@@ -114,12 +116,12 @@ struct JamSnapshotTask : Warehouse::INetworkTask
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-struct JamPurgeTask : Warehouse::INetworkTask
+struct JamPurgeTask : Warehouse::ITask
 {
     static constexpr char Tag[] = "PURGE";
 
-    JamPurgeTask( const api::NetConfiguration& ncfg, const types::JamCouchID& jamCID )
-        : Warehouse::INetworkTask( ncfg )
+    JamPurgeTask( const types::JamCouchID& jamCID )
+        : Warehouse::ITask()
         , m_jamCID( jamCID )
     {}
 
@@ -790,6 +792,12 @@ void Warehouse::syncFromJamCache( const cache::Jams& jamCache )
 // ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::addOrUpdateJamSnapshot( const types::JamCouchID& jamCouchID )
 {
+    if ( !hasFullEndlesssNetworkAccess() )
+    {
+        blog::error::api( "cannot call Warehouse::addOrUpdateJamSnapshot() with no active Endlesss network" );
+        return;
+    }
+
     m_taskSchedule->m_taskQueue.enqueue( std::make_unique<JamSnapshotTask>( m_netConfig, jamCouchID ) );
 }
 
@@ -824,7 +832,7 @@ bool Warehouse::fetchSingleRiffByID( const endlesss::types::RiffCouchID& riffID,
 // ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::requestJamPurge( const types::JamCouchID& jamCouchID )
 {
-    m_taskSchedule->m_taskQueue.enqueue( std::make_unique<JamPurgeTask>( m_netConfig, jamCouchID ) );
+    m_taskSchedule->m_taskQueue.enqueue( std::make_unique<JamPurgeTask>( jamCouchID ) );
 }
 
 
@@ -927,7 +935,10 @@ void Warehouse::threadWorker()
         // go looking for holes to fill
         else
         {
+            const bool hasEndlesssNetwork = hasFullEndlesssNetworkAccess();
+
             // scour for empty riffs
+            if ( hasEndlesssNetwork )
             {
                 base::instr::ScopedEvent se( "FILL", "Riffs", base::instr::PresetColour::Red );
 
@@ -956,6 +967,7 @@ void Warehouse::threadWorker()
                 }
             }
             // .. and then stems
+            if ( hasEndlesssNetwork )
             {
                 base::instr::ScopedEvent se( "FILL", "Stems", base::instr::PresetColour::Orange );
 
@@ -1330,8 +1342,7 @@ bool JamSliceTask::Work( TaskQueue& currentTasks )
 
     const int64_t riffCount = sql::riffs::countPopulated( m_jamCID, true );
 
-    auto resultSlice = std::make_unique<Warehouse::JamSlice>();
-    resultSlice->reserve( riffCount );
+    auto resultSlice = std::make_unique<Warehouse::JamSlice>( m_jamCID, riffCount );
 
     static constexpr char _sqlExtractRiffBits[] = R"(
             select RiffCID,CreationTime,UserName,Root,Scale,BPMrnd,StemCID_1,StemCID_2,StemCID_3,StemCID_4,StemCID_5,StemCID_6,StemCID_7,StemCID_8 
@@ -1373,7 +1384,7 @@ bool JamSliceTask::Work( TaskQueue& currentTasks )
                    stemCIDs[6],
                    stemCIDs[7] ) )
     {
-        const uint64_t hashedUsername = CityHash64( username.data(), username.length() );
+        const uint64_t hashedUsername = base::HashString64( username );
 
         const auto contextTimestamp = spacetime::InSeconds{ std::chrono::seconds{ timestamp } };
 
@@ -1484,4 +1495,5 @@ bool ContentsReportTask::Work( TaskQueue& currentTasks )
     return true;
 }
 
+} // namespace toolkit
 } // namespace endlesss

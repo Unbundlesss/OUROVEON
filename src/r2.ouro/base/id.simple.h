@@ -19,21 +19,29 @@ template< typename _identity, typename _inttype, _inttype _defaultValue, _inttyp
 struct Simple
 {
     using IntType = _inttype;
+    using SimpleType = Simple<_identity, _inttype, _defaultValue, _invalidValue >;
 
     constexpr Simple() : m_id( _defaultValue ) {}
-
-    constexpr explicit Simple( const _inttype _id ) : m_id( _id )
+    constexpr explicit Simple( const _inttype id ) : m_id( id )
     {
         static_assert(std::is_integral<_inttype>::value, "integral required for _idtype");
     }
 
-    constexpr _inttype get() const { return m_id; }
+    ouro_nodiscard constexpr static _inttype defaultValue() { return _defaultValue; }
+    ouro_nodiscard constexpr static Simple invalid() { return Simple( _invalidValue ); }
 
-    constexpr bool operator == ( const Simple& rhs ) const { return rhs.m_id == m_id; }
-    constexpr bool operator != ( const Simple& rhs ) const { return rhs.m_id != m_id; }
+    ouro_nodiscard constexpr bool isValid() const { return m_id != _invalidValue; }
+    ouro_nodiscard constexpr _inttype get() const { return m_id; }
 
+    ouro_nodiscard constexpr bool operator == ( const Simple& rhs ) const { return rhs.m_id == m_id; }
+    ouro_nodiscard constexpr bool operator != ( const Simple& rhs ) const { return rhs.m_id != m_id; }
 
-    static Simple invalid() { return Simple( _invalidValue ); }
+    // abseil
+    template <typename H>
+    friend H AbslHashValue( H h, const SimpleType& m )
+    {
+        return H::combine( std::move( h ), m.m_id );
+    }
 
 private:
     _inttype    m_id;

@@ -23,17 +23,17 @@ struct StringWrapper
     explicit inline StringWrapper( const std::string_view& rhs ) : _value( rhs ) {}
     inline StringWrapper() : _value() {}
 
-    inline const std::string& value() const { return _value; }
-    inline std::string& value() { return _value; }
-    inline operator const std::string&() const { return _value; }
-    inline operator const char*() const { return _value.c_str(); }
+    ouro_nodiscard constexpr const std::string& value() const { return _value; }
+    ouro_nodiscard constexpr std::string& value() { return _value; }
+    ouro_nodiscard constexpr operator const std::string&() const { return _value; }
+    ouro_nodiscard constexpr operator const char*() const { return _value.c_str(); }
 
     inline auto operator<=>( const StringWrapper& ) const = default;
 
-    inline bool empty() const { return _value.empty(); }
-    inline const char* c_str() const { return _value.c_str(); }
-    inline std::size_t size() const { return _value.size(); }
-    inline std::string substr( size_t len ) const { return _value.substr( 0, len ); }
+    ouro_nodiscard constexpr bool empty() const { return _value.empty(); }
+    ouro_nodiscard constexpr const char* c_str() const { return _value.c_str(); }
+    ouro_nodiscard constexpr std::size_t size() const { return _value.size(); }
+    ouro_nodiscard constexpr std::string substr( size_t len ) const { return _value.substr( 0, len ); }
 
     template <class Archive,
         cereal::traits::EnableIf<cereal::traits::is_text_archive<Archive>::value>

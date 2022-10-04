@@ -17,7 +17,7 @@ namespace base {
 template< typename _quantisedType, uint32_t _quantBits >
 struct InterleavingQuantiseBuffer
 {
-    DeclareUncopyable( InterleavingQuantiseBuffer );
+    DECLARE_NO_COPY( InterleavingQuantiseBuffer );
     InterleavingQuantiseBuffer( InterleavingQuantiseBuffer&& ) = default;
     InterleavingQuantiseBuffer& operator= ( InterleavingQuantiseBuffer&& ) = default;
 
@@ -27,8 +27,8 @@ struct InterleavingQuantiseBuffer
     {
         const auto totalStereoSamples = m_maximumSamples * 2;
 
-        m_interleavedFloat  = mem::malloc16As< float >( totalStereoSamples );
-        m_interleavedQuant  = mem::malloc16AsSet< _quantisedType >( totalStereoSamples, 0 );
+        m_interleavedFloat  = mem::alloc16< float >( totalStereoSamples );
+        m_interleavedQuant  = mem::alloc16To< _quantisedType >( totalStereoSamples, 0 );
     }
 
     ~InterleavingQuantiseBuffer()

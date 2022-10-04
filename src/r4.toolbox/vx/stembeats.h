@@ -6,15 +6,12 @@
 //
 
 
-namespace endlesss
-{
-    struct Exchange;
-}
+namespace endlesss { namespace toolkit { struct Exchange; } }
 
 namespace ImGui {
 namespace vx {
 
-void StemBeats( const char* label, const endlesss::Exchange& data );
+void StemBeats( const char* label, const endlesss::toolkit::Exchange& data, const float beatIndicatorSize = 16.0f, const bool monochrome = true );
 
 } // namespace vx
 } // namespace ImGui

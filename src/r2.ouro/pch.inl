@@ -7,7 +7,7 @@
 //  
 //
 
-#define OURO_FRAMEWORK_VERSION    "0.6.4"
+#define OURO_FRAMEWORK_VERSION    "0.7.0"
 
 // std
 #include <bitset>
@@ -23,8 +23,11 @@
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
+#include <source_location>
 #include <mutex>
 #include <concepts>
+
+
 
 // abseil
 #include "absl/container/flat_hash_map.h"
@@ -33,12 +36,15 @@
 #include "absl/hash/hash.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/cleanup/cleanup.h"
 
 #if ABSL_HAVE_CPP_ATTRIBUTE(nodiscard) || _MSC_VER >= 1911
 #define ouro_nodiscard  [[nodiscard]]
 #else
 #define ouro_nodiscard  
 #endif
+
+#define ouro_final  final
 
 
 // rpm
@@ -104,7 +110,6 @@ namespace fs = std::filesystem;
 // cereal
 #include "cereal/cereal.hpp"
 #include "cereal/types/array.hpp"
-#include "cereal/types/chrono.hpp"
 #include "cereal/types/vector.hpp"
 #include "cereal/types/string.hpp"
 #include "cereal/types/unordered_set.hpp"
@@ -211,48 +216,47 @@ ADD_BLOG( stem,     0xe65ea9,    "STEM" )
 
 } // namespace blog
 
+// shortened FMT_STRING
+#define FMTX(s) FMT_STRING_IMPL(s, fmt::compile_string, )
+
 
 // imgui
-#define IM_VEC2_CLASS_EXTRA                                                                                         \
-        inline ImVec2 operator*( const float rhs ) const { return ImVec2( this->x * rhs, this->y * rhs ); }         \
-        inline ImVec2 operator/( const float rhs ) const { return ImVec2( this->x / rhs, this->y / rhs ); }         \
-        inline ImVec2 operator+( const ImVec2& rhs ) const { return ImVec2( this->x + rhs.x, this->y + rhs.y ); }   \
-        inline ImVec2 operator-( const ImVec2& rhs ) const { return ImVec2( this->x - rhs.x, this->y - rhs.y ); }   \
-        inline ImVec2 operator*( const ImVec2& rhs ) const { return ImVec2( this->x * rhs.x, this->y * rhs.y ); }   \
-        inline ImVec2 operator/( const ImVec2& rhs ) const { return ImVec2( this->x / rhs.x, this->y / rhs.y ); }   \
-        inline ImVec2& operator*=( const float rhs ) { this->x *= rhs; this->y *= rhs; return *this; }              \
-        inline ImVec2& operator/=( const float rhs ) { this->x /= rhs; this->y /= rhs; return *this; }              \
-        inline ImVec2& operator+=( const ImVec2& rhs ) { this->x += rhs.x; this->y += rhs.y; return *this; }        \
-        inline ImVec2& operator-=( const ImVec2& rhs ) { this->x -= rhs.x; this->y -= rhs.y; return *this; }        \
-        inline ImVec2& operator*=( const ImVec2& rhs ) { this->x *= rhs.x; this->y *= rhs.y; return *this; }        \
-        inline ImVec2& operator/=( const ImVec2& rhs ) { this->x /= rhs.x; this->y /= rhs.y; return *this; }
+#define IM_VEC2_CLASS_EXTRA                                                                                             \
+        constexpr ImVec2 operator*( const float rhs ) const { return ImVec2( this->x * rhs, this->y * rhs ); }          \
+        constexpr ImVec2 operator/( const float rhs ) const { return ImVec2( this->x / rhs, this->y / rhs ); }          \
+        constexpr ImVec2 operator+( const ImVec2& rhs ) const { return ImVec2( this->x + rhs.x, this->y + rhs.y ); }    \
+        constexpr ImVec2 operator-( const ImVec2& rhs ) const { return ImVec2( this->x - rhs.x, this->y - rhs.y ); }    \
+        constexpr ImVec2 operator*( const ImVec2& rhs ) const { return ImVec2( this->x * rhs.x, this->y * rhs.y ); }    \
+        constexpr ImVec2 operator/( const ImVec2& rhs ) const { return ImVec2( this->x / rhs.x, this->y / rhs.y ); }    \
+        constexpr ImVec2& operator*=( const float rhs ) { this->x *= rhs; this->y *= rhs; return *this; }               \
+        constexpr ImVec2& operator/=( const float rhs ) { this->x /= rhs; this->y /= rhs; return *this; }               \
+        constexpr ImVec2& operator+=( const ImVec2& rhs ) { this->x += rhs.x; this->y += rhs.y; return *this; }         \
+        constexpr ImVec2& operator-=( const ImVec2& rhs ) { this->x -= rhs.x; this->y -= rhs.y; return *this; }         \
+        constexpr ImVec2& operator*=( const ImVec2& rhs ) { this->x *= rhs.x; this->y *= rhs.y; return *this; }         \
+        constexpr ImVec2& operator/=( const ImVec2& rhs ) { this->x /= rhs.x; this->y /= rhs.y; return *this; }
 
 // imgui
-#define IM_VEC4_CLASS_EXTRA                                                                                                                             \
-        ImVec4(const std::array< float, 4 >& arf)  { x = arf[0]; y = arf[1]; z = arf[2]; w = arf[3]; }                                                  \
-        friend inline ImVec4 operator*( const float lhs, const ImVec4& rhs ) { return ImVec4( rhs.x * lhs, rhs.y * lhs, rhs.z * lhs, rhs.w * lhs ); }   \
-        inline ImVec4 operator*( const float rhs ) const { return ImVec4( this->x * rhs, this->y * rhs, this->z * rhs, this->w * rhs ); }               \
-        inline ImVec4 operator+( const ImVec4& rhs ) const { return ImVec4( this->x + rhs.x, this->y + rhs.y, this->z + rhs.z, this->w + rhs.w ); }     \
-        inline ImVec4 operator*( const ImVec4& rhs ) const { return ImVec4( this->x * rhs.x, this->y * rhs.y, this->z * rhs.z, this->w * rhs.w ); }     \
-        inline ImVec4& operator*=( const float rhs ) { this->x *= rhs; this->y *= rhs; this->z *= rhs; this->w *= rhs; return *this; }                  \
-        inline ImVec4& operator+=( const ImVec4& rhs ) { this->x += rhs.x; this->y += rhs.y; this->z += rhs.z; this->w += rhs.w; return *this; }        \
-        inline ImVec4& operator*=( const ImVec4& rhs ) { this->x *= rhs.x; this->y *= rhs.y; this->z *= rhs.z; this->w *= rhs.w; return *this; }
+#define IM_VEC4_CLASS_EXTRA                                                                                                                                 \
+        constexpr ImVec4(const std::array< float, 4 >& arf)  { x = arf[0]; y = arf[1]; z = arf[2]; w = arf[3]; }                                            \
+        constexpr friend ImVec4 operator*( const float lhs, const ImVec4& rhs ) { return ImVec4( rhs.x * lhs, rhs.y * lhs, rhs.z * lhs, rhs.w * lhs ); }    \
+        constexpr ImVec4 operator*( const float rhs ) const { return ImVec4( this->x * rhs, this->y * rhs, this->z * rhs, this->w * rhs ); }                \
+        constexpr ImVec4 operator+( const ImVec4& rhs ) const { return ImVec4( this->x + rhs.x, this->y + rhs.y, this->z + rhs.z, this->w + rhs.w ); }      \
+        constexpr ImVec4 operator*( const ImVec4& rhs ) const { return ImVec4( this->x * rhs.x, this->y * rhs.y, this->z * rhs.z, this->w * rhs.w ); }      \
+        constexpr ImVec4& operator*=( const float rhs ) { this->x *= rhs; this->y *= rhs; this->z *= rhs; this->w *= rhs; return *this; }                   \
+        constexpr ImVec4& operator+=( const ImVec4& rhs ) { this->x += rhs.x; this->y += rhs.y; this->z += rhs.z; this->w += rhs.w; return *this; }         \
+        constexpr ImVec4& operator*=( const ImVec4& rhs ) { this->x *= rhs.x; this->y *= rhs.y; this->z *= rhs.z; this->w *= rhs.w; return *this; }
 
 
 #include "imgui.h"
-#include "imgui_impl_glfw.h"
-#include "imgui_impl_opengl3.h"
-#include "imgui_freetype.h"
 #include "imgui_stdlib.h"
+#include "implot.h"
 #include "imbezier.h"
 #include "imnodes.h"
-#include "implot.h"
 #include "ImGuiFileDialog.h"
 
 // sqlite
 #include "sqlite3.h"
 #include "SQLiteWrapper.h"
-
 
 // etc
 #include "utf8.h"
@@ -261,6 +265,7 @@ ADD_BLOG( stem,     0xe65ea9,    "STEM" )
 #include "readerwriterqueue.h"
 #include "concurrentqueue.h"
 #include "atomicops.h"
+#include "lightweightsemaphore.h"
 namespace mcc = moodycamel;
 
 // CityHash
@@ -270,24 +275,12 @@ namespace mcc = moodycamel;
 #include "stb_image.h"
 #include "stb_image_write.h"
 
-// kissFFT
-#include "kiss_fft.h"
-#include "kiss_fftr.h"
-
 // taskflow
 #include "taskflow.hpp"
 
-// base64 codec
-#include "base64_rfc4648.hpp"
-
-// r8brain
-#include "CDSPResampler.h"
-
-// midi
-#include "RtMidi.h"
-
 // http
 #include "httplib.h"
+
 
 
 namespace constants

@@ -1,8 +1,12 @@
 #include "pch.h"
 
+namespace stdp = std::placeholders;
+
 #include "base/utils.h"
 #include "base/metaenum.h"
 #include "base/instrumentation.h"
+#include "base/text.h"
+#include "base/bimap.h"
 
 #include "buffer/buffer.2d.h"
 
@@ -22,6 +26,9 @@
 #include "ux/diskrecorder.h"
 #include "ux/cache.jams.browser.h"
 
+#include "vx/stembeats.h"
+#include "vx/vibes.h"
+
 #include "discord/discord.bot.ui.h"
 
 #include "endlesss/all.h"
@@ -29,44 +36,67 @@
 #include "effect/effect.stack.h"
 
 #include "mix/preview.h"
+#include "mix/stem.amalgam.h"
 
 #include "gfx/sketchbook.h"
 
-
+#include "net/bond.riffpush.h"
+#include "net/bond.riffpush.connect.h"
 
 #define OUROVEON_LORE           "LORE"
 #define OUROVEON_LORE_VERSION   OURO_FRAMEWORK_VERSION "-alpha"
 
 
-namespace stdp = std::placeholders;
+
+#define _WH_VIEW(_action)           \
+      _action(Default)              \
+      _action(Maintenance)
+REFLECT_ENUM( WarehouseView, uint32_t, _WH_VIEW );
+
+std::string generateWarehouseViewTitle( const WarehouseView::Enum _vwv )
+{
+#define _ACTIVE_ICON(_ty)             _vwv == WarehouseView::_ty ? ICON_FC_FILLED_SQUARE : ICON_FC_HOLLOW_SQUARE,
+#define _ICON_PRINT(_ty)             "{}"
+
+    return fmt::format( FMTX( "Data Warehouse [" _WH_VIEW( _ICON_PRINT ) "]###data_warehouse_view" ),
+        _WH_VIEW( _ACTIVE_ICON )
+        "" );
+
+#undef _ICON_PRINT
+#undef _ACTIVE_ICON
+}
+
+#undef _WH_VIEW
+
+
 
 struct JamVisualisation
 {
-    #define _LINE_BREAK_ON(_action) \
-      _action(Never)                \
-      _action(ChangedBPM)           \
-      _action(ChangedScaleOrRoot)   \
-      _action(TimePassing)
+    #define _LINE_BREAK_ON(_action)   \
+        _action(Never)                \
+        _action(ChangedBPM)           \
+        _action(ChangedScaleOrRoot)   \
+        _action(TimePassing)
     REFLECT_ENUM( LineBreakOn, uint32_t, _LINE_BREAK_ON );
     #undef _LINE_BREAK_ON
 
-    #define _RIFF_GAP_ON(_action) \
-      _action(Never)                \
-      _action(ChangedBPM)           \
-      _action(ChangedScaleOrRoot)   \
-      _action(TimePassing)
+    #define _RIFF_GAP_ON(_action)     \
+        _action(Never)                \
+        _action(ChangedBPM)           \
+        _action(ChangedScaleOrRoot)   \
+        _action(TimePassing)
     REFLECT_ENUM( RiffGapOn, uint32_t, _RIFF_GAP_ON );
     #undef _RIFF_GAP_ON
 
-    #define _COLOUR_STYLE(_action)  \
-        _action( Uniform )          \
-        _action( UserIdentity )     \
-        _action( UserChangeCycle )  \
-        _action( UserChangeRate )   \
-        _action( StemChurn )        \
-        _action( StemTimestamp )    \
-        _action( Scale )            \
-        _action( Root )             \
+    #define _COLOUR_STYLE(_action)    \
+        _action( Uniform )            \
+        _action( UserIdentity )       \
+        _action( UserChangeCycle )    \
+        _action( UserChangeRate )     \
+        _action( StemChurn )          \
+        _action( StemTimestamp )      \
+        _action( Scale )              \
+        _action( Root )               \
         _action( BPM )
     REFLECT_ENUM( ColourStyle, uint32_t, _COLOUR_STYLE );
     #undef _COLOUR_STYLE
@@ -104,7 +134,7 @@ struct JamVisualisation
 
     // defaults that can be then tuned on the UI depending which colour viz is running
     float                   m_bpmMinimum        = 50.0f;
-    float                   m_bpmMaximum        = 190.0f;
+    float                   m_bpmMaximum        = 200.0f;
     float                   m_activityTimeSec   = 30.0f;
     float                   m_changeRateDecay   = 0.8f;
     std::array< float, 4 >  m_uniformColour     = { 0.5, 0.5, 0.5, 1.0f };
@@ -220,6 +250,7 @@ struct LoreApp : public app::OuroApp
 {
     LoreApp()
         : app::OuroApp()
+        , m_rpClient( GetAppName() )
     {
         m_discordBotUI = std::make_unique<discord::BotWithUI>( *this, m_configDiscord );
     }
@@ -232,56 +263,158 @@ struct LoreApp : public app::OuroApp
     const char* GetAppNameWithVersion() const override { return (OUROVEON_LORE " " OUROVEON_LORE_VERSION); }
     const char* GetAppCacheName() const override { return "lore"; }
 
+    bool supportsOfflineEndlesssMode() const override { return true; }
+
     int EntrypointOuro() override;
 
     void initMidi()
     {
-        auto* midiInput = m_mdMidi->getInputControl();
-        if ( midiInput != nullptr )
-        {
-            midiInput->getInputPorts( m_midiInputPortNames );
-        }
+        m_midiInputDevices = app::module::Midi::fetchListOfInputDevices();
 
-        registerMainMenuEntry( 10, "KERNEL", [this]()
+        registerMainMenuEntry( 10, "BOND", [this]()
         {
-            if ( ImGui::MenuItem( "Reclaim Memory" ) )
-                m_stemCache.prune();
+            if ( ImGui::BeginMenu( "Riff Push" ) )
+            {
+                if ( ImGui::MenuItem( "Connect ..." ) )
+                {
+                    activateModalPopup( "Riff Push Connection", [this]( const char* title )
+                    {
+                        modalRiffPushClientConnection( title, m_mdFrontEnd, m_rpClient );
+                    });
+                }
+                
+                bool canReplayJam  = ( m_jamSliceSketch != nullptr ) && ( m_jamSliceSketch->m_slice != nullptr );
+                     canReplayJam &= m_rpClient.getState() == net::bond::Connected;
+
+                if ( ImGui::MenuItem( "Jam Replay ...", nullptr, false, canReplayJam ) )
+                {
+                    activateModalPopup( "Jam Replay Tool", [this]( const char* title )
+                    {
+                        endlesss::types::RiffPlaybackAbstraction defaultAbstraction;
+                        const auto defaultPermutation = defaultAbstraction.asPermutation();
+
+                        ImGui::Text( "%u Riffs to replay", (uint32_t)m_jamSliceSketch->m_slice->m_ids.size() );
+
+                        const auto triggerNextRiffSend = [this, &defaultPermutation]()
+                        {
+                            endlesss::live::RiffPtr riffPtr;
+                            m_jamSliceReplayState.m_riffsToSend.try_dequeue( riffPtr );
+
+                            m_rpClient.pushRiff( riffPtr->m_riffData, defaultPermutation );
+                            m_jamSliceReplayState.m_currentRiffSentAt.restart();
+
+                            m_jamSliceReplayState.m_currentRiffDurationInSeconds = riffPtr->getTimingDetails().m_lengthInSec - ( riffPtr->getTimingDetails().m_lengthInSecPerBar * 0.2 );
+                            m_jamSliceReplayState.m_replaySequenceLengthSeconds += riffPtr->getTimingDetails().m_lengthInSec;
+
+                            const auto currentRiffID = riffPtr->m_riffData.riff.couchID;
+                            const auto expectedRiffID = m_jamSliceSketch->m_slice->m_ids[m_jamSliceReplayState.m_currentRiffIndex];
+
+                            if ( currentRiffID != expectedRiffID )
+                                blog::error::app( "REPLAY : id mismatch; got {}, expected {}", currentRiffID, expectedRiffID );
+
+                            blog::app( "REPLAY : {} for {}", currentRiffID, m_jamSliceReplayState.m_currentRiffDurationInSeconds );
+                        };
+
+                        if ( m_jamSliceReplayState.m_state == JamSliceReplayState::State::Idle )
+                        {
+                            if ( ImGui::Button( "Begin" ) )
+                            {
+                                m_jamSliceReplayState.m_riffPrefetchIndex = 0;
+
+                                m_jamSliceReplayState.m_state = JamSliceReplayState::State::Warmstart;
+
+                                for ( std::size_t p = 0; p < 4; p++ )
+                                {
+                                    m_jamSliceReplayState.m_replayPipeline->requestRiff( {
+                                        {
+                                            m_jamSliceSketch->m_slice->m_jamID,
+                                            m_jamSliceSketch->m_slice->m_ids[m_jamSliceReplayState.m_riffPrefetchIndex + p]
+                                        },
+                                        defaultPermutation } );
+
+                                    m_jamSliceReplayState.m_riffPrefetchIndex++;
+                                }
+                            }
+                        }
+                        else if ( m_jamSliceReplayState.m_state == JamSliceReplayState::State::Warmstart )
+                        {
+                            ImGui::TextUnformatted( "Prefetching ..." );
+                            if ( m_jamSliceReplayState.m_riffsToSend.size_approx() > 2 )
+                            {
+                                m_jamSliceReplayState.m_currentRiffIndex = 0;
+                                triggerNextRiffSend();
+
+                                m_jamSliceReplayState.m_state = JamSliceReplayState::State::Primed;
+                            }
+                        }
+                        else if ( m_jamSliceReplayState.m_state == JamSliceReplayState::State::Primed )
+                        {
+                            ImGui::TextUnformatted( "Initial riff sent, waiting ..." );
+                            if ( ImGui::Button( "Continue" ) )
+                            {
+                                m_jamSliceReplayState.m_state = JamSliceReplayState::State::Sending; 
+                            }
+                        }
+                        else if ( m_jamSliceReplayState.m_state == JamSliceReplayState::State::Sending )
+                        {
+                            const double secondsSinceLastSend = (double)m_jamSliceReplayState.m_currentRiffSentAt.deltaMs().count() * 0.001;
+
+                            ImGui::Text( "Sending [%i], %.2fs since last, current riff length is %.2fs", 
+                                m_jamSliceReplayState.m_currentRiffIndex, 
+                                secondsSinceLastSend,
+                                m_jamSliceReplayState.m_currentRiffDurationInSeconds );
+
+                            ImGui::Text( "Replay length : %.2fs", m_jamSliceReplayState.m_replaySequenceLengthSeconds );
+
+                            if ( secondsSinceLastSend >= m_jamSliceReplayState.m_currentRiffDurationInSeconds )
+                            {
+                                m_jamSliceReplayState.m_currentRiffIndex++;
+                                triggerNextRiffSend();
+
+                                if ( m_jamSliceReplayState.m_riffPrefetchIndex < m_jamSliceSketch->m_slice->m_ids.size() )
+                                {
+                                    m_jamSliceReplayState.m_replayPipeline->requestRiff( {
+                                        {
+                                            m_jamSliceSketch->m_slice->m_jamID,
+                                            m_jamSliceSketch->m_slice->m_ids[m_jamSliceReplayState.m_riffPrefetchIndex]
+                                        }, defaultPermutation } );
+
+                                    m_jamSliceReplayState.m_riffPrefetchIndex++;
+                                }
+
+                                if ( m_jamSliceReplayState.m_currentRiffIndex + 1 >= m_jamSliceSketch->m_slice->m_ids.size() )
+                                {
+                                    m_jamSliceReplayState.m_state = JamSliceReplayState::State::Idle;
+                                }
+                            }
+                        }
+                    });
+                }
+
+                ImGui::EndMenu();
+            }
         });
 
-        registerMainMenuEntry( 15, "EXPORT", [this]()
+
+        registerMainMenuEntry( 20, "EXPORT", [this]()
         {
-            endlesss::live::RiffPtr currentRiffPtr = m_nowPlayingRiff;
-
-            if ( currentRiffPtr != nullptr )
-            {
-                if ( ImGui::MenuItem( "Current Riff" ) )
-                {
-                    const auto exportedFiles = endlesss::xp::exportRiff( endlesss::xp::ExportMode::Stems,
-                        m_storagePaths.value(),
-                        m_configExportOutput.spec,
-                        currentRiffPtr );
-
-                    for ( const auto& exported : exportedFiles )
-                    {
-                        blog::core( " => {}", exported.string() );
-                    }
-                }
-            }
-            else
-            {
-                ImGui::MenuItem( "Nothing playing", nullptr, nullptr, false );
-            }
-
 //             ImGui::Separator();
 //             if ( ImGui::MenuItem( "Configure ..." ) )
 //             {
 //             }
         });
 
-        registerMainMenuEntry( 20, "MIDI", [this]()
+        registerMainMenuEntry( 30, "MIDI", [this]()
         {
+            for ( const auto& device : m_midiInputDevices )
+            {
+                if ( ImGui::MenuItem( device.getName().c_str(), nullptr, false ) )
+                {
+                }
+            }
+            /*
             auto* midiInput = m_mdMidi->getInputControl();
-            if ( midiInput != nullptr && !m_midiInputPortNames.empty() )
+            if ( midiInput != nullptr && !m_midiInputDevices.empty() )
             {
                 uint32_t openedIndex;
                 const bool hasOpenPort = midiInput->getOpenPortIndex( openedIndex );
@@ -303,30 +436,14 @@ struct LoreApp : public app::OuroApp
             {
                 ImGui::MenuItem( "Unavailable", nullptr, nullptr, false );
             }
+            */
         });
     }
 
 protected:
 
-    config::endlesss::Export                m_configExportOutput;
 
-//     void customStatusBar()
-//     {
-//         uint32_t openedIndex;
-//         auto* midiInput = m_mdMidi->getInputControl();
-//         if ( midiInput != nullptr && midiInput->getOpenPortIndex( openedIndex ) )
-//         {
-//             const auto& inputPortName = m_midiInputPortNames[openedIndex];
-//             {
-//                 ImGui::Scoped::ToggleButtonLit toggled;
-//                 ImGui::Button( "MIDI" );
-//                 ImGui::TextUnformatted( inputPortName );
-//             }
-//             ImGui::Separator();
-//         }
-//     }
-
-    std::vector< std::string >              m_midiInputPortNames;
+    std::vector< app::module::MidiDevice >  m_midiInputDevices;
 
 
     // discord bot & streaming panel 
@@ -336,12 +453,22 @@ protected:
     // VST playground
     std::unique_ptr< effect::EffectStack >  m_effectStack;
 #endif // OURO_FEATURE_VST24
+    
+    std::unique_ptr< vx::Vibes >            m_vibes;
+
+
+    base::EventListenerID                   m_eventListenerRiffChange;
+    base::EventListenerID                   m_eventListenerOpComplete;
+
+
+    mix::StemDataProcessor                  m_stemDataProcessor;
 
 
 // riff playback management #HDD build into common module?
 protected:
 
-    using SyncAndPlaybackQueue = mcc::ReaderWriterQueue< endlesss::types::RiffCouchID >;
+    using RiffPipeline          = std::unique_ptr< endlesss::toolkit::Pipeline >;
+    using SyncAndPlaybackQueue  = mcc::ReaderWriterQueue< endlesss::types::RiffCouchID >;
 
     // take the completed IDs posted back from the worker thread and prune them from
     // our list of 'in flight' tasks
@@ -350,59 +477,72 @@ protected:
         endlesss::types::RiffCouchID completedRiff;
         while ( m_syncAndPlaybackCompletions.try_dequeue( completedRiff ) )
         {
-            m_syncAndPlaybackInFlight.erase( 
-                std::remove( m_syncAndPlaybackInFlight.begin(), m_syncAndPlaybackInFlight.end(), completedRiff ), m_syncAndPlaybackInFlight.end() );
+            m_syncAndPlaybackInFlight.erase( completedRiff );
         }
         while ( m_riffsDequedByMixer.try_dequeue( completedRiff ) )
         {
-            m_riffsQueuedForPlayback.erase(
-                std::remove( m_riffsQueuedForPlayback.begin(), m_riffsQueuedForPlayback.end(), completedRiff ), m_riffsQueuedForPlayback.end() );
+            m_riffsQueuedForPlayback.erase( completedRiff );
         }
     }
 
+    RiffPipeline                    m_riffPipeline;
+
     SyncAndPlaybackQueue            m_syncAndPlaybackQueue;         // riffs to fetch & play - written to by main thread, read from worker
     SyncAndPlaybackQueue            m_syncAndPlaybackCompletions;   // riffs that have been fetched & played - written to by worker, read by main thread
-    endlesss::types::RiffCouchIDs   m_syncAndPlaybackInFlight;      // main thread list of work submitted to worker
-    std::unique_ptr< std::thread >  m_syncAndPlaybackThread;        // the worker thread
-    std::atomic_bool                m_syncAndPlaybackThreadHalt;
-#ifdef OURO_CXX20_SEMA    
-    std::counting_semaphore<>       m_syncAndPlaybackSem { 0 };
-#endif // OURO_CXX20_SEMA
+    endlesss::types::RiffCouchIDSet m_syncAndPlaybackInFlight;      // main thread list of work submitted to worker
 
     SyncAndPlaybackQueue            m_riffsDequedByMixer;
-    endlesss::types::RiffCouchIDs   m_riffsQueuedForPlayback;
+    endlesss::types::RiffCouchIDSet m_riffsQueuedForPlayback;
     endlesss::live::RiffPtr         m_nowPlayingRiff;
+    std::atomic_bool                m_riffPipelineClearInProgress = false;
 
 
-    void requestRiffPlayback( const endlesss::types::RiffCouchID& riff )
+    void requestRiffPlayback( const endlesss::types::RiffIdentity& riffIdent, const endlesss::types::RiffPlaybackPermutation& playback )
     {
-        blog::app( "requestRiffPlayback: {}", riff );
+        const auto& riffCouchID = riffIdent.getRiffID();
 
-        m_riffsQueuedForPlayback.emplace_back( riff );      // stash it in the "queued but not playing yet" list; removed from 
-                                                            // when the mixer eventually gets to playing it
+        blog::app( "requestRiffPlayback: {}", riffCouchID );
 
-        m_syncAndPlaybackInFlight.emplace_back( riff );     // log that we will be asynchronously fetching this
+        m_riffsQueuedForPlayback.emplace( riffCouchID );        // stash it in the "queued but not playing yet" list; removed from 
+                                                                // when the mixer eventually gets to playing it
 
-        m_syncAndPlaybackQueue.emplace( riff );             // push it onto the pile to be examined by the worker thread
-#if OURO_CXX20_SEMA
-        m_syncAndPlaybackSem.release();
-#endif // OURO_CXX20_SEMA        
+        m_syncAndPlaybackInFlight.emplace( riffCouchID );       // log that we will be asynchronously fetching this
+
+        m_riffPipeline->requestRiff( { riffIdent, playback } ); // kick the request to the pipeline
     }
 
-    void handleNewRiffPlaying( endlesss::live::RiffPtr& nowPlayingRiff )
+
+    void handleNewRiffPlaying( const base::IEvent& eventPtr )
     {
-        m_nowPlayingRiff = nowPlayingRiff;
+        ABSL_ASSERT( eventPtr.getID() == events::MixerRiffChange::ID );
+
+        const events::MixerRiffChange* riffChangeEvent = dynamic_cast<const events::MixerRiffChange*>( &eventPtr );
+        ABSL_ASSERT( riffChangeEvent != nullptr );
+
+        m_nowPlayingRiff = riffChangeEvent->m_riff;
 
         // might be a empty riff, only track actual riffs
-        if ( nowPlayingRiff != nullptr )
+        if ( riffChangeEvent->m_riff != nullptr )
             m_riffsDequedByMixer.emplace( m_nowPlayingRiff->m_riffData.riff.couchID );
     }
 
+    void handleOperationComplete( const base::IEvent& eventPtr )
+    {
+        ABSL_ASSERT( eventPtr.getID() == events::OperationComplete::ID );
+
+        const events::OperationComplete* opCompleteEvent = dynamic_cast<const events::OperationComplete*>(&eventPtr);
+        ABSL_ASSERT( opCompleteEvent != nullptr );
+
+        m_permutationOperationImGuiMap.remove( opCompleteEvent->m_id );
+    }
+
+    endlesss::types::RiffPlaybackAbstraction    m_riffPlaybackAbstraction;
+
+    base::BiMap< base::OperationID, ImGuiID >   m_permutationOperationImGuiMap;
 
 protected:
     endlesss::types::JamCouchID     m_currentViewedJam;
     std::string                     m_currentViewedJamName;
-    bool                            m_enableDbJamDeletion = false;
 
 // data and callbacks used to react to changes from the warehouse
 protected:
@@ -413,7 +553,7 @@ protected:
         m_warehouseWorkState    = currentTask;
     }
 
-    void handleWarehouseContentsReport( const endlesss::Warehouse::ContentsReport& report )
+    void handleWarehouseContentsReport( const endlesss::toolkit::Warehouse::ContentsReport& report )
     {
         // this data is presented by the UI so for safety at the moment we just do a big chunky lock around it
         // before wiping it out and rewriting
@@ -476,17 +616,17 @@ protected:
         }
     }
 
-    std::string                             m_warehouseWorkState;
-    bool                                    m_warehouseWorkUnderway;
+    std::string                                     m_warehouseWorkState;
+    bool                                            m_warehouseWorkUnderway;
 
-    std::mutex                              m_warehouseContentsReportMutex;
-    endlesss::Warehouse::ContentsReport     m_warehouseContentsReport;
-    endlesss::types::JamCouchIDSet          m_warehouseContentsReportJamIDs;
-    std::vector< std::string >              m_warehouseContentsReportJamTitles;
-    std::vector< bool >                     m_warehouseContentsReportJamInFlux;
-    endlesss::types::JamCouchIDSet          m_warehouseContentsReportJamInFluxSet;      // any jams that have unfetched data
-    WarehouseContentsSortMode               m_warehouseContentsSortMode                 = WarehouseContentsSortMode::ByName;
-    std::vector< std::size_t >              m_warehouseContentsSortedIndices;
+    std::mutex                                      m_warehouseContentsReportMutex;
+    endlesss::toolkit::Warehouse::ContentsReport    m_warehouseContentsReport;
+    endlesss::types::JamCouchIDSet                  m_warehouseContentsReportJamIDs;
+    std::vector< std::string >                      m_warehouseContentsReportJamTitles;
+    std::vector< bool >                             m_warehouseContentsReportJamInFlux;
+    endlesss::types::JamCouchIDSet                  m_warehouseContentsReportJamInFluxSet;      // any jams that have unfetched data
+    WarehouseContentsSortMode                       m_warehouseContentsSortMode                 = WarehouseContentsSortMode::ByName;
+    std::vector< std::size_t >                      m_warehouseContentsSortedIndices;
 
 
     struct WarehouseJamBrowserBehaviour : public ux::UniversalJamBrowserBehaviour
@@ -494,6 +634,38 @@ protected:
         // local copy of warehouse lookup to avoid threading drama
         endlesss::types::JamCouchIDSet      m_warehouseJamIDs;
     };
+
+
+
+protected:
+
+    struct JamSliceReplayState
+    {
+        enum class State
+        {
+            Idle,
+            Warmstart,
+            Primed,
+            Sending,
+        }                   m_state = State::Idle;
+
+        std::size_t         m_riffPrefetchIndex = 0;
+
+        double              m_jamSequenceLengthSeconds = 0;
+        double              m_replaySequenceLengthSeconds = 0;
+
+        std::size_t         m_currentRiffIndex = 0;
+        double              m_currentRiffDurationInSeconds = 0;
+        spacetime::Moment   m_currentRiffSentAt;
+
+        RiffPipeline        m_replayPipeline;
+
+        mcc::ReaderWriterQueue< endlesss::live::RiffPtr >
+                            m_riffsToSend;
+    };
+    JamSliceReplayState     m_jamSliceReplayState;
+
+
 
 public:
 
@@ -565,8 +737,10 @@ protected:
         using CellIndexToSliceIndex     = absl::flat_hash_map< uint64_t, int32_t >;
         using LinearRiffOrder           = std::vector< endlesss::types::RiffCouchID >;
 
+        using WarehouseJamSlicePtr      = endlesss::toolkit::Warehouse::JamSlicePtr;
 
-        endlesss::Warehouse::JamSlicePtr    m_slice;
+
+        WarehouseJamSlicePtr                m_slice;
 
         RiffToBitmapOffsetMap               m_riffToBitmapOffset;
         CellIndexToRiffMap                  m_cellIndexToRiff;
@@ -583,7 +757,7 @@ protected:
 
         std::vector< gfx::SketchUploadPtr > m_textures;
 
-        void prepare( endlesss::Warehouse::JamSlicePtr&& slicePtr )
+        void prepare( endlesss::toolkit::Warehouse::JamSlicePtr&& slicePtr )
         {
             m_slice = std::move( slicePtr );
         }
@@ -593,7 +767,7 @@ protected:
             m_textures.clear();
             m_jamViewRenderUserHashFMap.clear();
 
-            const endlesss::Warehouse::JamSlice& slice = *m_slice;
+            const endlesss::toolkit::Warehouse::JamSlice& slice = *m_slice;
             const int32_t totalRiffs = (int32_t)slice.m_ids.size();
 
 
@@ -622,7 +796,7 @@ protected:
                 nameHighlightOn[nH]             = !jamVis.m_nameHighlighting[nH].m_name.empty();
                 if ( nameHighlightOn[nH] )
                 {
-                    nameHighlightHashes[nH]     = CityHash64( jamVis.m_nameHighlighting[nH].m_name.data(), jamVis.m_nameHighlighting[nH].m_name.length() );
+                    nameHighlightHashes[nH]     = base::HashString64( jamVis.m_nameHighlighting[nH].m_name );
                     nameHighlightColourU32[nH]  = ImGui::ColorConvertFloat4ToU32_BGRA_Flip( jamVis.m_nameHighlighting[nH].m_colour );
                 }
             }
@@ -968,11 +1142,11 @@ protected:
         Rendering,
         Ready,
         PendingUpdate
-    }                                       m_jamSliceRenderState = JamSliceRenderState::Invalidated;
-    spacetime::Moment                       m_jamSliceRenderChangePendingTimer;
+    }                                           m_jamSliceRenderState = JamSliceRenderState::Invalidated;
+    spacetime::Moment                           m_jamSliceRenderChangePendingTimer;
 
-    endlesss::Warehouse::JamSlicePtr        m_jamSlice;
-    JamSliceSketchPtr                       m_jamSliceSketch;
+    endlesss::toolkit::Warehouse::JamSlicePtr   m_jamSlice;
+    JamSliceSketchPtr                           m_jamSliceSketch;
 
 
     void clearJamSlice()
@@ -986,7 +1160,7 @@ protected:
 
     void newJamSliceGenerated(
         const endlesss::types::JamCouchID& jamCouchID,
-        endlesss::Warehouse::JamSlicePtr&& resultSlice )
+        endlesss::toolkit::Warehouse::JamSlicePtr&& resultSlice )
     {
         std::scoped_lock<std::mutex> sliceLock( m_jamSliceMapLock );
 
@@ -1052,6 +1226,10 @@ protected:
         }
     }
 
+protected:
+
+    net::bond::RiffPushClient   m_rpClient;
+
 };
 
 
@@ -1060,8 +1238,14 @@ protected:
 // ---------------------------------------------------------------------------------------------------------------------
 int LoreApp::EntrypointOuro()
 {
+    // create a lifetime-tracked provider token to pass to systems that want access to Riff-fetching abilities we provide
+    // the app instance will outlive all those systems; this slightly convoluted process is there to double-check that assertion
+    endlesss::services::RiffFetchInstance riffFetchService( this );
+    endlesss::services::RiffFetchProvider riffFetchProvider = riffFetchService.makeBound();
+
+
     // create warehouse instance to manage ambient downloading
-    endlesss::Warehouse warehouse( m_storagePaths.value(), m_apiNetworkConfiguration.value() );
+    endlesss::toolkit::Warehouse warehouse( m_storagePaths.value(), m_apiNetworkConfiguration.value() );
     warehouse.syncFromJamCache( m_jamLibrary );
     warehouse.setCallbackWorkReport( std::bind( &LoreApp::handleWarehouseWorkUpdate, this, stdp::_1, stdp::_2 ) );
     warehouse.setCallbackContentsReport( std::bind( &LoreApp::handleWarehouseContentsReport, this, stdp::_1 ) );
@@ -1082,7 +1266,7 @@ int LoreApp::EntrypointOuro()
 
 
     // add status bar section to report warehouse activity
-    registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Left, 500.0f, [this]()
+    const auto sbbWarehouseID = registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Left, 500.0f, [this]()
     {
         // worker thread control / status display
         {
@@ -1097,18 +1281,35 @@ int LoreApp::EntrypointOuro()
     });
 
 
-    // default to viewing logged-in user in the jam view highlight
-    m_jamVisualisation.m_nameHighlighting[0].m_name = m_apiNetworkConfiguration->auth().user_id;
-    m_jamVisualisation.m_nameHighlighting[0].m_colour = ImVec4( 1.0f, 0.95f, 0.8f, 1.0f );
 
+    // default to viewing logged-in user in the jam view highlight
+    if ( m_apiNetworkConfiguration->hasValidEndlesssAuth() )
+    {
+        m_jamVisualisation.m_nameHighlighting[0].m_name     = m_apiNetworkConfiguration->auth().user_id;
+        m_jamVisualisation.m_nameHighlighting[0].m_colour   = ImVec4( 1.0f, 0.95f, 0.8f, 1.0f );
+    }
+
+    m_vibes = std::make_unique<vx::Vibes>();
+    if ( const auto vibeStatus = m_vibes->initialize( *this ); !vibeStatus.ok() )
+    {
+        blog::error::app( FMTX( "Bad vibes : {}" ), vibeStatus.ToString() );
+    }
 
     // examine our midi state, extract port names
     initMidi();
 
 
     // create and install the mixer engine
-    mix::Preview mixPreview( m_mdAudio->getMaximumBufferSize(), m_mdAudio->getSampleRate(), std::bind( &LoreApp::handleNewRiffPlaying, this, stdp::_1 ) );
+    mix::Preview mixPreview( m_mdAudio->getMaximumBufferSize(), m_mdAudio->getSampleRate(), m_appEventBusClient.value() );
     m_mdAudio->blockUntil( m_mdAudio->installMixer( &mixPreview ) );
+
+
+    m_eventListenerRiffChange       = m_appEventBus->addListener( events::MixerRiffChange::ID, std::bind( &LoreApp::handleNewRiffPlaying, this, stdp::_1 ) );
+    m_eventListenerOpComplete       = m_appEventBus->addListener( events::OperationComplete::ID, std::bind( &LoreApp::handleOperationComplete, this, stdp::_1 ) );
+
+
+    checkedCoreCall( "add stem listener", [this] { return m_stemDataProcessor.connect( m_appEventBus ); } );
+
 
 #if OURO_FEATURE_VST24
     // VSTs for audio engine
@@ -1116,57 +1317,72 @@ int LoreApp::EntrypointOuro()
     m_effectStack->load( m_appConfigPath );
 #endif // OURO_FEATURE_VST24
 
-    m_syncAndPlaybackThreadHalt = false;
-    m_syncAndPlaybackThread = std::make_unique<std::thread>( [&mixPreview, &warehouse, this]()
+
+    m_riffPipeline = std::make_unique< endlesss::toolkit::Pipeline >(
+        riffFetchProvider,
+        m_configPerf.liveRiffInstancePoolSize,
+        [&warehouse, this]( const endlesss::types::RiffIdentity& request, endlesss::types::RiffComplete& result) -> bool
         {
-            using namespace std::chrono_literals;
+            // most requests can be serviced direct from the DB
+            if ( warehouse.fetchSingleRiffByID( request.getRiffID(), result ) )
+                return true;
 
-            OuroveonThreadScope ots( OURO_THREAD_PREFIX "LORE::riff-sync" );
+            // assuming we have Endlesss auth, go hunting
+            if ( m_apiNetworkConfiguration->hasValidEndlesssAuth() )
+                return endlesss::toolkit::Pipeline::defaultNetworkResolver( m_apiNetworkConfiguration.value(), request, result );
 
-            endlesss::live::RiffCacheLRU liveRiffMiniCache{ 50 };
-            endlesss::types::RiffCouchID riffCouchID;
-
-            blog::app( "background riff sync thread [enter]" );
-            for (;;)
+            return false;
+        },
+        [&mixPreview, this]( const endlesss::types::RiffIdentity& request, endlesss::live::RiffPtr& loadedRiff, const endlesss::types::RiffPlaybackPermutationOpt& playbackPermutationOpt )
+        {
+            // if the provided riff is valid, hand it over to the mixer to enqueue for playing
+            if ( loadedRiff )
             {
-                if ( m_syncAndPlaybackThreadHalt )
-                    break;
+                mixPreview.enqueueRiff( loadedRiff );
 
-#if OURO_CXX20_SEMA
-                if ( m_syncAndPlaybackSem.try_acquire_for( 200ms ) )
-#endif // OURO_CXX20_SEMA
+                // TODO should we actually bind this in with enqueueRiff ?
+                if ( playbackPermutationOpt.has_value() )
                 {
-                    base::instr::ScopedEvent se( "riff-load", base::instr::PresetColour::Emerald );
-
-                    if ( m_syncAndPlaybackQueue.try_dequeue( riffCouchID ) )
-                    {
-                        endlesss::live::RiffPtr riffToPlay;
-
-                        // rummage through our little local cache of live riff instances to see if we can re-use one
-                        if ( !liveRiffMiniCache.search( riffCouchID, riffToPlay ) )
-                        {
-                            endlesss::types::RiffComplete riffComplete;
-                            if ( warehouse.fetchSingleRiffByID( riffCouchID, riffComplete ) )
-                            {
-                                riffToPlay = std::make_shared< endlesss::live::Riff >( riffComplete, m_mdAudio->getSampleRate() );
-                                riffToPlay->fetch( m_apiNetworkConfiguration.value(), m_stemCache, m_taskExecutor );
-
-                                // stash new riff in cache
-                                liveRiffMiniCache.store( riffToPlay );
-                            }
-                        }
-
-                        // could have failed if we passed in a naff CID that warehouse doesn't know about; pretend we played it
-                        if ( riffToPlay != nullptr )
-                            mixPreview.play( riffToPlay );
-
-                        // report that we're done with this one
-                        m_syncAndPlaybackCompletions.enqueue( riffCouchID );
-                    }
+                    mixPreview.enqueuePermutation( playbackPermutationOpt.value() );
                 }
-                std::this_thread::yield();
             }
-        } );
+            // if null, this may be either a failure to resolve or part of a request cancellation
+            // .. in which case we manually push it on the list that it *would* have been put on by the mixer eventually
+            else
+                m_riffsDequedByMixer.enqueue( request.getRiffID() );
+
+            // report that we're done with this one
+            m_syncAndPlaybackCompletions.enqueue( request.getRiffID() );
+        },
+        [&mixPreview, this]()
+        {
+            mixPreview.stop();
+            m_riffPipelineClearInProgress = false;
+        });
+
+    m_jamSliceReplayState.m_replayPipeline = std::make_unique< endlesss::toolkit::Pipeline >(
+        riffFetchProvider,
+        4,
+        [&warehouse, this]( const endlesss::types::RiffIdentity& request, endlesss::types::RiffComplete& result ) -> bool
+        {
+            // most requests can be serviced direct from the DB
+            if ( warehouse.fetchSingleRiffByID( request.getRiffID(), result ) )
+                return true;
+
+            // assuming we have Endlesss auth, go hunting
+            if ( m_apiNetworkConfiguration->hasValidEndlesssAuth() )
+                return endlesss::toolkit::Pipeline::defaultNetworkResolver( m_apiNetworkConfiguration.value(), request, result );
+
+            return false;
+        },
+        [this]( const endlesss::types::RiffIdentity& request, endlesss::live::RiffPtr& loadedRiff, const endlesss::types::RiffPlaybackPermutationOpt& )
+        {
+            if ( loadedRiff )
+                m_jamSliceReplayState.m_riffsToSend.enqueue( loadedRiff );
+        },
+        []()
+        {
+        });
 
     // UI core loop begins
     while ( beginInterfaceLayout( (app::CoreGUI::ViewportFlags)(
@@ -1181,6 +1397,8 @@ int LoreApp::EntrypointOuro()
         // run jam slice computation that needs to run on the main thread
         m_sketchbook.processPendingUploads();
 
+        m_stemDataProcessor.update( GImGui->IO.DeltaTime, 0.5f );
+
         // tidy up any messages from our riff-sync background thread
         synchroniseRiffWork();
 
@@ -1192,14 +1410,15 @@ int LoreApp::EntrypointOuro()
             // expose gain control
             {
                 float gainF = m_mdAudio->getMasterGain() * 1000.0f;
-                if ( ImGui::KnobFloat( "Gain", 24.0f, &gainF, 0.0f, 1000.0f, 2000.0f ) )
+                if ( ImGui::KnobFloat( "##mix_gain", 24.0f, &gainF, 0.0f, 1000.0f, 2000.0f ) )
                     m_mdAudio->setMasterGain( gainF * 0.001f );
             }
             ImGui::SameLine( 0, 8.0f );
+
             // button to toggle end-chain mute on audio engine (but leave processing, WAV output etc intact)
             const bool isMuted = m_mdAudio->isMuted();
             {
-                const char* muteIcon = isMuted ? ICON_FA_VOLUME_MUTE : ICON_FA_VOLUME_UP;
+                const char* muteIcon = isMuted ? ICON_FA_VOLUME_OFF : ICON_FA_VOLUME_HIGH;
 
                 {
                     ImGui::Scoped::ToggleButton bypassOn( isMuted );
@@ -1208,8 +1427,18 @@ int LoreApp::EntrypointOuro()
                 }
                 ImGui::CompactTooltip( "Mute final audio output\nThis does not affect streaming or disk-recording" );
             }
+            ImGui::SameLine( 0, 8.0f );
+            {
+                ImGui::Scoped::ToggleButton isClearing( m_riffPipelineClearInProgress );
+                if ( ImGui::Button( ICON_FA_BAN, ImVec2( 48.0f, 48.0f ) ) )
+                {
+                    m_riffPipelineClearInProgress = true;
+                    m_riffPipeline->requestClear();
+                }
+                ImGui::CompactTooltip( "Panic stop all playback, buffering, pre-fetching, etc" );
+            }
 
-
+            ImGui::Spacing();
             ImGui::TextUnformatted( "Disk Recorders" );
             {
                 ux::widget::DiskRecorder( *m_mdAudio, m_storagePaths->outputApp );
@@ -1234,27 +1463,300 @@ int LoreApp::EntrypointOuro()
         // for rendering state from the current riff;
         // take a shared ptr copy here, just in case the riff is swapped out mid-tick
         endlesss::live::RiffPtr currentRiffPtr = m_nowPlayingRiff;
-
-        // pour current riff into Exchange block
-        endlesss::Exchange::fillDetailsFromRiff( m_endlesssExchange, currentRiffPtr, m_currentViewedJamName.c_str() );
-
-
-
         const auto currentRiff = currentRiffPtr.get();
 
+        // update the Exchange data block; this also serves as a way to push sanitized beat / energy / playback 
+        // information around other parts of the app
+        {
+            // take basic riff & stem data from the Riff instance
+            endlesss::toolkit::Exchange::copyDetailsFromRiff( m_endlesssExchange, currentRiffPtr, m_currentViewedJamName.c_str() );
+
+            if ( currentRiff != nullptr )
+            {
+                // copy in the current stem energy/pulse data that may have arrived from the mixer
+                m_stemDataProcessor.copyToExchangeData( m_endlesssExchange );
+
+                // compute the progression (bar/percentage through riff) of playback based on the current sample, embed in Exchange
+                endlesss::live::RiffProgression playbackProgression;
+
+                const auto timingData = currentRiff->getTimingDetails();
+                timingData.ComputeProgressionAtSample(
+                    (uint64_t)mixPreview.getTimeInfoPtr()->samplePos,
+                    playbackProgression );
+
+                endlesss::toolkit::Exchange::copyDetailsFromProgression( m_endlesssExchange, playbackProgression );
+
+                // copy in the scope data
+                const dsp::Scope::Result& scopeResult = m_mdAudio->getCurrentScopeResult();
+                static_assert(dsp::Scope::FFTFinalBuckets == endlesss::toolkit::Exchange::ScopeBucketCount, "fft bucket count mismatch");
+                for ( std::size_t i = 0; i < endlesss::toolkit::Exchange::ScopeBucketCount; i++ )
+                    m_endlesssExchange.m_scope[i] = scopeResult[i];
+
+                // mark exchange as having a full complement of data
+                m_endlesssExchange.m_dataflags |= endlesss::toolkit::Exchange::DataFlags_Playback;
+                m_endlesssExchange.m_dataflags |= endlesss::toolkit::Exchange::DataFlags_Scope;
+            }
+        }
+
+
+        m_vibes->doImGui( m_endlesssExchange, this );
 
         m_mdMidi->processMessages( []( const app::midi::Message& ){ } );
 
-        {
-            m_discordBotUI->imgui( *this );
-        }
-        {
-            ImGui::Begin( "Playback Engine" );
+        m_discordBotUI->imgui( *this );
 
-            mixPreview.imgui( m_storagePaths.value() );
 
+        {
+            mixPreview.imgui();
+
+
+            if ( ImGui::Begin( "Riff Details" ) )
+            {
+
+                struct TableFixedColumn
+                {
+                    constexpr TableFixedColumn( const char* title, const float width )
+                        : m_title( title )
+                        , m_width( width )
+                    {}
+
+                    const char* m_title;
+                    const float m_width;
+                };
+
+                static constexpr std::array< TableFixedColumn, 12 > RiffViewTable{ {
+                    { "",           15.0f  },
+                    { "",           15.0f  },
+                    { "",           10.0f  },
+                    { "User",       140.0f },
+                    { "Instr",      60.0f  },
+                    { "Preset",     140.0f },
+                    { "Gain",       45.0f  },
+                    { "Speed",      45.0f  },
+                    { "Rep",        30.0f  },
+                    { "Length",     65.0f  },
+                    { "Rate",       65.0f  },
+                    { "Size/KB",    65.0f  }
+                } };
+
+                // based on the screen space we have available, figure out which columns we can draw
+                int32_t visibleColumns = 0;
+                float currentViewWidth = ImGui::GetContentRegionAvail().x;
+                const std::size_t maxColumns = RiffViewTable.size();
+                const float perColumnPadding = (GImGui->Style.CellPadding.x * 2.0f);
+                for ( ;; )
+                {
+                    currentViewWidth -= RiffViewTable[visibleColumns].m_width + perColumnPadding;
+                    if ( currentViewWidth <= 0.0f )
+                        break;
+
+                    // or run out of columns
+                    visibleColumns++;
+                    if ( visibleColumns >= maxColumns )
+                        break;
+                }
+
+                ImGui::Dummy( ImVec2( 0.0f, 4.0f ) );
+                ImGui::vx::StemBeats( "##stem_beat", m_endlesssExchange, 18.0f, false );
+                ImGui::Dummy( ImVec2( 0.0f, 8.0f ) );
+
+                if ( visibleColumns >= 3 && // only bother if there's actually enough space to make it worth while viewing
+                    ImGui::BeginTable( "##stem_stack", visibleColumns, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg ) )
+                {
+                    ImGui::PushStyleColor( ImGuiCol_Text, ImGui::GetStyleColorVec4( ImGuiCol_ResizeGripHovered ) );
+                    {
+                        for ( int32_t cI = 0; cI < visibleColumns; cI++ )
+                            ImGui::TableSetupColumn( RiffViewTable[cI].m_title, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoReorder | ImGuiTableColumnFlags_NoSort, RiffViewTable[cI].m_width );
+                    }
+                    ImGui::TableNextRow( ImGuiTableRowFlags_Headers );
+
+                    // render the table header ourselves so we can insert checkboxes to control the mute/solo columns
+                    const bool anyChannelSolo = m_riffPlaybackAbstraction.query( endlesss::types::RiffPlaybackAbstraction::Query::AnySolo, -1 );
+                    const bool anyChannelsMuted = m_riffPlaybackAbstraction.query( endlesss::types::RiffPlaybackAbstraction::Query::AnyMuted, -1 );
+                    bool anyChannelsMutedCb = anyChannelsMuted;
+                    for ( int32_t cI = 0; cI < visibleColumns; cI++ )
+                    {
+                        ImGui::TableSetColumnIndex( cI );
+                        ImGui::PushID( cI );
+                        if ( cI == 0 )
+                        {
+                            // show the checkbox for unmuting all muted channels if we have any muted 
+                            // and they aren't muted because of a solo'ing
+                            if ( anyChannelsMutedCb && !anyChannelSolo )
+                            {
+                                ImGui::PushStyleVar( ImGuiStyleVar_FramePadding, ImVec2( 0, 0 ) );
+                                ImGui::Checkbox( "##unmute_check", &anyChannelsMutedCb );
+                                ImGui::PopStyleVar();
+                            }
+                        }
+                        else
+                        {
+                            ImGui::TableHeader( RiffViewTable[cI].m_title );
+                        }
+                        ImGui::PopID();
+                    }
+                    ImGui::PopStyleColor();
+
+                    const auto currentPermutation = mixPreview.getCurrentPermutation();
+
+                    // user chose to de-check the mute column, meaning we need to unmute everything
+                    const bool unmuteAll = (anyChannelsMutedCb == false && anyChannelsMutedCb != anyChannelsMuted);
+
+
+                    const auto muteButtonColour = ImGui::GetStyleColorVec4( ImGuiCol_NavHighlight );
+                    const auto soloButtonColour = ImGui::GetStyleColorVec4( ImGuiCol_PlotHistogram );
+
+                    const auto ImGuiPermutationButton = [this, &mixPreview](
+                        const char* title,
+                        const endlesss::types::RiffPlaybackAbstraction::Action action,
+                        const endlesss::types::RiffPlaybackAbstraction::Query query,
+                        const ImVec4& buttonColour,
+                        const int32_t stemIndex,
+                        bool forceOff )
+                    {
+                        const ImGuiID currentImGuiID = ImGui::GetID( title );
+
+                        auto buttonState = m_riffPlaybackAbstraction.query( query, stemIndex ) ?
+                            ImGui::Scoped::FluxButton::State::On :
+                            ImGui::Scoped::FluxButton::State::Off;
+
+                        if ( m_permutationOperationImGuiMap.hasValue( currentImGuiID ) )
+                            buttonState = ImGui::Scoped::FluxButton::State::Flux;
+
+                        ImGui::Scoped::FluxButton fluxButton( buttonState, buttonColour, ImVec4( 0, 0, 0, 1 ) );
+                        if ( ImGui::Button( title ) || (forceOff && buttonState == ImGui::Scoped::FluxButton::State::On) )
+                        {
+                            if ( m_riffPlaybackAbstraction.action( action, stemIndex ) )
+                            {
+                                const auto newPermutation = m_riffPlaybackAbstraction.asPermutation();
+                                const auto operationID = mixPreview.enqueuePermutation( newPermutation );
+                                m_permutationOperationImGuiMap.add( operationID, currentImGuiID );
+                            }
+                        }
+                    };
+
+                    for ( auto sI = 0; sI < 8; sI++ )
+                    {
+                        ImGui::PushID( sI );
+
+                        const endlesss::live::Stem* stem = currentRiff ? currentRiff->m_stemPtrs[sI] : nullptr;
+
+                        // consider a stem "empty" if it has no data - a stem can have things like length and preset info
+                        // as that comes from the database or backend .. but if it failed download or endlesss fucked up the 
+                        // CDN upload then we get unplayable entries hanging around
+                        const bool stemIsEmpty = (stem != nullptr && currentRiff != nullptr &&
+                            (currentRiff->m_stemLengthInSamples[sI] == 0 ||
+                                currentRiff->m_stemLengthInSec[sI] <= 0.0f));
+
+                        if ( visibleColumns > 0 )
+                        {
+                            ImGui::TableNextColumn();
+
+                            // mark any dead / damaged streams
+                            if ( stemIsEmpty )
+                            {
+                                ImGui::TableSetBgColor( ImGuiTableBgTarget_RowBg0, ImGui::GetColorU32( ImGuiCol_HeaderActive, 0.1f ) );
+                                ImGui::PushStyleColor( ImGuiCol_Text, ImGui::GetColorU32( ImGuiCol_HeaderActive ) );
+                            }
+
+                            // MUTE toggle
+                            ImGuiPermutationButton(
+                                "M",
+                                endlesss::types::RiffPlaybackAbstraction::Action::ToggleMute,
+                                endlesss::types::RiffPlaybackAbstraction::Query::IsMuted,
+                                muteButtonColour,
+                                sI,
+                                unmuteAll );
+                        }
+                        if ( visibleColumns > 1 )
+                        {
+                            ImGui::TableNextColumn();
+
+                            // SOLO toggle
+                            ImGuiPermutationButton(
+                                "S",
+                                endlesss::types::RiffPlaybackAbstraction::Action::ToggleSolo,
+                                endlesss::types::RiffPlaybackAbstraction::Query::IsSolo,
+                                soloButtonColour,
+                                sI,
+                                false );
+                        }
+                        if ( visibleColumns > 2 )
+                        {
+                            ImGui::TableNextColumn();
+
+                            ImGui::VerticalProgress( "##gainBar",  currentPermutation.m_layerGainMultiplier[sI] );
+                        }
+
+                        // post up the stem data if we have it
+                        if ( stem == nullptr )
+                        {
+                            for ( std::size_t cI = 3; cI < visibleColumns; cI++ )
+                                ImGui::TableNextColumn(); ImGui::TextUnformatted( "" );
+                        }
+                        else
+                        {
+                            ABSL_ASSERT( currentRiff != nullptr );
+                            const auto& riffDocument = currentRiff->m_riffData;
+
+                            for ( std::size_t cI = 3; cI < visibleColumns; cI++ )
+                            {
+                                ImGui::TableNextColumn();
+                                switch ( cI )
+                                {
+                                case 3:  ImGui::TextUnformatted( stem->m_data.user.c_str() );           break;
+                                case 4:  ImGui::TextUnformatted( stem->m_data.getInstrumentName() );    break;
+                                case 5:  ImGui::TextUnformatted( stem->m_data.preset.c_str() );         break;
+                                case 6:  ImGui::Text( "%.2f", m_endlesssExchange.m_stemGain[sI] );      break;
+                                case 7:  ImGui::Text( "%.2f", currentRiff->m_stemTimeScales[sI] );      break;
+                                case 8:  ImGui::Text( "%ix", currentRiff->m_stemRepetitions[sI] );      break;
+                                case 9:  ImGui::Text( "%.2fs", currentRiff->m_stemLengthInSec[sI] );    break;
+                                case 10: ImGui::Text( "%i", stem->m_data.sampleRate );                  break;
+                                case 11: ImGui::Text( "%i", stem->m_data.fileLengthBytes / 1024 );      break;
+                                }
+                            }
+                        }
+
+                        if ( stemIsEmpty )
+                        {
+                            ImGui::PopStyleColor();
+                        }
+
+                        ImGui::PopID();
+                    }
+
+                    ImGui::EndTable();
+                    ImGui::Spacing();
+
+                    {
+                        const auto riffToolButtonSize = ImVec2( 180.0f, 0.0f );
+
+                        ImGui::Scoped::ButtonTextAlignLeft riffToolButtons;
+                        {
+                            const bool disableButton = ( currentRiff == nullptr );
+                            ImGui::BeginDisabledControls( disableButton );
+                            if ( ImGui::Button( " " ICON_FA_BOOK " Add to Scrapbook ", riffToolButtonSize ) )
+                            {
+
+                            }
+                            ImGui::EndDisabledControls( disableButton );
+                        }
+                        ImGui::SameLine( 0, 10.0f );
+                        {
+                            const bool disableButton = (m_rpClient.getState() != net::bond::BondState::Connected);
+                            ImGui::BeginDisabledControls( disableButton );
+                            if ( ImGui::Button( " " ICON_FA_CIRCLE_NODES " Push via BOND ", riffToolButtonSize ) )
+                            {
+                                m_rpClient.pushRiff( currentRiff->m_riffData, m_riffPlaybackAbstraction.asPermutation() );
+                            }
+                            ImGui::EndDisabledControls( disableButton );
+                        }
+                    }
+                }
+            }
             ImGui::End();
         }
+
         {
             ImGui::Begin( "Jam View" );
 
@@ -1352,7 +1854,7 @@ int LoreApp::EntrypointOuro()
                                                     while ( currentRiffInRange != m_jamSliceHoveredRiffIndex )
                                                     {
                                                         const auto& riffCouchID = m_jamSliceSketch->m_slice->m_ids[currentRiffInRange];
-                                                        requestRiffPlayback( riffCouchID );
+                                                        requestRiffPlayback( { m_currentViewedJam, riffCouchID }, m_riffPlaybackAbstraction.asPermutation() );
 
                                                         currentRiffInRange += direction;
                                                     }
@@ -1363,7 +1865,7 @@ int LoreApp::EntrypointOuro()
                                             else
                                             {
                                                 const auto& riffCouchID = m_jamSliceSketch->m_slice->m_ids[m_jamSliceHoveredRiffIndex];
-                                                requestRiffPlayback( riffCouchID );
+                                                requestRiffPlayback( { m_currentViewedJam, riffCouchID }, m_riffPlaybackAbstraction.asPermutation() );
                                             }
                                         }
                                     }
@@ -1452,19 +1954,51 @@ int LoreApp::EntrypointOuro()
             ImGui::End();
         }
         {
-            ImGui::Begin( "Data Warehouse" );
+            static WarehouseView::Enum warehouseView = WarehouseView::Default;
+            const auto viewTitle = generateWarehouseViewTitle( warehouseView );
 
-            if ( ImGui::IsWindowHovered( ImGuiHoveredFlags_RootAndChildWindows ) && ImGui::IsKeyPressedMap( ImGuiKey_Tab, false ) )
+            ImGui::Begin( viewTitle.c_str() );
+
+            const bool warehouseHasEndlesssAccess = warehouse.hasFullEndlesssNetworkAccess();
+
+            if ( ImGui::IsWindowHovered( ImGuiHoveredFlags_RootAndChildWindows ) && 
+                 ImGui::IsKeyPressedMap( ImGuiKey_Tab, false ) )
             {
-                blog::core( "TAB" );
+                warehouseView = WarehouseView::getNextWrapped( warehouseView );
+            }
+
+            if ( warehouseView == WarehouseView::Maintenance )
+            {
+                ImGui::CenteredText( "Database Maintenance" );
+                ImGui::SeparatorBreak();
+            }
+
+            static ImGuiTextFilter jamNameFilter;
+
+            {
+                ImGuiWindow* window = ImGui::GetCurrentWindow();
+                window->DC.CursorPos.y += 3.0f;
+                ImGui::TextUnformatted( "Filter : " );
+                ImGui::SameLine( 0, 2.0f );
+                window->DC.CursorPos.y -= 3.0f;
+                jamNameFilter.Draw( "##NameFilter", 220.0f );
+                ImGui::SameLine( 0, 2.0f );
+                if ( ImGui::Button( ICON_FA_CIRCLE_XMARK ) )
+                    jamNameFilter.Clear();
+                ImGui::SameLine( 0, 2.0f );
             }
 
             {
                 ImGui::Scoped::ButtonTextAlignLeft leftAlign;
                 const ImVec2 toolbarButtonSize{ 140.0f, 0.0f };
 
+                const float warehouseViewWidth = ImGui::GetContentRegionAvail().x;
+
                 // extra tools in a pile
+                if ( warehouseView == WarehouseView::Default )
                 {
+                    ImGui::SameLine( 0, warehouseViewWidth - ( toolbarButtonSize.x * 2.0f ) - 6.0f );
+
                     // note if the warehouse is running ops, if not then disable new-task buttons
                     const bool warehouseIsPaused = warehouse.workerIsPaused();
 
@@ -1472,8 +2006,8 @@ int LoreApp::EntrypointOuro()
                         // enable or disable the worker thread
                         ImGui::Scoped::ToggleButton highlightButton( !warehouseIsPaused, true );
                         if ( ImGui::Button( warehouseIsPaused ?
-                                            ICON_FA_PLAY_CIRCLE  " RESUME  " :
-                                            ICON_FA_PAUSE_CIRCLE " RUNNING ", toolbarButtonSize ) )
+                                            ICON_FA_CIRCLE_PLAY  " RESUME  " :
+                                            ICON_FA_CIRCLE_PAUSE " RUNNING ", toolbarButtonSize ) )
                         {
                             warehouse.workerTogglePause();
                         }
@@ -1481,7 +2015,8 @@ int LoreApp::EntrypointOuro()
                     
                     ImGui::SameLine();
 
-                    if ( ImGui::Button( ICON_FA_PLUS_CIRCLE " Add Jam...", toolbarButtonSize ) )
+                    ImGui::BeginDisabledControls( !warehouseHasEndlesssAccess );
+                    if ( ImGui::Button( ICON_FA_CIRCLE_PLUS " Add Jam...", toolbarButtonSize ) )
                     {
                         // create local copy of the current warehouse jam ID map for use by the popup; avoids
                         // having to worry about warehouse contents shifting underneath / locking mutex in dialog
@@ -1495,32 +2030,20 @@ int LoreApp::EntrypointOuro()
                             ux::modalUniversalJamBrowser( title, m_jamLibrary, warehouseJamBrowser );
                         });
                     }
-                }
-                {
-                    ImGui::SameLine();
-                    const float warehouseViewWidth = ImGui::GetContentRegionAvail().x;
-                    ImGui::SameLine( 0, warehouseViewWidth - 150.0f );
-                    ImGui::Checkbox( "Enable Deletion", &m_enableDbJamDeletion );
+                    ImGui::EndDisabledControls( !warehouseHasEndlesssAccess );
                 }
             }
 
-
             ImGui::SeparatorBreak();
 
+
             static ImVec2 buttonSizeMidTable( 33.0f, 24.0f );
-            static ImGuiTextFilter jamNameFilter;
-
-            ImGui::Dummy( ImVec2( 34.0f, 0.0f ) );
-            ImGui::SameLine();
-
-            jamNameFilter.Draw( "##NameFilter", 300.0f );
-            ImGui::SameLine( 0, 2.0f );
-            if ( ImGui::Button( ICON_FA_TIMES_CIRCLE ) )
-                jamNameFilter.Clear();
 
             if ( ImGui::BeginChild( "##data_child" ) )
             {
-                if ( ImGui::BeginTable( "##warehouse_table", 6, 
+                const auto columnCount = (warehouseView == WarehouseView::Default) ? 5 : 4;
+
+                if ( ImGui::BeginTable( "##warehouse_table", columnCount,
                             ImGuiTableFlags_ScrollY         |
                             ImGuiTableFlags_Borders         |
                             ImGuiTableFlags_RowBg           |
@@ -1528,12 +2051,22 @@ int LoreApp::EntrypointOuro()
                 {
                     ImGui::TableSetupScrollFreeze( 0, 1 );  // top row always visible
 
-                    ImGui::TableSetupColumn( "View",        ImGuiTableColumnFlags_WidthFixed, 32.0f  );
-                    ImGui::TableSetupColumn( "Jam Name",    ImGuiTableColumnFlags_WidthFixed, 320.0f );
-                    ImGui::TableSetupColumn( "Sync",        ImGuiTableColumnFlags_WidthFixed, 32.0f  );
-                    ImGui::TableSetupColumn( "Riffs",       ImGuiTableColumnFlags_WidthFixed, 120.0f );
-                    ImGui::TableSetupColumn( "Stems",       ImGuiTableColumnFlags_WidthFixed, 120.0f );
-                    ImGui::TableSetupColumn( "Wipe",        ImGuiTableColumnFlags_WidthFixed, 32.0f  );
+                    if ( warehouseView == WarehouseView::Default )
+                    {
+                        ImGui::TableSetupColumn( "View",        ImGuiTableColumnFlags_WidthFixed, 32.0f  );
+                        ImGui::TableSetupColumn( "Jam Name",    ImGuiTableColumnFlags_WidthFixed, 360.0f );
+                        ImGui::TableSetupColumn( "Sync",        ImGuiTableColumnFlags_WidthFixed, 32.0f  );
+                        ImGui::TableSetupColumn( "Riffs",       ImGuiTableColumnFlags_WidthFixed, 120.0f );
+                        ImGui::TableSetupColumn( "Stems",       ImGuiTableColumnFlags_WidthFixed, 120.0f );
+                    }
+                    else
+                    {
+                        ImGui::TableSetupColumn( "Jam Name",    ImGuiTableColumnFlags_WidthFixed, 390.0f );
+                        ImGui::TableSetupColumn( "Riffs",       ImGuiTableColumnFlags_WidthFixed, 120.0f );
+                        ImGui::TableSetupColumn( "Stems",       ImGuiTableColumnFlags_WidthFixed, 120.0f );
+                        ImGui::TableSetupColumn( "Wipe",        ImGuiTableColumnFlags_WidthFixed, 32.0f  );
+
+                    }
                     ImGui::TableHeadersRow();
 
                     // lock the data report so it isn't whipped away from underneath us mid-render
@@ -1556,42 +2089,50 @@ int LoreApp::EntrypointOuro()
                         if ( m_currentViewedJam == m_warehouseContentsReport.m_jamCouchIDs[jI] )
                             ImGui::TableSetBgColor( ImGuiTableBgTarget_RowBg0, ImGui::GetColorU32( ImGuiCol_TableRowBgAlt, 2.5f ) );
 
-                        ImGui::BeginDisabledControls( isJamInFlux );
-                        if ( ImGui::PrecisionButton( ICON_FA_EYE, buttonSizeMidTable, 1.0f ) )
+                        if ( warehouseView == WarehouseView::Default )
                         {
-                            clearJamSlice();
+                            ImGui::BeginDisabledControls( isJamInFlux );
+                            if ( ImGui::PrecisionButton( ICON_FA_EYE, buttonSizeMidTable, 1.0f ) )
+                            {
+                                clearJamSlice();
 
-                            // change which jam we're viewing, reset active riff hover in the process as this will invalidate it
-                            m_currentViewedJam          = m_warehouseContentsReport.m_jamCouchIDs[jI];
-                            m_currentViewedJamName      = m_warehouseContentsReportJamTitles[jI];
-                            m_jamSliceHoveredRiffIndex  = -1;
+                                // change which jam we're viewing, reset active riff hover in the process as this will invalidate it
+                                m_currentViewedJam          = m_warehouseContentsReport.m_jamCouchIDs[jI];
+                                m_currentViewedJamName      = m_warehouseContentsReportJamTitles[jI];
+                                m_jamSliceHoveredRiffIndex  = -1;
 
-                            warehouse.addJamSliceRequest( m_currentViewedJam, std::bind( &LoreApp::newJamSliceGenerated, this, std::placeholders::_1, std::placeholders::_2 ) );
+                                warehouse.addJamSliceRequest( m_currentViewedJam, std::bind( &LoreApp::newJamSliceGenerated, this, std::placeholders::_1, std::placeholders::_2 ) );
+
+                                ImGui::MakeTabVisible( "Jam View" );
+                            }
+                            ImGui::EndDisabledControls( isJamInFlux );
+
+                            ImGui::TableNextColumn();
                         }
-                        ImGui::EndDisabledControls( isJamInFlux );
 
-                        ImGui::TableNextColumn(); 
-                        
                         ImGui::Dummy( ImVec2( 0.0f, 1.0f ) );
-                        ImGui::TextDisabled( "ID" );
-                        ImGui::CompactTooltip( m_warehouseContentsReport.m_jamCouchIDs[jI].c_str() );
-                        ImGui::SameLine();
-                        ImGui::TextUnformatted( m_warehouseContentsReportJamTitles[jI].c_str() );
-
-
-                        ImGui::TableNextColumn();
-
-
-                        ImGui::BeginDisabledControls( isJamInFlux );
-                        if ( ImGui::PrecisionButton( ICON_FA_SYNC, buttonSizeMidTable, 1.0f ) )
+                        if ( warehouseView == WarehouseView::Maintenance )
                         {
-                            m_warehouseContentsReportJamInFlux[jI] = true;
-                            warehouse.addOrUpdateJamSnapshot( m_warehouseContentsReport.m_jamCouchIDs[jI] );
+                            ImGui::TextDisabled( "ID" );
+                            ImGui::CompactTooltip( m_warehouseContentsReport.m_jamCouchIDs[jI].c_str() );
+                            ImGui::SameLine();
                         }
-                        ImGui::EndDisabledControls( isJamInFlux );
-
-
+                        ImGui::TextUnformatted( m_warehouseContentsReportJamTitles[jI].c_str() );
                         ImGui::TableNextColumn();
+
+                        if ( warehouseView == WarehouseView::Default )
+                        {
+                            ImGui::BeginDisabledControls( isJamInFlux || !warehouseHasEndlesssAccess );
+                            if ( ImGui::PrecisionButton( ICON_FA_ARROWS_ROTATE, buttonSizeMidTable, 1.0f ) )
+                            {
+                                m_warehouseContentsReportJamInFlux[jI] = true;
+                                warehouse.addOrUpdateJamSnapshot( m_warehouseContentsReport.m_jamCouchIDs[jI] );
+                            }
+                            ImGui::EndDisabledControls( isJamInFlux || !warehouseHasEndlesssAccess );
+
+                            ImGui::TableNextColumn();
+                        }
+
                         ImGui::Dummy( ImVec2( 0.0f, 1.0f ) );
                         {
                             const auto unpopulated = m_warehouseContentsReport.m_unpopulatedRiffs[jI];
@@ -1602,8 +2143,8 @@ int LoreApp::EntrypointOuro()
                             else
                                 ImGui::Text( "%" PRIi64, populated);
                         }
-
                         ImGui::TableNextColumn();
+
                         ImGui::Dummy( ImVec2( 0.0f, 1.0f ) );
                         {
                             const auto unpopulated = m_warehouseContentsReport.m_unpopulatedStems[jI];
@@ -1615,14 +2156,17 @@ int LoreApp::EntrypointOuro()
                                 ImGui::Text( "%" PRIi64, populated);
                         }
 
-                        ImGui::TableNextColumn();
-                        ImGui::BeginDisabledControls( !m_enableDbJamDeletion || isJamInFlux );
-                        if ( ImGui::PrecisionButton( ICON_FA_TRASH, buttonSizeMidTable ) )
+                        if ( warehouseView == WarehouseView::Maintenance )
                         {
-                            warehouse.requestJamPurge( m_warehouseContentsReport.m_jamCouchIDs[jI] );
-                        }
-                        ImGui::EndDisabledControls( !m_enableDbJamDeletion || isJamInFlux );
+                            ImGui::TableNextColumn();
 
+                            ImGui::BeginDisabledControls( isJamInFlux );
+                            if ( ImGui::PrecisionButton( ICON_FA_TRASH, buttonSizeMidTable ) )
+                            {
+                                warehouse.requestJamPurge( m_warehouseContentsReport.m_jamCouchIDs[jI] );
+                            }
+                            ImGui::EndDisabledControls( isJamInFlux );
+                        }
                         ImGui::PopID();
                     }
 
@@ -1632,21 +2176,32 @@ int LoreApp::EntrypointOuro()
             ImGui::EndChild();
 
             ImGui::End();
-        }
+
+        } // warehouse imgui 
 
 
-        submitInterfaceLayout();
+        maintainStemCacheAsync();
+
+        finishInterfaceLayoutAndRender();
     }
 
-    m_syncAndPlaybackThreadHalt = true;
-    m_syncAndPlaybackThread->join();
-    m_syncAndPlaybackThread.reset();
+    unregisterStatusBarBlock( sbbWarehouseID );
+
+    m_riffPipeline.reset();
 
     m_discordBotUI.reset();
+
+    m_vibes.reset();
 
     // remove the mixer and ensure the async op has taken before leaving scope
     m_mdAudio->blockUntil( m_mdAudio->installMixer( nullptr ) );
     m_mdAudio->blockUntil( m_mdAudio->effectClearAll() );
+
+    // unregister any listeners
+    checkedCoreCall( "remove stem listener", [this] { return m_stemDataProcessor.disconnect( m_appEventBus ); } );
+    
+    checkedCoreCall( "remove op listener",   [this] { return m_appEventBus->removeListener( m_eventListenerOpComplete ); } );
+    checkedCoreCall( "remove riff listener", [this] { return m_appEventBus->removeListener( m_eventListenerRiffChange ); } );
 
 #if OURO_FEATURE_VST24
     // serialize effects

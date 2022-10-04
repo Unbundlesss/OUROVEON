@@ -8,7 +8,7 @@
 //
 
 #pragma once
-#include "base/macro.h"
+#include "base/construction.h"
 #include "base/instrumentation.h"
 
 #include "isamplestreamprocessor.h"
@@ -39,7 +39,10 @@ using OpusPacketDataInstance = std::unique_ptr< OpusPacketData >;
 class OpusStream : public ISampleStreamProcessor
 {
 public:
-    DeclareUncopyable( OpusStream );
+    DECLARE_NO_COPY( OpusStream );
+
+    using SharedPtr   = std::shared_ptr<OpusStream>;
+    using PtrOrStatus = absl::StatusOr< SharedPtr >;
 
     // permitted Opus frame sizes for 48 kHz sample rate
     enum class FrameSize
@@ -61,8 +64,7 @@ public:
 
     using NewDataCallback = std::function< void( OpusPacketDataInstance&& ) >;
 
-
-    static std::shared_ptr<OpusStream> Create(
+    static PtrOrStatus Create(
         const NewDataCallback&  newDataCallback,
         const uint32_t          sampleRate );
 

@@ -15,7 +15,7 @@ struct IRecordable
 {
     virtual ~IRecordable() {}
 
-    virtual bool beginRecording( const std::string& outputPath, const std::string& filePrefix ) = 0;
+    virtual bool beginRecording( const fs::path& outputPath, const std::string& filePrefix ) = 0;
     virtual void stopRecording() = 0;
     virtual bool isRecording() const = 0;
     virtual uint64_t getRecordingDataUsage() const = 0;

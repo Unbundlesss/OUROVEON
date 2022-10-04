@@ -11,7 +11,7 @@
 
 #pragma once
 
-#include "base/utils.h"
+#include "base/mathematics.h"
 
 namespace colour {
 

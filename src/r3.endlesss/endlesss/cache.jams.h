@@ -68,13 +68,15 @@ struct Jams
     {
         PublicArchive   = 0,          // static snapshot of all known public jams, scraped from Discord/etc
         PublicJoinIn    = 1,          // dynamic list of currently active "join in" public jams
-        UserSubscribed  = 2           // dynamic list of user's subscribed-to list of "My Jams"
+        UserSubscribed  = 2,          // dynamic list of user's subscribed-to list of "My Jams"
+        Collectible     = 3,          // the NFT stuff
     };
-    static constexpr size_t cJamTypeCount = 3;
+    static constexpr size_t cJamTypeCount = 4;
     static constexpr std::array< JamType, cJamTypeCount > cEachJamType = {
         JamType::PublicArchive,
         JamType::PublicJoinIn,
-        JamType::UserSubscribed
+        JamType::UserSubscribed,
+        JamType::Collectible
     };
 
 
@@ -108,6 +110,10 @@ struct Jams
 
     ouro_nodiscard constexpr bool hasJamData() const
     { 
+        // overbearing but ensures on the ouro boot page we aren't talking to vectors that are being
+        // heavily modified during a postProcessNewData() call (leading to very rare crash)
+        std::scoped_lock<std::mutex> lockProc( m_dataProcessMutex );
+
         return !m_jamDataJoinIn.empty() &&
                !m_jamDataUserSubscribed.empty();
     }
@@ -191,6 +197,8 @@ struct Jams
     {
         for ( const Data& data : m_jamDataPublicArchive )
             iteratorFunction( data );
+        for ( const Data& data : m_jamDataCollectibles )
+            iteratorFunction( data );
         for ( const Data& data : m_jamDataJoinIn )
             iteratorFunction( data );
         for ( const Data& data : m_jamDataUserSubscribed )
@@ -209,8 +217,14 @@ private:
     config::endlesss::PublicJamManifest
                                 m_configEndlesssPublics;
 
+    // .. similar data block for the marketplace/collectible jams
+    config::endlesss::CollectibleJamManifest
+                                m_configEndlesssCollectibles;
+
+
     uint32_t                    m_jamSerialisedVersion = 0;     // version of the data on disk, used to force obsolescence 
     std::vector< Data >         m_jamDataPublicArchive;         // conversion of data from PublicJamManifest to Data type
+    std::vector< Data >         m_jamDataCollectibles;          // conversion of data from CollectibleJamManifest to Data type
     std::vector< Data >         m_jamDataJoinIn;                // data from servers (persisted to disk)
     std::vector< Data >         m_jamDataUserSubscribed;        // data from servers (persisted to disk)
 
@@ -222,6 +236,7 @@ private:
 
     JamCouchIDToJamIndexMap     m_jamCouchIDToJamIndexMap;
 
+    mutable std::mutex          m_dataProcessMutex;
 
     void postProcessNewData();
 
@@ -230,9 +245,10 @@ private:
     {
         switch ( type )
         {
-            case JamType::PublicArchive:  return &m_jamDataPublicArchive;
-            case JamType::PublicJoinIn:   return &m_jamDataJoinIn;
-            case JamType::UserSubscribed: return &m_jamDataUserSubscribed;
+            case JamType::PublicArchive:    return &m_jamDataPublicArchive;
+            case JamType::PublicJoinIn:     return &m_jamDataJoinIn;
+            case JamType::UserSubscribed:   return &m_jamDataUserSubscribed;
+            case JamType::Collectible:      return &m_jamDataCollectibles;
         }
         return nullptr;
     }

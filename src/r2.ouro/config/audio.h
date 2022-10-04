@@ -16,7 +16,7 @@
 
 namespace config {
 
-struct Audio : public Base
+OURO_CONFIG( Audio )
 {
     // data routing
     static constexpr auto StoragePath       = IPathProvider::PathFor::SharedConfig;

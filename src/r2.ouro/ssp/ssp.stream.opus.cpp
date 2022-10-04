@@ -14,7 +14,6 @@
 
 #include "base/construction.h"
 #include "base/utils.h"
-#include "base/macro.h"
 
 #include <opus.h>
 
@@ -22,7 +21,7 @@
 namespace ssp {
 
 // ---------------------------------------------------------------------------------------------------------------------
-inline const char* getOpusErrorString( const int32_t err )
+ouro_nodiscard constexpr const char* getOpusErrorString( const int32_t err )
 {
     switch ( err )
     {
@@ -43,7 +42,7 @@ inline const char* getOpusErrorString( const int32_t err )
 OpusPacketData::OpusPacketData( const uint32_t packetCount )
     : m_opusDataBufferSize( packetCount * OpusStream::cFrameSize )
 {
-    m_opusData = mem::malloc16AsSet< uint8_t >( m_opusDataBufferSize, 0 );
+    m_opusData = mem::alloc16To< uint8_t >( m_opusDataBufferSize, 0 );
     m_opusPacketSizes.reserve( packetCount );
 }
 
@@ -82,14 +81,14 @@ struct OpusStream::StreamInstance : public AsyncBufferProcessorIQ16
         }
     }
 
-    bool initialiseEncoder( const uint32_t sampleRate )
+    absl::Status initialiseEncoder( const uint32_t sampleRate )
     {
         int32_t opusError = 0;
         m_opusEncoder = opus_encoder_create( sampleRate, 2, OPUS_APPLICATION_AUDIO, &opusError );
         if ( opusError )
         {
-            blog::error::core( "opus_encoder_create failed with error {} ({})", opusError, getOpusErrorString(opusError) );
-            return false;
+            return absl::UnknownError( fmt::format(
+                FMTX( "opus_encoder_create failed with error {} ({})" ), opusError, getOpusErrorString( opusError ) ) );
         }
 
         opus_encoder_ctl( m_opusEncoder, OPUS_SET_COMPLEXITY( 10 ) );
@@ -103,7 +102,7 @@ struct OpusStream::StreamInstance : public AsyncBufferProcessorIQ16
 
         m_opusRepacketizer = opus_repacketizer_create();
 
-        return true;
+        return absl::OkStatus();
     }
 
 
@@ -183,20 +182,21 @@ struct OpusStream::StreamInstance : public AsyncBufferProcessorIQ16
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-std::shared_ptr<OpusStream> OpusStream::Create(
+OpusStream::PtrOrStatus OpusStream::Create(
     const NewDataCallback&  newDataCallback,
     const uint32_t          sampleRate )
 {
     std::unique_ptr< OpusStream::StreamInstance > newState = std::make_unique< OpusStream::StreamInstance >();
 
-    if ( !newState->initialiseEncoder( sampleRate ) )
+    const auto encoderStatus = newState->initialiseEncoder( sampleRate );
+    if ( !encoderStatus.ok() )
     {
-        return nullptr;
+        return encoderStatus;
     }
 
     newState->m_newDataCallback = newDataCallback;
 
-    return base::protected_make_shared<OpusStream>( ISampleStreamProcessor::allocateNewInstanceID(), newState );
+    return PtrOrStatus( base::protected_make_shared<OpusStream>( ISampleStreamProcessor::allocateNewInstanceID(), newState ) );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

@@ -10,15 +10,20 @@
 #include "pch.h"
 
 #include "spacetime/chronicle.h"
+#include "base/text.h"
 
 #include "config/frontend.h"
 #include "config/data.h"
 #include "config/audio.h"
 
 #include "app/ouro.h"
+#include "app/imgui.ext.h"
 #include "app/module.audio.h"
 #include "app/module.frontend.h"
 #include "app/module.frontend.fonts.h"
+
+#include "mix/common.h"
+#include "mix/stem.amalgam.h"
 
 #include "endlesss/all.h"
 
@@ -26,59 +31,13 @@
 
 namespace app {
 
+
 // ---------------------------------------------------------------------------------------------------------------------
-// some ImGui helpers for displaying combos of values|labels where the selection is driven from matching the value
-// to a configuration variable + handling if the value doesn't match any of our defaults
-//
-template< size_t _itemCount >
-std::string ValueArrayPreviewString(
-    const std::array< const char*, _itemCount >& entryLabels,
-    const std::array< uint32_t,    _itemCount >& entryValues,
-    uint32_t&       variable )
+// endlesss::live::RiffFetchServices
+int32_t OuroApp::getSampleRate() const
 {
-    for ( size_t optI = 0; optI < _itemCount; optI++ )
-    {
-        if ( entryValues[optI] == variable )
-            return entryLabels[optI];
-    }
-    return fmt::format( "{} (Custom)", variable );
-}
-
-template< size_t _itemCount >
-bool ValueArrayImGuiCombo(
-    const char*     title,
-    const char*     label,
-    const std::array< const char*, _itemCount >& entryLabels,
-    const std::array< uint32_t,    _itemCount >& entryValues,
-    uint32_t&       variable,
-    std::string&    previewString,
-    const bool      addYOffset)
-{
-    ImGui::TextUnformatted( title );
-    ImGui::SameLine();
-
-    if ( addYOffset )
-        ImGui::SetCursorPosY( ImGui::GetCursorPosY() - 3.0f );
-
-    bool changed = false;
-    if ( ImGui::BeginCombo( label, previewString.c_str() ) )
-    {
-        for ( size_t optI = 0; optI < _itemCount; optI++ )
-        {
-            const bool selected = ( entryValues[optI] == variable );
-            if ( ImGui::Selectable( entryLabels[optI], selected ) )
-            {
-                variable        = entryValues[optI];
-                previewString   = ValueArrayPreviewString( entryLabels, entryValues, variable );
-                changed         = true;
-            }
-            if ( selected )
-                ImGui::SetItemDefaultFocus();
-        }
-        ImGui::EndCombo();
-    }
-
-    return changed;
+    ABSL_ASSERT( m_mdAudio != nullptr );    // can't be fetching riffs until all the core services are running
+    return m_mdAudio->getSampleRate();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -102,30 +61,30 @@ int OuroApp::EntrypointGUI()
     }
 
     // get default value strings for saved config values to display in the UI; these are updated if selection changes
-    std::string previewSampleRate = ValueArrayPreviewString( cSampleRateLabels, cSampleRateValues, audioConfig.sampleRate );
-    std::string previewBufferSize = ValueArrayPreviewString( cBufferSizeLabels, cBufferSizeValues, audioConfig.bufferSize );
+    std::string previewSampleRate = ImGui::ValueArrayPreviewString( cSampleRateLabels, cSampleRateValues, audioConfig.sampleRate );
+    std::string previewBufferSize = ImGui::ValueArrayPreviewString( cBufferSizeLabels, cBufferSizeValues, audioConfig.bufferSize );
 
     // stash current TZ
     const auto timezoneLocal = date::current_zone();
     const auto timezoneUTC = date::locate_zone( "Etc/UTC" );
 
     // add UTC/Server time on left of status bar
-    const auto timeStatusLeftID = registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Left, 500.0f, [=]()
+    const auto sbbTimeStatusLeftID = registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Left, 500.0f, [=]()
     {
         auto t  = date::make_zoned( timezoneUTC, std::chrono::system_clock::now() );
         auto tf = date::format( spacetime::defaultDisplayTimeFormatTZ, t );
-        const auto servertTime = fmt::format( FMT_STRING( "{} | {}" ), timezoneUTC->name(), tf );
+        const auto servertTime = fmt::format( FMTX( "{} | {}" ), timezoneUTC->name(), tf );
 
         ImGui::PushStyleColor( ImGuiCol_Text, IM_COL32_WHITE );
         ImGui::TextUnformatted( servertTime );
         ImGui::PopStyleColor();
     });
     // add local timezone time on right 
-    const auto timeStatusRightID = registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Right, 500.0f, [=]()
+    const auto sbbTimeStatusRightID = registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Right, 500.0f, [=]()
     {
         auto t  = date::make_zoned( timezoneLocal, std::chrono::system_clock::now() );
         auto tf = date::format( spacetime::defaultDisplayTimeFormatTZ, t );
-        const auto localTime = fmt::format( FMT_STRING( "{} | {}" ), tf, timezoneLocal->name() );
+        const auto localTime = fmt::format( FMTX( "{} | {}" ), tf, timezoneLocal->name() );
 
         // right-align
         const auto localTimeLength = ImGui::CalcTextSize( localTime );
@@ -176,7 +135,7 @@ int OuroApp::EntrypointGUI()
     std::string asyncState;
     tf::Taskflow taskFlow;
 
-    // buffer for changing data storage path; #HDD TODO per platform limits
+    // buffer for changing data storage path; #HDD TODO per platform limits for dataStoragePathBufferSize
     constexpr size_t dataStoragePathBufferSize = 255;
     char dataStoragePathBuffer[dataStoragePathBufferSize];
     memset( dataStoragePathBuffer, 0, dataStoragePathBufferSize );
@@ -192,7 +151,7 @@ int OuroApp::EntrypointGUI()
         strcpy( dataStoragePathBuffer, m_configData->storageRoot.c_str() );
     }
 
-    // ::filesystem variant of the buffer and computed free-space data, udpated via a lambda that can be called
+    // ::filesystem variant of the buffer and computed free-space data, updated via a lambda that can be called
     // if the buffer entry changes during imgui update
     fs::path        dataStoragePath;
     std::error_code dataStorageSpaceInfoError;
@@ -259,7 +218,7 @@ int OuroApp::EntrypointGUI()
         ImGui::SetNextWindowPos( viewportWorkSize - ( configWindowSize * 0.5f ) );
         ImGui::SetNextWindowContentSize( configWindowSize );
 
-        ImGui::Begin( "Framework Preflight", nullptr,
+        ImGui::Begin( "Framework Preflight | Version " OURO_FRAMEWORK_VERSION, nullptr,
             ImGuiWindowFlags_NoResize           |
             ImGuiWindowFlags_NoSavedSettings    |
             ImGuiWindowFlags_NoCollapse );
@@ -280,8 +239,13 @@ int OuroApp::EntrypointGUI()
                 // hi everybody 
 
                 {
+                    ImGui::Spacing();
+                    ImGui::Spacing();
+
                     ImGui::PushFont( m_mdFrontEnd->getFont( app::module::Frontend::FontChoice::LargeLogo ) );
+                    ImGui::PushStyleColor( ImGuiCol_Text, ImGui::GetColorU32( ImGuiCol_NavHighlight ) );
                     ImGui::TextUnformatted( "OUROVEON ");
+                    ImGui::PopStyleColor();
                     ImGui::PopFont();
 
                     ImGui::Spacing();
@@ -405,9 +369,9 @@ int OuroApp::EntrypointGUI()
                         const auto showValidatedStoragePath = []( bool isValid, const fs::path& path, const char* context )
                         {
                             if ( isValid )
-                                ImGui::TextColored( ImGui::GetStyleColorVec4( ImGuiCol_NavHighlight ), ICON_FA_CHECK_CIRCLE " %s", context );
+                                ImGui::TextColored( ImGui::GetStyleColorVec4( ImGuiCol_NavHighlight ), ICON_FA_CIRCLE_CHECK " %s", context );
                             else
-                                ImGui::TextDisabled( ICON_FA_STOP_CIRCLE " %s [Not Found]", context );
+                                ImGui::TextDisabled( ICON_FA_CIRCLE_STOP " %s [Not Found]", context );
 
                             ImGui::CompactTooltip( path.string().c_str() );
                         };
@@ -449,6 +413,7 @@ int OuroApp::EntrypointGUI()
                     // ---------------------------------------------------------------------------------------------------------
                     // check in on our configured access to Endlesss' services
 
+                    static bool endlesssWorkOffline = false;
                     bool endlesssAuthExpired = false;
                     {
                         m_mdFrontEnd->titleText( "Endlesss Accesss" );
@@ -459,6 +424,18 @@ int OuroApp::EntrypointGUI()
                         uint32_t expireDays, expireHours, expireMins, expireSecs;
                         endlesssAuthExpired = !spacetime::datestampUnixExpiryFromNow( authExpiryUnixTime, expireDays, expireHours, expireMins, expireSecs );
 
+                        {
+                            const bool offerOfflineMode = ( supportsOfflineEndlesssMode() && endlesssAuthExpired );
+                            ImGui::BeginDisabledControls( !offerOfflineMode );
+                            ImGui::Checkbox( " Enable Offline Mode", &endlesssWorkOffline );
+                            ImGui::EndDisabledControls( !offerOfflineMode );
+                            if ( !supportsOfflineEndlesssMode() )
+                                ImGui::CompactTooltip( "This app does not support Offline Mode" );
+                            else if ( endlesssAuthExpired )
+                                ImGui::CompactTooltip( "Enable to allow booting without valid Endlesss\nauthentication, which may limit some features" );
+                            ImGui::Spacing();
+                        }
+
                         if ( endlesssAuthExpired )
                         {
                             ImGui::TextColored(
@@ -467,7 +444,7 @@ int OuroApp::EntrypointGUI()
                         }
                         else
                         {
-                            if ( ImGui::IconButton( ICON_FA_SIGN_OUT_ALT ) )
+                            if ( ImGui::IconButton( ICON_FA_RIGHT_FROM_BRACKET ) )
                             {
                                 // zero out the disk copy and our local cache
                                 config::endlesss::Auth emptyAuth;
@@ -483,9 +460,12 @@ int OuroApp::EntrypointGUI()
                                 ImGui::GetStyleColorVec4( ImGuiCol_SliderGrabActive ),
                                 "%u day(s), %u hours", expireDays, expireHours );
                         }
-
+                        
                         if ( endlesssAuthExpired )
-                            progressionInhibitionReason = "Endlesss log-in has expired";
+                        {
+                            if ( !endlesssWorkOffline )
+                                progressionInhibitionReason = "Endlesss log-in has expired";
+                        }
 
                         ImGui::Spacing();
 
@@ -553,7 +533,7 @@ int OuroApp::EntrypointGUI()
 
                             ImGui::BeginDisabledControls( jamsAreUpdating );
                             {
-                                if ( ImGui::IconButton( ICON_FA_SYNC ) )
+                                if ( ImGui::IconButton( ICON_FA_ARROWS_ROTATE ) )
                                 {
                                     m_jamLibrary.asyncCacheRebuild( m_apiNetworkConfiguration.value(), taskFlow, [&]( const endlesss::cache::Jams::AsyncFetchState state, const std::string& status )
                                         {
@@ -592,6 +572,7 @@ int OuroApp::EntrypointGUI()
                             }
                         }
 
+
                         ImGui::Unindent( perBlockIndent );
                         ImGui::Spacing();
                         ImGui::Spacing();
@@ -625,12 +606,12 @@ int OuroApp::EntrypointGUI()
                         ImGui::PushItemWidth( ImGui::GetContentRegionAvail().x * 0.22f );
                         {
                             // choose a sample rate; changing causes device options to be reconsidered
-                            if ( ValueArrayImGuiCombo( "Sample Rate :", "##smpr", cSampleRateLabels, cSampleRateValues, audioConfig.sampleRate, previewSampleRate, true ) )
+                            if ( ImGui::ValueArrayComboBox( "Sample Rate :", "##smpr", cSampleRateLabels, cSampleRateValues, audioConfig.sampleRate, previewSampleRate, true ) )
                             {
                                 fnUpdateDeviceQuery();
                             }
                             ImGui::SameLine( 0, 25.0f );
-                            ValueArrayImGuiCombo( "Buffer Size :", "##buff", cBufferSizeLabels, cBufferSizeValues, audioConfig.bufferSize, previewBufferSize, false );
+                            ImGui::ValueArrayComboBox( "Buffer Size :", "##buff", cBufferSizeLabels, cBufferSizeValues, audioConfig.bufferSize, previewBufferSize, false );
 
                             ImGui::Spacing();
                             ImGui::Spacing();
@@ -673,6 +654,54 @@ int OuroApp::EntrypointGUI()
                     }
 
                     // ---------------------------------------------------------------------------------------------------------
+                    // gotta go fast
+                    {
+                        m_mdFrontEnd->titleText( "Performance" );
+                        ImGui::Indent( perBlockIndent );
+
+                        const auto NicerIntEditPreamble = []( const char* title, const char* tooltip )
+                        {
+                            ImGui::TextDisabled( "[?]" );
+                            ImGui::CompactTooltip( tooltip );
+                            ImGui::SameLine();
+                            ImGui::TextUnformatted( title );
+                            ImGui::SameLine();
+                            const auto panelRegionAvailable = ImGui::GetContentRegionAvail();
+                            ImGui::Dummy( ImVec2( panelRegionAvailable.x - 200.0f, 0.0f ) );
+                            ImGui::SameLine();
+
+                            // crap hack to re-align the InputInt - it isn't on the text baseline for some reason
+                            ImGuiWindow* window = ImGui::GetCurrentWindow();
+                            window->DC.CursorPos.y -= 2.0f;
+                        };
+
+                        ImGui::PushItemWidth( 150.0f );
+                        {
+                            NicerIntEditPreamble(
+                                "Stem Cache Memory Target",
+                                "Stems are loaded and stored in memory for re-use between riffs.\nWhen the amount of memory in use hits this value, we run a pruning process to unload the oldest ones in the cache.\nIncrease this if you have lots of RAM and want to avoid re-loading\nstems off disk during longer sessions"
+                            );
+                            if ( ImGui::InputInt( " Mb##stem_cache_mem", &m_configPerf.stemCacheAutoPruneAtMemoryUsageMb, 256, 512 ) )
+                            {
+                                m_configPerf.clampLimits();
+                            }
+
+                            NicerIntEditPreamble(
+                                "Riff Live Instance Pool Size",
+                                "If possible, some riffs are kept alive in memory to speed-up transitions / avoid re-loading from disk.\nThis value controls how many we aim to limit that to.\nIncrease if you got RAM to burn."
+                            );
+                            ImGui::InputInt( "##riff_live_inst", &m_configPerf.liveRiffInstancePoolSize, 8, 16);
+                        }
+                        ImGui::PopItemWidth();
+
+
+                        ImGui::Unindent( perBlockIndent );
+                        ImGui::Spacing();
+                        ImGui::Spacing();
+                        ImGui::ColumnSeparatorBreak();
+                    }
+
+                    // ---------------------------------------------------------------------------------------------------------
                     // i love to chat and friends
                     {
                         m_mdFrontEnd->titleText( "Discord Streaming" );
@@ -698,9 +727,9 @@ int OuroApp::EntrypointGUI()
                             else
                             {
                                 if ( audioConfig.sampleRate != 48000 )
-                                    ImGui::TextColored( ImGui::GetErrorTextColour(), ICON_FA_EXCLAMATION_TRIANGLE " Discord audio streaming requires 48khz output" );
+                                    ImGui::TextColored( ImGui::GetErrorTextColour(), ICON_FA_TRIANGLE_EXCLAMATION " Discord audio streaming requires 48khz output" );
                                 else
-                                    ImGui::TextUnformatted( ICON_FA_CHECK_CIRCLE " Discord compatible audio output" );
+                                    ImGui::TextUnformatted( ICON_FA_CIRCLE_CHECK " Discord compatible audio output" );
                             }
                         }
                         ImGui::PopItemWidth();
@@ -711,6 +740,7 @@ int OuroApp::EntrypointGUI()
                         ImGui::Spacing();
                         ImGui::ColumnSeparatorBreak();
                     }
+
 
                     ImGui::Unindent( perColumnIndent );
                     ImGui::EndTable();
@@ -735,7 +765,7 @@ int OuroApp::EntrypointGUI()
                 ImGui::BeginDisabledControls( asyncWorkIsHappening );
                 {
                     ImGui::SameLine();
-                    if ( ImGui::Button( ICON_FA_TIMES_CIRCLE " Quit", buttonSize ) )
+                    if ( ImGui::Button( ICON_FA_CIRCLE_XMARK " Quit", buttonSize ) )
                     {
                         m_mdFrontEnd->requestQuit();
                     }
@@ -747,12 +777,13 @@ int OuroApp::EntrypointGUI()
                 ImGui::BeginDisabledControls( bootProcessUnfinished );
                 {
                     ImGui::SameLine();
-                    if ( ImGui::Button( bootProcessUnfinished ? progressionInhibitionReason.c_str() : ICON_FA_CHECK_CIRCLE " Accept & Continue", buttonSize ) )
+                    if ( ImGui::Button( bootProcessUnfinished ? progressionInhibitionReason.c_str() : ICON_FA_CIRCLE_CHECK " Accept & Continue", buttonSize ) )
                     {
                         ImGui::Spacing();
                         ImGui::TextUnformatted( "Please wait, loading session..." );
 
-                        if ( m_mdAudio->initOutput( audioConfig ) )
+                        const auto audioInitStatus = m_mdAudio->initOutput( audioConfig );
+                        if ( audioInitStatus.ok() )
                             successfulBreakFromLoop = true;
                     }
                 }
@@ -772,11 +803,18 @@ int OuroApp::EntrypointGUI()
             popupErrorMessageToDisplay.clear();
         }
 
-
-        submitInterfaceLayout();
+        // dispatch the UI for rendering
+        finishInterfaceLayoutAndRender();
 
         if ( successfulBreakFromLoop )
             break;
+    }
+
+    // if we passed over Endlesss authentication, create a net config structure that only knows how to talk to public
+    // stuff (so we can still pull stems from the CDN on demand, for example)
+    if ( !m_apiNetworkConfiguration.has_value() )
+    {
+        m_apiNetworkConfiguration = endlesss::api::NetConfiguration( m_configEndlesssAPI, m_sharedDataPath );
     }
 
     // save any config data blocks
@@ -785,6 +823,12 @@ int OuroApp::EntrypointGUI()
         if ( audioSaveResult != config::SaveResult::Success )
         {
             blog::error::cfg( "Unable to save audio configuration" );
+        }
+
+        const auto perfSaveResult = config::save( *this, m_configPerf );
+        if ( perfSaveResult != config::SaveResult::Success )
+        {
+            blog::error::cfg( "Unable to save performance configuration" );
         }
 
         const auto discordSaveResult = config::save( *this, m_configDiscord );
@@ -798,15 +842,96 @@ int OuroApp::EntrypointGUI()
         return 0;
 
     // boot stem cache now we have paths & audio configured
-    if ( !m_stemCache.initialise( m_storagePaths->cacheCommon, m_mdAudio->getSampleRate() ) )
+    const auto stemCacheStatus = m_stemCache.initialise( m_storagePaths->cacheCommon, m_mdAudio->getSampleRate() );
+    if ( !stemCacheStatus.ok() )
+    {
+        blog::error::cfg( "Unable to initialise stem cache; {}", stemCacheStatus.ToString() );
         return -1;
+    }
+    m_stemCacheLastPruneCheck.restart();
+    m_stemCachePruneTask.emplace( [this]() { m_stemCache.lockAndPrune( false ); } );
 
     // unplug status bar bits
-    unregisterStatusBarBlock( timeStatusLeftID );
-    unregisterStatusBarBlock( timeStatusRightID );
+    unregisterStatusBarBlock( sbbTimeStatusLeftID );
+    unregisterStatusBarBlock( sbbTimeStatusRightID );
 
-    return EntrypointOuro();
+    // events
+    {
+        APP_EVENT_REGISTER( ExportRiff );
+        APP_EVENT_REGISTER( StemDataAmalgamGenerated );
+        APP_EVENT_REGISTER( MixerRiffChange );
+
+        m_eventListenerRiffExport = m_appEventBus->addListener( events::ExportRiff::ID, [this]( const base::IEvent& evt ) { onEvent_ExportRiff( evt ); } );
+    }
+
+    int appResult = EntrypointOuro();
+
+    // unhook events
+    {
+        checkedCoreCall( "remove listener", [this] { return m_appEventBus->removeListener( m_eventListenerRiffExport ); } );
+    }
+
+    // wrap up any dangling async work before teardown
+    ensureStemCacheChecksComplete();
+
+    return appResult;
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+void OuroApp::ensureStemCacheChecksComplete()
+{
+    if ( m_stemCachePruneFuture.has_value() )
+        m_stemCachePruneFuture->wait();
+    m_stemCachePruneFuture = std::nullopt;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void OuroApp::maintainStemCacheAsync()
+{
+    static constexpr auto memoryReclaimPeriod = 30 * 1000;
+
+    if ( m_stemCacheLastPruneCheck.deltaMs().count() > memoryReclaimPeriod )
+    {
+        const auto stemMemory          = m_stemCache.estimateMemoryUsageBytes();
+        const auto stemMemoryTriggerMb = (std::size_t)m_configPerf.stemCacheAutoPruneAtMemoryUsageMb;
+
+        if ( stemMemory >= stemMemoryTriggerMb * 1024 * 1024 )
+        {
+            ensureStemCacheChecksComplete();
+
+            // the prune is usually measured in 10s of milliseconds, but we may as well 
+            // toss it into the job queue; it locks the cache to do the work, worst case very briefly delaying 
+            // async background loading
+            m_stemCachePruneFuture = m_taskExecutor.run( m_stemCachePruneTask );
+        }
+        m_stemCacheLastPruneCheck.restart();
+    }
+}
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+void OuroApp::onEvent_ExportRiff( const base::IEvent& eventRef )
+{
+    ABSL_ASSERT( eventRef.getID() == events::ExportRiff::ID );
+    
+    const events::ExportRiff* exportRiffEvent = dynamic_cast<const events::ExportRiff*>( &eventRef );
+    ABSL_ASSERT( exportRiffEvent != nullptr );
+
+    endlesss::toolkit::xp::RiffExportDestination destination(
+        m_storagePaths.value(),
+        m_configExportOutput.spec
+    );
+
+    const auto exportedFiles = endlesss::toolkit::xp::exportRiff(
+        endlesss::toolkit::xp::RiffExportMode::Stems,
+        destination,
+        exportRiffEvent->m_adjustments,
+        exportRiffEvent->m_riff );
+
+    for ( const auto& exported : exportedFiles )
+    {
+        blog::core( " => {}", exported.string() );
+    }
+}
 
 } // namespace app

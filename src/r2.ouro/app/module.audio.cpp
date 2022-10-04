@@ -14,6 +14,9 @@
 
 #include "config/audio.h"
 
+#include "base/mathematics.h"
+#include "dsp/scope.h"
+
 #include "effect/vst2/host.h"
 #include "win32/errors.h"
 #include "win32/utils.h"
@@ -38,21 +41,26 @@ Audio::~Audio()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-bool Audio::create( const app::Core& appCore )
+absl::Status Audio::create( const app::Core* appCore )
 {
+    const auto baseStatus = Module::create( appCore );
+    if ( !baseStatus.ok() )
+        return baseStatus;
+
     // bring up PA, check we have things to play with
     const auto paErrorInit = Pa_Initialize();
     if ( paErrorInit != paNoError )
     {
-        blog::error::core( "PortAudio failed to initalise, {}", Pa_GetErrorText( paErrorInit ) );
-        return false;
+        return absl::UnavailableError( 
+            fmt::format( "PortAudio failed to initalise, {}", Pa_GetErrorText( paErrorInit ) ) );
     }
+
     const auto paDeviceCount = Pa_GetDeviceCount();
     if ( paDeviceCount <= 0 )
     {
-        blog::error::core( "PortAudio was unable to iterate or find any audio devices" );
-        return false;
+        return absl::UnavailableError( "PortAudio was unable to iterate or find any audio devices" );
     }
+
     blog::core( "Initialised PortAudio [ {} ]", Pa_GetVersionText() );
     blog::core( "                      [ .. found {} audio endpoints ]", paDeviceCount );
 
@@ -65,8 +73,7 @@ bool Audio::create( const app::Core& appCore )
         blog::core( "                      [ {} {}]", apiInfo->name, ( hostAPIdefault == hApi ) ? "(default) " : "" );
     }
 
-    
-    return true;
+    return absl::OkStatus();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -81,18 +88,19 @@ void Audio::destroy()
     {
         blog::error::core( "PortAudio failed to terminate cleanly, {}", Pa_GetErrorText( paErrorTerm ) );
     }
+
+    Module::destroy();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-bool Audio::initOutput( const config::Audio& outputDevice )
+absl::Status Audio::initOutput( const config::Audio& outputDevice )
 {
     blog::core( "Establishing audio output using [{}] @ {}", outputDevice.lastDevice, outputDevice.sampleRate );
 
     PaStreamParameters outputParameters;
     if ( AudioDeviceQuery::generateStreamParametersFromDeviceConfig( outputDevice, outputParameters ) < 0 )
     {
-        blog::error::core( "Unable to resolve stream parameters" );
-        return false;
+        return absl::UnavailableError( "Unable to resolve stream parameters" );
     }
 
     PaError err = Pa_OpenStream(
@@ -107,8 +115,7 @@ bool Audio::initOutput( const config::Audio& outputDevice )
 
     if ( err != paNoError )
     {
-        blog::error::core( "Pa_OpenStream failed [{}]", Pa_GetErrorText( err ) );
-        return false;
+        return absl::UnavailableError( fmt::format( FMTX( "Pa_OpenStream failed [{}]" ), Pa_GetErrorText( err ) ) );
     }
 
     m_sampleRate   = outputDevice.sampleRate;
@@ -119,11 +126,10 @@ bool Audio::initOutput( const config::Audio& outputDevice )
     {
         termOutput();
 
-        blog::error::core( "Pa_StartStream failed [{}]", Pa_GetErrorText( err ) );
-        return false;
+        return absl::UnavailableError( fmt::format( FMTX( "Pa_StartStream failed [{}]" ), Pa_GetErrorText( err ) ) );
     }
 
-    return true;
+    return absl::OkStatus();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -339,6 +345,8 @@ int Audio::PortAudioCallbackInternal( void* outputBuffer, unsigned long framesPe
         resultChannelRight = outputs[1];
     }
 
+    m_scope.append( resultChannelLeft, resultChannelRight, framesPerBuffer );
+
     {
         float* out = (float*)outputBuffer;
         for ( auto i = 0U; i < framesPerBuffer; i++ )
@@ -374,11 +382,11 @@ int Audio::PortAudioCallbackInternal( void* outputBuffer, unsigned long framesPe
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-bool Audio::beginRecording( const std::string& outputPath, const std::string& filePrefix )
+bool Audio::beginRecording( const fs::path& outputPath, const std::string& filePrefix )
 {
     assert( !isRecording() );
 
-    auto outputFilename = fs::absolute( fs::path( outputPath ) / fmt::format( "{}_finalmix.flac", filePrefix ) ).string();
+    auto outputFilename = fs::absolute( outputPath / fmt::format( "{}_finalmix.flac", filePrefix ) ).string();
     blog::core( "Opening FLAC final-mix output '{}'", outputFilename );
 
     assert( m_currentRecorderProcessor == nullptr );

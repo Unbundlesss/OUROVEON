@@ -755,7 +755,7 @@ bool ImGui::PrecisionButton( const char* label, const ImVec2& size, const float 
 }
 
 // #HDD
-bool ImGui::IconButton( const char* label )
+bool ImGui::IconButton( const char* label, const bool visible )
 {
     ImGuiWindow* window = GetCurrentWindow();
     if ( window->SkipItems )
@@ -777,6 +777,9 @@ bool ImGui::IconButton( const char* label )
     const ImRect bb( pos - customOffset, pos + size + customOffset );
     ItemSize( size, customPadding.y );
     if ( !ItemAdd( bb, id ) )
+        return false;
+
+    if ( !visible )
         return false;
 
     ImGuiButtonFlags flags = ImGuiButtonFlags_None;

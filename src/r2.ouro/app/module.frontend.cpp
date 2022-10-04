@@ -17,6 +17,11 @@
 
 #include "config/frontend.h"
 
+
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
+#include "imgui_freetype.h"
+
 // bits from imgui internals
 #include "imgui_internal.h"
 
@@ -99,7 +104,6 @@ Frontend::Frontend( const config::Frontend& feConfig, const char* name )
     , m_appName( name )
     , m_imguiLayoutIni( nullptr )
     , m_GlfwWindow( nullptr )
-    , m_largestTextureDimension( 0 )
     , m_fontFixed( nullptr )
     , m_fontMedium( nullptr )
     , m_fontLogo( nullptr )
@@ -127,14 +131,17 @@ enum FontSlots
     FsFontAwesome,
     FsTitle,
     FsMedium,
-    FsBanner,
     FsCount
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-bool Frontend::create( const app::Core& appCore )
+absl::Status Frontend::create( const app::Core* appCore )
 {
-    const auto fontLoadpath = appCore.getSharedDataPath() / "fonts";
+    const auto baseStatus = Module::create( appCore );
+    if ( !baseStatus.ok() )
+        return baseStatus;
+
+    const auto fontLoadpath = appCore->getSharedDataPath() / "fonts";
 
     auto fontAt = [&fontLoadpath](const char* localPath)
     {
@@ -144,9 +151,8 @@ bool Frontend::create( const app::Core& appCore )
     std::array< fs::path, FsCount > fontFilesSlots;
     fontFilesSlots[ FsFixed ]       = fontAt( "FiraCode-Regular.ttf" );
     fontFilesSlots[ FsFontAwesome ] = fontLoadpath / "icons" / fs::path(FONT_ICON_FILE_NAME_FAS);
-    fontFilesSlots[ FsTitle ]       = fontAt( "stentiga.ttf" );
+    fontFilesSlots[ FsTitle ]       = fontAt( "Warheed.otf" );
     fontFilesSlots[ FsMedium ]      = fontAt( "Oswald-Light.ttf" );
-    fontFilesSlots[ FsBanner ]      = fontAt( "JosefinSans-Regular.ttf" );
 
     #define FONT_AT( _idx ) fontFilesSlots[_idx].string().c_str()
 
@@ -155,8 +161,7 @@ bool Frontend::create( const app::Core& appCore )
     {
         if ( !fs::exists( fontPath ) )
         {
-            blog::error::core( "Unable to find required font file [{}]", fontPath.string() );
-            return false;
+            return absl::NotFoundError( fmt::format( FMTX( "Unable to find required font file [{}]" ), fontPath.string() ) );
         }
     }
 
@@ -165,8 +170,7 @@ bool Frontend::create( const app::Core& appCore )
     blog::core( "loading GLFW {}.{}.{} ...", GLFW_VERSION_MAJOR, GLFW_VERSION_MINOR, GLFW_VERSION_REVISION );
     if ( !glfwInit() )
     {
-        blog::error::core( "[glfw] failed to initialise" );
-        return false;
+        return absl::UnavailableError( "GLFW failed to initialise" );
     }
 
     // NB https://stackoverflow.com/questions/67345946/problem-with-imgui-when-using-glfw-opengl
@@ -190,21 +194,34 @@ bool Frontend::create( const app::Core& appCore )
     if ( !m_GlfwWindow )
     {
         glfwTerminate();
-        blog::error::core( "[glfw] unable to create main window" );
-        return false;
+        return absl::UnavailableError( "GLFW unable to create main window" );
     }
 
 
     blog::core( "creating main GL context" );
     glfwMakeContextCurrent( m_GlfwWindow );
-    glfwSetWindowCenter( m_GlfwWindow );
+
+    // set a saved position if we have one (and if it fits on screen); otherwise just centre on an appropriate monitor
+    if ( m_feConfigCopy.appPositionValid && 
+         glfwIsWindowPositionValid( m_GlfwWindow, m_feConfigCopy.appPositionX, m_feConfigCopy.appPositionY ) )
+    {
+        glfwSetWindowPos( m_GlfwWindow, m_feConfigCopy.appPositionX, m_feConfigCopy.appPositionY );
+    }
+    else
+    {
+        glfwSetWindowCenter( m_GlfwWindow );
+    }
+    // save the initial window pos/size, update (or create) the serialised version
+    m_currentWindowGeometry = getWindowGeometry();
+    m_windowGeometryChangedDelay = 0;
+    updateAndSaveFrontendConfig();
+
 
     blog::core( "loading GLAD ..." );
     int gladErr = gladLoadGLLoader( (GLADloadproc)glfwGetProcAddress );
     if ( gladErr == 0 )
     {
-        blog::error::core( "OpenGL loader failed, {}", gladErr );
-        return false;
+        return absl::UnavailableError( fmt::format( FMTX( "OpenGL loader failed, {}" ), gladErr ) );
     }
 
     glfwSwapInterval( 1 );
@@ -215,9 +232,6 @@ bool Frontend::create( const app::Core& appCore )
     blog::core( "bound OpenGL {} | GLSL {}",
         (char*)glGetString( GL_VERSION ),                       // casts as glGetString returns uchar
         (char*)glGetString( GL_SHADING_LANGUAGE_VERSION ) );
-
-    glGetIntegerv( GL_MAX_TEXTURE_SIZE, (GLint*)&m_largestTextureDimension );
-    blog::core( "GL_MAX_TEXTURE_SIZE = {}", m_largestTextureDimension );
 
     {
         GLint pformat, format, type;
@@ -239,7 +253,6 @@ bool Frontend::create( const app::Core& appCore )
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         ImPlot::CreateContext();
-        imnodes::Initialize();
 
         // install styles
         ImGui::StyleColorsDark();
@@ -255,7 +268,7 @@ bool Frontend::create( const app::Core& appCore )
         // configure where imgui will stash layout persistence
         {
             // default layouts are stashed in the shared/layouts path, eg. lore.default.ini
-            m_imguiLayoutDefaultPath = appCore.getSharedDataPath() / "layouts" / fs::path( fmt::format( "{}.default.ini", appCore.GetAppCacheName() ) );
+            m_imguiLayoutDefaultPath = appCore->getSharedDataPath() / "layouts" / fs::path( fmt::format( "{}.default.ini", appCore->GetAppCacheName() ) );
             if ( !fs::exists( m_imguiLayoutDefaultPath ) )
             {
                 blog::error::core( "missing default layout .ini fallback [{}]", m_imguiLayoutDefaultPath.string() );
@@ -264,7 +277,7 @@ bool Frontend::create( const app::Core& appCore )
             static constexpr size_t layoutPathMax = 256;
 
             m_imguiLayoutIni = new char[layoutPathMax];
-            const auto layoutStore = ( appCore.getAppConfigPath() / "layout.current.ini" ).string();
+            const auto layoutStore = ( appCore->getAppConfigPath() / "layout.current.ini" ).string();
             strncpy( m_imguiLayoutIni, layoutStore.c_str(), layoutPathMax - 1 );
 
             // if the current layout ini doesn't exist, manually pull the default one
@@ -305,17 +318,15 @@ bool Frontend::create( const app::Core& appCore )
                 io.Fonts->AddFontFromFileTTF( FONT_AT(FsFontAwesome), 15.0f, &faIconConfig, faIconRange );
             }
             m_fixedSmaller = io.Fonts->AddFontDefault();
-            m_fixedLarger  = io.Fonts->AddFontFromFileTTF( FONT_AT(FsFixed), 24.0f );
-            m_fontLogo     = io.Fonts->AddFontFromFileTTF( FONT_AT(FsTitle), 50.0f );
+            m_fontLogo     = io.Fonts->AddFontFromFileTTF( FONT_AT(FsTitle),  56.0f );
             m_fontMedium   = io.Fonts->AddFontFromFileTTF( FONT_AT(FsMedium), 50.0f );
-            m_fontBanner   = io.Fonts->AddFontFromFileTTF( FONT_AT(FsBanner), 40.0f );
 
             ImGuiFreeType::BuildFontAtlas( io.Fonts, ImGuiFreeType::LightHinting );
         }
     }
 
     #undef FONT_AT
-    return true;
+    return absl::OkStatus();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -324,7 +335,6 @@ void Frontend::destroy()
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
 
-    imnodes::Shutdown();
     ImPlot::DestroyContext();
     ImGui::DestroyContext();
 
@@ -332,14 +342,31 @@ void Frontend::destroy()
     glfwTerminate();
 
     m_GlfwWindow = nullptr;
+
+    Module::destroy();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 bool Frontend::appTick()
 {
     bool shouldQuit = m_quitRequested;
+         shouldQuit |= ( glfwWindowShouldClose( m_GlfwWindow ) != 0 );
 
-    shouldQuit |= ( glfwWindowShouldClose( m_GlfwWindow ) != 0 );
+    // track changes to the window size/position and write out new configuration after a delay
+    // (to absorb rapid changes, such as is likely when dragging around windows)
+    const auto windowGeometry = getWindowGeometry();
+    if ( m_currentWindowGeometry != windowGeometry )
+    {
+        m_currentWindowGeometry = windowGeometry;
+        m_windowGeometryChangedDelay = 60;
+    }
+    if ( m_windowGeometryChangedDelay > 0 )
+    {
+        m_windowGeometryChangedDelay--;
+        if ( m_windowGeometryChangedDelay == 0 )
+            updateAndSaveFrontendConfig();
+    }
+
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
@@ -357,8 +384,9 @@ void Frontend::appRenderBegin()
 
     ImGui::Render();
 
+    // reset GL rendering state
+    glBindFramebuffer( GL_FRAMEBUFFER, 0 );
     glViewport( 0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y );
-
     glClearColor( 0.0f, 0.0f, 0.0f, 1.0f );
     glClear( GL_COLOR_BUFFER_BIT );
 }
@@ -384,6 +412,39 @@ void Frontend::toggleBorderless()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+Frontend::WindowGeometry Frontend::getWindowGeometry() const
+{
+    WindowGeometry result;
+    glfwGetWindowSize( m_GlfwWindow, &result.m_width, &result.m_height );
+    glfwGetWindowPos( m_GlfwWindow, &result.m_positionX, &result.m_positionY );
+    return result;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void Frontend::updateAndSaveFrontendConfig()
+{
+    m_feConfigCopy.appWidth         = m_currentWindowGeometry.m_width;
+    m_feConfigCopy.appHeight        = m_currentWindowGeometry.m_height;
+    m_feConfigCopy.appPositionX     = m_currentWindowGeometry.m_positionX;
+    m_feConfigCopy.appPositionY     = m_currentWindowGeometry.m_positionY;
+    m_feConfigCopy.appPositionValid = true;
+
+    blog::core( "window moved/resized [{}, {}] [{} x {}], saving changes ...",
+        m_feConfigCopy.appPositionX,
+        m_feConfigCopy.appPositionY,
+        m_feConfigCopy.appWidth,
+        m_feConfigCopy.appHeight
+    );
+
+    ABSL_ASSERT( m_appCore.has_value() );
+    const auto feSave = config::save( *m_appCore.value(), m_feConfigCopy );
+    if ( feSave != config::SaveResult::Success )
+    {
+        blog::error::core( "unable to find or save [{}]", config::Frontend::StorageFilename );
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 void Frontend::applyBorderless() const
 {
     glfwSetWindowAttrib( m_GlfwWindow, GLFW_DECORATED, m_isBorderless ? 0 : 1 );
@@ -404,6 +465,19 @@ void Frontend::reloadImguiLayoutFromDefault() const
 {
     ImGui::LoadIniSettingsFromDisk( m_imguiLayoutDefaultPath.string().c_str() );
     ImGui::MarkIniSettingsDirty();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void Frontend::resetWindowPositionAndSizeToDefault()
+{
+    m_isBorderless = true;
+    applyBorderless();
+
+    glfwSetWindowSize( m_GlfwWindow, config::Frontend::DefaultWidth, config::Frontend::DefaultHeight );
+    glfwSetWindowCenter( m_GlfwWindow );
+
+    m_currentWindowGeometry = getWindowGeometry();
+    updateAndSaveFrontendConfig();
 }
 
 } // namespace module

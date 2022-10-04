@@ -9,21 +9,24 @@
 
 #pragma once
 
-#include "base/macro.h"
+#include "base/construction.h"
 
-// using a symbol to bump our threads to sort at the top of the view
+// using a default prefix to bump our threads to sort at the top of the view
 #define OURO_THREAD_PREFIX      "$:OURO::"
 
 namespace base {
 namespace instr {
 
+// ---------------------------------------------------------------------------------------------------------------------
 // set profiler-friendly name for currently executing thread
 void setThreadName( const char* name );
 
-// generic profiler event staking
+// ---------------------------------------------------------------------------------------------------------------------
+// generic profiler event bookends
 void eventBegin( const char* name, const char* context = nullptr, uint8_t colorR = 255, uint8_t colorG = 220, uint8_t colorB = 170 );
 void eventEnd();
 
+// ---------------------------------------------------------------------------------------------------------------------
 enum class PresetColour
 {
     Red,
@@ -37,10 +40,11 @@ enum class PresetColour
     Pink
 };
 
+// automatically start/stop an event block inside a scope
 struct ScopedEvent
 {
     ScopedEvent() = delete;
-    DeclareUncopyable( ScopedEvent );
+    DECLARE_NO_COPY_NO_MOVE( ScopedEvent );
 
     ScopedEvent( const char* name )
     {
@@ -71,7 +75,7 @@ private:
         default:
         case PresetColour::Red:      eventBegin( name, context, 252, 165, 165 ); break;
         case PresetColour::Orange:   eventBegin( name, context, 253, 186, 116 ); break;
-        case PresetColour::Amber:    eventBegin( name, context, 252, 211, 77 ); break;
+        case PresetColour::Amber:    eventBegin( name, context, 252, 211,  77 ); break;
         case PresetColour::Lime:     eventBegin( name, context, 190, 242, 100 ); break;
         case PresetColour::Emerald:  eventBegin( name, context, 110, 231, 183 ); break;
         case PresetColour::Cyan:     eventBegin( name, context, 103, 232, 249 ); break;

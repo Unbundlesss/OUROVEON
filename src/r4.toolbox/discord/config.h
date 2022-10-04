@@ -14,7 +14,7 @@
 namespace config {
 namespace discord {
 
-struct Connection : public Base
+OURO_CONFIG( Connection )
 {
     // data routing
     static constexpr auto StoragePath       = IPathProvider::PathFor::SharedConfig;

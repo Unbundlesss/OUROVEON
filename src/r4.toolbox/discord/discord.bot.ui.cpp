@@ -10,6 +10,8 @@
 
 #include "pch.h"
 
+#include "base/text.h"
+
 #include "discord/discord.bot.ui.h"
 #include "discord/discord.bot.h"
 #include "discord/config.h"
@@ -73,16 +75,16 @@ void BotWithUI::imgui( app::CoreGUI& coreGUI )
                 ImGui::TextUnformatted( ICON_FA_CIRCLE " Idle" );
                 break;
             case discord::Bot::ConnectionPhase::Booting:
-                ImGui::TextColored( pulseColour, ICON_FA_DOT_CIRCLE " Booting interface ..." );
+                ImGui::TextColored( pulseColour, ICON_FA_CIRCLE_DOT " Booting interface ..." );
                 break;
             case discord::Bot::ConnectionPhase::RequestingGuildData:
-                ImGui::TextColored( pulseColour, ICON_FA_DOT_CIRCLE " Fetching guild data ..." );
+                ImGui::TextColored( pulseColour, ICON_FA_CIRCLE_DOT " Fetching guild data ..." );
                 break;
             case discord::Bot::ConnectionPhase::Ready:
-                ImGui::TextColored( ImGui::GetStyleColorVec4( ImGuiCol_NavHighlight ), ICON_FA_USER_CIRCLE " Connected as %s", m_discordBot->getBotName().c_str() );
+                ImGui::TextColored( ImGui::GetStyleColorVec4( ImGuiCol_NavHighlight ), ICON_FA_CIRCLE_USER " Connected as %s", m_discordBot->getBotName().c_str() );
                 break;
             case discord::Bot::ConnectionPhase::UnableToStart:
-                ImGui::TextColored( ImGui::GetErrorTextColour(), ICON_FA_EXCLAMATION_TRIANGLE " Critical boot failure" );
+                ImGui::TextColored( ImGui::GetErrorTextColour(), ICON_FA_TRIANGLE_EXCLAMATION " Critical boot failure" );
                 break;
         }
 
@@ -135,7 +137,7 @@ void BotWithUI::imgui( app::CoreGUI& coreGUI )
                     ImGui::TableNextColumn();
                     {
                         ImGui::BeginDisabledControls( !isLive );
-                        ImGui::TextUnformatted( isLive ? ICON_FA_VOLUME_UP : ICON_FA_VOLUME_OFF );
+                        ImGui::TextUnformatted( isLive ? ICON_FA_VOLUME_HIGH : ICON_FA_VOLUME_OFF );
                         ImGui::EndDisabledControls( !isLive );
                     }
                     ImGui::TableNextColumn(); ImGui::Text( "%s", channel.m_name.c_str() );
@@ -209,11 +211,6 @@ void BotWithUI::imgui( app::CoreGUI& coreGUI )
                     // technically "500 to 512000" is viable, discord or dpp seems to have problems about 150k
                     setupChanged |= ImGui::SliderInt( " Target Bitrate",      &setup.m_bitrate, 20000, 150000 );
                                     ImGui::CompactTooltip( "OPUS compressor target bitrate" );
-
-/* EPL doesn't seem to do much?
-                    setupChanged |= ImGui::SliderInt( "Expected Packet Loss", &setup.m_expectedPacketLossPercent, 0, 100, "%d%%" );
-                                    ImGui::CompactTooltip( "Hint to OPUS about potential packet loss to try and workaround" );
-*/
                 }
                 if ( setupChanged )
                     m_discordBot->setCompressionSetup( setup );
@@ -242,7 +239,7 @@ void BotWithUI::imgui( app::CoreGUI& coreGUI )
             if ( m_config.botToken.empty() ||
                  m_config.guildSID.empty() )
             {
-                ImGui::TextDisabled( ICON_FA_EXCLAMATION_TRIANGLE " Discord configuration data missing" );
+                ImGui::TextDisabled( ICON_FA_TRIANGLE_EXCLAMATION " Discord configuration data missing" );
             }
             else
             {
@@ -254,9 +251,13 @@ void BotWithUI::imgui( app::CoreGUI& coreGUI )
                 if ( ImGui::Button( "Connect", ImVec2( -1.0f, 30.0f ) ) )
                 {
                     m_discordBot = std::make_unique<discord::Bot>();
-                    if ( !m_discordBot->initialise( m_services, m_config ) )
+
+                    const auto discordStatus = m_discordBot->initialise( m_services, m_config );
+                    if ( !discordStatus.ok() )
                     {
-                        lastConnectResult = ( ICON_FA_EXCLAMATION_TRIANGLE " initialisation failed" );
+                        blog::error::discord( fmt::format( FMTX( "bot failed to initialise; {}" ), discordStatus.ToString() ) );
+
+                        lastConnectResult = ( ICON_FA_TRIANGLE_EXCLAMATION " initialisation failed" );
                         m_discordBot.reset();
                     }
                 }

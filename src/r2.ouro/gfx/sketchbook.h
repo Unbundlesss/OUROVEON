@@ -9,7 +9,7 @@
 
 #pragma once
 
-#include "base/macro.h"
+#include "base/construction.h"
 #include "buffer/buffer.2d.h"
 
 #ifdef _DEBUG
@@ -72,7 +72,7 @@ struct Sketchbook;
 // an instance of a U32 buffer as well as control over how much of that buffer will eventually be masked for rendering
 struct SketchBuffer
 {
-    DeclareUncopyable( SketchBuffer );
+    DECLARE_NO_COPY( SketchBuffer );
 
     friend Sketchbook;
 
@@ -119,7 +119,7 @@ using SketchBufferPtr = std::unique_ptr< SketchBuffer >;
 //
 struct GPUTask
 {
-    DeclareUncopyable( GPUTask );
+    DECLARE_NO_COPY( GPUTask );
 
     // a state block that is returned once the GPU object is finalised; it contains the size/extents as 
     // defined by the original CPU buffer as well as a usable ImGui-compliant ID to get things rendered

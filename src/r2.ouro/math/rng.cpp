@@ -15,12 +15,6 @@
 
 namespace math {
 
-//----------------------------------------------------------------------------------------------------------------------
-RNG32::RNG32( uint32_t seed )
-{
-    reseed( seed );
-}
-
 #if OURO_PLATFORM_NIX
 static uint64_t GetTickCountMs()
 {
@@ -31,20 +25,26 @@ static uint64_t GetTickCountMs()
 #endif 
 
 //----------------------------------------------------------------------------------------------------------------------
-RNG32::RNG32()
+void RNG32::reseed()
 {
     // by default, seed with the ms-since-system-start ( or similar )
     reseed((uint32_t)(
 #if OURO_PLATFORM_WIN
-    ::GetTickCount64() 
+        ::GetTickCount64()
 #elif OURO_PLATFORM_NIX
-    GetTickCountMs()
+        GetTickCountMs()
 #elif OURO_PLATFORM_OSX
-    mach_absolute_time()
+        mach_absolute_time()
 #else
-    #error oh dear
+        #error oh dear
 #endif
-    & UINT32_MAX) );
+    & UINT32_MAX ));
+}
+
+//----------------------------------------------------------------------------------------------------------------------
+RNG32::RNG32()
+{
+    reseed();
 }
 
 } // namespace math

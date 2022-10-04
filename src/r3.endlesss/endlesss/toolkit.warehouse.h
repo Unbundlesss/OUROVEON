@@ -11,13 +11,15 @@
 
 #include "spacetime/chronicle.h"
 #include "endlesss/ids.h"
+#include "endlesss/api.h"
 
 namespace app { struct StoragePaths; }
 
 namespace endlesss {
 
-namespace api   { struct NetConfiguration; }
 namespace cache { struct Jams; }
+
+namespace toolkit {
 
 // ---------------------------------------------------------------------------------------------------------------------
 //
@@ -36,18 +38,16 @@ struct Warehouse
     // SoA extraction of a set of riff data
     struct JamSlice
     {
-        inline void reserve( const size_t elements )
-        {
-            m_ids.reserve( elements );
-            m_timestamps.reserve( elements );
-            m_userhash.reserve( elements );
-            m_roots.reserve( elements );
-            m_scales.reserve( elements );
-            m_bpms.reserve( elements );
+        DECLARE_NO_COPY_NO_MOVE( JamSlice );
 
-            m_deltaSeconds.reserve( elements );
-            m_deltaStem.reserve( elements );
+        JamSlice() = delete;
+        JamSlice( const types::JamCouchID& jamID, const size_t elementsToReserve )
+            : m_jamID( jamID )
+        {
+            reserve( elementsToReserve );
         }
+
+        types::JamCouchID                           m_jamID;
 
         // per-riff information
         std::vector< types::RiffCouchID >           m_ids;
@@ -60,6 +60,20 @@ struct Warehouse
         // riff-adjacency information
         std::vector< int32_t >                      m_deltaSeconds;
         std::vector< int8_t >                       m_deltaStem;
+
+    protected:
+        inline void reserve( const size_t elements )
+        {
+            m_ids.reserve( elements );
+            m_timestamps.reserve( elements );
+            m_userhash.reserve( elements );
+            m_roots.reserve( elements );
+            m_scales.reserve( elements );
+            m_bpms.reserve( elements );
+
+            m_deltaSeconds.reserve( elements );
+            m_deltaStem.reserve( elements );
+        }
     };
     using JamSlicePtr = std::unique_ptr<JamSlice>;
     using JamSliceCallback = std::function<void( const types::JamCouchID& jamCouchID, JamSlicePtr&& resultSlice )>;
@@ -91,10 +105,11 @@ struct Warehouse
     void workerTogglePause();
     inline bool workerIsPaused() const { return m_workerThreadPaused; }
 
-
     void requestJamPurge( const types::JamCouchID& jamCouchID );
 
-
+    // passing in the NetConfiguration for API access to Endlesss is optional; users should not enqueue tasks
+    // that require it if it isn't present (and tasks will check and bail in error)
+    constexpr bool hasFullEndlesssNetworkAccess() const { return m_netConfig.hasValidEndlesssAuth(); }
 
 protected:
     friend ITask;
@@ -117,4 +132,5 @@ protected:
     std::atomic_bool                        m_workerThreadPaused;
 };
 
+} // namespace toolkit
 } // namespace endlesss

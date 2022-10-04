@@ -8,7 +8,7 @@
 //
 
 #pragma once
-#include "base/utils.h"
+#include "base/mathematics.h"
 
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -24,6 +24,20 @@ inline ImVec4 lerpVec4( const ImVec4& from, const ImVec4& to, const float t )
 
 // ---------------------------------------------------------------------------------------------------------------------
 namespace ImGui {
+
+inline void MakeTabVisible( const char* window_name )
+{
+    ImGuiWindow* window = ImGui::FindWindowByName( window_name );
+    if ( window == nullptr || window->DockNode == nullptr || window->DockNode->TabBar == nullptr )
+        return;
+
+    window->DockNode->TabBar->NextSelectedTabId = window->ID;
+}
+
+inline bool Shortcut( ImGuiKeyModFlags mod, ImGuiKey key, bool repeat )
+{
+	return mod == GetMergedKeyModFlags() && IsKeyPressed( GetKeyIndex(key), repeat );
+}
 
 template < typename _HandleType >
 struct _ImTexture
@@ -51,8 +65,8 @@ inline void ColumnSeparatorBreak()
     ImGui::Spacing();
 }
 
-void BeginDisabledControls( bool cond );
-void EndDisabledControls( bool cond );
+void BeginDisabledControls( const bool isDisabled );
+void EndDisabledControls( const bool isDisabled );
 
 // ---------------------------------------------------------------------------------------------------------------------
 ImU32 ParseHexColour( const char* hexColour );
@@ -65,6 +79,7 @@ inline ImVec4 GetErrorTextColour() { return ImVec4(0.981f, 0.074f, 0.178f, 0.985
 
 // ---------------------------------------------------------------------------------------------------------------------
 void CompactTooltip( const char* tip );
+void CompactTooltip( const std::string& tip );
 
 // ---------------------------------------------------------------------------------------------------------------------
 bool KnobFloat( const char* label, const float outerRadius, float* p_value, float v_min, float v_max, float v_step );
@@ -77,15 +92,25 @@ void BeatSegments(
     const char* label,
     const int numSegments,
     const int activeSegment,
+    const int activeEdge = -1,
     const float height = 5.0f,
     const ImU32 highlightColour = ImGui::GetColorU32( ImGuiCol_TextDisabled ),
     const ImU32 backgroundColour = ImGui::GetColorU32( ImGuiCol_FrameBg ) );
+
+// ---------------------------------------------------------------------------------------------------------------------
+void VerticalProgress(
+    const char* label,
+    const float progress,
+    const ImU32 highlightColour = ImGui::GetColorU32( ImGuiCol_Text ) );
 
 // ---------------------------------------------------------------------------------------------------------------------
 void RenderArrowSolid( ImDrawList* draw_list, ImVec2 pos, ImU32 col, ImGuiDir dir, float height );
 
 // ---------------------------------------------------------------------------------------------------------------------
 bool ClickableText( const char* label );
+
+void CenteredText( const char* text );
+void CenteredColouredText( const ImVec4& col, const char* text );
 
 
 template< typename _T, int32_t _Size >
@@ -137,6 +162,25 @@ private:
     bool    m_state;
 };
 
+
+// ---------------------------------------------------------------------------------------------------------------------
+struct FluxButton
+{
+    enum class State
+    {
+        Off,
+        Flux,
+        On,
+    };
+
+    FluxButton( const State& state, const ImVec4& buttonColourOn, const ImVec4& textColourOn );
+    ~FluxButton();
+
+private:
+    int32_t     m_stylesToPop;
+};
+
+
 // ---------------------------------------------------------------------------------------------------------------------
 struct ToggleButtonLit
 {
@@ -157,6 +201,92 @@ private:
     bool    m_state;
 };
 
+// ---------------------------------------------------------------------------------------------------------------------
+struct FloatTextRight
+{
+    FloatTextRight( const char* text );
+    ~FloatTextRight();
+
+private:
+    ImVec2  m_savedCursor;
+};
+
 } // namespace Scoped
+
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+// some ImGui helpers for displaying combos of values|labels where the selection is driven from matching the value
+// to a configuration variable + handling if the value doesn't match any of our defaults
+//
+
+template <typename T, typename A>
+concept UnreferencedArrayResult = std::same_as<std::remove_cvref_t<T>, A>;
+
+template< typename T >
+concept IndexibleLabels = requires (T & t, const std::size_t i) {
+    { t[i] } -> UnreferencedArrayResult< const char* >;
+};
+template< typename T, typename V >
+concept IndexibleTypes = requires (T & t, const std::size_t i) {
+    { t[i] } -> UnreferencedArrayResult< V >;
+};
+
+template< typename _entryT, IndexibleLabels _containerL, IndexibleTypes<_entryT> _containerT >
+requires std::equality_comparable<_entryT>
+std::string ValueArrayPreviewString(
+    const _containerL&  entryLabels,
+    const _containerT&  entryValues,
+    _entryT&            variable )
+{
+    ABSL_ASSERT( entryLabels.size() == entryValues.size() );
+
+    for ( std::size_t optI = 0; optI < entryLabels.size(); optI++ )
+    {
+        if ( entryValues[optI] == variable )
+            return entryLabels[optI];
+    }
+    return fmt::format( "{} (Custom)", variable );
+}
+
+template< typename _entryT, IndexibleLabels _containerL, IndexibleTypes<_entryT> _containerT >
+requires std::equality_comparable<_entryT>
+bool ValueArrayComboBox(
+    const char*         title,
+    const char*         label,
+    const _containerL&  entryLabels,
+    const _containerT&  entryValues,
+    _entryT&            variable,
+    std::string&        previewString,
+    const bool          addYOffset )
+{
+    ABSL_ASSERT( entryLabels.size() == entryValues.size() );
+
+    ImGui::TextUnformatted( title );
+    ImGui::SameLine();
+
+    if ( addYOffset )
+        ImGui::SetCursorPosY( ImGui::GetCursorPosY() - 3.0f );
+
+    bool changed = false;
+    if ( ImGui::BeginCombo( label, previewString.c_str() ) )
+    {
+        for ( std::size_t optI = 0; optI < entryLabels.size(); optI++ )
+        {
+            const bool selected = ( entryValues[optI] == variable );
+            if ( ImGui::Selectable( entryLabels[optI], selected ) )
+            {
+                variable        = entryValues[optI];
+                previewString   = ValueArrayPreviewString( entryLabels, entryValues, variable );
+                changed         = true;
+            }
+            if ( selected )
+                ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+
+    return changed;
+}
 
 } // namespace ImGui

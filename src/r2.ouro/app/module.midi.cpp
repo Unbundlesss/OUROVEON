@@ -22,7 +22,8 @@ struct Midi::State : public Midi::InputControl
     using MidiMessageQueue = mcc::ReaderWriterQueue< app::midi::Message >;
 
 
-    State()
+    State( const base::EventBusClient& eventBusClient )
+        : m_eventBusClient( eventBusClient )
     {
         m_midiIn          = std::make_unique<RtMidiIn>();
 
@@ -75,7 +76,8 @@ struct Midi::State : public Midi::InputControl
 
                 blog::core( "midi::NoteOn  (#{}) [{}] [{}]", channelNumber, u7OnKey, u7OnVel );
 
-                state->m_midiMessageQueue.emplace( timeStamp, midi::Message::Type::NoteOn, u7OnKey, u7OnVel );
+                const ::events::MidiEvent midiMsg( { timeStamp, midi::Message::Type::NoteOn, u7OnKey, u7OnVel }, app::module::MidiDeviceID(0) );
+                state->m_eventBusClient.Send< ::events::MidiEvent >( midiMsg );
             }
             else
             if ( channelMessage == midi::NoteOff::u7Type )
@@ -172,6 +174,8 @@ struct Midi::State : public Midi::InputControl
     std::vector< std::string >      m_inputPortNames;
     uint32_t                        m_inputPortOpenedIndex = 0;
 
+    base::EventBusClient            m_eventBusClient;
+
     MidiMessageQueue                m_midiMessageQueue;
 };
 
@@ -186,25 +190,41 @@ Midi::~Midi()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-bool Midi::create( const app::Core& appCore )
+absl::Status Midi::create( const app::Core* appCore )
 {
-    try
-    {
-        m_state = std::make_unique<State>();
-    }
-    catch ( RtMidiError& error )
-    {
-        blog::error::core( "RtMidi initialisation error : {}", error.getMessage() );
-        m_state.reset();
-    }
+    const auto baseStatus = Module::create( appCore );
+    if ( !baseStatus.ok() )
+        return baseStatus;
 
-    return true; // MIDI can fail to boot, app can continue functioning without
+    m_state = std::make_unique<State>( appCore->getEventBusClient() );
+    return absl::OkStatus();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 void Midi::destroy()
 {
     m_state.reset();
+
+    Module::destroy();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+std::vector< app::module::MidiDevice > Midi::fetchListOfInputDevices()
+{
+    std::vector< app::module::MidiDevice > inputDevices; 
+
+    auto midiIn = std::make_unique<RtMidiIn>();
+
+    const auto inputPortCount = midiIn->getPortCount();
+
+    inputDevices.reserve( inputPortCount );
+    for ( auto pI = 0; pI < inputPortCount; pI++ )
+    {
+        const auto portName = midiIn->getPortName( pI );
+        inputDevices.emplace_back( portName );
+    }
+
+    return inputDevices;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

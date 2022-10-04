@@ -23,6 +23,12 @@ function SetDefaultBuildConfiguration()
 
     SilenceMSVCSecurityWarnings()
 
+    filter "system:Windows"
+        flags {
+            "MultiProcessorCompile"     -- /MP on MSVC to locally distribute compile
+        }
+    filter {}
+
     filter "configurations:Debug"
         defines   { "DEBUG", "OURO_DEBUG=1", "OURO_RELEASE=0" }
         symbols   "On"

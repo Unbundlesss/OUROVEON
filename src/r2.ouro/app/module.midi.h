@@ -11,18 +11,53 @@
 #include "app/module.h"
 #include "app/module.midi.msg.h"
 
+#include "base/id.hash.h"
+#include "base/text.h"
+
 namespace app {
 namespace module {
 
 // ---------------------------------------------------------------------------------------------------------------------
+struct _midi_device_id {};
+using MidiDeviceID = base::id::HashWrapper<_midi_device_id>;
+
+// represent a MIDI device by name; this is then translated to a low-level device index at the point of Open'ing -- 
+// which can fail if the device already got unplugged
+struct MidiDevice
+{
+    MidiDevice() = delete;
+    MidiDevice( const std::string& name )
+        : m_name( name )
+        , m_uid( base::HashString64( name ) )
+    {}
+
+    constexpr bool operator == ( const MidiDevice& rhs ) const { return rhs.m_uid == m_uid; }
+    constexpr bool operator != ( const MidiDevice& rhs ) const { return rhs.m_uid != m_uid; }
+
+    ouro_nodiscard constexpr const std::string& getName() const { return m_name; }
+    ouro_nodiscard constexpr const MidiDeviceID& getUID() const { return m_uid; }
+
+private:
+    std::string     m_name;
+    MidiDeviceID    m_uid;
+};
+
+// ---------------------------------------------------------------------------------------------------------------------
 struct Midi : public Module
 {
+    DECLARE_NO_COPY_NO_MOVE( Midi );
+
     Midi();
     ~Midi();
 
     // Module
-    bool create( const app::Core& appCore ) override;
+    absl::Status create( const app::Core* appCore ) override;
     void destroy() override;
+    virtual std::string getModuleName() const override { return "Midi"; };
+
+    // create a temporary MidiIn interface and assemble a list of usable input devices
+    static std::vector< MidiDevice > fetchListOfInputDevices();
+
 
     struct InputControl
     {
@@ -52,3 +87,16 @@ using MidiModule = std::unique_ptr<module::Midi>;
 
 } // namespace module
 } // namespace app
+
+// ---------------------------------------------------------------------------------------------------------------------
+CREATE_EVENT_BEGIN( MidiEvent )
+
+    MidiEvent( const app::midi::Message& msg, const app::module::MidiDeviceID& deviceUID )
+        : m_msg( msg )
+        , m_deviceUID( deviceUID )
+    {}
+
+    app::midi::Message          m_msg;
+    app::module::MidiDeviceID   m_deviceUID;
+
+CREATE_EVENT_END()

@@ -14,8 +14,10 @@
 #include "endlesss/live.stem.h"
 
 namespace endlesss {
+namespace toolkit {
 
-void Exchange::fillDetailsFromRiff( Exchange& data, const live::RiffPtr& riff, const char* jamName )
+// ---------------------------------------------------------------------------------------------------------------------
+void Exchange::copyDetailsFromRiff( Exchange& data, const live::RiffPtr& riff, const char* jamName )
 {
     const auto* currentRiff = riff.get();
     if ( currentRiff != nullptr )
@@ -31,7 +33,7 @@ void Exchange::fillDetailsFromRiff( Exchange& data, const live::RiffPtr& riff, c
     strncpy(
         data.m_jamName,
         jamName,
-        endlesss::Exchange::MaxJamName - 1 );
+        endlesss::toolkit::Exchange::MaxJamName - 1 );
 
     const uint64_t currentRiffHash = currentRiff->getCIDHash().getID();
     data.m_riffHash = currentRiffHash;
@@ -57,4 +59,12 @@ void Exchange::fillDetailsFromRiff( Exchange& data, const live::RiffPtr& riff, c
     }
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+void Exchange::copyDetailsFromProgression( Exchange& data, const live::RiffProgression& progression )
+{
+    data.m_riffBeatSegmentActive = progression.m_playbackBar;
+    data.m_riffPlaybackProgress  = (float)progression.m_playbackPercentage;
+}
+
+} // namespace toolkit
 } // namespace endlesss

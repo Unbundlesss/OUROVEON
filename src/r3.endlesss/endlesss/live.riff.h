@@ -15,6 +15,7 @@
 #include "core.types.h"
 #include "ssp/isamplestreamprocessor.h"
 
+#include "endlesss/core.services.h"
 #include "endlesss/api.h"
 
 namespace config { namespace endlesss { struct API; } }
@@ -26,6 +27,26 @@ namespace live {
 struct Stem; using StemPtr = std::shared_ptr<Stem>;
 
 // ---------------------------------------------------------------------------------------------------------------------
+struct RiffProgression
+{
+    RiffProgression()
+    {
+        reset();
+    }
+
+    constexpr void reset()
+    {
+        m_playbackPercentage = 0;
+        m_playbackBar        = 0;
+        m_playbackBarSegment = 0;
+    }
+
+    double      m_playbackPercentage;
+    int32_t     m_playbackBar;
+    int32_t     m_playbackBarSegment;
+};
+
+// ---------------------------------------------------------------------------------------------------------------------
 struct Riff
 {
     // unique type for hash values of riff Couch IDs (for quick and dirty equality checks and the like)
@@ -34,16 +55,17 @@ struct Riff
 
     static RiffCIDHash computeHashForRiffCID( const endlesss::types::RiffCouchID& riffCID );
 
-    Riff( const endlesss::types::RiffComplete& riffData, const int32_t targetSampleRate );
+    Riff( const endlesss::types::RiffComplete& riffData );
     ~Riff();
 
-    void fetch( const api::NetConfiguration& ncfg, endlesss::cache::Stems& stemCache, tf::Executor& taskExecutor );
+    void fetch( services::RiffFetchProvider& services );
 
-    void exportToDisk( const std::function< ssp::SampleStreamProcessorInstance( const uint32_t stemIndex, const endlesss::live::Stem& stemData ) >& diskWriterForStem );
+    using streamProcessorFactoryFn = std::function< ssp::SampleStreamProcessorInstance( const uint32_t stemIndex, const endlesss::live::Stem& stemData ) >;
+    void exportToDisk( const streamProcessorFactoryFn& diskWriterForStem, const int32_t sampleOffset );
 
     struct RiffTimingDetails
     {
-        inline void ComputeProgressionAtSample( const uint64_t sampleIndex, double& percentage, int32_t& currentBar, int32_t& currentBarSegment ) const
+        inline void ComputeProgressionAtSample( const uint64_t sampleIndex, RiffProgression& progression ) const
         {
             const double         sampleTime = (double)sampleIndex * m_rcpSampleRate;
             const double    riffWrappedTime = std::fmod( sampleTime, m_lengthInSec );
@@ -51,9 +73,9 @@ struct Riff
             const double segmentWrappedTime = std::fmod( sampleTime, m_lengthInSecPerBar );
             const double  segmentPercentage = (segmentWrappedTime / m_lengthInSecPerBar);
 
-            percentage = riffPercentage;
-            currentBar = (uint32_t)std::floor( riffPercentage * m_barCount );
-            currentBarSegment = (int32_t)(segmentPercentage * (double)m_quarterBeats);
+            progression.m_playbackPercentage = riffPercentage;
+            progression.m_playbackBar        = (uint32_t)std::floor( riffPercentage * m_barCount );
+            progression.m_playbackBarSegment = (int32_t)( segmentPercentage * (double)m_quarterBeats );
         }
 
         int32_t     m_quarterBeats = 0;     // X / 4 time signature
@@ -92,28 +114,49 @@ struct Riff
 
     inline RiffCIDHash getCIDHash() const { return m_computedRiffCouchHash; }
 
+
+    // export the riff metadata and anything else of vague (debug) interest into a string for dumping out somewhere
+    std::string generateMetadataReport() const;
+
+    // .. via this cereal fn; it includes a bunch of derived and more debug-specific data that won't be interesting to 
+    // most. "m_riffData" is likely the only bit that others might actually care about
+    template<class Archive>
+    inline void metadata( Archive& archive )
+    {
+        archive( CEREAL_NVP( m_riffData )
+               , CEREAL_NVP( m_timingDetails.m_lengthInSamples )
+               , CEREAL_NVP( m_timingDetails.m_lengthInSamplesPerBar )
+               , CEREAL_NVP( m_timingDetails.m_lengthInSec )
+               , CEREAL_NVP( m_timingDetails.m_lengthInSecPerBar )
+               , CEREAL_NVP( m_timingDetails.m_longestStemInBars )
+               , CEREAL_NVP( m_stemGains )
+               , CEREAL_NVP( m_stemLengthInSec )
+               , CEREAL_NVP( m_stemTimeScales )
+        );
+    }
+
 public:
 
     endlesss::types::RiffComplete           m_riffData;
-    uint32_t                                m_targetSampleRate;
     SyncState                               m_syncState;
     RiffTimingDetails                       m_timingDetails;
 
-    std::vector<endlesss::live::StemPtr>    m_stemOwnership;
-    std::vector<endlesss::live::Stem*>      m_stemPtrs;
-    std::vector<float>                      m_stemGains;
-    std::vector<float>                      m_stemLengthInSec;
-    std::vector<float>                      m_stemTimeScales;
-    std::vector<int32_t>                    m_stemRepetitions;
-    std::vector<uint32_t>                   m_stemLengthInSamples;
+    uint32_t                                m_stemSampleRate;
+    std::array<endlesss::live::StemPtr, 8>  m_stemOwnership;
+    std::array<endlesss::live::Stem*, 8>    m_stemPtrs;
+    std::array<float, 8>                    m_stemGains;
+    std::array<float, 8>                    m_stemLengthInSec;
+    std::array<float, 8>                    m_stemTimeScales;
+    std::array<int32_t, 8>                  m_stemRepetitions;
+    std::array<uint32_t, 8>                 m_stemLengthInSamples;
 
     spacetime::InSeconds                    m_stTimestamp;
 
-    // set of handy preformatted strings for use in UI rendering
+    // set of handy pre-formatted strings for use in UI rendering
     std::string                             m_uiTimestamp;              // prettified riff submission timestamp
     std::string                             m_uiJamUppercase;           // THE JAM NAME
-    std::string                             m_uiIdentity;               // riff owner username
-    std::string                             m_uiDetails;                // compact list of riff stats (BPM, etc)
+    std::string                             m_uiDetails;                // compact list of riff stats (author, BPM, ..)
+    std::string                             m_uiPlaybackDebug;          // some playback debugging info (stem repeats, length in sec, ..)
 
 protected:
     RiffCIDHash                             m_computedRiffCouchHash;

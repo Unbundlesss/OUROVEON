@@ -5,8 +5,6 @@
 #include "buffer/mix.h"
 #include "spacetime/moment.h"
 
-#include "config/data.h"
-
 #include "app/module.audio.h"
 #include "app/module.frontend.h"
 #include "app/module.frontend.fonts.h"
@@ -15,19 +13,18 @@
 
 #include "ux/diskrecorder.h"
 #include "ux/cache.jams.browser.h"
+#include "ux/live.riff.details.h"
+#include "vx/stembeats.h"
 
-#include "ssp/ssp.file.wav.h"
 #include "ssp/ssp.file.flac.h"
 
 #include "discord/discord.bot.ui.h"
-
-#include "effect/vst2/host.h"
 
 #include "endlesss/all.h"
 
 #include "data/databus.h"
 #include "effect/effect.stack.h"
-
+#include "net/bond.riffpush.h"
 
 
 #define OUROVEON_BEAM           "BEAM"
@@ -157,9 +154,9 @@ struct MixEngine : public app::module::MixerInterface,
 
     endlesss::live::RiffPtr     m_riffCurrent;
     uint32_t                    m_riffLengthInSamples;
-    double                      m_riffPlaybackPercentage;
-    int32_t                     m_riffPlaybackBar;
-    int32_t                     m_riffPlaybackBarSegment;
+
+    endlesss::live::RiffProgression
+                                m_playbackProgression;
 
     RiffQueue                   m_riffQueue;
     CommandQueue                m_commandQueue;
@@ -197,8 +194,8 @@ struct MixEngine : public app::module::MixerInterface,
 
         for ( size_t mI = 0; mI < 8; mI++ )
         {
-            m_mixChannelLeft[mI]  = mem::malloc16As<float>( m_audioBufferSize );
-            m_mixChannelRight[mI] = mem::malloc16As<float>( m_audioBufferSize );
+            m_mixChannelLeft[mI]  = mem::alloc16<float>( m_audioBufferSize );
+            m_mixChannelRight[mI] = mem::alloc16<float>( m_audioBufferSize );
         }
     }
 
@@ -213,7 +210,7 @@ struct MixEngine : public app::module::MixerInterface,
         m_mixChannelRight.fill( nullptr );
     }
 
-    inline void addNextRiff( endlesss::live::RiffPtr& nextRiff )
+    inline void addNextRiff( const endlesss::live::RiffPtr& nextRiff )
     {
         m_riffQueue.emplace( nextRiff );
     }
@@ -315,7 +312,7 @@ struct MixEngine : public app::module::MixerInterface,
         }
     }
 
-    void mainThreadUpdate( const float dT, endlesss::Exchange& beatEx )
+    void mainThreadUpdate( const float dT, endlesss::toolkit::Exchange& beatEx )
     {
         for ( auto& sb : m_stemBeats )
             sb.update( dT, m_stemBeatRate );
@@ -368,21 +365,19 @@ struct MixEngine : public app::module::MixerInterface,
 
 public:
 
-    inline bool beginRecording( const std::string& outputPath, const std::string& filePrefix ) override
+    inline bool beginRecording( const fs::path& outputPath, const std::string& filePrefix ) override
     {
         // should not be calling this if we're already in the process of streaming out
         assert( !isRecording() );
         if ( isRecording() )
             return false;
 
-        fs::path recordingsPath{ outputPath };
-
         math::RNG32 writeBufferShuffleRNG;
 
         // set up 8 WAV output streams, one for each Endlesss layer
         for ( auto i = 0; i < 8; i++ )
         {
-            auto recordFile = recordingsPath / fmt::format( "{}beam_channel{}.flac", filePrefix, i );
+            auto recordFile = outputPath / fmt::format( "{}beam_channel{}.flac", filePrefix, i );
             m_multiTrackOutputs[i] = ssp::FLACWriter::Create(
                 recordFile.string(),
                 m_audioSampleRate,
@@ -632,9 +627,7 @@ void MixEngine::update(
         outputBuffer.applySilence();
 
         // reset computed riff playback variables
-        m_riffPlaybackPercentage  = 0;
-        m_riffPlaybackBar         = 0;
-        m_riffPlaybackBarSegment  = 0;
+        m_playbackProgression.reset();
 
         // check if there's something on the horizon
         if ( m_riffQueue.peek() != nullptr )
@@ -655,7 +648,7 @@ void MixEngine::update(
     const endlesss::live::Riff* currentRiff = m_riffCurrent.get();
 
     // compute where we are (roughly) for the UI
-    currentRiff->getTimingDetails().ComputeProgressionAtSample( m_samplePosition, m_riffPlaybackPercentage, m_riffPlaybackBar, m_riffPlaybackBarSegment );
+    currentRiff->getTimingDetails().ComputeProgressionAtSample( m_samplePosition, m_playbackProgression );
 
 
     // update vst time structure with latest state
@@ -735,9 +728,9 @@ void MixEngine::update(
         {
             segmentSampleStart -= segmentLengthInSamples;
 
-            m_riffPlaybackBar++;
-            if ( m_riffPlaybackBar >= currentRiff->m_timingDetails.m_barCount )
-                m_riffPlaybackBar = 0;
+            m_playbackProgression.m_playbackBar++;
+            if ( m_playbackProgression.m_playbackBar >= currentRiff->m_timingDetails.m_barCount )
+                m_playbackProgression.m_playbackBar = 0;
         }
 
         const uint64_t segmentSample = segmentSampleStart++;
@@ -747,20 +740,20 @@ void MixEngine::update(
         {
 //            blog::mix( "[ Edge ] Bar {}", m_riffPlaybackBar + 1 );
 
-            const bool isEvenBarNumber = ( m_riffPlaybackBar & 1 ) == 0;
+            const bool isEvenBarNumber = (m_playbackProgression.m_playbackBar & 1 ) == 0;
             const bool shouldTriggerTransition =
                 // any bar
                 ( m_progression.m_triggerPoint == ProgressionConfiguration::TriggerPoint::AnyBarStart ) ||
                 // 0, 2, 4, .. 
                 ( m_progression.m_triggerPoint == ProgressionConfiguration::TriggerPoint::AnyEvenBarStart && isEvenBarNumber ) ||
                 // next riff is bar 0
-                ( m_progression.m_triggerPoint == ProgressionConfiguration::TriggerPoint::NextRiffStart && m_riffPlaybackBar == 0 );
+                ( m_progression.m_triggerPoint == ProgressionConfiguration::TriggerPoint::NextRiffStart && m_playbackProgression.m_playbackBar == 0 );
 
             if ( shouldTriggerTransition )
             {
                 bool allowedToTrigger = true;
 
-                if ( isRepComPaused() && m_repcomPausedOnBar != m_riffPlaybackBar )
+                if ( isRepComPaused() && m_repcomPausedOnBar != m_playbackProgression.m_playbackBar )
                     allowedToTrigger = false;
 
                 if ( allowedToTrigger && checkForAndDequeueNextRiff() )
@@ -784,9 +777,9 @@ void MixEngine::update(
                      && m_riffNext          == nullptr
                      && m_transitionValue   == 0 )
                 {
-                    blog::mix( "[ REPCOM ] Pausing @ bar {}, sample offset {}", m_riffPlaybackBar, sI );
+                    blog::mix( "[ REPCOM ] Pausing @ bar {}, sample offset {}", m_playbackProgression.m_playbackBar, sI );
 
-                    m_repcomPausedOnBar = m_riffPlaybackBar;
+                    m_repcomPausedOnBar = m_playbackProgression.m_playbackBar;
 
                     m_repcomSampleStart = 0;
                     m_repcomSampleEnd   = sI;
@@ -925,7 +918,7 @@ struct RiffPercentage : public data::Provider
 
     virtual float generate( const Input& input ) override
     {
-        return (float)m_mixer->m_riffPlaybackPercentage;
+        return (float)m_mixer->m_playbackProgression.m_playbackPercentage;
     }
 };
 
@@ -972,26 +965,7 @@ struct BeamApp : public app::OuroApp
     int EntrypointOuro() override;
 
 
-    inline void runAutomaticMemoryReclaim()
-    {
-        const auto memoryReclaimPeriod = 120 * 1000;
-
-        if ( m_lastAutoMemoryReclaimationMoment.deltaMs().count() > memoryReclaimPeriod )
-        {
-            m_stemCache.prune();
-            m_lastAutoMemoryReclaimationMoment.restart();
-        }
-    }
-
 protected:
-
-    void customMainMenu()
-    {
-    }
-
-    void customStatusBar()
-    {
-    }
 
 
     endlesss::types::JamCouchID             m_trackedJamCouchID;
@@ -1006,8 +980,6 @@ protected:
     std::unique_ptr< effect::EffectStack >  m_effectStack;
 #endif // OURO_FEATURE_VST24
 
-    spacetime::Moment                       m_lastAutoMemoryReclaimationMoment;
-
     std::unique_ptr< discord::BotWithUI >   m_discordBotUI;
 };
 
@@ -1015,6 +987,13 @@ protected:
 // ---------------------------------------------------------------------------------------------------------------------
 int BeamApp::EntrypointOuro()
 {
+    // create a lifetime-tracked provider object to pass to systems that want access to Riff-fetching abilities we provide
+    endlesss::services::RiffFetchInstance riffFetchService( this );
+    endlesss::services::RiffFetchProvider riffFetchProvider = riffFetchService.makeBound();
+
+    // fetch any customised stem export spec
+    const auto exportLoadResult = config::load( *this, m_configExportOutput );
+
     // create and install the mixer engine
     MixEngine mixEngine( m_mdAudio );
     m_mdAudio->blockUntil( m_mdAudio->installMixer( &mixEngine ) );
@@ -1044,56 +1023,47 @@ int BeamApp::EntrypointOuro()
 
     // == SNOOP ========================================================================================================
 
-    endlesss::Sentinel jamSentinel( m_apiNetworkConfiguration.value() );
-
     bool        riffSyncInProgress = false;
-    endlesss::types::RiffCouchID riffSyncLastSeenId;
-    const auto  riffChangeCallback = [&]( const endlesss::types::Jam& trackedJam )
+
+    endlesss::toolkit::Sentinel jamSentinel( riffFetchProvider, [&]( endlesss::live::RiffPtr& riffPtr )
     {
-        if ( riffSyncInProgress )
-            return;
-
-        riffSyncInProgress = true;
-
-        std::this_thread::sleep_for( 1000ms );
-
-        // get the current riff from the jam
-        endlesss::api::pull::LatestRiffInJam latestRiff { m_apiNetworkConfiguration.value(), trackedJam.couchID, trackedJam.displayName };
-        if ( !latestRiff.hasLoadedSuccessfully() )
-        {
-            blog::error::app( "[ SYNC ] failed to read latest riff in jam" );
-            riffSyncInProgress = false;
-            return;
-        }
-
-        endlesss::types::RiffComplete completeRiffData { latestRiff };
-
-
-        auto riff = std::make_shared<endlesss::live::Riff>( completeRiffData, m_mdAudio->getSampleRate() );
-        riff->fetch( m_apiNetworkConfiguration.value(), m_stemCache, m_taskExecutor );
-
-        // check to see if the riff contents actually changed; it might have been other metadata (like chats arriving)
-        const auto& syncRiffId          = completeRiffData.riff.couchID;
-        const bool  isActualNewRiffData = ( riffSyncLastSeenId != syncRiffId );
-        riffSyncLastSeenId = syncRiffId;
-
-        blog::app( "[ SYNC ] last id = [{}], new id = [{}] | {}", riffSyncLastSeenId, syncRiffId, isActualNewRiffData ? "is-new" : "no-new-data" );
-
-        // if new data has arrived, chuck it in the mix
-        if ( isActualNewRiffData )
-        {
-            mixEngine.addNextRiff( riff );  // transfer ownership; otherwise the riff will fall out of scope and be dealloced
-        }
-
-        riffSyncInProgress = false;
-    };
-
+        // enqueue for mixer
+        mixEngine.addNextRiff( riffPtr );
+    });
 
     ux::UniversalJamBrowserBehaviour jamBrowserBehaviour;
     jamBrowserBehaviour.fnOnSelected = [this]( const endlesss::types::JamCouchID& newJamCID )
     {
         m_trackedJamCouchID = newJamCID;
     };
+
+    endlesss::toolkit::Pipeline riffPipeline(
+        riffFetchProvider,
+        32,
+        [this]( const endlesss::types::RiffIdentity& request, endlesss::types::RiffComplete& result) -> bool
+        {
+            return endlesss::toolkit::Pipeline::defaultNetworkResolver( m_apiNetworkConfiguration.value(), request, result );
+        },
+        [&mixEngine]( const endlesss::types::RiffIdentity& request, endlesss::live::RiffPtr& loadedRiff, const endlesss::types::RiffPlaybackPermutationOpt& playbackPermutationOpt )
+        {
+            // TODO playbackPermutationOpt
+
+            if ( loadedRiff )
+                mixEngine.addNextRiff( loadedRiff );
+        },
+        []()
+        {
+        } );
+
+    net::bond::RiffPushServer rpServer;
+    rpServer.setRiffPushedCallback([&]( 
+        const endlesss::types::JamCouchID&                  jamID,
+        const endlesss::types::RiffCouchID&                 riffID,
+        const endlesss::types::RiffPlaybackPermutationOpt&  permutationOpt )
+    {
+        riffPipeline.requestRiff( { { jamID, riffID }, permutationOpt } );
+    });
+    std::ignore = rpServer.start();
 
 
     // == MAIN LOOP ====================================================================================================
@@ -1132,9 +1102,9 @@ int BeamApp::EntrypointOuro()
 
         // update exchange buffers 
         {
-            endlesss::Exchange::fillDetailsFromRiff( m_endlesssExchange, currentRiffPtr, trackedJamData.m_displayName.c_str() );
+            endlesss::toolkit::Exchange::copyDetailsFromRiff( m_endlesssExchange, currentRiffPtr, trackedJamData.m_displayName.c_str() );
 
-            m_endlesssExchange.m_riffBeatSegmentActive = mixEngine.m_riffPlaybackBarSegment;
+            m_endlesssExchange.m_riffBeatSegmentActive = mixEngine.m_playbackProgression.m_playbackBarSegment;
             m_endlesssExchange.m_riffTransition        = mixEngine.m_transitionValue;
         }
 
@@ -1171,7 +1141,7 @@ int BeamApp::EntrypointOuro()
             // button to toggle end-chain mute on audio engine (but leave processing, WAV output etc intact)
             const bool isMuted = m_mdAudio->isMuted();
             {
-                const char* muteIcon = isMuted ? ICON_FA_VOLUME_MUTE : ICON_FA_VOLUME_UP;
+                const char* muteIcon = isMuted ? ICON_FA_VOLUME_OFF : ICON_FA_VOLUME_HIGH;
 
                 {
                     ImGui::Scoped::ToggleButton bypassOn( isMuted );
@@ -1210,7 +1180,7 @@ int BeamApp::EntrypointOuro()
                 {
                     ImGui::BeginDisabledControls( isTracking );
 
-                    if ( ImGui::Button( ICON_FA_TH " Browse ...", ImVec2( panelRegionAvailable.x, chunkyButtonHeight ) ) )
+                    if ( ImGui::Button( ICON_FA_TABLE_LIST " Browse ...", ImVec2( panelRegionAvailable.x, chunkyButtonHeight ) ) )
                         modalDisplayJamBrowser = true;
 
                     ImGui::EndDisabledControls( isTracking );
@@ -1221,15 +1191,15 @@ int BeamApp::EntrypointOuro()
                 {
                     if ( isTrackerBroken )
                     {
-                        if ( ImGui::Button( ICON_FA_EXCLAMATION_TRIANGLE " Tracker Failed", ImVec2( panelRegionAvailable.x, chunkyButtonHeight ) ) )
+                        if ( ImGui::Button( ICON_FA_TRIANGLE_EXCLAMATION " Tracker Failed", ImVec2( panelRegionAvailable.x, chunkyButtonHeight ) ) )
                         {
-                            jamSentinel.startTracking( riffChangeCallback, { m_trackedJamCouchID, trackedJamData.m_displayName } );
+                            jamSentinel.startTracking( { m_trackedJamCouchID, trackedJamData.m_displayName } );
                         }
                     }
                     else
                     {
                         ImGui::Scoped::ToggleButton toggled( true, true );
-                        if ( ImGui::Button( ICON_FA_STOP_CIRCLE " Tracking Changes", ImVec2( panelRegionAvailable.x, chunkyButtonHeight ) ) )
+                        if ( ImGui::Button( ICON_FA_CIRCLE_STOP " Tracking Changes", ImVec2( panelRegionAvailable.x, chunkyButtonHeight ) ) )
                         {
                             jamSentinel.stopTracking();
                         }
@@ -1237,18 +1207,13 @@ int BeamApp::EntrypointOuro()
                 }
                 else
                 {
-                    if ( ImGui::Button( ICON_FA_PLAY_CIRCLE " Begin Tracking ", ImVec2( panelRegionAvailable.x, chunkyButtonHeight ) ) )
+                    if ( ImGui::Button( ICON_FA_CIRCLE_PLAY " Begin Tracking ", ImVec2( panelRegionAvailable.x, chunkyButtonHeight ) ) )
                     {
-                        jamSentinel.startTracking( riffChangeCallback, { m_trackedJamCouchID, trackedJamData.m_displayName } );
+                        jamSentinel.startTracking( { m_trackedJamCouchID, trackedJamData.m_displayName } );
                     }
                 }
                 ImGui::EndDisabledControls( !hasSelectedJam );
             }
-
-            ImGui::SeparatorBreak();
-
-            ImGui::TextUnformatted( "Beat Decay Rate" );
-            ImGui::DragFloat( "##beat_decay", &mixEngine.m_stemBeatRate, 0.01f, 0.1f, 25.0f );
 
 
             ImGui::PopItemWidth();
@@ -1266,7 +1231,46 @@ int BeamApp::EntrypointOuro()
                 ImGui::SetColumnWidth( 0, panelRegionAvailable.x * 0.5f );
             }
             {
-                ImGui::TextUnformatted( ICON_FA_RANDOM " Riff Blending" );
+                ImGui::TextUnformatted( ICON_FA_SHUFFLE " Active Riff Blending" );
+                ImGui::Spacing();
+                ImGui::Spacing();
+
+                const auto currentLineHeight = ImGui::GetTextLineHeight();
+                const auto progressBarHeight = ImVec2( -1.0f, currentLineHeight * 1.25f );
+
+                {
+                    const auto* progTrigger = MixEngine::ProgressionConfiguration::getTriggerPointName( mixEngine.m_progression.m_triggerPoint );
+                    const auto* progBlend = MixEngine::ProgressionConfiguration::getBlendTimeName( mixEngine.m_progression.m_blendTime );
+
+                    ImGui::Text( "Trigger %s, %s %s",
+                        progTrigger,
+                        progBlend,
+                        mixEngine.m_progression.m_greedyMode ? "(Leap)" : "(Sequential)" );
+                }
+
+                const bool itemsInRiffQueue = (mixEngine.m_riffQueue.size_approx() > 0);
+                {
+                    ImGui::PushStyleColor( ImGuiCol_PlotHistogram, ImGui::GetStyleColorVec4( ImGuiCol_NavHighlight ) );
+
+                    if ( itemsInRiffQueue )
+                        ImGui::ProgressBar( mixEngine.m_transitionValue, progressBarHeight, " Transition Scheduled ... " );
+                    else if ( mixEngine.m_transitionValue > 0 )
+                        ImGui::ProgressBar( mixEngine.m_transitionValue, progressBarHeight, " Transitioning ... " );
+                    else
+                        ImGui::ProgressBar( mixEngine.m_transitionValue, progressBarHeight, "" );
+
+                    ImGui::PopStyleColor();
+                }
+
+                ImGui::Spinner( "##syncing", riffSyncInProgress, currentLineHeight * 0.4f, 3.0f, 0.0f, ImGui::GetColorU32( ImGuiCol_Text ) );
+                ImGui::SameLine();
+                if ( riffSyncInProgress )
+                    ImGui::TextUnformatted( " Fetching Stems ..." );
+                else
+                    ImGui::TextUnformatted( "" );
+            }
+            {
+                ImGui::TextUnformatted( ICON_FA_SHUFFLE " Riff Blending" );
                 ImGui::Spacing();
                 ImGui::Spacing();
 
@@ -1293,7 +1297,7 @@ int BeamApp::EntrypointOuro()
             else
                 ImGui::SeparatorBreak();
             {
-                ImGui::TextUnformatted( ICON_FA_STREAM " Repetition Compression" );
+                ImGui::TextUnformatted( ICON_FA_BARS_STAGGERED " Repetition Compression" );
                 ImGui::Spacing();
                 ImGui::Spacing();
 
@@ -1324,10 +1328,6 @@ int BeamApp::EntrypointOuro()
             ImGui::Begin( "Current Riff" );
             const auto panelRegionAvailable = ImGui::GetContentRegionAvail();
 
-            ImGui::Columns( 2, nullptr, false );
-            ImGui::SetColumnWidth( 0, panelRegionAvailable.x * 0.55f );
-            ImGui::SetColumnWidth( 1, panelRegionAvailable.x * 0.45f );
-
             const auto* currentRiff = currentRiffPtr.get();
 
             ImGui::TextUnformatted( "Current Jam" );
@@ -1340,12 +1340,8 @@ int BeamApp::EntrypointOuro()
                 ImGui::PopFont();
                 ImGui::PopStyleColor();
 
-                // jam state (BPM et al)
-                ImGui::TextUnformatted( currentRiff->m_uiDetails.c_str() );
 
-                // jam changes
-                ImGui::Spacing();
-                ImGui::Text( "Last Change : %s, %s", currentRiff->m_uiIdentity.c_str(), currentRiff->m_uiTimestamp.c_str() );
+                ImGui::ux::RiffDetails( currentRiffPtr, m_appEventBusClient.value() );
             }
             else
             {
@@ -1355,55 +1351,8 @@ int BeamApp::EntrypointOuro()
                 ImGui::TextUnformatted( "NO CONNECTION");
                 ImGui::PopFont();
                 ImGui::PopStyleColor();
-
-                // empty state
-                ImGui::TextUnformatted( "" );
-
-                // empty changes
-                ImGui::Spacing();
-                ImGui::TextUnformatted( "" );
             }
 
-            ImGui::NextColumn();
-            ImGui::TextUnformatted( ICON_FA_RANDOM " Active Riff Blending" );
-            ImGui::Spacing();
-            ImGui::Spacing();
-            {
-                const auto currentLineHeight = ImGui::GetTextLineHeight();
-                const auto progressBarHeight = ImVec2( -1.0f, currentLineHeight * 1.25f );
-
-                {
-                    const auto* progTrigger = MixEngine::ProgressionConfiguration::getTriggerPointName( mixEngine.m_progression.m_triggerPoint );
-                    const auto* progBlend   = MixEngine::ProgressionConfiguration::getBlendTimeName( mixEngine.m_progression.m_blendTime );
-
-                    ImGui::Text( "Trigger %s, %s %s",
-                        progTrigger,
-                        progBlend,
-                        mixEngine.m_progression.m_greedyMode ? "(Leap)" : "(Sequential)" );
-                }
-
-                const bool itemsInRiffQueue = ( mixEngine.m_riffQueue.size_approx() > 0 );
-                {
-                    ImGui::PushStyleColor( ImGuiCol_PlotHistogram, ImGui::GetStyleColorVec4( ImGuiCol_NavHighlight ) );
-
-                    if ( itemsInRiffQueue )
-                        ImGui::ProgressBar( mixEngine.m_transitionValue, progressBarHeight, " Transition Scheduled ... " );
-                    else if ( mixEngine.m_transitionValue > 0 )
-                        ImGui::ProgressBar( mixEngine.m_transitionValue, progressBarHeight, " Transitioning ... " );
-                    else
-                        ImGui::ProgressBar( mixEngine.m_transitionValue, progressBarHeight, "" );
-
-                    ImGui::PopStyleColor();
-                }
-
-                ImGui::Spinner( "##syncing", riffSyncInProgress, currentLineHeight * 0.4f, 3.0f, 0.0f, ImGui::GetColorU32( ImGuiCol_Text ) );
-                ImGui::SameLine();
-                if ( riffSyncInProgress )
-                    ImGui::TextUnformatted( " Fetching Stems ..." );
-                else
-                    ImGui::TextUnformatted( "" );
-            }
-            ImGui::Columns( 1 );
 
             if ( currentRiffPtr != nullptr )
             {
@@ -1414,19 +1363,34 @@ int BeamApp::EntrypointOuro()
                     ImGui::BeatSegments( "##beats", m_endlesssExchange.m_riffBeatSegmentCount, m_endlesssExchange.m_riffBeatSegmentActive );
                     ImGui::Spacing();
                 }
+                {
+                    ImGui::ProgressBar( (float)mixEngine.m_playbackProgression.m_playbackPercentage, ImVec2( -1, 3.0f ), "" );
+                    ImGui::BeatSegments( "##bars_play", currentRiff->m_timingDetails.m_barCount, mixEngine.m_playbackProgression.m_playbackBar, 3.0f, ImGui::GetColorU32( ImGuiCol_PlotHistogram ) );
+
+                    if ( mixEngine.isRepComEnabled() &&
+                        mixEngine.isRecording() )
+                    {
+                        ImGui::Spacing();
+                        ImGui::BeatSegments( "##bars_sync", currentRiff->m_timingDetails.m_barCount, mixEngine.getBarPausedOn(), 3.0f, ImGui::GetColorU32( ImGuiCol_HeaderActive ) );
+                        ImGui::Spacing();
+
+                        ImGui::Text( "Repetition Counter : %u | Last Pause Bar : %i", mixEngine.getBarRepetitions(), mixEngine.getBarPausedOn() );
+                    }
+                    ImGui::Spacing();
+                }
 
                 if ( ImGui::BeginTable( "##stem_stack", 9, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg ) )
                 {
                     ImGui::PushStyleColor( ImGuiCol_Text, ImGui::GetStyleColorVec4( ImGuiCol_ResizeGripHovered ) );
-                    ImGui::TableSetupColumn( "User",    ImGuiTableColumnFlags_WidthFixed, 125.0f );
-                    ImGui::TableSetupColumn( "Gain",    ImGuiTableColumnFlags_WidthFixed, 45.0f );
-                    ImGui::TableSetupColumn( "Stretch", ImGuiTableColumnFlags_WidthFixed, 60.0f );
-                    ImGui::TableSetupColumn( "Rep",     ImGuiTableColumnFlags_WidthFixed, 30.0f );
-                    ImGui::TableSetupColumn( "Rate",    ImGuiTableColumnFlags_WidthFixed, 60.0f );
-                    ImGui::TableSetupColumn( "Instr",   ImGuiTableColumnFlags_WidthFixed, 60.0f );
-                    ImGui::TableSetupColumn( "Preset",  ImGuiTableColumnFlags_WidthFixed, 125.0f );
-                    ImGui::TableSetupColumn( "Beat",    ImGuiTableColumnFlags_WidthFixed, 125.0f );
-                    ImGui::TableSetupColumn( "Energy",  ImGuiTableColumnFlags_None );
+                    ImGui::TableSetupColumn( "User",    ImGuiTableColumnFlags_WidthFixed, 140.0f );
+                    ImGui::TableSetupColumn( "Instr",   ImGuiTableColumnFlags_WidthFixed, 60.0f  );
+                    ImGui::TableSetupColumn( "Preset",  ImGuiTableColumnFlags_WidthFixed, 140.0f );
+                    ImGui::TableSetupColumn( "Gain",    ImGuiTableColumnFlags_WidthFixed, 45.0f  );
+                    ImGui::TableSetupColumn( "Speed",   ImGuiTableColumnFlags_WidthFixed, 45.0f  );
+                    ImGui::TableSetupColumn( "Rep",     ImGuiTableColumnFlags_WidthFixed, 30.0f  );
+                    ImGui::TableSetupColumn( "Length",  ImGuiTableColumnFlags_WidthFixed, 65.0f  );
+                    ImGui::TableSetupColumn( "Rate",    ImGuiTableColumnFlags_WidthFixed, 65.0f  );
+                    ImGui::TableSetupColumn( "Size/KB", ImGuiTableColumnFlags_WidthFixed, 65.0f  );
                     ImGui::TableHeadersRow();
                     ImGui::PopStyleColor();
 
@@ -1449,42 +1413,24 @@ int BeamApp::EntrypointOuro()
                         else
                         {
                             const auto& riffDocument = currentRiff->m_riffData;
-                            const auto  bpsDiff      = riffDocument.riff.BPS / stem->m_data.BPS;
 
                             ImGui::TableNextColumn(); ImGui::TextUnformatted( stem->m_data.user.c_str() );
-                            ImGui::TableNextColumn(); ImGui::Text( "%.2f", m_endlesssExchange.m_stemGain[sI] );
-                            ImGui::TableNextColumn(); ImGui::Text( "%.2f", bpsDiff );
-                            ImGui::TableNextColumn(); ImGui::Text( "%ix", currentRiff->m_stemRepetitions[sI] );
-                            ImGui::TableNextColumn(); ImGui::Text( "%i", stem->m_data.sampleRate );
                             ImGui::TableNextColumn(); ImGui::TextUnformatted( stem->m_data.getInstrumentName() );
                             ImGui::TableNextColumn(); ImGui::TextUnformatted( stem->m_data.preset.c_str() );
-
-                            ImGui::PushStyleColor( ImGuiCol_PlotHistogram, m_endlesssExchange.m_stemColour[sI] );
-                            ImGui::TableNextColumn(); 
-                                ImGui::ProgressBar( m_endlesssExchange.m_stemPulse[sI], ImVec2(-1, 8.0f), "");
-                            ImGui::PopStyleColor();
-
-                            ImGui::TableNextColumn();
-                                ImGui::ProgressBar( m_endlesssExchange.m_stemEnergy[sI], ImVec2(-1, 8.0f), "");
+                            ImGui::TableNextColumn(); ImGui::Text( "%.2f",  m_endlesssExchange.m_stemGain[sI] );
+                            ImGui::TableNextColumn(); ImGui::Text( "%.2f",  currentRiff->m_stemTimeScales[sI] );
+                            ImGui::TableNextColumn(); ImGui::Text( "%ix",   currentRiff->m_stemRepetitions[sI] );
+                            ImGui::TableNextColumn(); ImGui::Text( "%.2fs", currentRiff->m_stemLengthInSec[sI] );
+                            ImGui::TableNextColumn(); ImGui::Text( "%i",    stem->m_data.sampleRate );
+                            ImGui::TableNextColumn(); ImGui::Text( "%i",    stem->m_data.fileLengthBytes / 1024 );
                         }
                     }
 
                     ImGui::EndTable();
 
-                    ImGui::Spacing();
-                    ImGui::Spacing();
-                    ImGui::ProgressBar( (float)mixEngine.m_riffPlaybackPercentage, ImVec2( -1, 3.0f ), "" );
-                    ImGui::BeatSegments( "##bars_play", currentRiff->m_timingDetails.m_barCount, mixEngine.m_riffPlaybackBar, 3.0f, ImGui::GetColorU32( ImGuiCol_PlotHistogram ) );
+                    ImGui::Dummy( ImVec2( 0.0f, 12.0f ) );
+                    ImGui::vx::StemBeats( "##stem_beat", m_endlesssExchange, 18.0f, false );
 
-                    if ( mixEngine.isRepComEnabled() && 
-                         mixEngine.isRecording() )
-                    {
-                        ImGui::Spacing();
-                        ImGui::BeatSegments( "##bars_sync", currentRiff->m_timingDetails.m_barCount, mixEngine.getBarPausedOn(), 3.0f, ImGui::GetColorU32( ImGuiCol_HeaderActive ) );
-                        ImGui::Spacing();
-
-                        ImGui::Text( "Repetition Counter : %u | Last Pause Bar : %i", mixEngine.getBarRepetitions(), mixEngine.getBarPausedOn() );
-                    }
                 }
             }
             ImGui::End();
@@ -1493,9 +1439,9 @@ int BeamApp::EntrypointOuro()
         if ( modalDisplayJamBrowser )
             ImGui::OpenPopup( modalJamBrowserTitle );
 
-        runAutomaticMemoryReclaim();
+        maintainStemCacheAsync();
 
-        submitInterfaceLayout();
+        finishInterfaceLayoutAndRender();
     }
 
     m_discordBotUI.reset();

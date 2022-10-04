@@ -10,7 +10,8 @@
 #include "pch.h"
 #include "app/imgui.ext.h"
 
-static float g_cycleTimer;
+static float g_cycleTimerSlow;
+static float g_cycleTimerFast;
 
 namespace ImGui {
 
@@ -54,9 +55,9 @@ bool ImTextureFromFile( const char* filename, ImTexture& texture, bool clampToEd
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void BeginDisabledControls( bool cond )
+void BeginDisabledControls( const bool isDisabled )
 {
-    if ( cond ) 
+    if ( isDisabled )
     {
         ImGui::PushItemFlag( ImGuiItemFlags_Disabled, true );
         ImGui::PushStyleVar( ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.25f );
@@ -64,9 +65,9 @@ void BeginDisabledControls( bool cond )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void EndDisabledControls( bool cond )
+void EndDisabledControls( const bool isDisabled )
 {
-    if ( cond ) 
+    if ( isDisabled )
     {
         ImGui::PopItemFlag();
         ImGui::PopStyleVar();
@@ -90,7 +91,7 @@ ImVec4 GetPulseColourVec4()
 {
     const auto colour1 = ImGui::GetStyleColorVec4( ImGuiCol_PlotHistogram );
     const auto colour2 = ImGui::GetStyleColorVec4( ImGuiCol_PlotHistogramHovered );
-    return lerpVec4( colour1, colour2, g_cycleTimer );
+    return lerpVec4( colour1, colour2, g_cycleTimerSlow );
 }
 
 ImU32 GetPulseColour()
@@ -100,6 +101,18 @@ ImU32 GetPulseColour()
 
 // ---------------------------------------------------------------------------------------------------------------------
 void CompactTooltip( const char* tip )
+{
+    if ( ImGui::IsItemHovered() )
+    {
+        ImGui::BeginTooltip();
+        ImGui::PushTextWrapPos( ImGui::GetFontSize() * 35.0f );
+        ImGui::TextUnformatted( tip );
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
+}
+
+void CompactTooltip( const std::string& tip )
 {
     if ( ImGui::IsItemHovered() )
     {
@@ -190,6 +203,39 @@ bool ClickableText( const char* label )
     return pressed;
 }
 
+void AddTextCentered( ImDrawList* DrawList, ImVec2 top_center, ImU32 col, const char* text_begin, const char* text_end ) {
+    float txt_ht = ImGui::GetTextLineHeight();
+    const char* title_end = ImGui::FindRenderedTextEnd( text_begin, text_end );
+    ImVec2 text_size;
+    float  y = 0;
+    while ( const char* tmp = (const char*)memchr( text_begin, '\n', title_end - text_begin ) ) {
+        text_size = ImGui::CalcTextSize( text_begin, tmp, true );
+        DrawList->AddText( ImVec2( top_center.x - text_size.x * 0.5f, top_center.y + y ), col, text_begin, tmp );
+        text_begin = tmp + 1;
+        y += txt_ht;
+    }
+    text_size = ImGui::CalcTextSize( text_begin, title_end, true );
+    DrawList->AddText( ImVec2( top_center.x - text_size.x * 0.5f, top_center.y + y ), col, text_begin, title_end );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void CenteredText( const char* text )
+{
+    ImVec2 textSize = ImGui::CalcTextSize( text );
+    const float currentRegionWidth = ImGui::GetContentRegionAvail().x;
+
+    ImGui::Dummy( ImVec2( (currentRegionWidth * 0.5f ) - (textSize.x * 0.5f ), 0.0f ) );
+    ImGui::SameLine();
+    ImGui::TextUnformatted( text );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void CenteredColouredText( const ImVec4& col, const char* text )
+{
+    ImGui::PushStyleColor( ImGuiCol_Text, col );
+    ImGui::CenteredText( text );
+    ImGui::PopStyleColor();
+}
 
 // ---------------------------------------------------------------------------------------------------------------------
 bool KnobFloat( const char* label, const float outerRadius, float* p_value, float v_min, float v_max, float v_step )
@@ -335,12 +381,19 @@ void BeatSegments(
     const char* label,
     const int numSegments,
     const int activeSegment,
+    const int activeEdge,
     const float height,
     const ImU32 highlightColour,
     const ImU32 backgroundColour )
 {
     const ImVec2 pos = ImGui::GetCursorScreenPos();
-    const float width = ImGui::GetContentRegionAvail().x;
+
+    const float width       = ImGui::GetContentRegionAvail().x;
+    const float widthPerSeg = width / (float)numSegments;
+
+    // bail out without enough space to work
+    if ( width <= 10.0f )
+        return;
 
     ImDrawList* draw_list = ImGui::GetWindowDrawList();
 
@@ -350,22 +403,56 @@ void BeatSegments(
 
     if ( activeSegment >= 0 )
     {
-        const float widthPerSeg = width / (float)numSegments;
-
         const float activeStart = activeSegment * widthPerSeg;
         const float activeEnd   = activeStart + widthPerSeg;
 
         draw_list->AddRectFilled( ImVec2( pos.x + activeStart, pos.y), ImVec2( pos.x + activeEnd, pos.y + height ), highlightColour, 2.0f );
     }
+    if ( activeEdge >= 0 )
+    {
+        const float activeStart = activeEdge * widthPerSeg;
+
+        draw_list->AddLine( ImVec2( pos.x + activeStart, pos.y - 1 ), ImVec2( pos.x + activeStart, pos.y + height ), IM_COL32_WHITE, 1.0f );
+    }
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+void VerticalProgress( const char* label, const float progress, const ImU32 highlightColour )
+{
+    const float totalHeight = (1.0f - std::clamp( progress, 0.0f, 1.0f ));
+
+    ImGuiWindow* window = GetCurrentWindow();
+    if ( window->SkipItems || progress <= 0.0f )
+        return;
+
+    ImGuiContext& g = *GImGui;
+    const ImGuiStyle& style = g.Style;
+    const ImGuiID id = window->GetID( label );
+
+    const ImVec2 padding( 2.0f, 2.0f );
+    const ImVec2 pos    = window->DC.CursorPos + padding;
+    const ImVec2 size   = ImVec2( ImGui::GetContentRegionAvail().x, ImGui::GetTextLineHeight() + ( style.FramePadding.y * 2 ) ) - ( padding * 2.0f );
+
+    const ImRect bb( 
+        ImVec2( pos.x,          pos.y + size.y * totalHeight ),
+        ImVec2( pos.x + size.x, pos.y + size.y ) );
+
+    ItemSize( bb, style.FramePadding.y );
+    if ( !ItemAdd( bb, id ) )
+        return;
+
+
+    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+    draw_list->AddRectFilled( bb.Min, bb.Max, highlightColour, 1.0f );
+}
 
 // ---------------------------------------------------------------------------------------------------------------------
 namespace Scoped {
 
 void TickPulses()
 {
-    g_cycleTimer = (float)(1.0 + std::sin( ImGui::GetTime() * 3.0 )) * 0.5f;
+    g_cycleTimerSlow = (float)(1.0 + std::sin( ImGui::GetTime() * 3.0 )) * 0.5f;
+    g_cycleTimerFast = (float)(1.0 + std::sin( ImGui::GetTime() * 6.0 )) * 0.5f;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -463,6 +550,69 @@ ToggleButtonLit::~ToggleButtonLit()
 {
     if ( m_active )
         ImGui::PopStyleColor( 4 );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+FluxButton::FluxButton( const State& state, const ImVec4& buttonColourOn, const ImVec4& textColourOn )
+    : m_stylesToPop( 0 )
+{
+    switch ( state )
+    {
+        default:
+        case State::Off:
+            break;
+
+        case State::Flux:
+        {
+            const float clampedCycleTimer = std::clamp( g_cycleTimerFast, 0.1f, 0.9f );
+
+            const auto buttonColour = lerpVec4(
+                ImGui::GetStyleColorVec4( ImGuiCol_ButtonHovered ),
+                buttonColourOn,
+                clampedCycleTimer );
+
+            const auto textColour = lerpVec4(
+                ImGui::GetStyleColorVec4( ImGuiCol_Text ),
+                textColourOn,
+                clampedCycleTimer );
+
+            ImGui::PushStyleColor( ImGuiCol_Button, buttonColour );
+            ImGui::PushStyleColor( ImGuiCol_ButtonHovered, buttonColour );
+            ImGui::PushStyleColor( ImGuiCol_ButtonActive, buttonColour );
+            ImGui::PushStyleColor( ImGuiCol_Text, textColour );
+            m_stylesToPop = 4;
+        }
+        break;
+
+        case State::On:
+            ImGui::PushStyleColor( ImGuiCol_Button, buttonColourOn );
+            ImGui::PushStyleColor( ImGuiCol_ButtonHovered, buttonColourOn );
+            ImGui::PushStyleColor( ImGuiCol_ButtonActive, buttonColourOn );
+            ImGui::PushStyleColor( ImGuiCol_Text, textColourOn );
+            m_stylesToPop = 4;
+            break;
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+FluxButton::~FluxButton()
+{
+    if ( m_stylesToPop > 0 )
+        ImGui::PopStyleColor( m_stylesToPop );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+FloatTextRight::FloatTextRight( const char* text )
+{
+    m_savedCursor = GImGui->CurrentWindow->DC.CursorPos;
+    const auto textSize = ImGui::CalcTextSize( text );
+    GImGui->CurrentWindow->DC.CursorPos += ImVec2( ImGui::GetContentRegionAvail().x - textSize.x, 0 );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+FloatTextRight::~FloatTextRight()
+{
+    GImGui->CurrentWindow->DC.CursorPos = m_savedCursor;
 }
 
 } // namespace Scoped

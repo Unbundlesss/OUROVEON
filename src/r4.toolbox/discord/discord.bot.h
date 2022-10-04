@@ -19,11 +19,12 @@ namespace app {
     namespace module { struct Audio; }
     using AudioModule = std::unique_ptr<module::Audio>;
 }
-
 namespace dpp { class channel; }
+
 
 namespace discord {
 
+// ---------------------------------------------------------------------------------------------------------------------
 struct VoiceChannel
 {
     VoiceChannel() = default;
@@ -38,6 +39,7 @@ using VoiceChannels         = std::vector< VoiceChannel >;
 using VoiceChannelsPtr      = std::shared_ptr< const VoiceChannels >;
 using VoiceChannelsAtomic   = VoiceChannelsPtr; // #HDD CXX20 atomic shared_ptr is not widely available :(
 
+// ---------------------------------------------------------------------------------------------------------------------
 struct GuildMetadata
 {
     uint32_t        m_shardID = 0;
@@ -45,9 +47,10 @@ struct GuildMetadata
 };
 using GuildMetadataOptional = std::optional< GuildMetadata >;
 
+// ---------------------------------------------------------------------------------------------------------------------
 struct Bot
 {
-    DeclareUncopyable( Bot );
+    DECLARE_NO_COPY( Bot );
 
     enum class ConnectionPhase
     {
@@ -93,7 +96,7 @@ struct Bot
     Bot();
     ~Bot();
 
-    bool initialise( app::ICoreServices& coreServices, const config::discord::Connection& configConnection );
+    ouro_nodiscard absl::Status initialise( app::ICoreServices& coreServices, const config::discord::Connection& configConnection );
     constexpr bool isInitialised() const { return m_initialised && m_state != nullptr; }
 
 

@@ -156,6 +156,8 @@ int64_t parseISO8601( const std::string& timestamp )
 // ---------------------------------------------------------------------------------------------------------------------
 std::string datestampStringFromUnix( const uint64_t unix )
 {
+    if ( unix == 0 )
+        return "<unknown>";
     return datestampStringFromUnix( InSeconds{ std::chrono::seconds{ unix } } );
 }
 

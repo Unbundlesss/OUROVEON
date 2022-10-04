@@ -36,3 +36,16 @@ inline const char* getGlErrorText( GLenum err )
             } \
         }
 
+
+#define glCheckedCall( failure_flag, ... )    \
+        __VA_ARGS__;        \
+        { \
+            const auto glErr = glGetError(); \
+            if ( glErr != GL_NO_ERROR ) \
+            { \
+                blog::error::app( "{}:{} OpenGL call error [{}] : {}", __FUNCTION__, __LINE__, glErr, gl::getGlErrorText(glErr) ); \
+                blog::error::app( "{}", #__VA_ARGS__ ); \
+                failure_flag = true; \
+            } \
+        }
+

@@ -13,7 +13,7 @@
 #include "math/rng.h"
 #include "dsp/fft.h"
 #include "app/module.frontend.h"
-#include "base/utils.h"
+#include "base/text.h"
 #include "filesys/fsutil.h"
 
 #include "endlesss/live.stem.h"
@@ -21,6 +21,8 @@
 #define STB_VORBIS_HEADER_ONLY
 #include "stb_vorbis.c"
 
+// r8brain
+#include "CDSPResampler.h"
 
 namespace endlesss {
 namespace live {
@@ -192,7 +194,7 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
     {
         blog::stem( "resampling [{}] from {}", m_data.couchID, oggSampleRate );
 
-        auto* resampleIn = mem::malloc16As<double>( m_sampleCount );
+        auto* resampleIn = mem::alloc16<double>( m_sampleCount );
 
         r8b::CDSPResampler24 resampler24(
             (double)oggSampleRate,
@@ -200,7 +202,7 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
             m_sampleCount );
 
         const auto outputSampleLength = resampler24.getMaxOutLen( 0 );
-        double* resampleOut = mem::malloc16As<double>( outputSampleLength );
+        double* resampleOut = mem::alloc16<double>( outputSampleLength );
 
         for ( int channel = 0; channel < 2; channel++ )
         {
@@ -211,7 +213,7 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
 
             resampler24.oneshot( resampleIn, m_sampleCount, resampleOut, outputSampleLength );
 
-            m_channel[channel] = mem::malloc16As<float>( outputSampleLength );
+            m_channel[channel] = mem::alloc16<float>( outputSampleLength );
             for ( size_t s = 0; s < outputSampleLength; s++ )
             {
                 m_channel[channel][s] = (float)resampleOut[s];
@@ -227,8 +229,8 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
     {
         blog::stem( "stem [{}] already at {}", m_data.couchID, m_sampleRate );
 
-        m_channel[0] = mem::malloc16As<float>( m_sampleCount );
-        m_channel[1] = mem::malloc16As<float>( m_sampleCount );
+        m_channel[0] = mem::alloc16<float>( m_sampleCount );
+        m_channel[1] = mem::alloc16<float>( m_sampleCount );
 
         for ( size_t s = 0, readIndex = 0; s < m_sampleCount; s++ )
         {
@@ -238,6 +240,8 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
     }
 
     free( oggData );
+
+    applyLoopCrossfade();
 
     m_state = State::Complete;
 
@@ -335,9 +339,15 @@ bool Stem::attemptRemoteFetch( const api::NetConfiguration& ncfg, const uint32_t
     {
         // auto result = cdnClient->get_openssl_verify_result();
 
-        blog::error::stem( "ogg data size mismatch [{}{}] (expected {}, got {})", httpUrl, slashedKey, audioMemory.m_rawLength, audioMemory.m_rawReceived );
-        m_state = State::Failed_DataUnderflow;
-        return false;
+        if ( !ncfg.api().hackAllowStemUnderflow )
+        {
+            blog::error::stem( "ogg data size mismatch [{}{}] (expected {}, got {})", httpUrl, slashedKey, audioMemory.m_rawLength, audioMemory.m_rawReceived );
+            m_state = State::Failed_DataUnderflow;
+            return false;
+        }
+
+        blog::stem( "fixing ogg data size mismatch [{}{}] (expected {}, got {})", httpUrl, slashedKey, audioMemory.m_rawLength, audioMemory.m_rawReceived );
+        audioMemory.m_rawLength = audioMemory.m_rawReceived;
     }
 
     if ( m_state == State::Failed_DataOverflow )
@@ -364,6 +374,49 @@ bool Stem::attemptRemoteFetch( const api::NetConfiguration& ncfg, const uint32_t
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+void Stem::applyLoopCrossfade()
+{
+    constexpr int32_t xfadeWindowSize = 128;
+    constexpr double xfadeWindowSizeRecp = 1.0 / (double)xfadeWindowSize;
+
+    // 1..0 constant power blend over the window size
+    constexpr auto xfadeBlendCoeff{ []() constexpr 
+    {
+        std::array<float, xfadeWindowSize> result{};
+        for ( int i = 0; i < xfadeWindowSize; ++i )
+        {
+            const double t = -1.0f + ( (double)i * xfadeWindowSizeRecp * 2.0 );
+            result[i] = (float)base::constSqrt( 0.5 * (1.0 - t) );
+        }
+        return result;
+    }() };
+
+    // looking at you, blackest jammmmmmmmmmmmm
+    if ( m_sampleCount <= xfadeWindowSize * 2 )
+    {
+        return;
+    }
+
+    {
+        const float startL = m_channel[0][0];
+        const float startR = m_channel[1][0];
+        for ( int i = 0; i < xfadeWindowSize; ++i )
+        {
+            const auto endSample = (m_sampleCount - 1) - i;
+
+            const float endL = m_channel[0][endSample];
+            const float endR = m_channel[1][endSample];
+
+            const float newEndL = base::lerp( endL, startL, xfadeBlendCoeff[i] );
+            const float newEndR = base::lerp( endR, startR, xfadeBlendCoeff[i] );
+
+            m_channel[0][endSample] = newEndL;
+            m_channel[1][endSample] = newEndR;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 void Stem::fft()
 {
     constexpr int32_t fftWindowSize     = 1024;
@@ -382,10 +435,10 @@ void Stem::fft()
 
     const uint64_t    fftTimeSlices     = m_sampleCount / fftWindowSize;
     
-    auto* fftDataIn       = mem::malloc16As<float>( fftWindowSize * 2 );
-    auto* fftOutMagnitude = mem::malloc16As<float>( m_sampleCount );
-    auto* fftOutLowBand   = mem::malloc16As<float>( fftTimeSlices );
-    auto* fftOutAvgEnergy = mem::malloc16As<float>( fftTimeSlices );
+    auto* fftDataIn       = mem::alloc16<float>( fftWindowSize * 2 );
+    auto* fftOutMagnitude = mem::alloc16<float>( m_sampleCount );
+    auto* fftOutLowBand   = mem::alloc16<float>( fftTimeSlices );
+    auto* fftOutAvgEnergy = mem::alloc16<float>( fftTimeSlices );
 
     std::array< float, fftBandBuckets > subband;
     std::array< float, fftEnergyHistory > energy0;
@@ -498,15 +551,9 @@ void Stem::fft()
 
         if ( beatTrigger( lowBand, averageEnergy * beatCoeff ) )
         {
-            // an arbitrary limit to avoid overloading the UI
-            if ( m_detectedBeatTimes.size() < 100 )
-                 m_detectedBeatTimes.emplace_back( (double)xI * sampleToPct );
-
-            {
-                const uint64_t bitBlock = xI >> 6;
-                const uint64_t bitBit   = xI - (bitBlock << 6);
-                m_sampleBeat[bitBlock] |= 1ULL << bitBit;
-            }
+            const uint64_t bitBlock = xI >> 6;
+            const uint64_t bitBit   = xI - (bitBlock << 6);
+            m_sampleBeat[bitBlock] |= 1ULL << bitBit;
         }
 
         lowBandIndex++;
@@ -531,7 +578,6 @@ size_t Stem::computeMemoryUsage() const
 
     if ( m_hasValidAnalysis )
     {
-        result += m_detectedBeatTimes.size() * sizeof( double );
         result += m_sampleEnergy.size() * sizeof( float );
         result += m_sampleBeat.size() * sizeof( uint64_t );
     }
@@ -565,7 +611,7 @@ void Stem::RawAudioMemory::allocate( size_t newSize )
         mem::free16( m_rawAudio );
 
     m_rawLength = newSize;
-    m_rawAudio = mem::malloc16AsSet< uint8_t >( m_rawLength + 4, 0 );   // +4 supports header read check in worst case of empty buf
+    m_rawAudio = mem::alloc16To< uint8_t >( m_rawLength + 4, 0 );   // +4 supports header read check in worst case of empty buf
 }
 
 } // namespace live

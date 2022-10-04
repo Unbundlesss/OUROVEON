@@ -8,36 +8,71 @@
 #include "pch.h"
 
 #include "mix/preview.h"
+#include "math/rng.h"
 
 #include "app/core.h"
 #include "app/imgui.ext.h"
 #include "app/module.frontend.fonts.h"
 
+#include "ssp/ssp.file.flac.h"
+#include "ssp/ssp.file.wav.h"
+
+#include "ux/live.riff.details.h"
 #include "vx/stembeats.h"
 
 #include "endlesss/core.constants.h"
 #include "endlesss/live.stem.h"
-#include "endlesss/toolkit.export.h"
+#include "endlesss/toolkit.riff.export.h"
+
+
+
+#define _PV_VIEW(_action)           \
+      _action(Default)              \
+      _action(Tuning)
+REFLECT_ENUM( PreviewView, uint32_t, _PV_VIEW );
+
+std::string generatePreviewViewTitle( const PreviewView::Enum _vwv )
+{
+#define _ACTIVE_ICON(_ty)             _vwv == PreviewView::_ty ? ICON_FC_FILLED_SQUARE : ICON_FC_HOLLOW_SQUARE,
+#define _ICON_PRINT(_ty)             "{}"
+
+    return fmt::format( FMTX( "Playback Engine [" _PV_VIEW( _ICON_PRINT ) "]###preview_mix_playback" ),
+        _PV_VIEW( _ACTIVE_ICON )
+        "" );
+
+#undef _ICON_PRINT
+#undef _ACTIVE_ICON
+}
+
+#undef _PV_VIEW
+
+
 
 
 namespace mix {
 
 // ---------------------------------------------------------------------------------------------------------------------
-Preview::Preview( const int32_t maxBufferSize, const int32_t sampleRate, const RiffChangeCallback& riffChangeCallback )
-    : RiffMixerBase( maxBufferSize, sampleRate )
-    , m_riffChangeCallback( riffChangeCallback )
+Preview::Preview( const int32_t maxBufferSize, const int32_t sampleRate, base::EventBusClient& eventBusClient )
+    : RiffMixerBase( maxBufferSize, sampleRate, eventBusClient )
 {
+    m_permutationSampleGainDelta.fill( 0 );
+
     m_txBlendCacheLeft.fill( 0 );
     m_txBlendCacheRight.fill( 0 );
     m_txBlendActiveLeft.fill( 0 );
     m_txBlendActiveRight.fill( 0 );
 
-    const auto blendDelta = 1.0 / (double)txBlendBufferSize;
-          auto blendValue = 1.0;
+    const auto blendDelta =  1.0 / (double)txBlendBufferSize;
+          auto blendValue = -1.0;
 
-    // precompute the lerp values for each blend sample in the buffer
-    for ( size_t bI = 0; bI < txBlendBufferSize; bI++, blendValue -= blendDelta )
-        m_txBlendInterp[bI] = (float)( blendValue * blendValue );
+    // precompute the lerp values for each blend sample in the buffer; based on constant-power fade through
+    for ( std::size_t bI = 0; bI < txBlendBufferSize; bI++, blendValue += blendDelta * 2.0 )
+        m_txBlendInterp[bI] = (float)std::sqrt( 0.5 * (1.0 - blendValue) );
+
+    // work out the timing for resetting amalgams; roughly broadcast every 1/N seconds
+    m_stemDataAmalgam.reset();
+    m_stemDataAmalgamSamplesBeforeReset = (uint32_t)std::round( (double)sampleRate * ( 1.0 / 60.0 ) );
+    m_stemDataAmalgamSamplesUsed = 0;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -53,22 +88,38 @@ void Preview::renderCurrentRiff(
     if ( samplesToWrite == 0 )
         return;
 
+    // burned through enough samples to send out latest stem data block. chuck the current data on the bus
+    // NB/TODO doesn't deal with crossing this boundary inside the update (eg. if samplesToWrite is big, bigger than SamplesBeforeReset..)
+    // could do this at a higher level, break the render() into smaller samplesToWrite blocks to fit, probably overkill
+    if ( m_stemDataAmalgamSamplesUsed >= m_stemDataAmalgamSamplesBeforeReset )
+    {
+        m_eventBusClient.Send< ::events::StemDataAmalgamGenerated >( m_stemDataAmalgam );
+
+        m_stemDataAmalgam.reset();
+        m_stemDataAmalgamSamplesUsed = 0;
+    }
+
+
     std::array< float, 8 >                  stemTimeStretch;
     std::array< float, 8 >                  stemGains;
+    std::array< bool, 8 >                   stemAnalysed;
     std::array< endlesss::live::Stem*, 8 >  stemPtr;
 
     const endlesss::live::Riff* currentRiff = m_riffCurrent.get();
 
+    // unzip the riff and stem data into stack-local items
     for ( auto stemI = 0U; stemI < 8; stemI++ )
     {
         stemTimeStretch[stemI]  = currentRiff->m_stemTimeScales[stemI];
-        stemGains[stemI]        = currentRiff->m_stemGains[stemI];
+        stemGains[stemI]        = currentRiff->m_stemGains[stemI] * m_permutationCurrent.m_layerGainMultiplier[stemI];
         stemPtr[stemI]          = currentRiff->m_stemPtrs[stemI];
+        stemAnalysed[stemI]     = ( stemPtr[stemI] != nullptr ) && stemPtr[stemI]->isAnalysisComplete();
     }
 
     // keep note of where we are mixing in terms of the 0..N sample count of the current riff
     const auto riffLengthInSamples      = currentRiff->m_timingDetails.m_lengthInSamples;
 
+    // ensure the curernt playback sample position for the riff isn't off the end
     while ( m_riffPlaybackSample >= riffLengthInSamples )
     {
         m_riffPlaybackSample -= riffLengthInSamples;
@@ -80,6 +131,8 @@ void Preview::renderCurrentRiff(
     {
         const auto  stemInst = stemPtr[stemI];
         const float stemGain = stemGains[stemI];
+
+        float permGain = m_permutationCurrent.m_layerGainMultiplier[stemI];
 
         m_txBlendCacheLeft[stemI]  = 0;
         m_txBlendCacheRight[stemI] = 0;
@@ -93,6 +146,10 @@ void Preview::renderCurrentRiff(
                 m_mixChannelLeft[stemI][outputOffset + sI] = 0;
                 m_mixChannelRight[stemI][outputOffset + sI] = 0;
             }
+
+            permGain += m_permutationSampleGainDelta[stemI] * samplesToWrite;
+            m_permutationCurrent.m_layerGainMultiplier[stemI] = permGain - m_permutationSampleGainDelta[stemI];
+
             continue;
         }
 
@@ -107,28 +164,49 @@ void Preview::renderCurrentRiff(
             const auto sampleCount = stemInst->m_sampleCount;
             uint64_t finalSampleIdx = riffSample;
 
+            int32_t sampleOffset = m_riffPlaybackNudge;
+
             if (stemTimeStretch[stemI] != 1.0f)
             {
-                const double scaleSample = (double)finalSampleIdx * stemTimeStretch[stemI];
-                finalSampleIdx = (uint64_t)scaleSample;
+                finalSampleIdx  = (uint64_t)( (double)finalSampleIdx * stemTimeStretch[stemI] );
+                sampleOffset    = (int32_t)( (double)sampleOffset * stemTimeStretch[stemI] );
             }
+            finalSampleIdx += sampleOffset;
             finalSampleIdx %= sampleCount;
 
-            lastSampleLeft  = stemInst->m_channel[0][finalSampleIdx] * stemGain;
-            lastSampleRight = stemInst->m_channel[1][finalSampleIdx] * stemGain;
+            // contribute data from the stem analysis to amalgamated block of data as we go
+            if ( stemAnalysed[stemI] && permGain > 0 )
+            {
+                const uint64_t bitBlock = finalSampleIdx >> 6;
+                const uint64_t bitBit   = finalSampleIdx - ( bitBlock << 6 );
+
+                m_stemDataAmalgam.m_beat[stemI]  |= (stemInst->m_sampleBeat[bitBlock] >> bitBit) != 0;
+                m_stemDataAmalgam.m_energy[stemI] = std::max(
+                    m_stemDataAmalgam.m_energy[stemI],
+                    stemInst->m_sampleEnergy[finalSampleIdx] * permGain );
+            }
+
+            lastSampleLeft  = stemInst->m_channel[0][finalSampleIdx] * stemGain * permGain;
+            lastSampleRight = stemInst->m_channel[1][finalSampleIdx] * stemGain * permGain;
             m_mixChannelLeft[stemI][outputOffset + sI]  = lastSampleLeft;
             m_mixChannelRight[stemI][outputOffset + sI] = lastSampleRight;
 
             riffSample++;
             if ( riffSample >= riffLengthInSamples )
                 riffSample -= riffLengthInSamples;
+
+            permGain += m_permutationSampleGainDelta[stemI];
         }
 
         m_txBlendCacheLeft[stemI]  = lastSampleLeft;
         m_txBlendCacheRight[stemI] = lastSampleRight;
+
+        m_permutationCurrent.m_layerGainMultiplier[stemI] = permGain - m_permutationSampleGainDelta[stemI];
     }
 
     m_riffPlaybackSample += samplesToWrite;
+
+    m_stemDataAmalgamSamplesUsed += samplesToWrite;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -171,37 +249,172 @@ void Preview::applyBlendBuffer( const uint32_t outputOffset, const uint32_t samp
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+void Preview::flushPendingPermutations()
+{
+    // see if we have permutations incoming
+    PermutationOperation permutationOp;
+    while ( m_permutationQueue.try_dequeue( permutationOp ) )
+    {
+        m_permutationTarget = permutationOp.m_value;
+
+        // .. signal that we consumed it, if so
+        m_eventBusClient.Send< ::events::OperationComplete >( permutationOp.m_operation );
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void Preview::updatePermutations( const uint32_t samplesToWrite, const double barLengthInSec )
+{
+    if ( m_permutationChangeRate == PermutationChangeRate::Instant )
+    {
+        for ( auto layer = 0U; layer < 8; layer++ )
+        {
+            m_permutationSampleGainDelta[layer] = 0;
+            m_permutationCurrent.m_layerGainMultiplier[layer] = m_permutationTarget.m_layerGainMultiplier[layer];
+        }
+    }
+    else
+    {
+        // get the time slice for this update() call in seconds
+        const double elapsedRealTime = (double)samplesToWrite * m_audioSampleRateRecp;
+
+
+        double changeRate = 30.0f;
+        switch ( m_permutationChangeRate )
+        {
+            case PermutationChangeRate::Fast:    changeRate = 20.0; break;
+            case PermutationChangeRate::Slow:    changeRate = 1.0;  break;
+            case PermutationChangeRate::Glacial: changeRate = 0.5;  break;
+        }
+        changeRate /= barLengthInSec;   // modify to fit the current riff bar length
+
+        const double changeLimitPerSecond = ( changeRate * elapsedRealTime );
+
+        const double sampleCountRecp = 1.0 / (double)samplesToWrite;
+
+        // update current/target chasing gain values
+        for ( auto layer = 0U; layer < 8; layer++ )
+        {
+            double delta = ( m_permutationTarget.m_layerGainMultiplier[layer] - 
+                             m_permutationCurrent.m_layerGainMultiplier[layer] );
+
+            delta = std::clamp( delta, -changeLimitPerSecond, changeLimitPerSecond );
+
+            // delta is small enough that we just snap to the target value instantly
+            if ( delta <=  FLT_EPSILON && 
+                 delta >= -FLT_EPSILON )
+            {
+                m_permutationSampleGainDelta[layer] = 0;
+                m_permutationCurrent.m_layerGainMultiplier[layer] = m_permutationTarget.m_layerGainMultiplier[layer];
+            }
+            // otherwise set the per-sample change to be applied during render() calls
+            else
+            {
+                m_permutationSampleGainDelta[layer] = (float)(delta * sampleCountRecp);
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// process commands from the main thread
+void Preview::processCommandQueue()
+{
+    EngineCommandData engineCmd;
+    if ( m_commandQueue.try_dequeue( engineCmd ) )
+    {
+        switch ( engineCmd.getCommand() )
+        {
+            // start multitrack on the edge of a riff; the actual recording begins 
+            // when that is detected during the sample loop below
+            case EngineCommand::BeginRecording:
+            {
+                m_multiTrackRecording = true;
+                m_multiTrackInFlux = false;
+            }
+            break;
+
+            // cleanly disengage recording from the mix thread
+            case EngineCommand::StopRecording:
+            {
+                m_multiTrackRecording = false;
+                m_multiTrackInFlux = false;
+
+                // move recorders over to destroy on the main thread, avoid any stalls
+                // from whatever may be required to tie off recording
+                for ( auto i = 0; i < 8; i++ )
+                {
+                    ABSL_ASSERT( m_multiTrackOutputsToDestroyOnMainThread[i] == nullptr );
+
+                    m_multiTrackOutputsToDestroyOnMainThread[i] = m_multiTrackOutputs[i];
+                    m_multiTrackOutputs[i].reset();
+                }
+            }
+            break;
+
+            default:
+            case EngineCommand::Invalid:
+                blog::error::mix( "Unknown or invalid command received" );
+                break;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 void Preview::update( 
     const AudioBuffer&  outputBuffer,
     const float         outputVolume,
     const uint32_t      samplesToWrite,
     const uint64_t      samplePosition )
 {
+    processCommandQueue();
+
+    // "drain and stop" flag; set on main thread, this will make the mixer drain off all the mix-side request queues
+    // and set the current riff playing to null, leaving silence
     const bool shouldDrainAndStop = m_drainQueueAndStop.load();
     if ( shouldDrainAndStop )
     {
-        while ( m_riffQueue.try_dequeue( m_riffCurrent ) )
+        // drain the current queue, reporting change/complete on each one to ensure any waiting 
+        // systems on other threads see that we processed the request to some degree
+        RiffPtrOperation riffOperation;
+        while ( m_riffQueue.try_dequeue( riffOperation ) )
         {
-            if ( m_riffChangeCallback )
-                m_riffChangeCallback( m_riffCurrent );
+            m_eventBusClient.Send< ::events::MixerRiffChange >( riffOperation.m_value );
+            m_eventBusClient.Send< ::events::OperationComplete >( riffOperation.m_operation );
         }
+        // .. finally, we play nothing
         m_riffCurrent = nullptr;
+        
+        // notify finally that we are not playing anything
+        m_eventBusClient.Send< ::events::MixerRiffChange >( m_riffCurrent );
+
+        // mark stop() operation as finished
         m_drainQueueAndStop = false;
     }
 
     bool        riffEnqueued = ( m_riffQueue.peek() != nullptr );
-    const auto dequeNextRiff = [this, &riffEnqueued]()
+    const auto dequeNextRiff = [this, samplesToWrite, &riffEnqueued]()
     {
-        if ( !m_riffQueue.try_dequeue( m_riffCurrent ) )
+        RiffPtrOperation riffOperation;
+        if ( !m_riffQueue.try_dequeue( riffOperation ) )
         {
-            assert( false );
+            ABSL_ASSERT( false );
+        }
+
+        // brand new riff from a silent state
+        if ( m_riffCurrent == nullptr )
+        {
+            m_lockTransitionBarCounter = m_lockTransitionBarMultiple.load();
         }
         
-        if ( m_riffChangeCallback )
-            m_riffChangeCallback( m_riffCurrent );
+        m_riffCurrent = riffOperation.m_value;
+
+        m_eventBusClient.Send< ::events::MixerRiffChange >( m_riffCurrent );
+        m_eventBusClient.Send< ::events::OperationComplete >( riffOperation.m_operation );
 
         // update enqueued state now we just removed something from the pile
         riffEnqueued = ( m_riffQueue.peek() != nullptr );
+
 
         m_riffTransitionedInMix = true;
     };
@@ -219,7 +432,9 @@ void Preview::update(
     const bool riffEmpty = ( m_riffCurrent == nullptr ||
                              m_riffCurrent->m_timingDetails.m_lengthInSamples == 0 );
 
-    // early out when nothing's happening
+    updatePermutations( samplesToWrite, riffEmpty ? 1.0 : m_riffCurrent->m_timingDetails.m_lengthInSecPerBar );
+
+    // early out when nothing is happening
     if ( riffEmpty && !riffEnqueued )
     {
         outputBuffer.applySilence();
@@ -229,9 +444,7 @@ void Preview::update(
         m_txBlendCacheRight.fill( 0 );
 
         // reset computed riff playback variables
-        m_riffPlaybackPercentage = 0;
-        m_riffPlaybackBar        = 0;
-        m_riffPlaybackBarSegment = 0;
+        m_playbackProgression.reset();
 
         return;
     }
@@ -239,12 +452,16 @@ void Preview::update(
     uint32_t txOffset = 0;
     uint32_t txSampleLimit = samplesToWrite;
 
-    if ( riffEnqueued )
+    // instant transition mode; or if we have no current riff, default to just grabbing one instantly
+    if ( m_lockTransitionToNextBar == false || riffEmpty )
     {
-        // instant transition mode?
-        if ( riffEmpty || m_lockTransitionToNextBar == false )
+        flushPendingPermutations();
+
+        // in instant mode, any time a riff is enqueued we pull it for playing immediately
+        if ( riffEnqueued )
         {
             dequeNextRiff();
+            addTxBlend();
 
             // in case of a null enqueue (ie. a command to stop playing)
             // revert to silence and bail 
@@ -252,49 +469,84 @@ void Preview::update(
             {
                 mixChannelsWriteSilence( 0, samplesToWrite );
             }
-
-            addTxBlend();
-        }
-        else
-        {
-            const auto shiftTransisionSample = m_lockTransitionOnBeat * (m_riffCurrent->m_timingDetails.m_lengthInSamplesPerBar / m_riffCurrent->m_timingDetails.m_quarterBeats);
-
-            auto segmentLengthInSamples = (int64_t)m_riffCurrent->m_timingDetails.m_lengthInSamplesPerBar;
-            switch ( m_lockTransitionBarCount )
-            {
-            case TransitionBarCount::Eighth:    segmentLengthInSamples /= 8; break;
-            case TransitionBarCount::Quarter:   segmentLengthInSamples /= 4; break;
-            case TransitionBarCount::Half:      segmentLengthInSamples /= 2; break;
-            case TransitionBarCount::Many:      segmentLengthInSamples *= m_lockTransitionBarMultiple; break;
-            default:
-            case TransitionBarCount::Once:
-                break;
-            }
-
-
-            auto shiftedPlaybackSample = m_riffPlaybackSample - shiftTransisionSample;
-            if ( shiftedPlaybackSample < 0 )
-            {
-                shiftedPlaybackSample += segmentLengthInSamples;
-            }
-
-            const auto samplesUntilNextSegment = (uint32_t)(segmentLengthInSamples - (shiftedPlaybackSample % segmentLengthInSamples));
-
-            if ( samplesUntilNextSegment > samplesToWrite )
+            else
             {
                 renderCurrentRiff( 0, samplesToWrite );
             }
-            else
+        }
+        // .. nothing to do, just keep rendering samples
+        else
+        {
+            renderCurrentRiff( 0, samplesToWrite );
+        }
+    }
+    // bar transition mode, more to think about
+    else
+    {
+        const auto shiftTransisionSample = m_lockTransitionOnBeat * ( m_riffCurrent->m_timingDetails.m_lengthInSamplesPerBar / m_riffCurrent->m_timingDetails.m_quarterBeats );
+
+        auto segmentLengthInSamples = (int64_t)m_riffCurrent->m_timingDetails.m_lengthInSamplesPerBar;
+        switch ( m_lockTransitionBarCount )
+        {
+            case TransitionBarCount::Eighth:    segmentLengthInSamples /= 8; break;
+            case TransitionBarCount::Quarter:   segmentLengthInSamples /= 4; break;
+            case TransitionBarCount::Half:      segmentLengthInSamples /= 2; break;
+            default:
+            case TransitionBarCount::Once:
+            case TransitionBarCount::Many:      // loop for m_lockTransitionBarMultiple
+                break;
+        }
+
+        // work out how many samples we have to render before we hit a transition point
+        auto shiftedPlaybackSample = m_riffPlaybackSample - shiftTransisionSample;
+        if ( shiftedPlaybackSample < 0 )
+        {
+            shiftedPlaybackSample += segmentLengthInSamples;
+        }
+        const auto samplesUntilNextSegment = (uint32_t)(segmentLengthInSamples - (shiftedPlaybackSample % segmentLengthInSamples));
+
+        const bool waitingOnMultiBarCountdown = ( m_lockTransitionBarCount == TransitionBarCount::Many );
+
+        // if there are more samples than we're currently rendering, that means we won't be hitting a transition in this update so just blit out the current riff
+        if ( samplesUntilNextSegment > samplesToWrite )
+        {
+            renderCurrentRiff( 0, samplesToWrite );
+        }
+        // .. otherwise we will render out the the samples up to the transition point, then do any riff switching or logic that
+        //    requires processing on that transition, then continue
+        else
+        {
+            // write out the remaining chunk of riff before we consider what happens at the transition
+            if ( samplesUntilNextSegment > 0 )
+                renderCurrentRiff( 0, samplesUntilNextSegment );
+
+            // work out how many samples now remain from the transition point to the end of the current output buffer
+            const auto samplesRemainingToWrite = samplesToWrite - samplesUntilNextSegment;
+            
+            bool doRiffTransitionLogic = true;
+
+            // check if we're waiting on N bars, update the countdown
+            if ( waitingOnMultiBarCountdown && riffEnqueued )
             {
-                if ( samplesUntilNextSegment > 0 )
-                    renderCurrentRiff( 0, samplesUntilNextSegment );
+                --m_lockTransitionBarCounter;
 
+                // still got bars to go
+                if ( m_lockTransitionBarCounter > 0 )
+                {
+                    renderCurrentRiff( samplesUntilNextSegment, samplesRemainingToWrite );
+                    doRiffTransitionLogic = false;
+                }
+            }
+
+            if ( doRiffTransitionLogic )
+            {
                 if ( riffEnqueued )
+                {
                     dequeNextRiff();
+                    addTxBlend();
+                }
 
-                addTxBlend();
-
-                const auto samplesRemainingToWrite = samplesToWrite - samplesUntilNextSegment;
+                flushPendingPermutations();
 
                 // in the case where we paused playback, write silence from the current offset
                 if ( m_riffCurrent == nullptr )
@@ -306,19 +558,21 @@ void Preview::update(
                     renderCurrentRiff( samplesUntilNextSegment, samplesRemainingToWrite );
                 }
 
-                // set the transition blending to start at this point in the buffer
-                txOffset      = samplesUntilNextSegment;
+                // set the transition blending to start at this point in the buffer if applyBlendBuffer() will be doing any work
+                txOffset = samplesUntilNextSegment;
                 txSampleLimit = samplesRemainingToWrite;
+
+                // reset multi-bar countdown on transition
+                if ( waitingOnMultiBarCountdown )
+                {
+                    m_lockTransitionBarCounter = m_lockTransitionBarMultiple.load();
+                }
             }
         }
     }
-    // nothing queued up to transition to, we just play on whatever we got
-    else
-    {
-        renderCurrentRiff( 0, samplesToWrite );
-    }
 
-    // if we have some cached transition smoothing values in play, shlonk them in
+
+    // if we have some cached transition smoothing values in play, weave them in
     applyBlendBuffer( txOffset, txSampleLimit );
 
 
@@ -328,19 +582,31 @@ void Preview::update(
         const auto timingData = m_riffCurrent->getTimingDetails();
         timingData.ComputeProgressionAtSample(
             m_riffPlaybackSample,
-            m_riffPlaybackPercentage,
-            m_riffPlaybackBar,
-            m_riffPlaybackBarSegment );
+            m_playbackProgression );
 
-        m_timeInfo.samplePos          = (double)samplePosition;
+        m_timeInfo.samplePos          = (double)m_riffPlaybackSample;
         m_timeInfo.tempo              = timingData.m_bpm;
         m_timeInfo.timeSigNumerator   = timingData.m_quarterBeats;
         m_timeInfo.timeSigDenominator = 4;
     }
 
+    // spool samples out to recorders if running
+    if ( m_multiTrackRecording )
+    {
+        for ( auto i = 0; i < 8; i++ )
+        {
+            m_multiTrackOutputs[i]->appendSamples( m_mixChannelLeft[i], m_mixChannelRight[i], samplesToWrite );
+        }
+    }
+
     mixChannelsToOutput( outputBuffer, outputVolume, samplesToWrite );
 }
 
+
+// =====================================================================================================================
+
+
+// ---------------------------------------------------------------------------------------------------------------------
 ImVec4 GetTransitionColourVec4( const float lerpT )
 {
     const auto colour1 = ImGui::GetStyleColorVec4( ImGuiCol_PlotHistogram );
@@ -349,9 +615,37 @@ ImVec4 GetTransitionColourVec4( const float lerpT )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void Preview::imgui( const app::StoragePaths& storagePaths )
+void Preview::imgui()
+{
+    static PreviewView::Enum previewView = PreviewView::Default;
+    const auto viewTitle = generatePreviewViewTitle( previewView );
+
+    if ( ImGui::Begin( viewTitle.c_str() ) )
+    {
+        if ( ImGui::IsWindowHovered( ImGuiHoveredFlags_RootAndChildWindows ) && 
+             ImGui::IsKeyPressedMap( ImGuiKey_Tab, false ) )
+        {
+            previewView = PreviewView::getNextWrapped( previewView );
+        }
+
+        switch ( previewView )
+        {
+            case PreviewView::Default:  imguiDefault(); break;
+            case PreviewView::Tuning:   imguiTuning();  break;
+        }
+    }
+
+    ImGui::End();
+
+    for ( auto layer = 0U; layer < 8; layer++ )
+        m_multiTrackOutputsToDestroyOnMainThread[layer].reset();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void Preview::imguiDefault()
 {
     const auto panelVolumeModule = 75.0f;
+    const auto panelNudgeModule = 140.0f;
 
     const auto panelRegionAvailable = ImGui::GetContentRegionAvail();
     if ( panelRegionAvailable.x < panelVolumeModule )
@@ -376,64 +670,79 @@ void Preview::imgui( const app::StoragePaths& storagePaths )
                                 currentRiff->m_syncState == endlesss::live::Riff::SyncState::Success );
 
     {
-        if ( currentRiffIsValid )
-        {
-            // compute a time delta so we can format how long ago this riff was subbed
-            const auto riffTimeDelta = spacetime::calculateDeltaFromNow( currentRiff->m_stTimestamp );
+        endlesss::toolkit::xp::RiffExportAdjustments riffExportAdjustments;
+        riffExportAdjustments.m_exportSampleOffset = m_riffPlaybackNudge;
 
-            // print the stats
-            ImGui::TextUnformatted( currentRiff->m_uiDetails.c_str() );
-            ImGui::Spacing();
-            ImGui::Text( "%s | %s", currentRiff->m_uiIdentity.c_str(), riffTimeDelta.asPastTenseString( 3 ).c_str() );
-            ImGui::SameLine();
-            ImGui::TextDisabled( "[?]" );
-            ImGui::CompactTooltip( currentRiff->m_uiTimestamp.c_str() );
-        }
-        else
         {
-            ImGui::TextUnformatted( "" );
-            ImGui::Spacing();
-            ImGui::TextUnformatted( "" );
+            ImGui::Columns( 2, "##nudge_edit", false );
+            ImGui::SetColumnWidth( 0, ( panelRegionAvailable.x - panelNudgeModule ) + 16.0f );
+            ImGui::SetColumnWidth( 1, panelNudgeModule );
+
+            ImGui::ux::RiffDetails( currentRiffPtr, m_eventBusClient, &riffExportAdjustments );
+
+            ImGui::NextColumn();
+            if ( currentRiffIsValid )
+            {
+                // you come up with a better name then go on
+                ImGui::TextUnformatted( "  Wuncle Nudge" );
+                const auto stepSize = currentRiffPtr->m_timingDetails.m_lengthInSamplesPerBar / 32;
+
+                int32_t nudgeEdit = m_riffPlaybackNudge;
+                ImGui::SetNextItemWidth( panelNudgeModule - 20.0f );
+                const auto nudgeChanged = ImGui::InputInt(
+                    "##wuncle",
+                    &nudgeEdit,
+                    stepSize,
+                    stepSize * 2,
+                    ImGuiInputTextFlags_CharsDecimal | ImGuiInputTextFlags_EnterReturnsTrue );
+
+                if ( nudgeChanged || ImGui::IsItemDeactivatedAfterEdit() )
+                {
+                    m_riffPlaybackNudge = nudgeEdit;
+                }
+            }
+
+            ImGui::Columns( 1 );
         }
+
         ImGui::Spacing();
         ImGui::Spacing();
 
-        ImGui::Columns( 2, nullptr, false );
+        ImGui::Columns( 2, "##beat_display", false );
         ImGui::SetColumnWidth( 0, panelVolumeModule );
-        ImGui::SetColumnWidth( 1, panelRegionAvailable.x - panelVolumeModule );
+        ImGui::SetColumnWidth( 1, ( panelRegionAvailable.x - panelVolumeModule ) + 16.0f );
 
         // toggle transition mode; take copy of atomic to update/use in ui
         bool lockTransitionLocal = m_lockTransitionToNextBar.load();
         {
             {
-                ImGui::Scoped::ToggleButton highlightButton( lockTransitionLocal, true );
-                if ( ImGui::Button( ICON_FA_RULER_HORIZONTAL, ImVec2( 30.0f, 0.0f ) ) )
+                ImGui::Scoped::ToggleButtonLit highlightButton( lockTransitionLocal, riffTransitColourU32 );
+                if ( ImGui::Button( ICON_FA_TIMELINE, ImVec2( 65.0f, 0.0f ) ) )
                 {
                     lockTransitionLocal = !lockTransitionLocal;
                     m_lockTransitionToNextBar = lockTransitionLocal;
                 }
             }
             ImGui::CompactTooltip( lockTransitionLocal ? "Transition Timing : On Chosen Bar" : "Transition Timing : Instant" );
-            ImGui::SameLine( 0, 2.0f );
-
-            ImGui::BeginDisabledControls( !currentRiffIsValid );
-            if ( ImGui::Button( ICON_FA_STOP, ImVec2( 30.0f, 0.0f ) ) )
-            {
-                stop();
-            }
-            ImGui::EndDisabledControls( !currentRiffIsValid );
-            ImGui::CompactTooltip( "Stop Playback" );
         }
 
         ImGui::NextColumn();
 
         if ( currentRiffIsValid )
         {
-            ImGui::BeatSegments( "##beats", currentRiff->m_timingDetails.m_quarterBeats, m_riffPlaybackBarSegment );
-            ImGui::ProgressBar( (float)m_riffPlaybackPercentage, ImVec2( -1, 3.0f ), "" );
-            ImGui::BeatSegments( "##bars_play", currentRiff->m_timingDetails.m_barCount, m_riffPlaybackBar, 3.0f, riffTransitColourU32 );
-        }
+            const bool waitingOnMultiBarCountdown = ( m_lockTransitionBarCount == TransitionBarCount::Many );
+            const int32_t remainingBarCounter = waitingOnMultiBarCountdown ? ( m_playbackProgression.m_playbackBar + m_lockTransitionBarCounter ) : -1;
 
+            ImGui::ProgressBar( (float)m_playbackProgression.m_playbackPercentage, ImVec2( -1, 3.0f ), "" );
+            ImGui::BeatSegments( "##bars_play", currentRiff->m_timingDetails.m_barCount, m_playbackProgression.m_playbackBar, remainingBarCounter, 3.0f, riffTransitColourU32 );
+            ImGui::BeatSegments( "##beats", currentRiff->m_timingDetails.m_quarterBeats, m_playbackProgression.m_playbackBarSegment );
+        }
+        else
+        {
+            ImGui::ProgressBar( 0, ImVec2( -1, 3.0f ), "" );
+            ImGui::BeatSegments( "##bars_play", 1, -1, -1, 3.0f, riffTransitColourU32 );
+            ImGui::BeatSegments( "##beats", 1, -1 );
+        }
 
         {
             ImGui::BeginDisabledControls( !lockTransitionLocal );
@@ -509,6 +818,7 @@ void Preview::imgui( const app::StoragePaths& storagePaths )
                     if ( ImGui::Button( TransitionBarCount::toString( lb ), buttonSize ) )
                     {
                         m_lockTransitionBarCount = lb;
+                        m_lockTransitionBarCounter = m_lockTransitionBarMultiple.load();
                     }
                 }
                 ImGui::SameLine( 0, buttonGap );
@@ -519,7 +829,10 @@ void Preview::imgui( const app::StoragePaths& storagePaths )
                     ImGui::BeginDisabledControls( disableMultipleSlider );
                     int32_t localMultipleValue = m_lockTransitionBarMultiple;
                     if ( ImGui::SliderInt( "##mlti", &localMultipleValue, 2, 12, "%d", ImGuiSliderFlags_AlwaysClamp ) )
+                    {
                         m_lockTransitionBarMultiple = localMultipleValue;
+                        m_lockTransitionBarCounter  = localMultipleValue;  // reset current countdown on change
+                    }
                     ImGui::EndDisabledControls( disableMultipleSlider );
                 }
             }
@@ -530,4 +843,122 @@ void Preview::imgui( const app::StoragePaths& storagePaths )
     }
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+void Preview::imguiTuning()
+{
+    ImGui::TextUnformatted( ICON_FA_STOPWATCH " Mute/Solo Blend Speed" );
+    ImGui::Spacing();
+
+    const auto buttonGap = 4.0f;
+    const auto buttonSize = ImVec2( 100.0f, ImGui::GetTextLineHeight() * 1.25f );
+
+    META_FOREACH( PermutationChangeRate, pcr )
+    {
+        if ( pcr != PermutationChangeRate::Instant )
+            ImGui::SameLine( 0, buttonGap );
+
+        ImGui::Scoped::ToggleButton lit( m_permutationChangeRate == pcr );
+        if ( ImGui::Button( PermutationChangeRate::toString( pcr ), buttonSize ) )
+        {
+            m_permutationChangeRate = pcr;
+        }
+    }
+
+    ImGui::Spacing();
+    ImGui::TextUnformatted( ICON_FA_BARS " 8-Track Recording Format" );
+    ImGui::Spacing();
+
+    // although it wouldn't actually do anything to switch while active but disable changing output format while recording to show that fact
+    const bool disableFormatSwitching = ( m_multiTrackInFlux == true || m_multiTrackRecording == true );
+
+    META_FOREACH( MultiTrackOutputFormat, mto )
+    {
+        if ( mto != MultiTrackOutputFormat::WAV )
+            ImGui::SameLine( 0, buttonGap );
+
+        ImGui::BeginDisabledControls( disableFormatSwitching );
+        ImGui::Scoped::ToggleButton lit( m_multiTrackOutputFormat == mto );
+        if ( ImGui::Button( MultiTrackOutputFormat::toString( mto ), buttonSize ) )
+        {
+            m_multiTrackOutputFormat = mto;
+        }
+        ImGui::EndDisabledControls( disableFormatSwitching );
+    }
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+bool Preview::beginRecording( const fs::path& outputPath, const std::string& filePrefix )
+{
+    // should not be calling this if we're already in the process of streaming out
+    ABSL_ASSERT( !isRecording() );
+    if ( isRecording() )
+        return false;
+
+    // randomise the write buffer sizes to avoid all outputs flushing outputs simultaneously
+    math::RNG32 writeBufferShuffleRNG;
+
+    // set up 8 output streams, one for each Endlesss layer
+    for ( auto i = 0; i < 8; i++ )
+    {
+        if ( m_multiTrackOutputFormat == MultiTrackOutputFormat::WAV )
+        {
+            auto recordFile = outputPath / fmt::format( "{}_layer-{}.wav", filePrefix, i + 1 );
+            m_multiTrackOutputs[i] = ssp::WAVWriter::Create(
+                recordFile.string(),
+                m_audioSampleRate,
+                writeBufferShuffleRNG.genInt32( 5, 15 ) );
+        }
+        else if ( m_multiTrackOutputFormat == MultiTrackOutputFormat::FLAC )
+        {
+            auto recordFile = outputPath / fmt::format( "{}_layer-{}.flac", filePrefix, i + 1 );
+            m_multiTrackOutputs[i] = ssp::FLACWriter::Create(
+                recordFile.string(),
+                m_audioSampleRate,
+                writeBufferShuffleRNG.genFloat( 0.75f, 1.75f ) );
+        }
+        else
+        {
+            ABSL_ASSERT( 0 );
+        }
+    }
+
+    // tell the worker thread to begin writing to our streams
+    m_commandQueue.enqueue( EngineCommand::BeginRecording );
+    m_multiTrackInFlux = true;
+
+    return true;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void Preview::stopRecording()
+{
+    // can't stop what hasn't started
+    assert( isRecording() );
+    if ( !isRecording() )
+        return;
+
+    m_commandQueue.enqueue( EngineCommand::StopRecording );
+    m_multiTrackInFlux = true;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+bool Preview::isRecording() const
+{
+    return m_multiTrackRecording ||
+           m_multiTrackInFlux;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+uint64_t Preview::getRecordingDataUsage() const
+{
+    if ( !isRecording() )
+        return 0;
+
+    uint64_t usage = 0;
+    for ( auto i = 0; i < 8; i++ )
+        usage += m_multiTrackOutputs[i]->getStorageUsageInBytes();
+
+    return usage;
+}
+
+} // namespace mix

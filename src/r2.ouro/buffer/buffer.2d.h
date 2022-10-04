@@ -8,6 +8,7 @@
 #pragma once
 
 #include "base/utils.h"
+#include "base/mathematics.h"
 
 namespace base {
 
@@ -27,7 +28,7 @@ public:
         : m_width(width)
         , m_height(height)
     {
-        m_buffer = mem::malloc16AsSet<_Type>( m_width * m_height, (_Type)0 );
+        m_buffer = mem::alloc16To<_Type>( m_width * m_height, (_Type)0 );
     }
 
     Buffer2D( Buffer2D&& other )
@@ -43,18 +44,18 @@ public:
         mem::free16( m_buffer );
     }
 
-    inline uint32_t getWidth() const
+    ouro_nodiscard constexpr uint32_t getWidth() const
     {
         return m_width;
     }
 
-    inline uint32_t getHeight() const
+    ouro_nodiscard constexpr uint32_t getHeight() const
     {
         return m_height;
     }
 
 
-    inline void clear( const _Type& value )
+    constexpr void clear( const _Type& value )
     {
         for ( size_t i = 0; i < m_width * m_height; i++ )
         {
@@ -64,42 +65,42 @@ public:
 
 
     // direct (x,y) accessor does no error checking
-    inline const _Type& operator () ( const uint32_t &x, const uint32_t &y ) const
+    ouro_nodiscard constexpr const _Type& operator () ( const uint32_t &x, const uint32_t &y ) const
     {
-        assert( x < m_width );
-        assert( y < m_height );
+        ABSL_ASSERT( x < m_width );
+        ABSL_ASSERT( y < m_height );
 
         return m_buffer[( y * m_width ) + x];
     }
 
     // direct (x,y) accessor does no error checking
-    inline _Type& operator () ( const uint32_t &x, const uint32_t &y )
+    ouro_nodiscard constexpr _Type& operator () ( const uint32_t &x, const uint32_t &y )
     {
-        assert( x < m_width );
-        assert( y < m_height );
+        ABSL_ASSERT( x < m_width );
+        ABSL_ASSERT( y < m_height );
 
         return m_buffer[( y * m_width ) + x];
     }
 
     // access the data buffer linearly with []
-    inline const _Type& operator [] ( const size_t offset ) const
+    ouro_nodiscard constexpr const _Type& operator [] ( const size_t offset ) const
     {
-        assert( offset < ( m_width * m_height ) );
+        ABSL_ASSERT( offset < ( m_width * m_height ) );
 
         return m_buffer[offset];
     }
 
     // access the data buffer linearly with []
-    inline _Type& operator [] ( const size_t offset )
+    ouro_nodiscard constexpr _Type& operator [] ( const size_t offset )
     {
-        assert( offset < ( m_width * m_height ) );
+        ABSL_ASSERT( offset < ( m_width * m_height ) );
 
         return m_buffer[offset];
     }
 
 
     // set a entry, safely ignoring out-of-bounds XY coordinates
-    inline void poke(
+    constexpr void poke(
         const uint32_t x,
         const uint32_t y,
         const _Type& colour )
@@ -114,7 +115,7 @@ public:
     }
 
     // get a pointer back to a entry, or null if XY is out-of bounds
-    inline _Type* peek(
+    ouro_nodiscard constexpr _Type* peek(
         const uint32_t x,
         const uint32_t y )
     {
@@ -127,10 +128,10 @@ public:
         return &m_buffer[( y * m_width ) + x];
     }
 
-    inline       _Type* getBuffer()       { return m_buffer; }
-    inline const _Type* getBuffer() const { return m_buffer; }
+    ouro_nodiscard constexpr       _Type* getBuffer()       { return m_buffer; }
+    ouro_nodiscard constexpr const _Type* getBuffer() const { return m_buffer; }
 
-    inline void findMinMax( _Type& minValue, _Type& maxValue )
+    constexpr void findMinMax( _Type& minValue, _Type& maxValue )
     {
         minValue = std::numeric_limits< _Type>::max();
         maxValue = std::numeric_limits< _Type>::lowest();

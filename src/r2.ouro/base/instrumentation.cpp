@@ -11,6 +11,7 @@
 #include "base/instrumentation.h"
 
 // ---------------------------------------------------------------------------------------------------------------------
+// Superluminal profiler support
 #ifdef OURO_FEATURE_SUPERLUMINAL
 
 #define PERFORMANCEAPI_ENABLED 1
@@ -40,6 +41,7 @@ void eventEnd()
 
 
 // ---------------------------------------------------------------------------------------------------------------------
+// NOP instrumentation
 #else
 
 namespace base {

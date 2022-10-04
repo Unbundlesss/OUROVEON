@@ -17,6 +17,7 @@
 #include "endlesss/cache.stems.h"
 #include "endlesss/live.stem.h"
 
+using recursive_directory_iterator = std::filesystem::recursive_directory_iterator;
 
 namespace endlesss {
 namespace cache {
@@ -29,7 +30,7 @@ Stems::Stems()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-bool Stems::initialise( const fs::path& cachePath, const uint32_t targetSampleRate )
+absl::Status Stems::initialise( const fs::path& cachePath, const uint32_t targetSampleRate )
 {
     static const fs::path stemSubdir( "stem" );
 
@@ -39,57 +40,86 @@ bool Stems::initialise( const fs::path& cachePath, const uint32_t targetSampleRa
     const auto stemRootStatus = filesys::ensureDirectoryExists( m_cacheStemRoot );
     if ( !stemRootStatus.ok() )
     {
-        blog::error::stem( "Failed to create stem cache directory inside [{}], {}", m_cacheStemRoot.string(), stemRootStatus.ToString() );
-        return false;
+        return absl::PermissionDeniedError( fmt::format(
+            "Failed to create directory inside [{}], {}", m_cacheStemRoot.string(), stemRootStatus.ToString() ) );
     }
 
     m_stemGeneration = 0;
 
-    return true;
+//     spacetime::Moment pruneTimer;
+//     for ( const auto& dirEntry : recursive_directory_iterator( m_cacheStemRoot ) )
+//     {
+//         if ( dirEntry.is_directory() )
+//             continue;
+//         const auto stat = dirEntry.path().stem();
+//     }
+//     blog::stem( "stem cache examination took {}", pruneTimer.deltaMs() );
+
+    return absl::OkStatus();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 endlesss::live::StemPtr Stems::request( const endlesss::types::Stem& stemData )
 {
-    std::scoped_lock<std::mutex> lock( m_pruneLock );
-
-    m_stemGeneration++;
-
-    const auto& stemDocumentID = stemData.couchID;
-
-    auto stemIter = m_stems.find( stemDocumentID );
-    if ( stemIter == m_stems.end() )
+    ABSL_ASSERT( m_targetSampleRate > 0 );  // ensure initialise() has been run
     {
-        auto newStem = std::make_shared<endlesss::live::Stem>( stemData, m_targetSampleRate );
+        std::scoped_lock<std::mutex> lock( m_pruneLock );
 
-        m_usages.emplace( stemDocumentID, m_stemGeneration );
-        m_stems.emplace( stemDocumentID, newStem );
-        return newStem;
-    }
-    else
-    {
-        ABSL_ASSERT( m_usages.find( stemDocumentID ) != m_usages.end() );
-        m_usages[ stemDocumentID ] = m_stemGeneration;
+        m_stemGeneration++;
 
-        return stemIter->second;
+        const auto& stemDocumentID = stemData.couchID;
+
+        auto stemIter = m_stems.find( stemDocumentID );
+        if ( stemIter == m_stems.end() )
+        {
+            auto newStem = std::make_shared<endlesss::live::Stem>( stemData, m_targetSampleRate );
+
+            m_usages.emplace( stemDocumentID, m_stemGeneration );
+            m_stems.emplace( stemDocumentID, newStem );
+            return newStem;
+        }
+        else
+        {
+            ABSL_ASSERT( m_usages.find( stemDocumentID ) != m_usages.end() );
+            m_usages[stemDocumentID] = m_stemGeneration;
+
+            return stemIter->second;
+        }
     }
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void Stems::prune( const uint32_t generationsToKeep )
+ouro_nodiscard std::size_t Stems::estimateMemoryUsageBytes()
 {
-    if ( m_stemGeneration < generationsToKeep )
+    std::size_t total = 0;
     {
-        blog::stem( "stem cache abored, generation index is too low : {} (need {})", m_stemGeneration, generationsToKeep );
-        return;
+        std::scoped_lock<std::mutex> lock( m_pruneLock );
+        for ( const auto& stem : m_stems )
+        {
+            total += stem.second->estimateMemoryUsageBytes();
+        }
     }
+    return total;
+}
 
+// ---------------------------------------------------------------------------------------------------------------------
+void Stems::lockAndPrune( const bool verbose, const uint32_t generationsToKeep )
+{
     spacetime::Moment pruneTimer;
 
     {
         std::scoped_lock<std::mutex> lock( m_pruneLock );
 
-        blog::stem( "stem cache prune : generation {}", m_stemGeneration );
+        if ( m_stemGeneration < generationsToKeep )
+        {
+            if ( verbose )
+                blog::stem( "stem cache pruning aborted, generation index is too low : {} (need at least {})", m_stemGeneration, generationsToKeep );
+
+            return;
+        }
+
+        if ( verbose )
+            blog::stem( "stem cache prune : generation {}", m_stemGeneration );
 
         StemDictionary keptStems;
         StemUsage      keptUsages;
@@ -120,17 +150,26 @@ void Stems::prune( const uint32_t generationsToKeep )
             }
         }
 
-        blog::stem( "stem cache prune : had {} stems ...", m_stems.size() );
+        const std::size_t beforeSize = m_stems.size();
+        if ( verbose )
+            blog::stem( "stem cache prune : had {} stems ...", beforeSize );
+
         m_stems = std::move( keptStems );
         m_usages = std::move( keptUsages );
-        blog::stem( "stem cache prune : ... now has {}", m_stems.size() );
-    }
 
-    blog::stem( "stem cache prune took {}", pruneTimer.deltaMs() );
+        const std::size_t afterSize = m_stems.size();
+        if ( verbose )
+            blog::stem( "stem cache prune : ... now has {}", afterSize );
+
+        blog::stem( "stem cache prune trimmed {} entries, took {}", (beforeSize - afterSize), pruneTimer.deltaMs() );
+    }
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 // produce a path to store the stem 
+// 
+// NB changing this may invalidate existing stem caches
+//
 fs::path Stems::getCachePathForStem( const endlesss::types::StemCouchID& stemDocumentID ) const
 {
     // pluck the first character from the couch ID to partition the cache folder

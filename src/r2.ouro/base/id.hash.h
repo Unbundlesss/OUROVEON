@@ -10,7 +10,7 @@
 
 #pragma once
 
-#include "base/utils.h"
+#include "base/hashing.h"
 
 namespace base {
 namespace id {
@@ -19,6 +19,8 @@ namespace id {
 template< typename _identity >
 struct HashWrapper
 {
+    using HashWrapperType = HashWrapper<_identity>;
+
     static inline const HashWrapper Invalid() { return HashWrapper(); }
 
     constexpr explicit HashWrapper( const uint64_t _id ) : id( _id )
@@ -29,11 +31,19 @@ struct HashWrapper
         assert( id != 0 && id32 != 0 ); // TBD 
     }
     constexpr HashWrapper( const HashWrapper& rhs ) : id( rhs.id ), id32( rhs.id32) {}
-    constexpr uint64_t getID() const { return id; }
-    constexpr uint32_t getID32() const { return id32; }
+
+    ouro_nodiscard constexpr uint64_t getID() const { return id; }
+    ouro_nodiscard constexpr uint32_t getID32() const { return id32; }
 
     constexpr bool operator == ( const HashWrapper& rhs ) const { return rhs.id == id && rhs.id32 == id32; }
     constexpr bool operator != ( const HashWrapper& rhs ) const { return rhs.id != id || rhs.id32 != id32; }
+
+    // abseil
+    template <typename H>
+    friend H AbslHashValue( H h, const HashWrapperType& m )
+    {
+        return H::combine( std::move( h ), m.id );
+    }
 
 private:
 

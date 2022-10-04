@@ -13,30 +13,35 @@ class RNG32
 {
 public:
 
-    RNG32( uint32_t seed );
-    RNG32();
-    ~RNG32() = default;
+    RNG32();            // construct with seed from time value
+    void reseed();      // reseed from time value
 
-    void reseed( uint32_t newseed );
+
+    // construct or reseed with a specific seed value
+    constexpr RNG32( uint32_t seed )
+    {
+        reseed( seed );
+    }
+    constexpr void reseed( uint32_t newseed );
 
 
     // random float in range [0..1]
-    inline float genFloat();
+    constexpr float genFloat();
 
     // random float between rmin-rmax
-    inline float genFloat( float rmin, float rmax );
+    constexpr float genFloat( float rmin, float rmax );
 
     // float in range [0..1] in Gaussian distribution (bell curve approximation)
-    inline float genGaussApprox();
+    constexpr float genGaussApprox();
 
     // random signed integer
-    inline int32_t genInt32();
+    constexpr int32_t genInt32();
 
     // random signed integer between rmin-rmax
-    inline int32_t genInt32( int32_t rmin, int32_t rmax );
+    constexpr int32_t genInt32( int32_t rmin, int32_t rmax );
 
     // random unsigned integer
-    inline uint32_t genUInt32();
+    constexpr uint32_t genUInt32();
 
 protected:
 
@@ -45,21 +50,21 @@ protected:
 
 
 //----------------------------------------------------------------------------------------------------------------------
-inline void RNG32::reseed( uint32_t newseed )
+constexpr void RNG32::reseed( uint32_t newseed )
 {
     m_seed[0] = newseed + !newseed;
     m_seed[1] = ((newseed << 16) | (newseed >> 16)) ^ newseed;
 }
 
 //----------------------------------------------------------------------------------------------------------------------
-inline float RNG32::genFloat()
+constexpr float RNG32::genFloat()
 {
     // mask lower 23 bits, multiply by 1/2**23.
     return (genInt32() & ((1 << 23) - 1)) * 0.00000011920928955078125f;
 }
 
 //----------------------------------------------------------------------------------------------------------------------
-inline float RNG32::genFloat( float rmin, float rmax )
+constexpr float RNG32::genFloat( float rmin, float rmax )
 {
     if ( rmin == rmax )
         return rmin;
@@ -68,7 +73,7 @@ inline float RNG32::genFloat( float rmin, float rmax )
 }
 
 //----------------------------------------------------------------------------------------------------------------------
-inline float RNG32::genGaussApprox()
+constexpr float RNG32::genGaussApprox()
 {
     // sum-of-uniforms / central limit theorem; a fast way to produce an approximate bell curve distribution
     float r0 = genFloat();
@@ -79,13 +84,13 @@ inline float RNG32::genGaussApprox()
 }
 
 //----------------------------------------------------------------------------------------------------------------------
-inline int32_t RNG32::genInt32()
+constexpr int32_t RNG32::genInt32()
 {
     return (int32_t)genUInt32();
 }
 
 //----------------------------------------------------------------------------------------------------------------------
-inline int32_t RNG32::genInt32( int32_t rmin, int32_t rmax )
+constexpr int32_t RNG32::genInt32( int32_t rmin, int32_t rmax )
 {
     if ( rmin == rmax )
         return rmin;
@@ -99,9 +104,8 @@ inline int32_t RNG32::genInt32( int32_t rmin, int32_t rmax )
     return result;
 }
 
-
 //----------------------------------------------------------------------------------------------------------------------
-inline uint32_t RNG32::genUInt32()
+constexpr uint32_t RNG32::genUInt32()
 {
     /*
     http://cliodhna.cop.uop.edu/~hetrick/na_faq.html

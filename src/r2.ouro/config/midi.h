@@ -15,7 +15,7 @@
 
 namespace config {
 
-struct Midi : public Base
+OURO_CONFIG( Midi )
 {
     // data routing
     static constexpr auto StoragePath       = IPathProvider::PathFor::SharedConfig;

@@ -311,7 +311,7 @@ void EffectStack::imgui(
         const float appendButtonWidth = vstLeftPanelWidth - (4.0f + commonSquareSize.x);
         {
             ImGui::Scoped::ButtonTextAlignLeft leftAlign;
-            if ( ImGui::Button( ICON_FA_PLUS_SQUARE " Append VST...", ImVec2( appendButtonWidth, 0.0f ) ) )
+            if ( ImGui::Button( ICON_FA_SQUARE_PLUS " Append VST...", ImVec2( appendButtonWidth, 0.0f ) ) )
             {
                 chooseNewVST( coreGUI );
             }
@@ -361,7 +361,7 @@ void EffectStack::imgui(
 
                     if ( vstFailedToLoad )
                     {
-                        ImGui::TextUnformatted( ICON_FA_SAD_CRY " Failed To Load" );
+                        ImGui::TextUnformatted( ICON_FA_HEART_CRACK " Failed To Load" );
                         addDeletionButton = true; // load failed, only option to delete now
                     }
                     else
@@ -417,11 +417,11 @@ void EffectStack::imgui(
                             const bool vstEditorOpen = vsti->editorIsOpen();
 
                             ImGui::Scoped::ToggleButton selEdit( vstEditorOpen );
-                            if ( vstEditorOpen && ImGui::Button( ICON_FA_COG, commonSquareSize ) )
+                            if ( vstEditorOpen && ImGui::Button( ICON_FA_GEAR, commonSquareSize ) )
                             {
                                 vsti->closeEditor();
                             }
-                            else if ( !vstEditorOpen && ImGui::Button( ICON_FA_COG, commonSquareSize ) )
+                            else if ( !vstEditorOpen && ImGui::Button( ICON_FA_GEAR, commonSquareSize ) )
                             {
                                 vsti->openEditor();
                             }
@@ -447,7 +447,7 @@ void EffectStack::imgui(
                     auto cursorX = ImGui::GetCursorPosX();
 
                     ImGui::SameLine( 0.0f, vstLeftPanelWidth - cursorX - 8.0f );
-                    if ( ImGui::Button( ICON_FA_BACKSPACE ) )
+                    if ( ImGui::Button( ICON_FA_DELETE_LEFT ) )
                     {
                         vstToDelete = vstUID;
                     }
@@ -498,7 +498,7 @@ void EffectStack::imgui(
                 ImGui::Spacing();
                 auto thisColumnSize = ImGui::MeasureSpace( ImVec2( -1.0f, 0.0f ) );
                 thisColumnSize.x += ImGui::GetCursorPosX();
-                if ( ImGui::Button( ICON_FA_SLIDERS_H " New Binding...", ImVec2( -1.0f, 0.0f ) ) )
+                if ( ImGui::Button( ICON_FA_SLIDERS " New Binding...", ImVec2( -1.0f, 0.0f ) ) )
                 {
                     vsti->requestAutomationHook( nullptr ); // clear hook, as the lambda points to potentially old binding data
                     paramSet.bindings.emplace_back( "Unnamed" );
@@ -567,7 +567,7 @@ void EffectStack::imgui(
                         auto cursorX = ImGui::GetCursorPosX();
                         ImGui::SameLine( 0.0f, thisColumnSize.x - cursorX - 18.0f );
                     }
-                    if ( ImGui::Button( ICON_FA_BACKSPACE ) )
+                    if ( ImGui::Button( ICON_FA_DELETE_LEFT ) )
                     {
                         bindingToDelete = binding.name;
                     }
@@ -592,7 +592,7 @@ void EffectStack::imgui(
                             auto cursorX = ImGui::GetCursorPosX();
                             ImGui::SameLine( 0.0f, thisColumnSize.x - cursorX - 18.0f );
                         }
-                        if ( ImGui::Button( ICON_FA_BACKSPACE ) )
+                        if ( ImGui::Button( ICON_FA_DELETE_LEFT ) )
                         {
                             paramToDelete = params.pidx;
                         }

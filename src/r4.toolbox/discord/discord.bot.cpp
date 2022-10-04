@@ -65,8 +65,11 @@ struct Bot::State
 
     ~State()
     {
-        m_appCoreServices.getAudioModule()->blockUntil(
-            m_appCoreServices.getAudioModule()->detachSampleProcessor( m_opusStreamProcessorID ) );
+        if ( m_opusStreamProcessorID != ssp::StreamProcessorInstanceID::invalid() )
+        {
+            m_appCoreServices.getAudioModule()->blockUntil(
+                m_appCoreServices.getAudioModule()->detachSampleProcessor( m_opusStreamProcessorID ) );
+        }
         
         m_phase = Bot::ConnectionPhase::Uninitialised;
     }
@@ -76,26 +79,25 @@ struct Bot::State
         return m_phase; 
     }
 
-    bool initialise()
+    absl::Status initialise()
     {
-        blog::discord( "init {}", DPP_VERSION_TEXT );
+        blog::discord( FMTX( "init {}" ), DPP_VERSION_TEXT );
 
         if ( m_phase != Bot::ConnectionPhase::Uninitialised )
         {
-            blog::error::discord( "already initialised / cannot start" );
-            return false;
+            return absl::AlreadyExistsError( "already initialised / cannot start" );
         }
 
         // called when shard is ready
         m_cluster.on_ready( [this]( const dpp::ready_t& event )
         {
-            blog::discord( "cluster manager ready" );
+            blog::discord( FMTX( "cluster manager ready" ) );
             onBotReady();
         });
 
         m_cluster.on_critical_boot_failure( [this]( const dpp::log_t& event )
         {
-            blog::error::discord( "boot failure; {}", event.message );
+            blog::error::discord( FMTX( "boot failure; {}" ), event.message );
             m_phase = Bot::ConnectionPhase::UnableToStart;
         });
 
@@ -103,14 +105,14 @@ struct Bot::State
         {
             if ( event.severity > dpp::ll_trace )
             {
-                blog::discord( "{} : {}", dpp::utility::loglevel( event.severity ), event.message );
+                blog::discord( FMTX( "{} : {}" ), dpp::utility::loglevel( event.severity ), event.message );
             }
         });
 
         // triggered when we arrive in a voice channel; need to capture and stash the voice_client instance
         m_cluster.on_voice_ready( [this]( const dpp::voice_ready_t& event )
         {
-            blog::discord( "voice channel connected (ch:{})", event.voice_channel_id );
+            blog::discord( FMTX( "voice channel connected (ch:{})" ), event.voice_channel_id );
 
             m_liveVoice          = event.voice_client;
             m_voiceChannelLiveID = event.voice_channel_id;
@@ -119,7 +121,7 @@ struct Bot::State
 
         m_cluster.on_voice_state_update( [this]( const dpp::voice_state_update_t& event )
         {
-            blog::discord( "on_voice_state_update (user:{}, ch:{})", event.state.user_id, event.state.channel_id );
+            blog::discord( FMTX( "on_voice_state_update (user:{}, ch:{})" ), event.state.user_id, event.state.channel_id );
 
             if ( event.state.user_id == m_cluster.me.id )
             {
@@ -139,11 +141,26 @@ struct Bot::State
         m_cluster.start( true );
         m_phase = Bot::ConnectionPhase::Booting;
 
-        return true;
+        return absl::OkStatus();
     }
 
     void onBotReady()
     {
+        // create and install an OPUS sample processor that points back to this bot instance; we will accept and
+        // handle the blocks of packets it returns.
+        // nb. 48000 hz sample rate is required by Discord and should be enforced by the UI / app boot process if you want to use the bot interface
+        const auto statusOrPtr = ssp::OpusStream::Create( std::bind( &State::onOpusPacketBlock, this, std::placeholders::_1 ), 48000 );
+
+        // i'm not sure what would lead to OPUS failing to boot but .. it's technically possible
+        if ( !statusOrPtr.ok() )
+        {
+            blog::error::discord( FMTX( "fatal bot error - cannot create OPUS instance" ) );
+            blog::error::discord( FMTX( " --> {}" ), statusOrPtr.status().ToString() );
+            m_phase = Bot::ConnectionPhase::UnableToStart;
+            return;
+        }
+        m_opusStreamProcessor = *statusOrPtr;
+
         m_commandHandler.add_command(
             "nowplaying",
             {
@@ -162,19 +179,15 @@ struct Bot::State
         m_phase = Bot::ConnectionPhase::RequestingGuildData;
         m_cluster.guild_get( m_guildSID, [this]( const dpp::confirmation_callback_t& cb )
         {
-            blog::discord( "decoding guild data" );
+            blog::discord( FMTX( "decoding guild data" ) );
             onGuildData();
         });
 
-        m_cluster.on_voice_buffer_send( [this]( dpp::voice_buffer_send_t bufferSend )
+        m_cluster.on_voice_buffer_send( [this]( const dpp::voice_buffer_send_t& bufferSend )
         {
             m_voiceBufferQueueState = bufferSend.buffer_size;
         });
 
-        // create and install an OPUS sample processor that points back to this bot instance; we will accept and
-        // handle the blocks of packets it returns.
-        // nb. 48000 hz sample rate is required by Discord and should be enforced by the UI / app boot process if you want to use the bot interface
-        m_opusStreamProcessor = ssp::OpusStream::Create( std::bind( &State::onOpusPacketBlock, this, std::placeholders::_1 ), 48000 );
 
         assert( m_opusStreamProcessorID == ssp::StreamProcessorInstanceID::invalid() );
         m_opusStreamProcessorID = m_opusStreamProcessor->getInstanceID();
@@ -197,7 +210,7 @@ struct Bot::State
         dpp::guild* guildInstance = dpp::find_guild( m_guildSID );
         if ( guildInstance == nullptr )
         {
-            blog::error::discord( "guild data fetch failed, cannot isolate voice channels" );
+            blog::error::discord( FMTX( "guild data fetch failed, cannot isolate voice channels" ) );
             return;
         }
 
@@ -223,7 +236,7 @@ struct Bot::State
             channelList->emplace_back( ch );
             m_voiceChannelNamesByID.emplace( ch->id, ch->name );
         }
-        blog::discord( "found {} potential voice channels", channelList->size() );
+        blog::discord( FMTX( "found {} potential voice channels" ), channelList->size() );
 
         // stash voice metadata ready for use
         m_voiceChannels = std::shared_ptr< const VoiceChannels >( channelList );
@@ -258,11 +271,11 @@ struct Bot::State
 
     bool joinVoiceChannel( const VoiceChannel& vc )
     {
-        blog::discord( "joinVoiceChannel({}:{})", vc.m_name, vc.m_id );
+        blog::discord( FMTX( "joinVoiceChannel({}:{})" ), vc.m_name, vc.m_id );
 
         if ( m_voiceState != Bot::VoiceState::NotJoined )
         {
-            blog::error::discord( "voiceState ({}) not in NotJoined, can't trigger Join event", (int32_t)m_voiceState.load() );
+            blog::error::discord( FMTX( "voiceState ({}) not in NotJoined, can't trigger Join event" ), (int32_t)m_voiceState.load() );
             return false;
         }
 
@@ -277,11 +290,11 @@ struct Bot::State
 
     bool leaveVoiceChannel()
     {
-        blog::discord( "leaveVoiceChannel()" );
+        blog::discord( FMTX( "leaveVoiceChannel()" ) );
 
         if ( m_voiceState != Bot::VoiceState::Joined )
         {
-            blog::error::discord( "voiceState ({}) not in Joined, can't trigger Leave event", (int32_t)m_voiceState.load() );
+            blog::error::discord( FMTX( "voiceState ({}) not in Joined, can't trigger Leave event" ), (int32_t)m_voiceState.load() );
             return false;
         }
 
@@ -306,7 +319,7 @@ struct Bot::State
                 const auto riffTimeDelta = spacetime::calculateDeltaFromNow(
                     spacetime::InSeconds( std::chrono::seconds{ exchangeData.m_riffTimestamp } ) ).asPastTenseString( 3 );
 
-                pastRiff = fmt::format( " ( riff recorded {} )", riffTimeDelta );
+                pastRiff = fmt::format( FMTX( " ( riff recorded {} )" ), riffTimeDelta );
             }
 
             // sort out a list of unique jammer names to report
@@ -337,7 +350,7 @@ struct Bot::State
                 addIndex++;
             }
 
-            return fmt::format( "Live in <#{}>, we're tuned into [**{}**] with {}{}", 
+            return fmt::format( FMTX( "Live in <#{}>, we're tuned into [**{}**] with {}{}" ),
                 m_voiceChannelLiveID.load(),
                 exchangeData.m_jamName,
                 jammers,
@@ -359,7 +372,7 @@ struct Bot::State
     dpp::cluster                            m_cluster;
     dpp::commandhandler                     m_commandHandler;
 
-    std::shared_ptr<ssp::OpusStream>        m_opusStreamProcessor;
+    ssp::OpusStream::SharedPtr              m_opusStreamProcessor;
     ssp::StreamProcessorInstanceID          m_opusStreamProcessorID;
 
 
@@ -473,7 +486,7 @@ void Bot::State::update( DispatchStats& stats )
             ssp::OpusPacketDataInstance flushQueue;
             while ( m_opusQueue.try_dequeue( flushQueue ) )
             {
-                blog::discord( "draining packet queue..." );
+                blog::discord( FMTX( "draining packet queue..." ) );
                 flushQueue.reset();
             }
             m_opusPacketInProgress.reset();
@@ -498,19 +511,18 @@ Bot::~Bot()
 {
 }
 
-bool Bot::initialise( app::ICoreServices& coreServices, const config::discord::Connection& configConnection )
+absl::Status Bot::initialise( app::ICoreServices& coreServices, const config::discord::Connection& configConnection )
 {
-    blog::discord( "connection initialising ..." );
+    blog::discord( FMTX( "connection initialising ..." ) );
     try
     {
         m_state = std::make_unique<State>( coreServices, configConnection );
         return m_state->initialise();
     }
-    catch ( dpp::exception* )
+    catch ( dpp::exception* dpex )
     {
-        // #HDD todo abseil return exception data
         m_state = nullptr;
-        return false;
+        return absl::UnknownError( dpex->what() );
     }
 }
 

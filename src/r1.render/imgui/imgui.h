@@ -232,8 +232,8 @@ typedef unsigned long long  ImU64;  // 64-bit unsigned integer (post C++11)
 struct ImVec2
 {
     float                                   x, y;
-    ImVec2()                                { x = y = 0.0f; }
-    ImVec2(float _x, float _y)              { x = _x; y = _y; }
+    constexpr ImVec2()                                { x = y = 0.0f; }
+    constexpr ImVec2(float _x, float _y)              { x = _x; y = _y; }
     float  operator[] (size_t idx) const    { IM_ASSERT(idx <= 1); return (&x)[idx]; }    // We very rarely use this [] operator, the assert overhead is fine.
     float& operator[] (size_t idx)          { IM_ASSERT(idx <= 1); return (&x)[idx]; }    // We very rarely use this [] operator, the assert overhead is fine.
 #ifdef IM_VEC2_CLASS_EXTRA
@@ -245,8 +245,8 @@ struct ImVec2
 struct ImVec4
 {
     float                                   x, y, z, w;
-    ImVec4()                                { x = y = z = w = 0.0f; }
-    ImVec4(float _x, float _y, float _z, float _w)  { x = _x; y = _y; z = _z; w = _w; }
+    constexpr ImVec4()                                { x = y = z = w = 0.0f; }
+    constexpr ImVec4(float _x, float _y, float _z, float _w)  { x = _x; y = _y; z = _z; w = _w; }
 #ifdef IM_VEC4_CLASS_EXTRA
     IM_VEC4_CLASS_EXTRA     // Define additional constructors and implicit cast operators in imconfig.h to convert back and forth between your math types and ImVec4.
 #endif
@@ -471,7 +471,7 @@ namespace ImGui
     IMGUI_API bool          Button(const char* label, const ImVec2& size = ImVec2(0, 0));   // button
     IMGUI_API bool          SmallButton(const char* label);                                 // button with FramePadding=(0,0) to easily embed within text
     IMGUI_API bool          PrecisionButton( const char* label, const ImVec2& size = ImVec2( 0, 0 ), const float adjust_x = 0, const float adjust_y = 0 );  // #HDD specific button for FontAwesome icons aligned nicely
-    IMGUI_API bool          IconButton(const char* label);  // #HDD specific button for FontAwesome icons aligned nicely
+    IMGUI_API bool          IconButton(const char* label, const bool visible = true);  // #HDD specific button for FontAwesome icons aligned nicely
     IMGUI_API bool          InvisibleButton(const char* str_id, const ImVec2& size, ImGuiButtonFlags flags = 0); // flexible button behavior without the visuals, frequently useful to build custom behaviors using the public api (along with IsItemActive, IsItemHovered, etc.)
     IMGUI_API bool          ArrowButton(const char* str_id, ImGuiDir dir);                  // square button with an arrow shape
     IMGUI_API void          Image(ImTextureID user_texture_id, const ImVec2& size, const ImVec2& uv0 = ImVec2(0, 0), const ImVec2& uv1 = ImVec2(1,1), const ImVec4& tint_col = ImVec4(1,1,1,1), const ImVec4& border_col = ImVec4(0,0,0,0));
@@ -1338,6 +1338,8 @@ enum ImGuiKey_
     ImGuiKey_X,                 // for text edit CTRL+X: cut
     ImGuiKey_Y,                 // for text edit CTRL+Y: redo
     ImGuiKey_Z,                 // for text edit CTRL+Z: undo
+    ImGuiKey_E,// #hdd
+    ImGuiKey_R,// #hdd
     ImGuiKey_COUNT
 };
 

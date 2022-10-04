@@ -18,6 +18,7 @@
 
 #include "endlesss/api.h"
 #include "endlesss/cache.jams.h"
+#include "endlesss/config.h"
 
 using namespace std::chrono_literals;
 
@@ -37,6 +38,15 @@ bool Jams::load( const config::IPathProvider& pathProvider )
             config::getFullPath< config::endlesss::PublicJamManifest >( pathProvider ).string() );
     }
     blog::core( "loaded {} public jams from snapshot manifest", m_configEndlesssPublics.jams.size() );
+
+    // try and load the cached collectibles data
+    m_configEndlesssCollectibles.jams.clear();
+    const auto collectibleLoadResult = config::load( pathProvider, m_configEndlesssCollectibles );
+    if ( collectibleLoadResult != config::LoadResult::Success )
+    {
+        // thats ok, we can update one from the net
+    }
+    blog::core( "loaded {} collectible jams from snapshot manifest", m_configEndlesssCollectibles.jams.size() );
 
 
     // dynamic jam cache is shared between apps
@@ -85,6 +95,13 @@ bool Jams::load( const config::IPathProvider& pathProvider )
 // ---------------------------------------------------------------------------------------------------------------------
 bool Jams::save( const config::IPathProvider& pathProvider )
 {
+    const auto collectibleSaveResult = config::save( pathProvider, m_configEndlesssCollectibles );
+    if ( collectibleSaveResult != config::SaveResult::Success )
+    {
+        blog::error::cache( "unable to save collectibles manifest" );
+    }
+
+
     fs::path jamLibraryCacheFile = pathProvider.getPath( config::IPathProvider::PathFor::SharedConfig );
     jamLibraryCacheFile.append( cFilename );
 
@@ -132,6 +149,46 @@ void Jams::asyncCacheRebuild( const endlesss::api::NetConfiguration& ncfg, tf::T
         {
             asyncCallback( AsyncFetchState::Failed, "Failed to get public jam data" );
             return;
+        }
+
+        // fetch all known pages of collectibles
+        std::vector< api::CurrentCollectibleJams::Data > collectedCollectibles;
+        for ( int32_t page = 0; page < 16; page ++ )    // just putting some kind of limit on this nonsense
+        {
+            asyncCallback( AsyncFetchState::Working, fmt::format( FMTX( "Fetching collectibles, page {} ..." ), page ) );
+
+            api::CurrentCollectibleJams collectibles;
+            bool fetchOk = collectibles.fetch( ncfg, page );
+            if ( fetchOk && collectibles.ok && !collectibles.data.empty() )
+            {
+                collectedCollectibles.insert( collectedCollectibles.end(), collectibles.data.begin(), collectibles.data.end() );
+            }
+            else
+            {
+                break;
+            }
+        }
+        // convert to our cached collectibles type
+        {
+            m_configEndlesssCollectibles.jams.clear();
+            for ( const api::CurrentCollectibleJams::Data& cdata : collectedCollectibles )
+            {
+                if ( cdata.name.empty() )
+                    continue;
+
+                config::endlesss::CollectibleJamManifest::Jam cjam;
+
+                cjam.jamId = cdata.jamId;
+                cjam.name = cdata.name;
+                cjam.bio = cdata.bio;
+                cjam.bandId = cdata.legacy_id;
+                cjam.owner = cdata.owner;
+                cjam.members = cdata.members;
+                cjam.rifftime = cdata.rifff.created;
+
+                m_configEndlesssCollectibles.jams.emplace_back( cjam );
+            }
+            blog::cache( "extracted {} collectible jams", m_configEndlesssCollectibles.jams.size() );
         }
 
         asyncCallback( AsyncFetchState::Working, "Updating jam metadata ..." );
@@ -197,6 +254,8 @@ void Jams::postProcessNewData()
 {
     spacetime::ScopedTimer perfTimer( __FUNCTION__ );
 
+    std::scoped_lock<std::mutex> lockProc( m_dataProcessMutex );
+
     m_jamDataPublicArchive.clear();
 
     for ( const auto& pjam : m_configEndlesssPublics.jams )
@@ -206,6 +265,13 @@ void Jams::postProcessNewData()
                                                          fmt::format("started by [{}]\nest. {} days of activity", pjam.earliest_user, pjam.estimated_days_of_activity ),
                                                          pjam.earliest_unixtime );
         pjd.m_riffCount = pjam.total_riffs;
+    }
+    for ( const auto& cjam : m_configEndlesssCollectibles.jams )
+    {
+        auto& pjd = m_jamDataCollectibles.emplace_back(  cjam.bandId,
+                                                         cjam.name,
+                                                         fmt::format("owned by [{}], with:\n{}", cjam.owner, fmt::join(cjam.members, "\n")),
+                                                         cjam.rifftime / 1000 );    // riff time is unix-nano
     }
 
     for ( auto& innerVec : m_idxSortedByTime )
@@ -230,7 +296,8 @@ void Jams::postProcessNewData()
             std::sort( m_idxSortedByTime[jamTypeIndex].begin(), m_idxSortedByTime[jamTypeIndex].end(),
                 [dataArray]( const size_t lhs, const size_t rhs ) -> bool
                 {
-                    return dataArray->at(lhs).m_timestampOrdering < dataArray->at(rhs).m_timestampOrdering;
+                    // newest first
+                    return dataArray->at(lhs).m_timestampOrdering > dataArray->at(rhs).m_timestampOrdering;
                 });
 
             std::sort( m_idxSortedByName[jamTypeIndex].begin(), m_idxSortedByName[jamTypeIndex].end(),
@@ -256,6 +323,9 @@ void Jams::postProcessNewData()
             data.m_timestampOrderingDescription.clear();
 
         for ( Data& data : m_jamDataUserSubscribed )
+            data.m_timestampOrderingDescription = spacetime::datestampStringFromUnix( data.m_timestampOrdering );
+
+        for ( Data& data : m_jamDataCollectibles )
             data.m_timestampOrderingDescription = spacetime::datestampStringFromUnix( data.m_timestampOrdering );
     }
 }

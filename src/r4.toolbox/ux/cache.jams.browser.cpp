@@ -29,16 +29,19 @@ void modalUniversalJamBrowser(
         Jams::JamType::UserSubscribed,
         Jams::JamType::PublicJoinIn,
         Jams::JamType::PublicArchive,
+        Jams::JamType::Collectible,
     };
     static constexpr std::array< const char*, Jams::cJamTypeCount > jamTypeTitle = {
         " Public Jam Archive ",
         " Current Join-In Jams ",
         " Subscribed / Private Jams ",
+        " Collectibles ",
     };
     static constexpr std::array< const char*, Jams::cJamTypeCount > jamTimeDesc = {
-        "Earliest Stem",
+        "Earliest Riff",
         "",
         "Joined",
+        "Latest Riff",
     };
 
     const ImVec2 configWindowSize = ImVec2( 750.0f, 420.0f ); // blaze it
@@ -107,7 +110,7 @@ void modalUniversalJamBrowser(
         jamNameFilter.Draw( "##NameFilter", 200.0f );
 
         ImGui::SameLine( 0, 2.0f );
-        if ( ImGui::Button( ICON_FA_TIMES_CIRCLE ) )
+        if ( ImGui::Button( ICON_FA_CIRCLE_XMARK ) )
             jamNameFilter.Clear();
 
         ImGui::SameLine();

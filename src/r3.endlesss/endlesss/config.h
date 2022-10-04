@@ -16,7 +16,7 @@ namespace endlesss {
 
 // ---------------------------------------------------------------------------------------------------------------------
 // extraction of the default web login response, to gather login tokens
-struct Auth : public Base
+OURO_CONFIG( Auth )
 {
     // data routing
     static constexpr auto StoragePath       = IPathProvider::PathFor::SharedConfig;
@@ -42,7 +42,7 @@ struct Auth : public Base
 
 // ---------------------------------------------------------------------------------------------------------------------
 // config required for all the remote calls to pull data from endlesss backend
-struct API : public Base
+OURO_CONFIG( API )
 {
     // data routing
     static constexpr auto StoragePath       = IPathProvider::PathFor::SharedData;       // api config ships with app
@@ -51,6 +51,7 @@ struct API : public Base
     // identity for the network connection User-Agent string
     std::string             userAgentApp;   // .. when connecting to 'app services' as if we are the client / website
     std::string             userAgentDb;    // .. when talking to Couch
+    std::string             userAgentWeb;   // .. when talking to web api
 
     // path from the app shared data directory to a valid CA Root Certificates file
     std::string             certBundleRelative;
@@ -66,6 +67,10 @@ struct API : public Base
     // this is basically required for deep diving back more than about 6 months, there is often some strange
     // data lurking in the older archives
     bool                    hackAllowStemSizeMismatch = true;
+
+    // .. similarly this can happen when actually streaming the data in, it just terminates early every time. 
+    // activate this to ignore and clamp the received audio buffer to whatever we get
+    bool                    hackAllowStemUnderflow = false;
 
 
     // DEBUG OPTIONS
@@ -83,6 +88,7 @@ struct API : public Base
     {
         archive( CEREAL_NVP( userAgentApp )
                , CEREAL_NVP( userAgentDb )
+               , CEREAL_NVP( userAgentWeb )
                , CEREAL_NVP( certBundleRelative )
                , CEREAL_OPTIONAL_NVP( jamSentinelPollRateInSeconds )
                , CEREAL_OPTIONAL_NVP( hackAllowStemSizeMismatch )
@@ -93,8 +99,8 @@ struct API : public Base
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-// a captured bank of public jam metadata we siphon via a tedious automated process
-struct PublicJamManifest : public Base
+// a captured bank of public jam metadata we siphon via a lengthy automated offline process
+OURO_CONFIG( PublicJamManifest )
 {
     // data routing
     static constexpr auto StoragePath       = IPathProvider::PathFor::SharedData;       // public snapshot ships with build
@@ -138,6 +144,48 @@ struct PublicJamManifest : public Base
     }
 };
 
+
+// ---------------------------------------------------------------------------------------------------------------------
+// snapshot of collectible/nft jam metadata (boo, hiss)
+OURO_CONFIG( CollectibleJamManifest )
+{
+    // data routing
+    static constexpr auto StoragePath       = IPathProvider::PathFor::SharedConfig;
+    static constexpr auto StorageFilename   = "endlesss.collectibles.json";
+
+    struct Jam
+    {
+        std::string             jamId;
+        std::string             name;
+        std::string             bio;
+        std::string             bandId;
+        std::string             owner;
+        std::vector< std::string > members;
+        uint64_t                rifftime;
+
+        template<class Archive>
+        void serialize( Archive& archive )
+        {
+            archive( CEREAL_NVP( jamId )
+                   , CEREAL_NVP( name )
+                   , CEREAL_OPTIONAL_NVP( bio )
+                   , CEREAL_NVP( bandId )
+                   , CEREAL_NVP( owner )
+                   , CEREAL_NVP( members )
+                   , CEREAL_NVP( rifftime )
+            );
+        }
+    };
+
+    std::vector< Jam >  jams;
+
+    template<class Archive>
+    void serialize( Archive& archive )
+    {
+        archive( CEREAL_NVP( jams )
+        );
+    }
+};
 
 } // namespace endlesss
 } // namespace config

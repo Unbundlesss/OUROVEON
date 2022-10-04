@@ -44,22 +44,41 @@ struct Stem
     // of destruction arriving before the task is done, we wait to avoid the analysis working with a deleted object
     inline void keepFuture( std::shared_future<void>& analysisFuture )
     {
-        assert( !m_analysisFuture.valid() );
+        ABSL_ASSERT( !m_analysisFuture.valid() );
         m_analysisFuture = analysisFuture;
     }
 
-    inline bool isAnalysisComplete() const
+    ouro_nodiscard inline bool isAnalysisComplete() const
     {
         return m_hasValidAnalysis;
     }
 
-    constexpr bool hasFailed() const 
+    ouro_nodiscard constexpr bool hasFailed() const
     {
         return ( m_state == State::Failed_Http          ||
                  m_state == State::Failed_DataUnderflow ||
                  m_state == State::Failed_DataOverflow  ||
                  m_state == State::Failed_Vorbis        ||
                  m_state == State::Failed_CacheDirectory );
+    }
+
+    ouro_nodiscard inline std::size_t estimateMemoryUsageBytes() const
+    {
+        std::size_t result = sizeof( Stem );
+
+        if ( m_state != State::Complete )
+            return result;
+
+        // buffer data
+        result += ( m_sampleCount * 2 ) * sizeof( float );
+
+        // analysis chunk
+        if ( isAnalysisComplete() )
+        {
+            result += m_sampleEnergy.size() * sizeof( float );
+            result += m_sampleBeat.size() * sizeof( uint64_t );
+        }
+        return result;
     }
 
 private:
@@ -71,19 +90,23 @@ private:
 
         void allocate( size_t newSize );
 
-        size_t                          m_rawLength;
-        size_t                          m_rawReceived;
-        uint8_t*                        m_rawAudio;
+        size_t      m_rawLength;
+        size_t      m_rawReceived;
+        uint8_t*    m_rawAudio;
     };
 
     // make an attempt to download the stem from the Endlesss CDN; this may fail and that may be because the CDN
     // hasn't actually got the data yet - so we can call this function repeatedly to see if success is possible 
     // after a little delay
     // returns false if something broke; sets the m_state appropriately in that case
-    bool attemptRemoteFetch( const api::NetConfiguration& ncfg, const uint32_t attemptUID, RawAudioMemory& audioMemory );
+    ouro_nodiscard bool attemptRemoteFetch( const api::NetConfiguration& ncfg, const uint32_t attemptUID, RawAudioMemory& audioMemory );
+
+    // blend a small window of samples at each end of the stem to reduce clicks on looping
+    // (as best we can tell Endlesss also does something like this)
+    void applyLoopCrossfade();
 
 
-    size_t computeMemoryUsage() const;
+    ouro_nodiscard size_t computeMemoryUsage() const;
 
 
     std::shared_future<void>        m_analysisFuture;
@@ -98,7 +121,6 @@ public:
     int32_t                         m_sampleCount;
     std::array<float*, 2>           m_channel;
 
-    std::vector< double >           m_detectedBeatTimes;
     std::vector< float >            m_sampleEnergy;
     std::vector< uint64_t >         m_sampleBeat;
 };

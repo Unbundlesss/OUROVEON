@@ -9,195 +9,175 @@
 
 #include "pch.h"
 
+#include "gfx/gl/macro.h"
+#include "gfx/gl/enumstring.h"
 #include "gfx/gl/shader.h"
 
-void logGLErrorLog( GLuint glID )
+#include "filesys/preprocessing.h"
+
+
+// variant of glChecked that bails out with an absl error on error
+#define glAbslChecked( ... )    \
+        __VA_ARGS__;        \
+        { \
+            const auto glErr = glGetError(); \
+            if ( glErr != GL_NO_ERROR ) \
+            { \
+                return absl::InternalError( fmt::format( FMTX("{}:{} OpenGL call '{}' error [{}] : {}"), __FUNCTION__, __LINE__, #__VA_ARGS__, glErr, gl::getGlErrorText(glErr) ) ); \
+            } \
+        }
+
+// ---------------------------------------------------------------------------------------------------------------------
+std::string glGetErrorLog( GLuint glID )
 {
+    std::string capturedLog;
+
     GLint logLength;
     glGetShaderiv( glID, GL_INFO_LOG_LENGTH, &logLength );
     if ( logLength > 0 )
     {
         GLchar* log = (GLchar*)calloc( logLength + 1, 1 );
         glGetShaderInfoLog( glID, logLength, &logLength, log );
-        blog::error::gfx( "Compilation log : {}", log );
+        capturedLog = log;
         free( log );
     }
+
+    return capturedLog;
 }
 
-GLuint compileShader(const char* context, const char* source, GLuint shaderType)
+// ---------------------------------------------------------------------------------------------------------------------
+absl::StatusOr< GLuint > compileShader( const std::string& shaderName, const char* sourceText, const GLuint shaderType )
 {
-    GLuint result = glCreateShader(shaderType);
+    // allocate shader ID, mark to delete it automatically if we exit early to avoid leaking the ID
+    GLuint shaderId = glAbslChecked( glCreateShader( shaderType ) );
+    absl::Cleanup discardShaderIdOnEarlyOut = [shaderId] { glChecked( glDeleteShader( shaderId ) ); };
 
-    glShaderSource(result, 1, &source, NULL);
-    glCompileShader(result);
+    glAbslChecked( glShaderSource( shaderId, 1, &sourceText, NULL ) );
+    glAbslChecked( glCompileShader( shaderId ) );
 
     GLint shaderCompiled = GL_FALSE;
-    glGetShaderiv(result, GL_COMPILE_STATUS, &shaderCompiled);
-    if (shaderCompiled != GL_TRUE)
+    glAbslChecked( glGetShaderiv( shaderId, GL_COMPILE_STATUS, &shaderCompiled ) );
+    if ( shaderCompiled != GL_TRUE )
     {
-        blog::error::gfx( "Shader compilation error [{}] ({})", context, result );
+        const auto compilationLog = glGetErrorLog( shaderId );
+        return absl::InternalError( fmt::format( FMTX( "{} compilation failure, log:\n{}" ), gl::enumToString( shaderType ), compilationLog ) );
+    }
 
-        logGLErrorLog( result );
-        glDeleteShader(result);
-        result = 0;
-    }
-    else
-    {
-        blog::gfx( "Shader compiled [{}]", context );
-    }
-    return result;
+    // all good, so cancel deleting the ID
+    std::move( discardShaderIdOnEarlyOut ).Cancel();
+    return shaderId;
 }
 
-GLuint compileProgram( const char* context, const char* vshFile, const char* pshFile )
+// ---------------------------------------------------------------------------------------------------------------------
+absl::StatusOr< GLuint > compileProgram(
+    const std::string&              shaderName,
+    const filesys::Preprocessing&   ppState,
+    const fs::path&                 vsh,
+    const fs::path&                 psh )
 {
-    GLuint programId = 0;
-    GLuint vtxShaderId, fragShaderId;
+    std::string shaderSourceWork;
+    shaderSourceWork.reserve( 128 * 1024 );
 
-    programId = glCreateProgram();
+    constexpr static const std::string_view shaderPrefix = R"(
+#version 150 core
+#extension GL_ARB_explicit_attrib_location : enable
 
-    std::ifstream f(vshFile);
-    std::string source((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    vtxShaderId = compileShader( context, source.c_str(), GL_VERTEX_SHADER );
+)";
 
-    f = std::ifstream(pshFile);
-    source = std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    fragShaderId = compileShader( context, source.c_str(), GL_FRAGMENT_SHADER );
+    const bool emitLinePragmas = false;
 
-    if (vtxShaderId && fragShaderId)
+    // allocate new shader program ID; clean it on scope exit if we fail compilation for any reason to avoid leaking the ID
+    GLuint programId = glAbslChecked( glCreateProgram() );
+    absl::Cleanup discardProgramIdOnEarlyOut = [programId] { glChecked( glDeleteProgram( programId ) ); };
+
+    // preprocess the vertex shader source
+    shaderSourceWork = shaderPrefix;
+    if ( const auto preproStatus = ppState.processAndAppend( vsh, shaderSourceWork, emitLinePragmas ); !preproStatus.ok() )
+        return preproStatus;
+
+    // .. and compile it
+    const auto vertexShaderResult = compileShader( shaderName, shaderSourceWork.c_str(), GL_VERTEX_SHADER );
+    if ( !vertexShaderResult.ok() )
+        return vertexShaderResult;
+
+    // then do the same for fragment shader source
+    shaderSourceWork = shaderPrefix;
+    if ( const auto preproStatus = ppState.processAndAppend( psh, shaderSourceWork, emitLinePragmas ); !preproStatus.ok() )
+        return preproStatus;
+
+    // .. and compile that
+    const auto fragmentShaderResult = compileShader( shaderName, shaderSourceWork.c_str(), GL_FRAGMENT_SHADER );
+    if ( !fragmentShaderResult.ok() )
+        return fragmentShaderResult;
+
+
+    // assuming all the above preprocessing and compilation was successful, we can link the result
     {
-        // Associate shader with program
-        glAttachShader(programId, vtxShaderId);
-        glAttachShader(programId, fragShaderId);
-        glLinkProgram(programId);
-        glValidateProgram(programId);
+        // associate shader with program, link, validate
+        glAbslChecked( glAttachShader( programId, *vertexShaderResult ) );
+        glAbslChecked( glAttachShader( programId, *fragmentShaderResult ) );
+        glAbslChecked( glLinkProgram( programId ) );
+        glAbslChecked( glValidateProgram( programId ) );
 
-        // Check the status of the compile/link
-        logGLErrorLog( programId );
+        GLint programValidated = 0;
+        glChecked( glGetProgramiv( programId, GL_VALIDATE_STATUS, &programValidated ) );
+
+        // validate link
+        if ( programValidated == 0 )
+        {
+            const auto compilationLog = glGetErrorLog( programId );
+            return absl::InternalError( fmt::format( FMTX( "shader validation failure, log:\n{}" ), compilationLog ) );
+        }
     }
 
+    // all good, so cancel deleting the ID
+    std::move( discardProgramIdOnEarlyOut ).Cancel();
     return programId;
 }
 
 
 namespace gl {
 
+// ---------------------------------------------------------------------------------------------------------------------
 Shader::~Shader()
 {
     if ( m_handle != 0 )
-        glDeleteProgram( m_handle );
+        glChecked( glDeleteProgram( m_handle ) );
 }
 
-std::shared_ptr<Shader> Shader::loadFromFiles( const std::string& context, const std::string& vsh, const std::string& psh )
+// ---------------------------------------------------------------------------------------------------------------------
+Shader::PtrOrStatus Shader::loadFromDisk(
+    const std::string&              shaderName,
+    const filesys::Preprocessing&   ppState,
+    const fs::path&                 vsh,
+    const fs::path&                 psh )
 {
-    auto newId = compileProgram( context.c_str(), vsh.c_str(), psh.c_str() );
-    if ( newId <= 0 )
-        return nullptr;
+    auto compilationStatus = compileProgram( shaderName, ppState, vsh, psh );
+    if ( !compilationStatus.ok() )
+        return compilationStatus.status();
 
-    return std::make_shared<Shader>( newId );
+    return std::make_shared<Shader>( shaderName, *compilationStatus );
 }
 
-ScopedShader::ScopedShader( ShaderInstance& shaderToSet )
+// ---------------------------------------------------------------------------------------------------------------------
+ScopedUseShader::ScopedUseShader( const ShaderInstance& shaderToSet )
     : m_shaderInUse( shaderToSet )
 {
     const auto handle = shaderToSet->getHandle();
-    if ( handle != 0 ) {
-        glGetIntegerv( GL_CURRENT_PROGRAM, &m_previousHandle );
-        glUseProgram( handle );
-    }
-}
-
-ScopedShader::~ScopedShader()
-{
-    if ( m_previousHandle != 0 ) {
-        glUseProgram( m_previousHandle );
-    }
-}
-
-const char* checkGLErr()
-{
-    const auto err = glGetError();
-    switch ( err )
+    if ( handle != 0 )
     {
-    case GL_INVALID_ENUM: return "GL_INVALID_ENUM";
-    case GL_INVALID_VALUE: return "GL_INVALID_VALUE";
-    case GL_INVALID_OPERATION: return "GL_INVALID_OPERATION";
-    case GL_OUT_OF_MEMORY: return "GL_OUT_OF_MEMORY";
+        glChecked( glGetIntegerv( GL_CURRENT_PROGRAM, &m_previousHandle ) );
+        glChecked( glUseProgram( handle ) );
     }
-    return nullptr;
 }
 
-Flatscreen::Flatscreen()
+// ---------------------------------------------------------------------------------------------------------------------
+ScopedUseShader::~ScopedUseShader()
 {
-    glGenBuffers( 1, &m_glHandleArrayBuffer );
-    auto* err = checkGLErr();
-
-    m_shaderInstance = gl::Shader::loadFromFiles( "2d", "../../shared/shaders/vsh.2d.glsl", "../../shared/shaders/psh.2d.glsl" );
+    if ( m_previousHandle != 0 )
     {
-        ScopedShader setShader( m_shaderInstance );
-
-        m_glUniformResolution = glGetUniformLocation( m_shaderInstance->getHandle(), "iResolution" );
-        err = checkGLErr();
-        m_glUniformTime = glGetUniformLocation( m_shaderInstance->getHandle(), "iTime" );
-        err = checkGLErr();
-        m_glPositionVertex = (uint32_t)glGetAttribLocation( m_shaderInstance->getHandle(), "position" );
-        err = checkGLErr();
+        glChecked( glUseProgram( m_previousHandle ) );
     }
-}
-
-Flatscreen::~Flatscreen()
-{
-    if ( m_glHandleArrayBuffer ) 
-    { 
-        glDeleteBuffers( 1, &m_glHandleArrayBuffer ); m_glHandleArrayBuffer = 0;
-    }
-}
-struct FsVert
-{
-    FsVert( float _x, float _y )
-        : x(_x)
-        , y(_y)
-    {}
-    float x, y;
-};
-
-void Flatscreen::render()
-{
-    ScopedShader setShader( m_shaderInstance );
-
-    GLuint vao;
-    glGenVertexArrays( 1, &vao );
-    glBindVertexArray( vao );
-
-    glDisable( GL_SCISSOR_TEST );
-    glDisable( GL_BLEND );
-
-    FsVert vertices[6]{
-        {-1.0f,  1.0f},
-        { 1.0f,  1.0f},
-        { 1.0f, -1.0f},
-        {-1.0f,  1.0f},
-        { 1.0f, -1.0f},
-        {-1.0f, -1.0f}
-    };
-
-    glUniform2f( m_glUniformResolution, 1920, 1080 );
-    glUniform1f( m_glUniformTime, (float) ImGui::GetTime() );
-    auto* err = checkGLErr();
-
-    glBindBuffer( GL_ARRAY_BUFFER, m_glHandleArrayBuffer );
-    err = checkGLErr();
-    glBufferData( GL_ARRAY_BUFFER, (GLsizeiptr)6 * (int)sizeof( vertices ), (const GLvoid*)vertices, GL_STREAM_DRAW );
-    err = checkGLErr();
-
-    glEnableVertexAttribArray( m_glPositionVertex );
-    err = checkGLErr();
-    glVertexAttribPointer( m_glPositionVertex, 2, GL_FLOAT, GL_FALSE, sizeof( FsVert ), (GLvoid*)0 );
-    err = checkGLErr();
-
-    glDrawArrays( GL_TRIANGLES, 0, 6 );
-    err = checkGLErr();
-
-    glDeleteVertexArrays( 1, &vao );
 }
 
 } // namespace gl

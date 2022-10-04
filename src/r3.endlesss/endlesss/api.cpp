@@ -9,7 +9,7 @@
 
 #include "pch.h"
 
-#include "base/utils.h"
+#include "base/hashing.h"
 #include "spacetime/chronicle.h"
 
 #include "endlesss/api.h"
@@ -18,14 +18,27 @@
 namespace endlesss {
 namespace api {
 
-static constexpr auto cEndlesssDataDomain   = "data.endlesss.fm";
-static constexpr auto cMimeApplicationJson  = "application/json";
+static constexpr auto cEndlesssDataDomain       = "data.endlesss.fm";
+static constexpr auto cEndlesssAPIDomain        = "api.endlesss.fm";
+static constexpr auto cMimeApplicationJson      = "application/json";
+
+static constexpr auto cRegexLengthTypeMismatch  = "\"length\":\"([0-9]+)\"";
+
+// ---------------------------------------------------------------------------------------------------------------------
+NetConfiguration::NetConfiguration( const config::endlesss::API& api, const fs::path& tempDir )
+    : m_api( api )
+    , m_tempDir( tempDir )
+    , m_dataFixRegex_lengthTypeMismatch( cRegexLengthTypeMismatch )
+{
+}
 
 // ---------------------------------------------------------------------------------------------------------------------
 NetConfiguration::NetConfiguration( const config::endlesss::API& api, const config::endlesss::Auth& auth, const fs::path& tempDir )
     : m_api( api )
     , m_auth( auth )
+    , m_hasValidEndlesssAuth( true )
     , m_tempDir( tempDir )
+    , m_dataFixRegex_lengthTypeMismatch( cRegexLengthTypeMismatch )
 {
 }
 
@@ -59,8 +72,12 @@ std::string NetConfiguration::getVerboseCaptureFilename( const char* context ) c
 // ---------------------------------------------------------------------------------------------------------------------
 std::unique_ptr<httplib::SSLClient> createEndlesssHttpClient( const NetConfiguration& ncfg, const UserAgent ua )
 {
+    using namespace std::literals::chrono_literals;
+
     const std::string loadBalance = ncfg.generateRandomLoadBalancerCookie();
 
+    std::string requestDomain = cEndlesssDataDomain;
+    bool addAuthentication = true;
     const char* userAgent = "";
     switch ( ua )
     {
@@ -69,14 +86,28 @@ std::unique_ptr<httplib::SSLClient> createEndlesssHttpClient( const NetConfigura
         default:
         case UserAgent::Couchbase:      userAgent = ncfg.api().userAgentDb.c_str();
             break;
+
+        // the web api domain does not need our user creds
+        case UserAgent::WebAPI:
+            userAgent = ncfg.api().userAgentWeb.c_str();
+            requestDomain = cEndlesssAPIDomain;
+            addAuthentication = false;
+            break;
     }
 
-    auto dataClient = std::make_unique< httplib::SSLClient >( cEndlesssDataDomain );
+    auto dataClient = std::make_unique< httplib::SSLClient >( requestDomain );
 
     dataClient->set_ca_cert_path( ncfg.api().certBundleRelative.c_str() );
     dataClient->enable_server_certificate_verification( true );
 
-    dataClient->set_basic_auth( ncfg.auth().token.c_str(), ncfg.auth().password.c_str() );
+    // some of endlesss' servers are slow to respond
+    dataClient->set_connection_timeout( 8s );
+    dataClient->set_read_timeout( 8s );
+
+    if ( addAuthentication )
+    {
+        dataClient->set_basic_auth( ncfg.auth().token.c_str(), ncfg.auth().password.c_str() );
+    }
     dataClient->set_compress( true );
 
     if ( ncfg.api().debugVerboseNetLog )
@@ -89,7 +120,7 @@ std::unique_ptr<httplib::SSLClient> createEndlesssHttpClient( const NetConfigura
     }
     dataClient->set_default_headers(
     {
-        { "Host",               cEndlesssDataDomain    },
+        { "Host",               requestDomain          },
         { "User-Agent",         userAgent              },
         { "Cookie",             loadBalance            },
         { "Accept",             cMimeApplicationJson   },
@@ -239,6 +270,26 @@ bool CurrentJoinInJams::fetch( const NetConfiguration& ncfg )
 
     return deserializeJson< CurrentJoinInJams >( ncfg, res, *this, __FUNCTION__ );
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+bool CurrentCollectibleJams::fetch( const NetConfiguration& ncfg, int32_t pageNo )
+{
+    // you might think we could use <100 and get a more efficient fetch but anything but 100 seems to error 
+    // constantly as you move through pages. D:
+    const auto requestUrl = fmt::format( FMTX( "/marketplace/collectible-jams?pageSize=100&pageNo={}" ), pageNo );
+
+    auto client = createEndlesssHttpClient( ncfg, UserAgent::WebAPI );
+
+    // this endpoint is slow and prone to failure. give it a second try if it fails immediately.
+    auto res = client->Get( requestUrl);
+    if ( res.error() != httplib::Error::Success )
+    {
+        res = client->Get( requestUrl );
+    }
+
+    return deserializeJson< CurrentCollectibleJams >( ncfg, res, *this, __FUNCTION__ );
+}
+
 
 // ---------------------------------------------------------------------------------------------------------------------
 // NB: could change this to data.endlesss.fm/user_appdata${user}/_find

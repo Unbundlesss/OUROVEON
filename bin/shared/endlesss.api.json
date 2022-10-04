@@ -1,6 +1,7 @@
 {
     "userAgentApp":         "Ouroveon/",
     "userAgentDb":          "CouchbaseLite/1.3",
+    "userAgentWeb":         "Mozilla/5.0",
 
     "jamSentinelPollRateInSeconds": 5,
 

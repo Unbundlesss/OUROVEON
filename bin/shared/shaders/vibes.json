@@ -1,0 +1,42 @@
+{
+    "declarations": [
+        {
+            "name": "Horizon",
+            "copyright" : "ishani",
+            "operations": [
+                {
+                    "name": "render",
+                    "fragment": "horizon",
+                    "bufferInA": "final",
+                    "bufferOut": "final",
+                    "toggles" : [
+                        { "name" : "Core Mass",     "opts" : [ "FILMGRAIN" ], "default_value" : 0 },
+                        { "name" : "Colouring",     "opts" : [ "WHITE", "BLACK", "RED" ], "default_value" : 1 }
+                    ],
+                    "dials" : [
+                        { "name" : "Intensity",     "default_value" :  0,     "range" : [ 0, 1] },
+                        { "name" : "Bleed",         "default_value" : -1,     "range" : [-1, 1] }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Drift",
+            "copyright" : "Martijn Steinrucken aka BigWings",
+            "operations": [
+                {
+                    "name": "render",
+                    "fragment": "drift",
+                    "bufferInA": "work1",
+                    "bufferOut": "work1"
+                },
+                {
+                    "name": "postpro",
+                    "fragment": "chromatic",
+                    "bufferInA": "work1",
+                    "bufferOut": "final"
+                }
+            ]
+        }
+    ]
+}

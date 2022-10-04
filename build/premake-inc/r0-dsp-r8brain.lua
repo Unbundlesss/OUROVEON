@@ -18,6 +18,7 @@ project "r0-r8brain"
     kind "StaticLib"
     language "C++"
     cppdialect "C++20"
+    floatingpoint "Strict"
 
     SetDefaultBuildConfiguration()
     SetDefaultOutputDirectories("r0")

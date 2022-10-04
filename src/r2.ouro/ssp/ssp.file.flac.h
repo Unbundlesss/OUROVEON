@@ -8,7 +8,7 @@
 //
 
 #pragma once
-#include "base/macro.h"
+#include "base/construction.h"
 #include "isamplestreamprocessor.h"
 
 namespace ssp {
@@ -18,7 +18,7 @@ namespace ssp {
 class FLACWriter : public ISampleStreamProcessor
 {
 public:
-    DeclareUncopyable( FLACWriter );
+    DECLARE_NO_COPY( FLACWriter );
 
     ~FLACWriter();
 

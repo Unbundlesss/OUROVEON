@@ -9,7 +9,7 @@
 
 #pragma once
 
-#include "base/uriparse.h"
+#include "net/uriparse.h"
 
 #include "endlesss/config.h"
 #include "endlesss/core.types.h"
@@ -21,6 +21,13 @@ namespace api {
 struct NetConfiguration
 {
     NetConfiguration() = delete;
+
+    // initialise without Endlesss auth for a network layer that can't talk to Couch, etc (but can grab stuff from CDN)
+    NetConfiguration(
+        const config::endlesss::API& api,
+        const fs::path& tempDir );                  // writable temp location for verbose/debug logging if enabled
+
+    // initialise with validated Endlesss auth for full access
     NetConfiguration(
         const config::endlesss::API& api,
         const config::endlesss::Auth& auth,
@@ -28,7 +35,7 @@ struct NetConfiguration
 
     ouro_nodiscard constexpr const config::endlesss::API&  api()  const { return m_api; }
     ouro_nodiscard constexpr const config::endlesss::Auth& auth() const { return m_auth; }
-
+    ouro_nodiscard constexpr const bool hasValidEndlesssAuth()    const { return m_hasValidEndlesssAuth; }
 
     // spin an RNG to produce a new LB=live## cookie value
     ouro_nodiscard std::string generateRandomLoadBalancerCookie() const;
@@ -37,6 +44,9 @@ struct NetConfiguration
     // some kind of timestamp or order differentiator
     ouro_nodiscard std::string getVerboseCaptureFilename( const char* context ) const;
 
+
+    ouro_nodiscard constexpr const std::regex& getDataFixRegex_lengthTypeMismatch() const { return m_dataFixRegex_lengthTypeMismatch; }
+
 private:
 
     inline static std::atomic_uint32_t  m_writeIndex = 0;
@@ -44,14 +54,21 @@ private:
     config::endlesss::API       m_api;
     config::endlesss::Auth      m_auth;
 
+    bool                        m_hasValidEndlesssAuth = false;
+
     // for capture/debug output
     fs::path                    m_tempDir;
+
+    // used to precondition incoming data against the version of endless that decided to start writing "Length" values
+    // as strings instead of numbers - this regex patches those back to numbers
+    std::regex                  m_dataFixRegex_lengthTypeMismatch;
 };
 
 enum class UserAgent
 {
     ClientService,
-    Couchbase
+    Couchbase,
+    WebAPI
 };
 
 
@@ -86,8 +103,7 @@ inline static bool deserializeJson( const NetConfiguration& ncfg, const httplib:
     // apply horribly inefficient kludge to work around one particular version of Endlesss that decided to start
     // writing out "length" keys as strings rather than numbers :O *shakes fist*
     //
-    std::regex workaround_lengthTypeMismatch( "\"length\":\"([0-9]+)\"" );
-    bodyText = std::regex_replace( bodyText, workaround_lengthTypeMismatch, "\"length\":$1" );
+    bodyText = std::regex_replace( bodyText, ncfg.getDataFixRegex_lengthTypeMismatch(), "\"length\":$1" );
 
     try
     {
@@ -389,18 +405,18 @@ struct ResultStemDocument
                 // damage / old data missing "key"; re-derive it from URL
                 if ( key.empty() )
                 {
-                    base::UriParse parser( url );
+                    const base::UriParse parser( url );
                     if ( !parser.isValid() )
                     {
-                        blog::error::api( "URL Parse fail : {}\n", url );
-                        throw new cereal::Exception( "failed to parse missing key from existing URL" );
+                        blog::error::api( "URL Parse fail : {}", url );
+                        throw cereal::Exception( "failed to parse missing key from existing URL" );
                     }
 
                     key = parser.path().substr(1);   // skip the leading "/"
                     if ( key.empty() )
                     {
-                        blog::error::api( "URL Parse fail : {}\n", url );
-                        throw new cereal::Exception( "failed to parse missing key from existing URL" );
+                        blog::error::api( "URL Parse fail : {}", url );
+                        throw cereal::Exception( "failed to parse missing key from existing URL" );
                     }
 
                     blog::api( "Fixed missing [key] in ogg data" );
@@ -412,8 +428,8 @@ struct ResultStemDocument
                     std::size_t found = endpoint.find_last_of( "/" );
                     if ( found == 0 || found == std::string::npos )
                     {
-                        blog::error::api( "Endpoint fix : {}\n", endpoint );
-                        throw new cereal::Exception( "failed to fix invalid endpoint data" );
+                        blog::error::api( "Endpoint fix : {}", endpoint );
+                        throw cereal::Exception( "failed to fix invalid endpoint data" );
                     }
 
                     endpoint = endpoint.substr( found + 1 ); // +1 to skip the /
@@ -595,6 +611,59 @@ struct CurrentJoinInJams
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
+struct CurrentCollectibleJams
+{
+    struct LatestRiff
+    {
+        uint64_t                    created = 0;
+
+        template<class Archive>
+        inline void serialize( Archive& archive )
+        {
+            archive( CEREAL_OPTIONAL_NVP( created )
+            );
+        }
+    };
+    struct Data
+    {
+        std::string                 jamId;
+        std::string                 name;
+        std::string                 bio;
+        std::string                 owner;
+        std::vector< std::string >  members;
+        std::string                 legacy_id;
+        LatestRiff                  rifff;
+
+        template<class Archive>
+        inline void serialize( Archive& archive )
+        {
+            archive( CEREAL_NVP( jamId )
+                   , CEREAL_NVP( name )
+                   , CEREAL_OPTIONAL_NVP( bio )     // weirdly these can all turn up "null"
+                   , CEREAL_OPTIONAL_NVP( owner )
+                   , CEREAL_OPTIONAL_NVP( members )
+                   , CEREAL_NVP( legacy_id )
+                   , CEREAL_OPTIONAL_NVP( rifff )
+            );
+        }
+    };
+
+    bool ok;
+    std::vector< Data > data;
+
+    template<class Archive>
+    inline void serialize( Archive& archive )
+    {
+        archive( CEREAL_NVP( ok )
+               , CEREAL_OPTIONAL_NVP( data )
+        );
+    }
+
+    bool fetch( const NetConfiguration& ncfg, int32_t pageNo );
+};
+
+
+// ---------------------------------------------------------------------------------------------------------------------
 struct ResultJamMembership
 {
     std::string                 id;     // database ID of jam
@@ -620,31 +689,36 @@ struct SubscribedJams : public ResultRowHeader<ResultJamMembership>
 namespace pull {
 
 // ---------------------------------------------------------------------------------------------------------------------
-// synchronously fetch the latest state of a jam (construct this in a task or a thread if you want it to not block)
+// synchronously fetch the latest state of a jam (use this in a task or a thread if you want it to not block)
 struct LatestRiffInJam
 {
-    // #HDD refactor, don't like that this does all the work in ctor
     LatestRiffInJam(
-        const NetConfiguration&             ncfg,
         const endlesss::types::JamCouchID&  jamCouchID,
         const std::string&                  jamDisplayName )
         : m_jamCouchID( jamCouchID )
         , m_jamDisplayName( jamDisplayName )
-        , m_loadedSuccessfully( true )
+        , m_dataIsValid( false )
     {
-        m_loadedSuccessfully &= m_dataJamLatestState.fetch( ncfg, m_jamCouchID );
-        if ( m_loadedSuccessfully )
-        {
-            m_loadedSuccessfully &= m_dataRiffDetails.fetch( ncfg, m_jamCouchID, m_dataJamLatestState.rows[0].id );
-            m_loadedSuccessfully &= m_dataStemDetails.fetchBatch( ncfg, m_jamCouchID, m_dataJamLatestState.rows[0].value );
-        }
     }
 
-    ouro_nodiscard constexpr bool hasLoadedSuccessfully() const { return m_loadedSuccessfully; }
+    ouro_nodiscard inline bool trySynchronousLoad( const NetConfiguration& ncfg )
+    {
+        m_dataIsValid = true;
+        m_dataIsValid &= m_dataJamLatestState.fetch( ncfg, m_jamCouchID );
+        if ( m_dataIsValid )
+        {
+            m_dataIsValid &= m_dataRiffDetails.fetch( ncfg, m_jamCouchID, m_dataJamLatestState.rows[0].id );
+            m_dataIsValid &= m_dataStemDetails.fetchBatch( ncfg, m_jamCouchID, m_dataJamLatestState.rows[0].value );
+        }
 
-    ouro_nodiscard constexpr const endlesss::api::JamLatestState& getJamState() const { return m_dataJamLatestState; }
-    ouro_nodiscard constexpr const endlesss::api::RiffDetails& getRiffDetails() const { return m_dataRiffDetails; }
-    ouro_nodiscard constexpr const endlesss::api::StemDetails& getStemDetails() const { return m_dataStemDetails; }
+        return m_dataIsValid;
+    }
+
+    ouro_nodiscard constexpr bool isDataValid() const { return m_dataIsValid; }
+
+    ouro_nodiscard constexpr const endlesss::api::JamLatestState& getJamState() const { ABSL_ASSERT( isDataValid() ); return m_dataJamLatestState; }
+    ouro_nodiscard constexpr const endlesss::api::RiffDetails& getRiffDetails() const { ABSL_ASSERT( isDataValid() ); return m_dataRiffDetails; }
+    ouro_nodiscard constexpr const endlesss::api::StemDetails& getStemDetails() const { ABSL_ASSERT( isDataValid() ); return m_dataStemDetails; }
 
     const endlesss::types::JamCouchID   m_jamCouchID;
     const std::string                   m_jamDisplayName;
@@ -653,8 +727,7 @@ private:
     endlesss::api::JamLatestState       m_dataJamLatestState;
     endlesss::api::RiffDetails          m_dataRiffDetails;
     endlesss::api::StemDetails          m_dataStemDetails;
-
-    bool                                m_loadedSuccessfully;
+    bool                                m_dataIsValid;
 };
 
 } // namespace pull

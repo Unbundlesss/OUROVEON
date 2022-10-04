@@ -17,6 +17,7 @@ namespace api { struct ResultRiffDocument; struct ResultStemDocument; namespace 
 
 namespace types {
 
+// we create and store a rounded-to-2-decimal-places BPM value from the BPS, for ease of display and comparison
 inline float BPStoRoundedBPM( const double bps )
 {
     return (float)( std::ceil( ( bps * 60.0 ) * 100.0 ) / 100.0 );
@@ -57,28 +58,29 @@ struct Stem
     std::string     fileKey;
     std::string     fileMIME;
 
-    uint32_t        fileLengthBytes;
-    uint32_t        sampleRate;
+    uint32_t        fileLengthBytes  = 0;
+    uint32_t        sampleRate       = 0;
 
-    uint64_t        creationTimeUnix;
+    uint64_t        creationTimeUnix = 0;
 
     std::string     preset;
     std::string     user;
     std::string     colour;                 // hex digit colour encoding
 
-    float           BPS;
-    float           BPMrnd;                 // BPS * 60, rounded to nearest 2 decimal places
-    float           length16s;
-    float           originalPitch;
-    float           barLength;
+    float           BPS              = 0;
+    float           BPMrnd           = 0;   // BPS * 60, rounded to nearest 2 decimal places
+    float           length16s        = 0;
+    float           originalPitch    = 0;
+    float           barLength        = 0;
 
-    bool            isDrum = false;
-    bool            isNote = false;
-    bool            isBass = false;
-    bool            isMic = false;
+    bool            isDrum           = false;
+    bool            isNote           = false;
+    bool            isBass           = false;
+    bool            isMic            = false;
 
-    // take bucket into consideration
-    inline std::string fullEndpoint() const
+    // return the endpoint string; take bucket into consideration if present
+    // (some old data has bucket specification, some doesn't)
+    ouro_nodiscard inline std::string fullEndpoint() const
     {
         // majority case
         if ( fileBucket.empty() )
@@ -123,7 +125,7 @@ struct Stem
         Other
     };
 
-    inline InstrumentType getInstrumentType() const
+    ouro_nodiscard constexpr InstrumentType getInstrumentType() const
     {
         if ( isDrum )
             return InstrumentType::Drum;
@@ -137,7 +139,7 @@ struct Stem
         return InstrumentType::Other;
     }
 
-    inline const char* getInstrumentName() const
+    ouro_nodiscard constexpr const char* getInstrumentName() const
     {
         switch ( getInstrumentType() )
         {
@@ -171,14 +173,29 @@ struct Riff
     StemCIDs        stems;
     StemGains       gains;
 
-    uint64_t        creationTimeUnix;
-    uint32_t        root;
-    uint32_t        scale;
-    float           BPS;
-    float           BPMrnd;
-    float           barLength;
-    uint32_t        appVersion;
-    float           magnitude;
+    uint64_t        creationTimeUnix    = 0;
+    uint32_t        root                = 0;
+    uint32_t        scale               = 0;
+    float           BPS                 = 0;
+    float           BPMrnd              = 0;
+    float           barLength           = 0;
+    uint32_t        appVersion          = 0;
+    float           magnitude           = 0;
+
+    // return vector of stem couch IDs that are 'on'
+    // commonly used when fetching stem data in batches; note this doesn't leave
+    // gaps in the resulting vector for any 'off' stems, you will need to remap to the
+    // appropriate slot by examining IDs (see Pipeline for example)
+    ouro_nodiscard constexpr endlesss::types::StemCouchIDs getActiveStemIDs() const
+    {
+        endlesss::types::StemCouchIDs result;
+        for ( std::size_t stemI = 0; stemI < 8; stemI++ )
+        {
+            if ( stemsOn[stemI] )
+                result.push_back( stems[stemI] );
+        }
+        return result;
+    }
 
     template<class Archive>
     inline void serialize( Archive& archive )
@@ -201,6 +218,8 @@ struct Riff
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
+// the complete set of metadata describing a riff
+//
 struct RiffComplete
 {
     RiffComplete() = default;
@@ -218,6 +237,218 @@ struct RiffComplete
                , CEREAL_NVP( stems )
         );
     }
+};
+
+// ---------------------------------------------------------------------------------------------------------------------
+// presently to "uniquely" identify a riff - to load it from the backend, for example - we need the jam that owns it
+// as well as the riff's own Couch ID. Our own Warehouse can use just the riff ID but there isn't an existing endlesss API to look up
+// full metadata just on riff ID alone (as far as I know)
+//
+struct RiffIdentity
+{
+    RiffIdentity()
+    {}
+
+    RiffIdentity(
+        endlesss::types::JamCouchID jam,
+        endlesss::types::RiffCouchID riff )
+        : m_jam( jam )
+        , m_riff( riff )
+    {}
+
+    constexpr bool hasData() const
+    {
+        return !m_jam.empty() &&
+               !m_riff.empty();
+    }
+
+    constexpr const endlesss::types::JamCouchID&  getJamID()  const { return m_jam; }
+    constexpr const endlesss::types::RiffCouchID& getRiffID() const { return m_riff; }
+
+private:
+    endlesss::types::JamCouchID     m_jam;
+    endlesss::types::RiffCouchID    m_riff;
+};
+
+// ---------------------------------------------------------------------------------------------------------------------
+// control how the layers in a riff are played; primarily things like being able to mask out layers, but potentially
+// other per-stem-DSP may be useful here
+//
+struct RiffPlaybackPermutation
+{
+    constexpr RiffPlaybackPermutation()
+    {
+        m_layerGainMultiplier.fill( 1.0f );
+    }
+
+    template<class Archive>
+    inline void serialize( Archive& archive )
+    {
+        archive( CEREAL_NVP( m_layerGainMultiplier )
+        );
+    }
+
+
+    // multiplier for the current layer gain; also for doing mute
+    std::array<float, 8>    m_layerGainMultiplier;
+};
+
+using RiffPlaybackPermutationOpt = std::optional< RiffPlaybackPermutation >;
+
+// ---------------------------------------------------------------------------------------------------------------------
+// a more 'UI focused' playback structure which can be turned into a RiffPlaybackPermutation for use by a mixer or whatnot
+//
+struct RiffPlaybackAbstraction
+{
+    enum class Query
+    {
+        IsMuted,
+        IsSolo,
+        AnyMuted,
+        AnySolo,
+    };
+    enum class Action
+    {
+        ToggleMute,
+        ToggleSolo,
+        ClearAllMute,
+        ClearSolo,
+    };
+
+    constexpr RiffPlaybackAbstraction()
+    {
+        m_layerMuted.fill( false );
+    }
+
+    constexpr bool query( Query q, const int32_t index )
+    {
+        switch ( q )
+        {
+            case Query::IsMuted:
+                return isMute( index );
+
+            case Query::IsSolo:
+                return isSolo( index );
+
+            case Query::AnyMuted:
+                for ( bool mute : m_layerMuted )
+                {
+                    if ( mute )
+                        return true;
+                }
+                return false;
+
+            case Query::AnySolo:
+                return m_layerSoloIndex != -1;
+        }
+
+        ABSL_ASSERT( 0 );
+        return false;
+    }
+
+    constexpr bool action( Action a, const int32_t index )
+    {
+        switch ( a )
+        {
+            case Action::ToggleMute:
+                return toggleMute( index );
+
+            case Action::ToggleSolo:
+                return toggleSolo( index );
+
+            case Action::ClearAllMute:
+                m_layerMuted.fill( false );
+                return true;
+
+            case Action::ClearSolo:
+                m_layerSoloIndex = -1;
+                return true;
+        }
+
+        ABSL_ASSERT( 0 );
+        return false;
+    }
+
+    constexpr bool toggleSolo( const int32_t index )
+    {
+        if ( index >= 8 )
+            return false;
+
+        if ( m_layerSoloIndex == index )
+            m_layerSoloIndex = -1;
+        else
+            m_layerSoloIndex = index;
+
+        return true;
+    }
+
+    constexpr bool toggleMute( const int32_t index )
+    {
+        if ( index >= 8 )
+            return false;
+
+        // don't manually change mutes if we are solo'd on a layer
+        if ( anySolo() )
+            return false;
+
+        m_layerMuted[index] = !m_layerMuted[index];
+
+        return true;
+    }
+
+    constexpr bool isMute( const int32_t index ) const
+    {
+        if ( index >= 8 )
+            return false;
+
+        if ( anySolo() )
+        {
+            if ( index != m_layerSoloIndex )
+                return true;
+            return false;
+        }
+
+        return m_layerMuted[index];
+    }
+
+    constexpr bool isSolo( const int32_t index ) const
+    {
+        if ( index >= 8 )
+            return false;
+
+        return ( index == m_layerSoloIndex );
+    }
+
+    constexpr bool anySolo() const
+    {
+        return ( m_layerSoloIndex >= 0 );
+    }
+
+    constexpr RiffPlaybackPermutation asPermutation() const
+    {
+        RiffPlaybackPermutation result;
+        
+        if ( anySolo() )
+        {
+            for ( auto i = 0; i < 8; i++ )
+            {
+                result.m_layerGainMultiplier[i] = ( i == m_layerSoloIndex ) ? 1.0f : 0.0f;
+            }
+        }
+        else
+        {
+            for ( auto i = 0; i < 8; i++ )
+            {
+                result.m_layerGainMultiplier[i] = m_layerMuted[i] ? 0.0f : 1.0f;
+            }
+        }
+
+        return result;
+    }
+
+private:
+    std::array<bool, 8>     m_layerMuted;
+    int32_t                 m_layerSoloIndex    = -1;
 };
 
 } // namespace types

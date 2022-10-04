@@ -9,7 +9,7 @@
 
 #pragma once
 
-#include "base/macro.h"
+#include "base/construction.h"
 #include "endlesss/core.types.h"
 
 namespace endlesss {
@@ -20,24 +20,29 @@ namespace api  { struct NetConfiguration; }
 namespace cache {
 
 // ---------------------------------------------------------------------------------------------------------------------
+// 
 struct Stems
 {
-    DeclareUncopyable( Stems );
+    DECLARE_NO_COPY_NO_MOVE( Stems );
+
 
     Stems();
 
-    bool initialise( 
+    absl::Status initialise( 
         const fs::path& cachePath,          // the root path of where to build the stored stems
         const uint32_t targetSampleRate     // the chosen sample rate, stems will be resampled to this if they don't match
     );
 
-    endlesss::live::StemPtr request( const endlesss::types::Stem& stemData );
+    ouro_nodiscard endlesss::live::StemPtr request( const endlesss::types::Stem& stemData );
+
+    // tot up all live stems' approximate memory usage; not const as it locks the mutex, dont call it every frame
+    ouro_nodiscard std::size_t estimateMemoryUsageBytes();
 
     // synchronously lock & garbage collect the cache
-    void prune( const uint32_t generationsToKeep = 50 );
+    void lockAndPrune( const bool verbose, const uint32_t generationsToKeep = 64 );
 
     // given a stem ID, return a suitable path to write the cached data to
-    fs::path getCachePathForStem( const endlesss::types::StemCouchID& stemDocumentID ) const;
+    ouro_nodiscard fs::path getCachePathForStem( const endlesss::types::StemCouchID& stemDocumentID ) const;
 
 
 private:
@@ -50,8 +55,8 @@ private:
     StemDictionary      m_stems;
     StemUsage           m_usages;
 
-    uint32_t            m_targetSampleRate;
-    uint32_t            m_stemGeneration;
+    uint32_t            m_targetSampleRate = 0;
+    uint32_t            m_stemGeneration = 0;
     std::mutex          m_pruneLock;
 };
 

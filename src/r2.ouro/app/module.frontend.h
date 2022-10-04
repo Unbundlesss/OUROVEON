@@ -12,20 +12,24 @@
 #include "app/module.h"
 #include "config/frontend.h"
 #include "base/utils.h"
+#include "base/construction.h"
 #include "app/imgui.ext.h"
 
 namespace app {
 namespace module {
 
 // ---------------------------------------------------------------------------------------------------------------------
-struct Frontend : public Module
+struct Frontend ouro_final : public Module
 {
+    DECLARE_NO_COPY_NO_MOVE( Frontend );
+
     Frontend( const config::Frontend& feConfig, const char* name );
     virtual ~Frontend();
 
     // Module
-    bool create( const app::Core& appCore ) override;
+    absl::Status create( const app::Core* appCore ) override;
     void destroy() override;
+    virtual std::string getModuleName() const override { return "Frontend"; };
 
 
     // run the event loop, return if we are scheduled to quit or not
@@ -42,14 +46,11 @@ struct Frontend : public Module
 
     void toggleBorderless();
 
+
     // will return false from next appTick
-    finline void requestQuit() { m_quitRequested = true; }
-    finline bool wasQuitRequested() const { return m_quitRequested; }
+    constexpr void requestQuit() { m_quitRequested = true; }
+    ouro_nodiscard constexpr bool wasQuitRequested() const { return m_quitRequested; }
 
-    // as we do initialisation in the constructor, one must check afterwards that all is well
-    finline bool wasBootSuccessful() const  { return m_GlfwWindow != nullptr; }
-
-    finline int32_t getLargestTextureDim() const{ return m_largestTextureDimension; }
 
 
     void titleText( const char* label ) const;
@@ -58,22 +59,18 @@ struct Frontend : public Module
     {
         FixedMain,      // fixed width used for the main UI
         FixedSmaller,
-        FixedLarger,
         MediumTitle,    // medium font used for panel titles
         LargeLogo,      // big font used for the app logo pane
-        Banner          // really big
     };
 
-    finline ImFont* getFont( const FontChoice fc ) const
+    inline ImFont* getFont( const FontChoice fc ) const
     {
         switch ( fc )
         {
             case FontChoice::FixedMain:     return m_fontFixed;
             case FontChoice::FixedSmaller:  return m_fixedSmaller;
-            case FontChoice::FixedLarger:   return m_fixedLarger;
             case FontChoice::MediumTitle:   return m_fontMedium;
             case FontChoice::LargeLogo:     return m_fontLogo;
-            case FontChoice::Banner:        return m_fontBanner;
             default:
                 assert(0);
         }
@@ -81,8 +78,26 @@ struct Frontend : public Module
     }
 
     void reloadImguiLayoutFromDefault() const;
+    void resetWindowPositionAndSizeToDefault();
 
 private:
+
+    struct WindowGeometry
+    {
+        int32_t      m_positionX;
+        int32_t      m_positionY;
+        int32_t      m_width;
+        int32_t      m_height;
+
+        bool operator==( const WindowGeometry& ) const = default;
+    };
+
+    // fetch the current size and location of the app window
+    ouro_nodiscard WindowGeometry getWindowGeometry() const;
+
+    // take current state, stash into a config::Frontend and write it out to disk
+    void updateAndSaveFrontendConfig();
+
 
     // push actual window attributes for borderless mode
     void applyBorderless() const;
@@ -94,8 +109,11 @@ private:
     char*               m_imguiLayoutIni;
 
     GLFWwindow*         m_GlfwWindow;
-    int32_t             m_largestTextureDimension;
     bool                m_isBorderless;
+
+    WindowGeometry      m_currentWindowGeometry;
+    int32_t             m_windowGeometryChangedDelay;   // used to delay writing out changes to size/pos to gather up 
+                                                        // sequential changes and avoid hammering the disk
 
     ImFont*             m_fontFixed;
     ImFont*             m_fixedSmaller;

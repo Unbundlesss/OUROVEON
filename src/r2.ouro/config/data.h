@@ -13,7 +13,7 @@
 
 namespace config {
 
-struct Data : public Base
+OURO_CONFIG( Data )
 {
     // data routing
     static constexpr auto StoragePath       = IPathProvider::PathFor::SharedConfig;

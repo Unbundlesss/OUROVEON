@@ -9,10 +9,12 @@
 
 #pragma once
 
-#include "base/macro.h"
+#include "base/eventbus.h"
+
 #include "spacetime/moment.h"
 
 #include "config/data.h"
+#include "config/performance.h"
 #include "config/frontend.h"
 
 #include "endlesss/config.h"
@@ -20,6 +22,7 @@
 #include "endlesss/cache.jams.h"
 #include "endlesss/cache.stems.h"
 #include "endlesss/toolkit.exchange.h"
+#include "endlesss/toolkit.riff.export.h"
 
 // ---------------------------------------------------------------------------------------------------------------------
 // on Windows, declare and enable use of the global memory IPC object for pushing Exchange data out to external apps
@@ -29,7 +32,7 @@
 #define OURO_EXCHANGE_IPC   1
 
 namespace endlesss {
-using ExchangeIPC = win32::GlobalSharedMemory< endlesss::Exchange >;
+using ExchangeIPC = win32::GlobalSharedMemory< endlesss::toolkit::Exchange >;
 } //namespace endlesss
 
 #else // OURO_PLATFORM_WIN
@@ -37,6 +40,25 @@ using ExchangeIPC = win32::GlobalSharedMemory< endlesss::Exchange >;
 #define OURO_EXCHANGE_IPC   0
 
 #endif
+
+template <typename T>
+concept ReturnsAbslStatus = requires (T t) {
+    { t() } -> std::same_as<absl::Status>;
+};
+
+template< ReturnsAbslStatus _ccall >
+bool checkedCoreCall( const char* context, const _ccall& cb )
+{
+    if ( const auto callStatus = cb(); !callStatus.ok() )
+    {
+        blog::error::core( FMTX( "{} failed; {}" ),
+            context, 
+            callStatus.ToString() );
+
+        return false;
+    }
+    return true;
+}
 
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -63,6 +85,7 @@ namespace module { struct Audio; struct Midi; }
 using AudioModule = std::unique_ptr<module::Audio>;
 using MidiModule  = std::unique_ptr<module::Midi>;
 
+// ---------------------------------------------------------------------------------------------------------------------
 
 // initial thread startup wrapper
 struct CoreStart
@@ -76,8 +99,24 @@ struct ICoreServices
 {
     virtual ~ICoreServices() {}
     virtual app::AudioModule& getAudioModule() = 0;
-    virtual const endlesss::Exchange& getEndlesssExchange() = 0;
+    virtual const endlesss::toolkit::Exchange& getEndlesssExchange() = 0;
 };
+
+// exposure of custom render injection callbacks as interface
+struct ICoreCustomRendering
+{
+    using RenderInjectionCallback = std::function< void() >;
+
+    enum class RenderPoint
+    {
+        PreImgui,       // blit things to the screen before the imgui render launches; only useful if not drawing fullscreen/docked imgui stuff that will overwrite it immediately
+        PostImgui       // blit things on top of the drawn UI
+    };
+
+    // render callbacks are only valid for a single frame, client code should re-add them constantly if required
+    virtual void registerRenderCallback( const RenderPoint rp, const RenderInjectionCallback& callback ) = 0;
+};
+
 
 // ---------------------------------------------------------------------------------------------------------------------
 // application base class that implements basic services for headless use
@@ -86,7 +125,7 @@ struct Core : CoreStart,
               config::IPathProvider,
               ICoreServices
 {
-    DeclareUncopyable( Core );
+    DECLARE_NO_COPY( Core );
 
     Core();
     ~Core();
@@ -99,9 +138,12 @@ struct Core : CoreStart,
     virtual const char* GetAppNameWithVersion() const = 0;  // 'FOO 0.1.2-beta'
     virtual const char* GetAppCacheName() const = 0;        // 'foo' - must be filename/path friendly
 
-    const fs::path& getSharedConfigPath() const { return m_sharedConfigPath; }
-    const fs::path& getSharedDataPath() const   { return m_sharedDataPath;   }
-    const fs::path& getAppConfigPath() const    { return m_appConfigPath;    }
+    // optional toggle for supporting login-less boot up where the app can run without needing full auth data
+    virtual bool supportsOfflineEndlesssMode() const { return false; }
+
+    ouro_nodiscard constexpr const fs::path& getSharedConfigPath() const { return m_sharedConfigPath; }
+    ouro_nodiscard constexpr const fs::path& getSharedDataPath() const   { return m_sharedDataPath;   }
+    ouro_nodiscard constexpr const fs::path& getAppConfigPath() const    { return m_appConfigPath;    }
 
 
     static void waitForConsoleKey();
@@ -111,7 +153,8 @@ protected:
     // called once basic initial configuration is done for the application to continue work
     virtual int Entrypoint() = 0;
 
-    inline const char* getOuroveonPlatform() const {
+    ouro_nodiscard constexpr const char* getOuroveonPlatform() const 
+    {
 #if OURO_PLATFORM_WIN
         return "Windows";
 #elif OURO_PLATFORM_OSX
@@ -134,23 +177,28 @@ protected:
     fs::path                                m_appConfigPath;                // R/W path for config for this specific app
 
     config::DataOptional                    m_configData = std::nullopt;
+    config::Performance                     m_configPerf;
     config::endlesss::API                   m_configEndlesssAPI;            // loaded from app install, will be used with
                                                                             // an auth block to initialise NetConfiguration
 
-
     // mash of Endlesss access configuration and authentication credentials, required for all our API calls
-    // <optional> as this may require a login process during boot sequence
-    std::optional < endlesss::api::NetConfiguration >
+    // <optional> as this may require a login process during boot sequence and user may choose to work offline
+    std::optional< endlesss::api::NetConfiguration >
                                             m_apiNetworkConfiguration = std::nullopt;
 
     // multithreading bro ever heard of it
     tf::Executor                            m_taskExecutor;
 
+    // master event bus
+    base::EventBusPtr                       m_appEventBus;
+    std::optional< base::EventBusClient >   m_appEventBusClient = std::nullopt;
+
+
     // the cached jam metadata - public names et al
     endlesss::cache::Jams                   m_jamLibrary;
 
     // standard state exchange data, filled when possible with the current playback state
-    endlesss::Exchange                      m_endlesssExchange;
+    endlesss::toolkit::Exchange             m_endlesssExchange;
 
 #if OURO_EXCHANGE_IPC
     // constantly-updated globally-shared data block
@@ -166,8 +214,14 @@ protected:
 
 public:
 
+    inline const base::EventBusClient& getEventBusClient() const
+    { 
+        ABSL_ASSERT( m_appEventBusClient.has_value() );
+        return m_appEventBusClient.value();
+    }
+
     // config::IPathProvider
-    fs::path getPath( const PathFor p ) const override
+    ouro_nodiscard constexpr fs::path getPath( const PathFor p ) const override
     { 
         switch ( p )
         {
@@ -175,13 +229,13 @@ public:
             case config::IPathProvider::PathFor::SharedData:    return m_sharedDataPath;
             case config::IPathProvider::PathFor::PerAppConfig:  return m_appConfigPath;
         }
-        assert( 0 );
+        ABSL_ASSERT( 0 );
         return { "" };
     }
 
     // ICoreServices
     virtual app::AudioModule& getAudioModule() override { return m_mdAudio; }
-    virtual const endlesss::Exchange& getEndlesssExchange() override { return m_endlesssExchange; }
+    virtual const endlesss::toolkit::Exchange& getEndlesssExchange() override { return m_endlesssExchange; }
 };
 
 
@@ -192,7 +246,8 @@ using FrontendModule = std::unique_ptr<module::Frontend>;
 // ---------------------------------------------------------------------------------------------------------------------
 // next layer up from Core is a Core app with a UI; bringing GL and ImGUI into the mix
 //
-struct CoreGUI : public Core
+struct CoreGUI : Core,
+                 ICoreCustomRendering
 {
     // UI injection for inserting custom things into generic structure - eg. main menu items, status bar blocks
     using UIInjectionHandle         = uint32_t;
@@ -232,12 +287,16 @@ struct CoreGUI : public Core
     bool unregisterMainMenuEntry( const UIInjectionHandle handle );
 
 
+    // ICoreCustomRendering
+    void registerRenderCallback( const RenderPoint rp, const RenderInjectionCallback& callback ) override;
+
+
     // push a popup label to execute in the edges of the main loop, with [executor] being called to actually display
     // whatever popup window you have in mind.
     void activateModalPopup( const char* label, const ModalPopupExecutor& executor );
 
     // submit an ImGui file dialog instance for display as part of the main loop; we can only have one live at once
-    bool activateFileDialog( FileDialogInst&& dialogInstance, const FileDialogCallback& onOK )
+    inline bool activateFileDialog( FileDialogInst&& dialogInstance, const FileDialogCallback& onOK )
     {
         if ( m_activeFileDialog == nullptr )
         {
@@ -248,7 +307,7 @@ struct CoreGUI : public Core
         return false;
     }
 
-    inline const app::FrontendModule& getFrontend() const { return m_mdFrontEnd; }
+    ouro_nodiscard constexpr const app::FrontendModule& getFrontend() const { return m_mdFrontEnd; }
 
 
 protected:
@@ -278,6 +337,8 @@ protected:
     };
     using MenuMenuEntryList     = std::vector< MenuMenuEntry >;
 
+    using CustomRenderCallbacks = std::vector< ICoreCustomRendering::RenderInjectionCallback >;
+
 
     // generic modal-popup tracking types to simplify client code opening and running dialog boxes
     using ModalPopupsWaiting    = std::vector< std::string >;
@@ -302,26 +363,27 @@ protected:
 
     // call inside app main loop to perform pre/post core functions (eg. checking for exit, submitting rendering)
     bool beginInterfaceLayout( const ViewportFlags viewportFlags );
-    void submitInterfaceLayout();
+    void finishInterfaceLayoutAndRender();
 
-    static constexpr bool hasViewportFlag( const ViewportFlags viewportFlags, ViewportFlags vFlag )
+    static ouro_nodiscard constexpr bool hasViewportFlag( const ViewportFlags viewportFlags, ViewportFlags vFlag )
     {
         return ( viewportFlags & vFlag ) == vFlag;
     }
 
 
-    struct PerfData
-    {
-        spacetime::Moment   m_moment;
-
-        double              m_uiLastMicrosecondsPreRender;
-        double              m_uiLastMicrosecondsPostRender;
-    };
-
     config::Frontend        m_configFrontend;
     app::FrontendModule     m_mdFrontEnd;       // UI canvas management
 
-    PerfData                m_perfData;
+
+    // collection of performance data for core systems
+    struct PerfData
+    {
+        spacetime::Moment           m_moment;       // tracking timer
+
+        std::chrono::milliseconds   m_uiEventBus;
+        std::chrono::milliseconds   m_uiPreRender;
+        std::chrono::milliseconds   m_uiPostRender;
+    }                       m_perfData;
     AudioLoadAverage        m_audoLoadAverage;
 
 
@@ -336,10 +398,18 @@ protected:
     ModalPopupsWaiting      m_modalsWaiting;
     ModalPopupsActive       m_modalsActive;
 
+    // rendering phase injections, only valid for one frame; clients should re-up the registrations each time
+    CustomRenderCallbacks   m_preImguiRenderCallbacks;
+    CustomRenderCallbacks   m_postImguiRenderCallbacks;
+
+
+    // instance of the file picker imgui gizmo
     FileDialogInst          m_activeFileDialog;
     FileDialogCallback      m_fileDialogCallbackOnOK;
 
 private:
+
+    void checkLayoutConfig();
 
 #if OURO_DEBUG
     bool                    m_showImGuiDebugWindow    = false;

@@ -12,6 +12,7 @@
 #include "app/core.h"
 
 #include "discord/config.h"
+#include "endlesss/core.services.h"
 
 namespace rec { struct IRecordable; }
 namespace app {
@@ -20,7 +21,8 @@ namespace app {
 // OuroApp is a small shim for UI apps to build upon that adds some basic Endlesss features out the gate; like a standard
 // "login" screen that offers audio/services configuration and validating a connection to the Endlesss backend
 //
-struct OuroApp : public CoreGUI
+struct OuroApp : public CoreGUI,
+                 public endlesss::services::RiffFetch   // natively support using the built-in member services to load riffs
 {
     OuroApp()
         : CoreGUI()
@@ -35,18 +37,49 @@ protected:
     // inheritants implement this as app entrypoint
     virtual int EntrypointOuro() = 0;
 
+protected:
+
+    // endlesss::services::RiffFetch
+    virtual int32_t                                 getSampleRate() const override;
+    virtual const endlesss::api::NetConfiguration&  getNetConfiguration() const override { return m_apiNetworkConfiguration.value();}
+    virtual endlesss::cache::Stems&                 getStemCache() override { return m_stemCache; }
+    virtual tf::Executor&                           getTaskExecutor() override { return m_taskExecutor; }
 
 
     // validated storage locations for the app
     // <optional> because this is expected to be configured once the boot sequence has checked / changed
     //              the root storage path; once the app starts for real, this can be assumed to be valid
     std::optional< StoragePaths >           m_storagePaths = std::nullopt;
-    
+
+    // -------------
+
+    // stem cache maintenance; checks for memory pressure, triggers async prune operation to try and guide towards
+    // chosen memory limit
+    void maintainStemCacheAsync();
+    void ensureStemCacheChecksComplete();
+
     // the global live-instance stem cache, used to populate riffs when preparing for playback
     endlesss::cache::Stems                  m_stemCache;
+    // timer used to check in and auto-prune the stem cache if it busts past the set memory usage targets
+    spacetime::Moment                       m_stemCacheLastPruneCheck;
+    // async bits to run the prune() fn via TF
+    tf::Taskflow                            m_stemCachePruneTask;
+    std::optional< tf::Future<void> >       m_stemCachePruneFuture = std::nullopt;
+
+    // -------------
 
     // discord config done on preflight screen
     config::discord::Connection             m_configDiscord;
+
+    // -------------
+
+    void onEvent_ExportRiff( const base::IEvent& eventRef );
+
+    // riff export config
+    config::endlesss::Export                m_configExportOutput;
+
+    base::EventListenerID                   m_eventListenerRiffExport;
+
 };
 
 } // namespace app

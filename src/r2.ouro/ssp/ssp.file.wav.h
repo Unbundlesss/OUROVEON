@@ -8,7 +8,7 @@
 //
 
 #pragma once
-#include "base/macro.h"
+#include "base/construction.h"
 #include "isamplestreamprocessor.h"
 
 namespace ssp {
@@ -19,7 +19,7 @@ namespace ssp {
 class WAVWriter : public ISampleStreamProcessor
 {
 public:
-    DeclareUncopyable( WAVWriter );
+    DECLARE_NO_COPY( WAVWriter );
 
     ~WAVWriter();
 

@@ -31,16 +31,20 @@ endlesss::live::Riff::RiffCIDHash Riff::computeHashForRiffCID( const endlesss::t
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-Riff::Riff( const endlesss::types::RiffComplete& riffData, const int32_t targetSampleRate )
+Riff::Riff( const endlesss::types::RiffComplete& riffData )
     : m_riffData( riffData )
-    , m_targetSampleRate( targetSampleRate )
     , m_syncState( SyncState::Waiting )
     , m_computedRiffCouchHash( RiffCIDHash::Invalid() )
 {
-    m_stemPtrs.reserve( 8 );
-    m_stemGains.reserve( 8 );
-    m_stemTimeScales.reserve( 8 );
-    m_stemRepetitions.reserve( 8 );
+    m_stemSampleRate = 0;
+
+    m_stemOwnership.fill( nullptr );
+    m_stemPtrs.fill( nullptr );
+    m_stemGains.fill( 0 );
+    m_stemLengthInSec.fill( 0 );
+    m_stemTimeScales.fill( 0 );
+    m_stemRepetitions.fill( 0 );
+    m_stemLengthInSamples.fill( 0 );
 
     // store the jam name as uppercase for UI titles
     m_uiJamUppercase = m_riffData.jam.displayName;
@@ -57,20 +61,25 @@ Riff::~Riff()
 {
     blog::riff( "releasing C:{} | H:{:#x}", m_riffData.riff.couchID, m_computedRiffCouchHash.getID() );
 
-    m_stemPtrs.clear();
+    for ( auto& sP : m_stemOwnership )
+        sP.reset();
+    m_stemPtrs.fill( nullptr );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void Riff::fetch( const api::NetConfiguration& ncfg, endlesss::cache::Stems& stemCache, tf::Executor& taskExecutor )
+void Riff::fetch( services::RiffFetchProvider& services )
 {
     m_syncState = SyncState::Working;
+
+    m_stemSampleRate = services->getSampleRate();
+    const double targetSampleRateD = (double)m_stemSampleRate;
 
     {
         const auto& theRiff = m_riffData.riff;
 
         // work out timing basics for the riff; this may mutate as we learn more about the stems that we'll be loading
         {
-            m_timingDetails.m_rcpSampleRate = 1.0 / (double)m_targetSampleRate;
+            m_timingDetails.m_rcpSampleRate = 1.0 / targetSampleRateD;
 
             m_timingDetails.m_quarterBeats = (int32_t)(theRiff.barLength / 4);
             m_timingDetails.m_bps = theRiff.BPS;
@@ -95,8 +104,16 @@ void Riff::fetch( const api::NetConfiguration& ncfg, endlesss::cache::Stems& ste
             m_timingDetails.m_barCount = (int32_t)(maximumSegmentsBeforeLengthIsClamped * 2.0); // 2x restore the 0.5 at the end of the while()
 
 
-            m_timingDetails.m_lengthInSamples = (uint32_t)(m_timingDetails.m_lengthInSec * (double)m_targetSampleRate);
+            m_timingDetails.m_lengthInSamples = (uint32_t)(m_timingDetails.m_lengthInSec * targetSampleRateD);
             m_timingDetails.m_longestStemInBars = 1;
+
+
+//             float beatLength = 60.0f / m_timingDetails.m_bpm;
+//             float beat32nd   = beatLength / 8.0f;
+//             float total32nds = m_timingDetails.m_lengthInSec / beat32nd;
+// 
+//             auto samplesPer32nd = m_timingDetails.m_lengthInSamples / (int32_t)total32nds;
+
 
             blog::riff( "Riff is {:.2f} BPM, {:.2f} BPS, {} / 4, probably {:2.05f}s long, {} samples, {} bars",
                 m_timingDetails.m_bpm,
@@ -121,8 +138,8 @@ void Riff::fetch( const api::NetConfiguration& ncfg, endlesss::cache::Stems& ste
 
             if ( stemIsOn )
             {
-                const StemPtr& loopStemPtr = stemCache.request( stemData );
-                m_stemOwnership.push_back( loopStemPtr );
+                const StemPtr& loopStemPtr = services->getStemCache().request( stemData );
+                m_stemOwnership[stemI] = loopStemPtr;
 
                 endlesss::live::Stem* loopStemRaw = loopStemPtr.get();
 
@@ -131,7 +148,7 @@ void Riff::fetch( const api::NetConfiguration& ncfg, endlesss::cache::Stems& ste
                 {
                     stemLoadFlow.emplace( [&, loopStemRaw]()
                     {
-                        loopStemRaw->fetch( ncfg, stemCache.getCachePathForStem( stemData.couchID ) );
+                        loopStemRaw->fetch( services->getNetConfiguration(), services->getStemCache().getCachePathForStem( stemData.couchID ) );
                     });
                     stemAnalysisFlow.emplace( [loopStemRaw]()
                     {
@@ -139,29 +156,22 @@ void Riff::fetch( const api::NetConfiguration& ncfg, endlesss::cache::Stems& ste
                     });
                     stemsWithAsyncAnalysis.push_back( loopStemRaw );
                 }
-                m_stemPtrs.push_back( loopStemRaw );
+                m_stemPtrs[stemI] = loopStemRaw;
 
                 // stems can be used across riffs with changed tempos, we have to scale to cope
                 const auto stemTimeScale = theRiff.BPS / stemData.BPS;
-                m_stemGains.push_back( theRiff.gains[stemI] );
-                m_stemTimeScales.push_back( stemTimeScale );
-            }
-            else
-            {
-                m_stemOwnership.push_back( nullptr );
-                m_stemPtrs.push_back( nullptr );
-                m_stemGains.push_back( 0 );
-                m_stemTimeScales.push_back( 0.0f );
+                m_stemGains[stemI] = theRiff.gains[stemI];
+                m_stemTimeScales[stemI] = stemTimeScale;
             }
         }
 
         // spread out stem loading across task system
-        auto stemLoadFuture = taskExecutor.run( stemLoadFlow );
+        auto stemLoadFuture = services->getTaskExecutor().run( stemLoadFlow );
         stemLoadFuture.wait();
 
         // with data loaded, enqueue the post-process analysis tasks; shift ownership of the graph and return
         // a future that all stems can wait() on pre-destruction to ensure the underlying data isn't tossed before the tasks complete
-        std::shared_future<void> stemSharedAnalysis( taskExecutor.run( std::move(stemAnalysisFlow) ) );
+        std::shared_future<void> stemSharedAnalysis( services->getTaskExecutor().run( std::move(stemAnalysisFlow) ) );
         for ( endlesss::live::Stem* rawStem : stemsWithAsyncAnalysis )
             rawStem->keepFuture( stemSharedAnalysis );
 
@@ -173,22 +183,20 @@ void Riff::fetch( const api::NetConfiguration& ncfg, endlesss::cache::Stems& ste
 
             if ( loopStem == nullptr )
             {
-                m_stemLengthInSec.push_back( 0 );
-                m_stemLengthInSamples.push_back( 0 );
                 continue;
             }
 
             const auto timeScaledSampleCount = (uint32_t)( (double)loopStem->m_sampleCount * (1.0 / (double)stemTimeScale) );
-            const auto timeScaledStemLength = (double)timeScaledSampleCount / (double)m_targetSampleRate;
+            const auto timeScaledStemLength  = (double)timeScaledSampleCount / targetSampleRateD;
 
-            m_stemLengthInSec.push_back( (float)timeScaledStemLength );
-            m_stemLengthInSamples.push_back( timeScaledSampleCount );
+            m_stemLengthInSec[stemI]     = (float)timeScaledStemLength;
+            m_stemLengthInSamples[stemI] = timeScaledSampleCount;
 
             // push out riff length to fit if we have resident stems that are from different time signatures
-            m_timingDetails.m_lengthInSec = std::max( m_timingDetails.m_lengthInSec, timeScaledStemLength );
+            m_timingDetails.m_lengthInSec     = std::max( m_timingDetails.m_lengthInSec,     timeScaledStemLength  );
             m_timingDetails.m_lengthInSamples = std::max( m_timingDetails.m_lengthInSamples, timeScaledSampleCount );
 
-            blog::riff( "Stem {} [{:.03f} timescale] [{:2.05f} sec] [{} raw samples] [{} samples]",
+            blog::riff( FMTX( "Stem {} [{:.03f} timescale] [{:2.05f} sec] [{} raw samples] [{} samples]" ),
                 stemI + 1,
                 stemTimeScale,
                 timeScaledStemLength,
@@ -199,7 +207,7 @@ void Riff::fetch( const api::NetConfiguration& ncfg, endlesss::cache::Stems& ste
         m_timingDetails.m_barCount = (int32_t)(m_timingDetails.m_lengthInSec / m_timingDetails.m_lengthInSecPerBar);
         m_timingDetails.m_lengthInSamplesPerBar = m_timingDetails.m_lengthInSamples / m_timingDetails.m_barCount;
 
-        blog::riff( ".. adjusted riff lengths post-load; {:2.05f}s long, {} bars, {} samples",
+        blog::riff( FMTX( ".. adjusted riff lengths post-load; {:2.05f}s long, {} bars, {} samples" ),
             m_timingDetails.m_lengthInSec,
             m_timingDetails.m_barCount,
             m_timingDetails.m_lengthInSamples );
@@ -213,17 +221,16 @@ void Riff::fetch( const api::NetConfiguration& ncfg, endlesss::cache::Stems& ste
             if ( loopStem == nullptr || 
                  loopStem->hasFailed() )
             {
-                m_stemRepetitions.push_back( 0 );
                 continue;
             }
 
             auto repeats = (int32_t)std::round( (double)m_timingDetails.m_lengthInSamples / (double)m_stemLengthInSamples[stemI] );
             if ( repeats <= 0 )
             {
-                blog::riff( ".. stem [{}] calculated {} repeats, invalid?", stemI, repeats );
+                blog::riff( FMTX( ".. stem [{}] calculated {} repeats, invalid?" ), stemI, repeats );
                 repeats = 1;
             }
-            m_stemRepetitions.push_back( repeats );
+            m_stemRepetitions[stemI] = repeats;
 
             m_timingDetails.m_longestStemInBars = std::max( m_timingDetails.m_longestStemInBars, m_timingDetails.m_barCount / repeats );
         }
@@ -233,12 +240,16 @@ void Riff::fetch( const api::NetConfiguration& ncfg, endlesss::cache::Stems& ste
         // preformat some state for UI display
         m_uiTimestamp = spacetime::datestampStringFromUnix( theRiff.creationTimeUnix );
 
-        m_uiIdentity = theRiff.user;
-        m_uiDetails = fmt::format( "{} {} | {:.1f} BPM | {} / 4 | {}[]:{}x | {:.1f}s",
+        m_uiDetails = fmt::format( FMTX( "{} | {} {} | {:.1f} BPM | {} / 4 | {}" ),
+            theRiff.user,
             endlesss::constants::cRootNames[theRiff.root],
             endlesss::constants::cScaleNames[theRiff.scale],
             m_timingDetails.m_bpm,
             m_timingDetails.m_quarterBeats,
+            theRiff.couchID.substr(4)
+        );
+
+        m_uiPlaybackDebug = fmt::format( FMTX( "| {}[]:{}x | {:.1f}s" ),
             m_timingDetails.m_barCount,
             m_timingDetails.m_longestStemInBars,
             m_timingDetails.m_lengthInSec
@@ -253,7 +264,7 @@ void Riff::fetch( const api::NetConfiguration& ncfg, endlesss::cache::Stems& ste
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void Riff::exportToDisk( const std::function< ssp::SampleStreamProcessorInstance( const uint32_t stemIndex, const endlesss::live::Stem& stemData ) >& diskWriterForStem )
+void Riff::exportToDisk( const streamProcessorFactoryFn& diskWriterForStem, const int32_t sampleOffset )
 {
     for ( auto stemI = 0; stemI < 8; stemI++ )
     {
@@ -271,27 +282,50 @@ void Riff::exportToDisk( const std::function< ssp::SampleStreamProcessorInstance
         if ( diskWriter != nullptr )
         {
             const int32_t sampleCount = stemPtr->m_sampleCount;
-            const int32_t sampleCountTst = (int32_t)( (double)sampleCount / (double)stemTimeStretch );
+            const int32_t sampleCountTimeScaled = (int32_t)( (double)sampleCount / (double)stemTimeStretch );
 
-            auto exportChannelLeft  = mem::malloc16AsSet<float>( sampleCountTst, 0.0f );
-            auto exportChannelRight = mem::malloc16AsSet<float>( sampleCountTst, 0.0f );
+            auto exportChannelLeft  = mem::alloc16To<float>( sampleCountTimeScaled, 0.0f );
+            auto exportChannelRight = mem::alloc16To<float>( sampleCountTimeScaled, 0.0f );
 
-            for ( int32_t sampleWrite = 0; sampleWrite < sampleCountTst; sampleWrite++ )
+            const int32_t sampleOffsetTimeScaled = (int32_t)( (double)sampleOffset * (double)stemTimeStretch );
+
+            for ( int32_t sampleWrite = 0; sampleWrite < sampleCountTimeScaled; sampleWrite++ )
             {
-                const int32_t readSampleUnscaled = (int32_t)( (double)sampleWrite * (double)stemTimeStretch );
+                const int32_t readSampleTimeScaled           = (int32_t)( (double)sampleWrite * (double)stemTimeStretch );
+                const int32_t readSampleTimeScaledWithOffset = ( readSampleTimeScaled + sampleOffsetTimeScaled ) % sampleCount;
 
-                exportChannelLeft[sampleWrite] = stemPtr->m_channel[0][readSampleUnscaled] * stemGain;
-                exportChannelRight[sampleWrite] = stemPtr->m_channel[1][readSampleUnscaled] * stemGain;
+                exportChannelLeft[sampleWrite]  = stemPtr->m_channel[0][readSampleTimeScaledWithOffset] * stemGain;
+                exportChannelRight[sampleWrite] = stemPtr->m_channel[1][readSampleTimeScaledWithOffset] * stemGain;
             }
 
             // output to disk, force flush immediately
-            diskWriter->appendSamples( exportChannelLeft, exportChannelRight, sampleCountTst );
+            diskWriter->appendSamples( exportChannelLeft, exportChannelRight, sampleCountTimeScaled );
             diskWriter.reset();
 
             mem::free16( exportChannelLeft );
             mem::free16( exportChannelRight );
         }
     }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+std::string Riff::generateMetadataReport() const
+{
+    std::string result;
+    try
+    {
+        std::ostringstream iss;
+        cereal::JSONOutputArchive archive( iss );
+
+        Riff* mutableThis = const_cast<Riff*>(this);
+        mutableThis->metadata( archive );
+        result = iss.str();
+    }
+    catch ( cereal::Exception& cEx )
+    {
+        result = cEx.what();
+    }
+    return result;
 }
 
 } // namespace endlesss

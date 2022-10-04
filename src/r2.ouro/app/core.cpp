@@ -10,10 +10,12 @@
 #include "pch.h"
 
 #include "base/instrumentation.h"
+#include "base/operations.h"
 
 #include "config/base.h"
 #include "config/frontend.h"
 #include "config/data.h"
+#include "config/layout.h"
 
 #include "app/core.h"
 #include "app/module.frontend.h"
@@ -36,6 +38,12 @@
 #include "effect/vst2/host.h"
 #endif 
 
+// manual exposure for the one-off init/term in Operations
+namespace base
+{
+    extern void OperationsInit();
+    extern void OperationsTerm();
+}
 
 // ---------------------------------------------------------------------------------------------------------------------
 // pch global function implementations
@@ -60,12 +68,12 @@ OuroveonThreadScope::OuroveonThreadScope( const char* threadName )
     m_name = static_cast<char*>( rpmalloc(strlen(threadName) + 1) );
     strcpy( m_name, threadName );
 
-    blog::instr( FMT_STRING("{{thread}} => {}"), m_name );
+    blog::instr( FMTX( "{{thread}} => {}" ), m_name );
 }
 
 OuroveonThreadScope::~OuroveonThreadScope()
 {
-    blog::instr( FMT_STRING( "{{thread}} <= {}" ), m_name );
+    blog::instr( FMTX( "{{thread}} <= {}" ), m_name );
     rpfree( m_name );
     ouroveonThreadExit();
 }
@@ -79,7 +87,7 @@ namespace tf
     // injected from taskflow executor, name the worker threads 
     void _taskflow_worker_thread_init( size_t threadID )
     {
-        ouroveonThreadEntry( fmt::format( OURO_THREAD_PREFIX "TaskFlow:{}", threadID ).c_str() );
+        ouroveonThreadEntry( fmt::format( FMTX( OURO_THREAD_PREFIX "TaskFlow:{}" ), threadID ).c_str() );
     }
     void _taskflow_worker_thread_exit( size_t threadID )
     {
@@ -88,7 +96,7 @@ namespace tf
 }
 void _discord_dpp_thread_init( const char* name )
 {
-    ouroveonThreadEntry( fmt::format( OURO_THREAD_PREFIX "DPP:{}", name ).c_str() );
+    ouroveonThreadEntry( fmt::format( FMTX( OURO_THREAD_PREFIX "DPP:{}" ), name ).c_str() );
 }
 void _discord_dpp_thread_exit()
 {
@@ -110,23 +118,23 @@ StoragePaths::StoragePaths( const config::Data& configData, const char* appName 
 // ---------------------------------------------------------------------------------------------------------------------
 bool StoragePaths::tryToCreateAndValidate() const
 {
-    blog::core( "  storage paths :" );
+    blog::core( FMTX( "  storage paths : " ) );
 
-    blog::core( "      app cache : {}", cacheApp.string() );
+    blog::core( FMTX( "      app cache : {}" ), cacheApp.string() );
     if ( !filesys::ensureDirectoryExists( cacheApp ).ok() )
     {
         blog::error::core( "unable to create or find directory" );
         return false;
     }
 
-    blog::core( "   common cache : {}", cacheCommon.string() );
+    blog::core( FMTX( "   common cache : {}" ), cacheCommon.string() );
     if ( !filesys::ensureDirectoryExists( cacheCommon ).ok() )
     {
         blog::error::core( "unable to create or find directory" );
         return false;
     }
 
-    blog::core( "     app output : {}", outputApp.string() );
+    blog::core( FMTX( "     app output : {}" ), outputApp.string() );
     if ( !filesys::ensureDirectoryExists( outputApp ).ok() )
     {
         blog::error::core( "unable to create or find directory" );
@@ -142,10 +150,14 @@ CoreStart::CoreStart()
 {
     rpmalloc_initialize();
     base::instr::setThreadName( OURO_THREAD_PREFIX "$::main-thread" );
+
+    base::OperationsInit();
 }
 
 CoreStart::~CoreStart()
 {
+    base::OperationsTerm();
+
     rpmalloc_finalize();
 }
 
@@ -161,7 +173,9 @@ Core::~Core()
     
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
 #if OURO_PLATFORM_OSX
+// return the path to where the MacOS bundle is running from; this will be used as our root path for finding app-local data
 std::string osxGetBundlePath()
 {
     CFURLRef url;
@@ -195,10 +209,24 @@ int Core::Run()
     std::ios_base::sync_with_stdio( false );
 
     // sup
-    blog::core( "Hello from OUROVEON {} [{}]", GetAppNameWithVersion(), getOuroveonPlatform() );
+    blog::core( FMTX( "Hello from OUROVEON {} [{}]" ), GetAppNameWithVersion(), getOuroveonPlatform() );
 
     // big and wide
-    blog::core( "launched taskflow {} with {} worker threads", tf::version(), m_taskExecutor.num_workers() );
+    blog::core( FMTX( "launched taskflow {} with {} worker threads" ), tf::version(), m_taskExecutor.num_workers() );
+
+    // configure app event bus
+    {
+        m_appEventBus       = std::make_shared<base::EventBus>();
+        m_appEventBusClient = base::EventBusClient( m_appEventBus );
+
+        // register basic event IDs
+        APP_EVENT_REGISTER( OperationComplete );
+        APP_EVENT_REGISTER( PanicStop );
+
+        // MIDI event bus
+        APP_EVENT_REGISTER( MidiEvent );
+    }
+
 
     // we load configuration data from the known system config directory
     m_sharedConfigPath  = fs::path( sago::getConfigHome() ) / cOuroveonRootName;
@@ -218,43 +246,45 @@ int Core::Run()
     }
     else
     {
-        blog::core( "osx bundle path : {}", osxBundlePath );
+        blog::core( FMTX( "osx bundle path : {}" ), osxBundlePath );
     }
 #else
+    // on non-MacOS, running APP.EXE will launch with the working path set to wherever APP.EXE is 
+    // .. in that case, we step back twice (ie from `\bin\lore\windows_release_x86_64` back to `\bin`)
     const auto sharedResRoot = fs::current_path().parent_path().parent_path();
 #endif 
 
     m_sharedDataPath    = sharedResRoot / "shared";
 
-    blog::core( "core filesystem :" );
-    blog::core( "  shared config : {}", m_sharedConfigPath.string() );
-    blog::core( "     app config : {}", m_appConfigPath.string() );
-    blog::core( "    shared data : {}", m_sharedDataPath.string() );
+    blog::core( FMTX( "core filesystem :" ) );
+    blog::core( FMTX( "  shared config : {}" ), m_sharedConfigPath.string() );
+    blog::core( FMTX( "     app config : {}" ), m_appConfigPath.string() );
+    blog::core( FMTX( "    shared data : {}" ), m_sharedDataPath.string() );
 
     // point at TZ database
     date::set_install( ( m_sharedDataPath / "timezone" ).string() );
 
     // ensure all core directories exist or we can't continue
     {
-        blog::core( "ensuring core paths are viable ..." );
+        blog::core( FMTX( "ensuring core paths are viable ..." ) );
 
         const auto sharedConfigPathStatus = filesys::ensureDirectoryExists( m_sharedConfigPath );
         if ( !sharedConfigPathStatus.ok() )
         {
-            blog::error::core( "unable to create or find shared config directory, aborting\n[{}] ({})", m_sharedConfigPath.string(), sharedConfigPathStatus.ToString() );
+            blog::error::core( FMTX( "unable to create or find shared config directory, aborting\n[{}] ({})" ), m_sharedConfigPath.string(), sharedConfigPathStatus.ToString() );
             return -2;
         }
 
         const auto appConfigPathStatus = filesys::ensureDirectoryExists( m_appConfigPath );
         if ( !appConfigPathStatus.ok() )
         {
-            blog::error::core( "unable to create or find app config directory, aborting\n[{}] ({})", m_appConfigPath.string(), appConfigPathStatus.ToString() );
+            blog::error::core( FMTX( "unable to create or find app config directory, aborting\n[{}] ({})" ), m_appConfigPath.string(), appConfigPathStatus.ToString() );
             return -2;
         }
 
         if ( !fs::exists( m_sharedDataPath ) )
         {
-            blog::error::core( "cannot find shared data directory, aborting" );
+            blog::error::core( FMTX( "cannot find shared data directory, aborting" ) );
             return -2;
         }
     }
@@ -266,19 +296,21 @@ int Core::Run()
     {
         // stash the loaded data as a starting point, otherwise code later on will need to set this up manually / via UI
         m_configData = configData;
-        blog::core( "   storage root : {}", m_configData.value().storageRoot );
+        blog::core( FMTX( "   storage root : {}" ), m_configData.value().storageRoot );
     }
     // nothing found, create some kind of default that can be set manually later
     else if ( dataLoad == config::LoadResult::CannotFindConfigFile )
     {
-        blog::core( "no data configuration file [{}] found", config::Data::StorageFilename );
+        blog::core( FMTX( "no data configuration file [{}] found" ), config::Data::StorageFilename );
     }
     // couldn't load, will have to setup a new one
     else
     {
-        blog::error::core( "unable to parse, find or load data configuration file [{}]", config::Data::StorageFilename );
+        blog::error::core( FMTX( "unable to parse, find or load data configuration file [{}]" ), config::Data::StorageFilename );
     }
 
+    // try and load performance tuning; okay if this fails, we'll use defaults
+    const auto perfLoad = config::load( *this, m_configPerf );
 
 
     blog::core( "initial Endlesss setup ..." );
@@ -288,7 +320,7 @@ int Core::Run()
     if ( apiLoadResult != config::LoadResult::Success )
     {
         // can't continue without the API config
-        blog::error::cfg( "Unable to load required Endlesss API configuration data [{}]", 
+        blog::error::cfg( FMTX( "Unable to load required Endlesss API configuration data [{}]" ),
             config::getFullPath< config::endlesss::API >( *this ).string() );
 
         return -2;
@@ -299,15 +331,15 @@ int Core::Run()
     const auto certPath = ( m_sharedDataPath / fs::path( m_configEndlesssAPI.certBundleRelative ) );
     if ( !fs::exists( certPath ) )
     {
-        blog::error::cfg( "Cannot find CA root certificates file [{}], required for networking", certPath.string() );
+        blog::error::cfg( FMTX( "Cannot find CA root certificates file [{}], required for networking" ), certPath.string() );
         return -2;
     }
     // rewrite config option with the full path
     m_configEndlesssAPI.certBundleRelative = certPath.string();
 
     // drop the app name, version and platform into the user agent string
-    m_configEndlesssAPI.userAgentApp += fmt::format( "{} ({})", GetAppNameWithVersion(), getOuroveonPlatform() );
-    m_configEndlesssAPI.userAgentDb  += fmt::format( " ({})", GetAppNameWithVersion(), getOuroveonPlatform() );
+    m_configEndlesssAPI.userAgentApp += fmt::format( FMTX( "{} ({})" ), GetAppNameWithVersion(), getOuroveonPlatform() );
+    m_configEndlesssAPI.userAgentDb  += fmt::format( FMTX( " ({})"   ), GetAppNameWithVersion(), getOuroveonPlatform() );
 
 
     // load the jam cache data (or try to)
@@ -327,32 +359,39 @@ int Core::Run()
 #if OURO_EXCHANGE_IPC
     // create shared buffer for exchanging data with other apps
     if ( !m_endlesssExchangeIPC.init(
-        endlesss::Exchange::GlobalMapppingNameW,
-        endlesss::Exchange::GlobalMutexNameW,
+        endlesss::toolkit::Exchange::GlobalMapppingNameW,
+        endlesss::toolkit::Exchange::GlobalMutexNameW,
         win32::details::IPC::Access::Write ) )
     {
-        blog::error::core( "Failed to open global memory for data exchange; feature disabled" );
+        blog::error::core( FMTX( "Failed to open global memory for data exchange; feature disabled" ) );
     }
     else
     {
-        blog::core( "Broadcasting data exchange on [{}]", endlesss::Exchange::GlobalMapppingNameA );
+        blog::core( FMTX( "Broadcasting data exchange on [{}]" ), endlesss::toolkit::Exchange::GlobalMapppingNameA );
     }
 #endif // OURO_EXCHANGE_IPC
 
 
     // create our wrapper around PA; this doesn't connect to a device, just does initial startup & enumeration
     m_mdAudio = std::make_unique<app::module::Audio>();
-    if ( !m_mdAudio->create( *this ) )
     {
-        blog::error::core( "app::module::AudioServices unable to start" );
-        return -2;
+        const auto audioStatus = m_mdAudio->create( this );
+        if ( !audioStatus.ok() )
+        {
+            blog::error::core( FMTX( "app::module::AudioServices unable to start : {}" ), audioStatus.ToString() );
+            return -2;
+        }
     }
 
+    // central MIDI manager module
     m_mdMidi = std::make_unique<app::module::Midi>();
-    if ( !m_mdMidi->create( *this ) )
     {
-        blog::error::core( "app::module::Midi unable to start" );
-        return -2;
+        const auto midiStatus = m_mdMidi->create( this );
+        if ( !midiStatus.ok() )
+        {
+            blog::error::core( FMTX( "app::module::Midi unable to start : {}" ), midiStatus.ToString() );
+            return -2;
+        }
     }
 
     // run the app main loop
@@ -362,6 +401,8 @@ int Core::Run()
     m_mdMidi->destroy();
     m_mdAudio->destroy();
 
+    m_appEventBusClient = std::nullopt;
+
     return appResult;
 }
 
@@ -369,9 +410,9 @@ int Core::Run()
 void Core::waitForConsoleKey()
 {
 #if OURO_PLATFORM_WIN
-    blog::core( "[press any key]\n" );
+    blog::core( FMTX( "[press any key]\n" ) );
     _getch();
-#endif     
+#endif
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -394,28 +435,77 @@ config::Frontend CoreGUI::createDefaultFrontendConfig() const
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+void CoreGUI::checkLayoutConfig()
+{
+    config::Layout configLayout;
+
+    const auto feLoad = config::load( *this, configLayout );
+    if ( feLoad == config::LoadResult::Success )
+    {
+        // check if we need to force a layout reload from defaults; master revision change means any existing customisation
+        // would be invalid and reset in a busted looking UI
+        if ( configLayout.guiMasterRevision != config::Layout::CurrentGuiMasterRevision )
+        {
+            blog::core( FMTX( "GUI master revision has changed {} -> {}, forcing layout reset" ),
+                configLayout.guiMasterRevision,
+                config::Layout::CurrentGuiMasterRevision );
+
+            m_resetLayoutInNextUpdate = true;
+        }
+    }
+
+    configLayout.guiMasterRevision = config::Layout::CurrentGuiMasterRevision;
+
+    const auto feSave = config::save( *this, configLayout );
+    if ( feSave != config::SaveResult::Success )
+    {
+        blog::error::core( FMTX( "warning; unable to save [{}]" ), config::Layout::StorageFilename );
+    }
+}
+
+
+// ---------------------------------------------------------------------------------------------------------------------
 int CoreGUI::Entrypoint()
 {
     const auto feLoad = config::load( *this, m_configFrontend );
     if ( feLoad != config::LoadResult::Success )
     {
-        blog::core( "unable to find or load [{}], assuming defaults", config::Frontend::StorageFilename );
+        blog::core( FMTX( "unable to find or load [{}], assuming defaults" ), config::Frontend::StorageFilename );
         m_configFrontend = createDefaultFrontendConfig();
     }
 
     // bring up frontend; SDL and IMGUI
     m_mdFrontEnd = std::make_unique<app::module::Frontend>( m_configFrontend, GetAppNameWithVersion() );
-    if ( !m_mdFrontEnd->create( *this ) )
     {
-        blog::error::core( "app::module::Frontend unable to start" );
-        return -2;
+        const auto feStatus = m_mdFrontEnd->create( this );
+        if ( !feStatus.ok() )
+        {
+            blog::error::core( FMTX( "app::module::Frontend unable to start : {}" ), feStatus.ToString() );
+            return -2;
+        }
     }
 
-    registerMainMenuEntry( -1, "LAYOUT", [this]()
+    // check in on the layout breadcrumb file, see if we need to force a layout reset
+    checkLayoutConfig();
+
+    registerMainMenuEntry( -1, "WINDOW", [this]()
     {
-        if ( ImGui::MenuItem( "Reset" ) )
+        if ( ImGui::MenuItem( "Toggle Border" ) )
+            m_mdFrontEnd->toggleBorderless();
+
+        ImGui::Separator();
+
+        if ( ImGui::BeginMenu( "Reset" ) )
         {
-            m_resetLayoutInNextUpdate = true;
+            // reset the window position/size to defaults
+            if ( ImGui::MenuItem( "View Size / Position" ) )
+                m_mdFrontEnd->resetWindowPositionAndSizeToDefault();
+
+            // reload the default UI layout when it is next convenient to do so
+            if ( ImGui::MenuItem( "GUI Layout" ) )
+                m_resetLayoutInNextUpdate = true;
+
+            ImGui::EndMenu();
         }
     });
 
@@ -438,7 +528,7 @@ int CoreGUI::Entrypoint()
 // ---------------------------------------------------------------------------------------------------------------------
 void CoreGUI::activateModalPopup( const char* label, const ModalPopupExecutor& executor )
 {
-    blog::core( "activating modal [{}]", label );
+    blog::core( FMTX( "activating modal [{}]" ), label );
 
     m_modalsWaiting.emplace_back( label );
     m_modalsActive.emplace_back( label, executor );
@@ -447,10 +537,13 @@ void CoreGUI::activateModalPopup( const char* label, const ModalPopupExecutor& e
 // ---------------------------------------------------------------------------------------------------------------------
 bool CoreGUI::beginInterfaceLayout( const ViewportFlags viewportFlags )
 {
+    // begin tracking perf cost of the imgui 'build' stage
+    m_perfData.m_moment.restart();
+
     // resetting/loading new layouts has to happen before layout is underway
     if ( m_resetLayoutInNextUpdate )
     {
-        blog::core( "resetting layout from default ..." );
+        blog::core( FMTX( "resetting layout from default ..." ) );
 
         m_mdFrontEnd->reloadImguiLayoutFromDefault();
         m_resetLayoutInNextUpdate = false;
@@ -460,7 +553,6 @@ bool CoreGUI::beginInterfaceLayout( const ViewportFlags viewportFlags )
     if ( m_mdFrontEnd->appTick() )
         return false;
 
-    m_perfData.m_moment.restart();
 
     // inject dock space if we're expecting to lay the imgui out with docking
     if ( hasViewportFlag( viewportFlags, VF_WithDocking ) )
@@ -471,15 +563,11 @@ bool CoreGUI::beginInterfaceLayout( const ViewportFlags viewportFlags )
     {
         if ( ImGui::BeginMainMenuBar() )
         {
-            // the only uncustomisable, first-entry menu item; everything else uses hooks
+            // the only uncustomisable, first-entry menu item; everything else uses callbacks, run below
             if ( ImGui::BeginMenu( "OUROVEON" ) )
             {
                 ImGui::MenuItem( GetAppNameWithVersion(), nullptr, nullptr, false );
                 ImGui::MenuItem( "ishani.org 2022", nullptr, nullptr, false );
-
-                ImGui::Separator();
-                if ( ImGui::MenuItem( "Toggle Border" ) )
-                    m_mdFrontEnd->toggleBorderless();
 
                 ImGui::Separator();
                 if ( ImGui::MenuItem( "Quit" ) )
@@ -488,13 +576,14 @@ bool CoreGUI::beginInterfaceLayout( const ViewportFlags viewportFlags )
                 ImGui::EndMenu();
             }
 
+            // inject main menu items that have been registered by client code
             for ( const auto& mainMenuEntry : m_mainMenuEntries )
             {
                 if ( ImGui::BeginMenu( mainMenuEntry.m_name.c_str() ) )
                 {
-                    for ( const auto& callbacks : mainMenuEntry.m_callbacks )
+                    for ( const auto& callback : mainMenuEntry.m_callbacks )
                     {
-                        callbacks();
+                        callback();
                     }
                     ImGui::EndMenu();
                 }
@@ -582,24 +671,32 @@ bool CoreGUI::beginInterfaceLayout( const ViewportFlags viewportFlags )
     {
         std::get<1>( modalPair )( std::get<0>( modalPair ).c_str() );
     }
+    // .. and if any were run, go check if they closed and tidy up appropriately if so
     if ( !m_modalsActive.empty() )
     {
-        // purge any modals that ImGui no longer claims as Open
+        // purge any modals that ImGui no longer claims as "Open"
         auto new_end = std::remove_if( m_modalsActive.begin(),
                                        m_modalsActive.end(),
-                                       []( const std::tuple< std::string, ModalPopupExecutor >& ma )
+                                       [this]( const std::tuple< std::string, ModalPopupExecutor >& ma )
                                        {
-                                           return !ImGui::IsPopupOpen( std::get<0>( ma ).c_str() );
+                                           const auto modalName = std::get<0>( ma );
+
+                                           // check the "waiting" list; don't remove anything that hasn't had a chance to be processed at least once yet
+                                           if ( std::find( m_modalsWaiting.begin(), m_modalsWaiting.end(), modalName ) != m_modalsWaiting.end() )
+                                               return false;
+
+                                           return !ImGui::IsPopupOpen( modalName.c_str() );
                                        });
 
+        // log out the ones we marked as closed and then trim the list of active dialogs
         for ( auto it = new_end; it != m_modalsActive.end(); ++it )
         {
-            blog::core( "modal discard : [{}]", std::get<0>( *it ) );
+            blog::core( FMTX( "modal discard : [{}]" ), std::get<0>( *it ) );
         }
         m_modalsActive.erase( new_end, m_modalsActive.end() );
     }
 
-    // run file dialog
+    // run pop-up file dialog as a special top-level case as it requires some custom handling
     if ( m_activeFileDialog != nullptr )
     {
         ImGuiIO& io = ImGui::GetIO();
@@ -626,42 +723,52 @@ bool CoreGUI::beginInterfaceLayout( const ViewportFlags viewportFlags )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void CoreGUI::submitInterfaceLayout()
+void CoreGUI::finishInterfaceLayoutAndRender()
 {
     // trigger popups that are waiting after we're clear of the imgui UI stack
     for ( const auto& modalToPop : m_modalsWaiting )
     {
-        blog::core( "modal open : [{}]", modalToPop );
+        blog::core( FMTX( "modal open : [{}]" ), modalToPop );
         ImGui::OpenPopup( modalToPop.c_str() );
     }
     m_modalsWaiting.clear();
 
-
     ImGui::PopFont();
 
-    // keep track of perf for the main loop
-    {
-        auto uiElapsed = m_perfData.m_moment.deltaMs();
-        m_perfData.m_uiLastMicrosecondsPreRender = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(uiElapsed).count()) * 0.001;
-    }
+    // get perf cost of the UI 'build' code
+    m_perfData.m_uiPreRender = m_perfData.m_moment.deltaMs();
+    m_perfData.m_moment.restart();
+
+    // flush the main thread event bus
+    m_appEventBus->mainThreadDispatch();
+
+    m_perfData.m_uiEventBus = m_perfData.m_moment.deltaMs();
+    m_perfData.m_moment.restart();
 
     m_mdFrontEnd->appRenderBegin();
 
-//     if ( preImguiRenderCallback )
-//         preImguiRenderCallback();
+    // callbacks for pre-imgui custom rendering
+    for ( const auto& renderCallback : m_preImguiRenderCallbacks )
+    {
+        renderCallback();
+    }
 
     m_mdFrontEnd->appRenderImguiDispatch();
 
-    // perf post imgui render dispatch
+    // callbacks for post-imgui custom rendering
+    for ( const auto& renderCallback : m_postImguiRenderCallbacks )
     {
-        auto uiElapsed = m_perfData.m_moment.deltaMs();
-        m_perfData.m_uiLastMicrosecondsPostRender = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(uiElapsed).count()) * 0.001;
+        renderCallback();
     }
 
-//     if ( postImguiRenderCallback )
-//         postImguiRenderCallback();
+    // perf cost of UI render dispatch
+    m_perfData.m_uiPostRender = m_perfData.m_moment.deltaMs();
 
     m_mdFrontEnd->appRenderFinalise();
+
+    // flush render callbacks
+    m_preImguiRenderCallbacks.clear();
+    m_postImguiRenderCallbacks.clear();
 }
 
 
@@ -695,24 +802,21 @@ void CoreGUI::ImGuiPerformanceTracker()
     using PerfPoints = std::array< uint64_t, executionStages >;
 
     static int32_t maxCountdown = 256;       // ignore early [max] readings to disregard boot-up spikes
-    static PerfPoints maxPerf = { 0, 0, 0 };
+    static PerfPoints maxPerf = { 0, 0, 0, 0, 0 };
     PerfPoints totalPerf;
     totalPerf.fill( 0 );
 
-    for ( uint32_t pI = 0; pI < app::module::Audio::ExposedState::cPerfTrackSlots; pI++ )
+    for ( auto cI = 1; cI < executionStages; cI++ )
     {
-        for ( auto cI = 1; cI < executionStages; cI++ )
+        const uint64_t perfValue = (uint64_t)aeState.m_perfCounters[cI].m_average;
+
+        // only update max scores once initial grace period has passed
+        if ( maxCountdown == 0 )
         {
-            const uint64_t perfValue = aeState.m_perfCounters[cI][pI];
-
-            // only update max scores once initial grace period has passed
-            if ( maxCountdown == 0 )
-            {
-                maxPerf[cI] = std::max( maxPerf[cI], perfValue );
-            }
-
-            totalPerf[cI] += perfValue;
+            maxPerf[cI] = std::max( maxPerf[cI], perfValue );
         }
+
+        totalPerf[cI] += perfValue;
     }
     maxCountdown = std::max( 0, maxCountdown - 1 );
 
@@ -748,7 +852,7 @@ void CoreGUI::ImGuiPerformanceTracker()
     if ( ImGui::BeginTable( "##perf_stats_max", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg ) )
     {
         ImGui::PushStyleColor( ImGuiCol_Text, ImGui::GetStyleColorVec4( ImGuiCol_ResizeGripHovered ) );
-        ImGui::TableSetupColumn( "MAXIMUM", ImGuiTableColumnFlags_WidthFixed, column0size );
+        ImGui::TableSetupColumn( "PEAK", ImGuiTableColumnFlags_WidthFixed, column0size );
         ImGui::TableSetupColumn( "", ImGuiTableColumnFlags_None );
         ImGui::TableHeadersRow();
         ImGui::PopStyleColor();
@@ -757,8 +861,10 @@ void CoreGUI::ImGuiPerformanceTracker()
         ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", maxPerf[1] );
         ImGui::TableNextColumn(); ImGui::TextUnformatted( "VST" );
         ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", maxPerf[2] );
-        ImGui::TableNextColumn(); ImGui::TextUnformatted( "Recorder" );
+        ImGui::TableNextColumn(); ImGui::TextUnformatted( "Interleave" );
         ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", maxPerf[3] );
+        ImGui::TableNextColumn(); ImGui::TextUnformatted( "Recorder" );
+        ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", maxPerf[4] );
 
         ImGui::TableNextColumn(); 
         ImGui::Spacing();
@@ -778,10 +884,12 @@ void CoreGUI::ImGuiPerformanceTracker()
         ImGui::TableHeadersRow();
         ImGui::PopStyleColor();
 
+        ImGui::TableNextColumn(); ImGui::TextUnformatted( "Event Bus" );
+        ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " ms", m_perfData.m_uiEventBus.count() );
         ImGui::TableNextColumn(); ImGui::TextUnformatted( "Build" );
-        ImGui::TableNextColumn(); ImGui::Text( "%9.1f ms", m_perfData.m_uiLastMicrosecondsPreRender );
-        ImGui::TableNextColumn(); ImGui::TextUnformatted( "Render" );
-        ImGui::TableNextColumn(); ImGui::Text( "%9.1f ms", m_perfData.m_uiLastMicrosecondsPostRender );
+        ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " ms", m_perfData.m_uiPreRender.count() );
+        ImGui::TableNextColumn(); ImGui::TextUnformatted( "Dispatch" );
+        ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " ms", m_perfData.m_uiPostRender.count() );
 
         ImGui::EndTable();
     }
@@ -867,6 +975,17 @@ app::CoreGUI::UIInjectionHandle CoreGUI::registerMainMenuEntry( const int32_t or
 bool CoreGUI::unregisterMainMenuEntry( const UIInjectionHandle handle )
 {
     return false;
+}
+
+void CoreGUI::registerRenderCallback( const RenderPoint rp, const RenderInjectionCallback& callback )
+{
+    switch ( rp )
+    {
+    case ICoreCustomRendering::RenderPoint::PreImgui:  m_preImguiRenderCallbacks.push_back( callback );  break;
+    case ICoreCustomRendering::RenderPoint::PostImgui: m_postImguiRenderCallbacks.push_back( callback ); break;
+    default:
+        ABSL_ASSERT( 0 );
+    }
 }
 
 } // namespace app

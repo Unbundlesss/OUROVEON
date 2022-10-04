@@ -5,7 +5,10 @@
 //  ishani.org 2022              e.t.c.                  MIT License
 //
 
+#pragma once
+
 #include "spacetime/chronicle.h"
+#include "base/text.h"
 
 namespace ux {
 namespace widget {
@@ -15,15 +18,23 @@ void DiskRecorder( rec::IRecordable& recordable, const fs::path& recordingRootPa
 {
     const ImVec2 commonButtonSize = ImVec2( 26.0f, ImGui::GetFrameHeight() );
 
-    static constexpr std::array< const char*, 5 > animProgress{
-        "[_.~\"~] ",
-        "[~_.~\"] ",
-        "[\"~_.~] ",
-        "[~\"~_.] ",
-        "[.~\"~_] "
+    static constexpr std::array< const char*, 10 > animProgress{
+        "[`-.___] ",
+        "[-.___,] ",
+        "[.___,-] ",
+        "[___,-'] ",
+        "[__,-'\"] ",
+        "[_,-'\"`] ",
+        "[,-'\"`-] ",
+        "[-'\"`-.] ",
+        "['\"`-._] ",
+        "[\"`-.__] ",
     };
+   
 
-    ImGui::PushID( recordable.getRecorderName() );
+    const auto recordableUID = ImGui::GetID( recordable.getRecorderName() );
+    ImGui::PushID( recordableUID );
+    const auto animCycleOffset = recordableUID & 0xff;
 
     const bool recodingInProgress = recordable.isRecording();
 
@@ -33,7 +44,7 @@ void DiskRecorder( rec::IRecordable& recordable, const fs::path& recordingRootPa
     {
         {
             ImGui::Scoped::ToggleButton toggled( true, true );
-            if ( ImGui::Button( ICON_FA_HOURGLASS_HALF, commonButtonSize ) )
+            if ( ImGui::Button( ICON_FA_HOURGLASS, commonButtonSize ) )
             {
                 recordable.stopRecording();
             }
@@ -51,7 +62,9 @@ void DiskRecorder( rec::IRecordable& recordable, const fs::path& recordingRootPa
         {
             bool beginRecording = false;
 
-            beginRecording |= ImGui::Button( ICON_FA_HDD, commonButtonSize );
+            beginRecording |= ImGui::Button( ICON_FA_HARD_DRIVE, commonButtonSize );
+
+            ImGui::Scoped::ButtonTextAlignLeft leftAlign;
 
             ImGui::SameLine( 0.0f, 4.0f );
             beginRecording |= ImGui::Button( recordable.getRecorderName(), ImVec2( ImGui::GetContentRegionAvail().x, 0.0f ) );
@@ -59,21 +72,19 @@ void DiskRecorder( rec::IRecordable& recordable, const fs::path& recordingRootPa
             if ( beginRecording )
             {
                 const auto timestampPrefix = spacetime::createPrefixTimestampForFile();
-                recordable.beginRecording( recordingRootPath.string(), timestampPrefix );
+                recordable.beginRecording( recordingRootPath, timestampPrefix );
             }
         }
         else
         {
-            // #HDD grim!
-            static int32_t animCycle = 0;
-            animCycle++;
+            int32_t animCycle = ImGui::GetFrameCount() + animCycleOffset;
 
             const uint64_t bytesRecorded = recordable.getRecordingDataUsage();
-            const auto humanisedBytes = base::humaniseByteSize( animProgress[(animCycle / 8) % 5], bytesRecorded );
+            const auto humanisedBytes = base::humaniseByteSize( animProgress[ (animCycle / 4) % 10 ], bytesRecorded );
 
             {
                 ImGui::Scoped::ToggleButton toggled( true, true );
-                if ( ImGui::Button( ICON_FA_HDD, commonButtonSize ) )
+                if ( ImGui::Button( ICON_FA_HARD_DRIVE, commonButtonSize ) )
                 {
                     recordable.stopRecording();
                 }

@@ -8,21 +8,25 @@
 //
 
 #pragma once
+
 #include "app/module.h"
 
 #include "base/utils.h"
 #include "base/id.simple.h"
 #include "base/instrumentation.h"
+#include "base/eventbus.h"
 
 #include "spacetime/moment.h"
 
 #include "rec/irecordable.h"
 #include "ssp/isamplestreamprocessor.h"
+#include "dsp/scope.h"
 #include "effect/container.h"
 
-
+// portaudio
 struct PaStreamCallbackTimeInfo;
 struct PaStreamParameters;
+
 
 namespace config { struct Audio; }
 namespace vst { class Instance; }
@@ -36,10 +40,13 @@ namespace module {
 
 struct MixerInterface;
 
-struct Audio : public Module
+struct Audio ouro_final 
+             : public Module
              , public rec::IRecordable
              , public effect::IContainer
 {
+    DECLARE_NO_COPY_NO_MOVE( Audio );
+
     Audio();
     ~Audio();
 
@@ -56,12 +63,12 @@ struct Audio : public Module
         OutputBuffer( const uint32_t maxSamples )
             : m_maxSamples( maxSamples )
         {
-            m_workingLR[0]      = mem::malloc16AsSet<float>( m_maxSamples, 0.0f );
-            m_workingLR[1]      = mem::malloc16AsSet<float>( m_maxSamples, 0.0f );
-            m_finalOutputLR[0]  = mem::malloc16AsSet<float>( m_maxSamples, 0.0f );
-            m_finalOutputLR[1]  = mem::malloc16AsSet<float>( m_maxSamples, 0.0f );
-            m_silence           = mem::malloc16AsSet<float>( m_maxSamples, 0.0f );
-            m_runoff            = mem::malloc16AsSet<float>( m_maxSamples, 0.0f );
+            m_workingLR[0]      = mem::alloc16To<float>( m_maxSamples, 0.0f );
+            m_workingLR[1]      = mem::alloc16To<float>( m_maxSamples, 0.0f );
+            m_finalOutputLR[0]  = mem::alloc16To<float>( m_maxSamples, 0.0f );
+            m_finalOutputLR[1]  = mem::alloc16To<float>( m_maxSamples, 0.0f );
+            m_silence           = mem::alloc16To<float>( m_maxSamples, 0.0f );
+            m_runoff            = mem::alloc16To<float>( m_maxSamples, 0.0f );
         }
 
         ~OutputBuffer()
@@ -102,18 +109,21 @@ struct Audio : public Module
 
     // an arbitrary choice, as some things need an estimate upfront - and even once a portaudio stream is open the sample count
     // can potentially change. Choose something big to give us breathing room. 
-    inline int32_t getMaximumBufferSize() const { return 1024 * 4; }
+    ouro_nodiscard constexpr int32_t getMaximumBufferSize() const { return 1024 * 4; }
 
 
     // Module
-    bool create( const app::Core& appCore ) override;
+    absl::Status create( const app::Core* appCore ) override;
     void destroy() override;
+    virtual std::string getModuleName() const override { return "Audio"; };
+
 
     // initialise chosen audio device
-    bool initOutput( const config::Audio& outputDevice );
+    ouro_nodiscard absl::Status initOutput( const config::Audio& outputDevice );
     void termOutput();
 
-    inline int32_t getSampleRate() const { assert( m_sampleRate > 0 ); return m_sampleRate; }
+    ouro_nodiscard constexpr int32_t getSampleRate() const { ABSL_ASSERT( m_sampleRate > 0 ); return m_sampleRate; }
+
 
 
     struct ExposedState
@@ -140,23 +150,17 @@ struct Audio : public Module
         };
 
         static constexpr size_t     cNumExecutionStages         = (size_t)ExecutionStage::Count;
-        static constexpr size_t     cPerfTrackSlots             = 15;
-        static constexpr double     cPerfSumRcp                 = 1.0 / (double)cPerfTrackSlots;
 
-        using CounterArray      = std::array< uint64_t, cPerfTrackSlots >;
-        using StageCounters     = std::array< CounterArray, cNumExecutionStages >;
+        using StageAverage      = base::RollingAverage<60>;
+        using StageCounters     = std::array< StageAverage, cNumExecutionStages >;
 
 
         ExposedState()
         {
             m_samplePos             = 0;
-            m_perfTraceIndex        = 0;
 
             m_maxBufferFillSize     = 0;
             m_minBufferFillSize     = std::numeric_limits<uint32_t>::max();
-
-            for ( auto& ca : m_perfCounters )
-                ca.fill( 0 );
         }
 
         // called after a block of work has been done to log performance metrics for that stage
@@ -164,21 +168,15 @@ struct Audio : public Module
         {
             const size_t stageIndex = (size_t)es;
 
-            // [Start] is an empty block, so there will be no event running
+            // [Start] is an empty block, so there will be no event running; cap off the last running event from last time round
             if ( stageIndex > 0 )
                 base::instr::eventEnd();
 
-            m_perfCounters[stageIndex][m_perfTraceIndex] = m_timingMoment.deltaUs().count();
+            m_perfCounters[stageIndex].update( (double)m_timingMoment.deltaUs().count() );
             m_timingMoment.restart();
 
-            // on last phase, cycle trace index
-            if ( stageIndex == cNumExecutionStages - 1 )
-            {
-                m_perfTraceIndex++;
-                if ( m_perfTraceIndex >= cPerfTrackSlots )
-                    m_perfTraceIndex = 0;
-            }
-            else
+            // on everything but the final stage, kick an instrumentation event out
+            if ( stageIndex != cNumExecutionStages - 1 )
             {
                 base::instr::eventBegin( "AUDIOPROC", ExecutionStageEventName[stageIndex + 1] );
             }
@@ -192,17 +190,19 @@ struct Audio : public Module
 
         // perf counter snapshots at start/mid/end of mixer process
         StageCounters       m_perfCounters;
-        uint32_t            m_perfTraceIndex;
     };
 
-    inline const ExposedState& getState() const { return m_state; }
-    double getAudioEngineCPULoadPercent() const;
+    ouro_nodiscard constexpr const ExposedState& getState() const { return m_state; }
+    ouro_nodiscard double getAudioEngineCPULoadPercent() const;
 
-    inline float getMasterGain() const { return m_gain; }
+    ouro_nodiscard inline float getMasterGain() const { return m_gain; }
     inline void setMasterGain( const float v ) { m_gain = v; }
 
     AsyncCommandCounter toggleMute();
-    inline bool isMuted() const { return m_mute; }
+    ouro_nodiscard constexpr bool isMuted() const { return m_mute; }
+
+    // get copy of the rolling FFT analysis of audio output
+    ouro_nodiscard constexpr dsp::Scope::Result getCurrentScopeResult() const { return m_scope.getCurrentResult(); }
 
 private:
 
@@ -250,6 +250,8 @@ private:
 
     ExposedState                        m_state;
 
+    dsp::Scope                          m_scope;
+
 #if OURO_FEATURE_VST24
     using VSTFxSlots = std::vector< vst::Instance* >;
 
@@ -257,7 +259,7 @@ private:
     bool                                m_vstBypass = false;
 #endif // OURO_FEATURE_VST24
 
-    std::atomic<float>                  m_gain            = 0.5f;           // generic 0..1 global gain control
+    std::atomic<float>                  m_gain            = 0.8f;           // generic 0..1 global gain control
 
     MixerInterface*                     m_mixerInterface    = nullptr;
 
@@ -270,7 +272,7 @@ private:
 public:
 
     // rec::IRecordable
-    bool beginRecording( const std::string& outputPath, const std::string& filePrefix ) override;
+    bool beginRecording( const fs::path& outputPath, const std::string& filePrefix ) override;
     void stopRecording() override;
     bool isRecording() const override;
     uint64_t getRecordingDataUsage() const override;
@@ -303,6 +305,9 @@ public:
 // interface class used to plug sound output generators into the Audio instance; this is how a client app interacts with the audio engine
 struct MixerInterface
 {
+    virtual ~MixerInterface() {}
+
+
     // called from the realtime audio processing thread
     virtual void update(
         const Audio::OutputBuffer& outputBuffer,
@@ -311,7 +316,7 @@ struct MixerInterface
         const uint64_t             samplePosition ) = 0;
 
     // called from the main UI thread
-    virtual void imgui( const app::StoragePaths& storagePaths ) {}
+    virtual void imgui() {}
 
     // optionally cast / return a rec::IRecordable interface to expose disk output functionality
     virtual rec::IRecordable* getRecordable() { return nullptr; }
@@ -354,3 +359,6 @@ struct AudioPlaybackTimeInfo
 };
 
 } // namespace app
+
+CREATE_EVENT_BEGIN( PanicStop )
+CREATE_EVENT_END()

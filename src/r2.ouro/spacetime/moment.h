@@ -29,12 +29,17 @@ struct Moment
         return std::chrono::high_resolution_clock::now();
     }
 
-    inline std::chrono::milliseconds deltaMs()
+    constexpr std::chrono::seconds deltaSec()
+    {
+        return std::chrono::duration_cast<std::chrono::seconds>(now() - m_initialTime);
+    }
+
+    constexpr std::chrono::milliseconds deltaMs()
     {
         return std::chrono::duration_cast<std::chrono::milliseconds>(now() - m_initialTime);
     }
 
-    inline std::chrono::microseconds deltaUs()
+    constexpr std::chrono::microseconds deltaUs()
     {
         return std::chrono::duration_cast<std::chrono::microseconds>(now() - m_initialTime);
     }
@@ -54,7 +59,7 @@ struct ScopedTimer : public Moment
 
     ~ScopedTimer();
 
-    inline std::chrono::milliseconds stop()
+    constexpr std::chrono::milliseconds stop()
     {
         const auto delta = deltaMs();
         m_running = false;

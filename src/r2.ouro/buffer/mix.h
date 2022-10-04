@@ -16,7 +16,7 @@ namespace buffer {
 // ---------------------------------------------------------------------------------------------------------------------
 // 
 inline void downmix_8channel_stereo( 
-    const float  global_volume,
+    const float  global_gain,
     const int    sample_count,
     float        input_left_channel_0[],
     float        input_left_channel_1[],
@@ -47,7 +47,7 @@ inline void downmix_8channel_stereo(
                             input_left_channel_4[i] + 
                             input_left_channel_5[i] + 
                             input_left_channel_6[i] + 
-                            input_left_channel_7[i] ) * global_volume;
+                            input_left_channel_7[i] ) * global_gain;
 
         output_right[i] = ( input_right_channel_0[i] + 
                             input_right_channel_1[i] + 
@@ -56,7 +56,7 @@ inline void downmix_8channel_stereo(
                             input_right_channel_4[i] + 
                             input_right_channel_5[i] + 
                             input_right_channel_6[i] + 
-                            input_right_channel_7[i] ) * global_volume;
+                            input_right_channel_7[i] ) * global_gain;
     }
 }
 

@@ -9,6 +9,8 @@
 
 #pragma once
 
+#define OURO_CONFIG_CONCEPTS 1
+
 namespace config {
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -28,27 +30,33 @@ struct IPathProvider
 
 // ---------------------------------------------------------------------------------------------------------------------
 
+#if OURO_CONFIG_CONCEPTS
 
 template<typename T>
 concept Serializeable = requires( T& t )
 {
-    { T::StoragePath }        -> std::same_as<const IPathProvider::PathFor>;
-    { T::StorageFilename }    -> std::same_as<const char* const>;
+    { T::StoragePath }        -> std::convertible_to< ::config::IPathProvider::PathFor >;
+    { T::StorageFilename }    -> std::convertible_to< const char* >;
+};
+#define ConfigSerializeableTypename   Serializeable
+
+template<typename T>
+constexpr bool HasPostLoad = requires( T& t )
+{
+    { t.postLoad() } -> std::same_as<bool>;
 };
 
+template<typename T>
+constexpr bool HasPreSave = requires( const T& t )
+{
+    { t.preSave() } -> std::same_as<bool>;
+};
 
-// template<typename T>
-// constexpr bool HasPostLoad = requires( T& t )
-// {
-//     { t.postLoad() } -> std::same_as<bool>;
-// };
-// 
-// template<typename T>
-// constexpr bool HasPreSave = requires( const T& t )
-// {
-//     { t.preSave() } -> std::same_as<bool>;
-// };
+#define OURO_CONFIG( _name )    struct _name
 
+#else
+
+#define ConfigSerializeableTypename   typename
 
 struct Base
 {
@@ -56,6 +64,10 @@ struct Base
     virtual bool postLoad() { return true; }
     virtual bool preSave() { return true; }
 };
+
+#define OURO_CONFIG( _name )    struct _name : public Base
+
+#endif // OURO_CONFIG_CONCEPTS
 
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -77,7 +89,7 @@ enum class SaveResult
 // ---------------------------------------------------------------------------------------------------------------------
 // return the full assembled path for the given config type
 //
-template < typename _config_type >
+template < ConfigSerializeableTypename _config_type >
 inline fs::path getFullPath( const IPathProvider& pathProvider )
 {
     fs::path loadPath = pathProvider.getPath( _config_type::StoragePath );
@@ -88,7 +100,7 @@ inline fs::path getFullPath( const IPathProvider& pathProvider )
 // ---------------------------------------------------------------------------------------------------------------------
 // generic load & save functions for a Base derived data type
 
-template < typename _config_type >
+template < ConfigSerializeableTypename _config_type >
 inline LoadResult load( const IPathProvider& pathProvider, _config_type& result )
 {
     const fs::path loadPath = getFullPath<_config_type>( pathProvider );
@@ -109,7 +121,9 @@ inline LoadResult load( const IPathProvider& pathProvider, _config_type& result 
         return LoadResult::ErrorDuringLoad;
     }
 
-    //if constexpr ( HasPostLoad<_config_type> )
+#if OURO_CONFIG_CONCEPTS
+    if constexpr ( HasPostLoad<_config_type> )
+#endif // OURO_CONFIG_CONCEPTS
     {
         if ( !result.postLoad() )
         {
@@ -120,7 +134,7 @@ inline LoadResult load( const IPathProvider& pathProvider, _config_type& result 
     return LoadResult::Success;
 }
 
-template < typename _config_type >
+template < ConfigSerializeableTypename _config_type >
 inline LoadResult loadFromMemory( const std::string& rawJson, _config_type& result )
 {
     try
@@ -136,7 +150,9 @@ inline LoadResult loadFromMemory( const std::string& rawJson, _config_type& resu
         return LoadResult::ErrorDuringLoad;
     }
 
-    //if constexpr ( HasPostLoad<_config_type> )
+#if OURO_CONFIG_CONCEPTS
+    if constexpr ( HasPostLoad<_config_type> )
+#endif // OURO_CONFIG_CONCEPTS
     {
         if ( !result.postLoad() )
         {
@@ -148,10 +164,12 @@ inline LoadResult loadFromMemory( const std::string& rawJson, _config_type& resu
 
 }
 
-template < typename _config_type >
+template < ConfigSerializeableTypename _config_type >
 inline SaveResult save( const IPathProvider& pathProvider, _config_type& data )
 {
-    //if constexpr ( HasPreSave<_config_type> )
+#if OURO_CONFIG_CONCEPTS
+    if constexpr ( HasPreSave<_config_type> )
+#endif // OURO_CONFIG_CONCEPTS
     {
         if ( !data.preSave() )
         {

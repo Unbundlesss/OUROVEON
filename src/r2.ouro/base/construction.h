@@ -30,3 +30,18 @@ protected_make_shared( Args&&... args )
 }
 
 } // namespace base
+
+#define DECLARE_NO_COPY( _classname )                           \
+    _classname & operator=(const _classname&) = delete;         \
+    _classname( const _classname& ) = delete                    
+
+#define DECLARE_NO_MOVE( _classname )                           \
+    _classname(_classname&& a) = delete;                        \
+    _classname& operator=(_classname&& a) = delete
+
+#define DECLARE_NO_COPY_NO_MOVE( _classname )                   \
+    _classname & operator=(const _classname&) = delete;         \
+    _classname( const _classname& ) = delete;                   \
+    _classname(_classname&& a) = delete;                        \
+    _classname& operator=(_classname&& a) = delete
+

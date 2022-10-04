@@ -27,7 +27,7 @@ void RiffMixerBase::mixChannelsWriteSilence(
 }
 
 void RiffMixerBase::mixChannelsToOutput( 
-    const app::module::Audio::OutputBuffer& outputBuffer, 
+    const app::module::Audio::OutputBuffer& outputBuffer,
     const float globalMultiplier,
     const uint32_t samplesToWrite )
 {

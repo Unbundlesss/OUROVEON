@@ -40,14 +40,86 @@ ModuleHeaderOnlyFiles["cereal"] = function()
 end
 
 -- ------------------------------------------------------------------------------
+ModuleRefInclude["asio"] = function()
+
+    sysincludedirs
+    {
+        SrcDir() .. "r0.net/asio/include"
+    }
+
+    ModuleRefInclude["openssl"]()
+
+    defines 
+    {
+        "ASIO_STANDALONE",
+        "ASIO_NO_DEFAULT_LINKED_LIBS",
+    }
+end
+
+ModuleHeaderOnlyFiles["asio"] = function()
+    files 
+    { 
+        SrcDir() .. "r0.net/asio/include/*.h",
+    }
+end
+
+
+-- ------------------------------------------------------------------------------
+ModuleRefInclude["websocketpp"] = function()
+
+    sysincludedirs
+    {
+        SrcDir() .. "r0.net/websocketpp"
+    }
+
+    ModuleRefInclude["asio"]()
+
+    filter "system:Windows"
+    defines 
+    {
+        "_WEBSOCKETPP_CPP11_FUNCTIONAL_",
+        "_WEBSOCKETPP_CPP11_SYSTEM_ERROR_",
+        "_WEBSOCKETPP_CPP11_RANDOM_DEVICE_",
+        "_WEBSOCKETPP_CPP11_MEMORY_",
+        "_WEBSOCKETPP_CPP11_TYPE_TRAITS_",
+    }
+    filter {}
+
+    filter "system:linux"
+    defines 
+    {
+        "_WEBSOCKETPP_CPP11_STL_",
+    }
+    filter {}
+
+    filter "system:macosx"
+    defines 
+    {
+        "_WEBSOCKETPP_CPP11_STL_",
+    }
+    filter {}
+end
+
+ModuleHeaderOnlyFiles["websocketpp"] = function()
+    files 
+    { 
+        SrcDir() .. "r0.net/websocketpp/websocketpp/**.h",
+    }
+end
+
+
+
+-- ------------------------------------------------------------------------------
 
 function addSimpleHeaderOnly( moduleName, pathTo )
+
     ModuleRefInclude[moduleName] = function()
         includedirs
         {
             SrcDir() .. pathTo,
         }
     end
+
     ModuleHeaderOnlyFiles[moduleName] = function()
         files
         {
