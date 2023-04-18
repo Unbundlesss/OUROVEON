@@ -293,7 +293,13 @@ struct LoreApp : public app::OuroApp
                         endlesss::types::RiffPlaybackAbstraction defaultAbstraction;
                         const auto defaultPermutation = defaultAbstraction.asPermutation();
 
-                        ImGui::Text( "%u Riffs to replay", (uint32_t)m_jamSliceSketch->m_slice->m_ids.size() );
+                        static std::size_t startOffsetIndex = 0;
+
+                        ImGui::Text( "%u Riffs to replay", (uint32_t)(m_jamSliceSketch->m_slice->m_ids.size() - startOffsetIndex) );
+                        ImGui::Separator();
+                        ImGui::Text( "Prefetch Index : %u", m_jamSliceReplayState.m_riffPrefetchIndex );
+                        ImGui::Text( "Playback Index : %u", m_jamSliceReplayState.m_currentRiffIndex );
+                        ImGui::Separator();
 
                         const auto triggerNextRiffSend = [this, &defaultPermutation]()
                         {
@@ -317,18 +323,36 @@ struct LoreApp : public app::OuroApp
 
                         if ( m_jamSliceReplayState.m_state == JamSliceReplayState::State::Idle )
                         {
+                            ImGui::Text( "Start Offset : %u", startOffsetIndex );
+                            if ( ImGui::Button( "Start At Selected" ) )
+                            {
+                                endlesss::live::RiffPtr currentRiffPtr = m_nowPlayingRiff;
+                                const auto currentRiff = currentRiffPtr.get();
+
+                                for ( std::size_t i = 0; i < m_jamSliceSketch->m_slice->m_ids.size(); i++ )
+                                {
+                                    if ( m_jamSliceSketch->m_slice->m_ids[i] == currentRiff->m_riffData.riff.couchID )
+                                    {
+                                        startOffsetIndex = i;
+                                        break;
+                                    }
+                                }
+                            }
                             if ( ImGui::Button( "Begin" ) )
                             {
-                                m_jamSliceReplayState.m_riffPrefetchIndex = 0;
+                                m_jamSliceReplayState.m_riffPrefetchIndex = startOffsetIndex;
+                                m_jamSliceReplayState.m_currentRiffIndex  = startOffsetIndex;
 
                                 m_jamSliceReplayState.m_state = JamSliceReplayState::State::Warmstart;
 
                                 for ( std::size_t p = 0; p < 4; p++ )
                                 {
+                                    blog::app( "REPLAY : prefetch[{}] = {}", m_jamSliceReplayState.m_riffPrefetchIndex, m_jamSliceSketch->m_slice->m_ids[m_jamSliceReplayState.m_riffPrefetchIndex + p] );
+
                                     m_jamSliceReplayState.m_replayPipeline->requestRiff( {
                                         {
                                             m_jamSliceSketch->m_slice->m_jamID,
-                                            m_jamSliceSketch->m_slice->m_ids[m_jamSliceReplayState.m_riffPrefetchIndex + p]
+                                            m_jamSliceSketch->m_slice->m_ids[m_jamSliceReplayState.m_riffPrefetchIndex]
                                         },
                                         defaultPermutation } );
 
@@ -341,7 +365,6 @@ struct LoreApp : public app::OuroApp
                             ImGui::TextUnformatted( "Prefetching ..." );
                             if ( m_jamSliceReplayState.m_riffsToSend.size_approx() > 2 )
                             {
-                                m_jamSliceReplayState.m_currentRiffIndex = 0;
                                 triggerNextRiffSend();
 
                                 m_jamSliceReplayState.m_state = JamSliceReplayState::State::Primed;
@@ -352,6 +375,7 @@ struct LoreApp : public app::OuroApp
                             ImGui::TextUnformatted( "Initial riff sent, waiting ..." );
                             if ( ImGui::Button( "Continue" ) )
                             {
+                                m_jamSliceReplayState.m_currentRiffSentAt.restart();
                                 m_jamSliceReplayState.m_state = JamSliceReplayState::State::Sending; 
                             }
                         }
@@ -373,6 +397,8 @@ struct LoreApp : public app::OuroApp
 
                                 if ( m_jamSliceReplayState.m_riffPrefetchIndex < m_jamSliceSketch->m_slice->m_ids.size() )
                                 {
+                                    blog::app( "REPLAY > prefetch[{}] = {}", m_jamSliceReplayState.m_riffPrefetchIndex, m_jamSliceSketch->m_slice->m_ids[m_jamSliceReplayState.m_riffPrefetchIndex] );
+
                                     m_jamSliceReplayState.m_replayPipeline->requestRiff( {
                                         {
                                             m_jamSliceSketch->m_slice->m_jamID,
@@ -2041,6 +2067,9 @@ int LoreApp::EntrypointOuro()
 
             if ( ImGui::BeginChild( "##data_child" ) )
             {
+                const auto TextColourDownloading  = ImGui::GetStyleColorVec4( ImGuiCol_CheckMark );
+                const auto TextColourDownloadable = ImGui::GetStyleColorVec4( ImGuiCol_PlotHistogram );
+
                 const auto columnCount = (warehouseView == WarehouseView::Default) ? 5 : 4;
 
                 if ( ImGui::BeginTable( "##warehouse_table", columnCount,
@@ -2076,6 +2105,8 @@ int LoreApp::EntrypointOuro()
                     {
                         const std::size_t jI   = m_warehouseContentsSortedIndices[jamIdx];
                         const bool isJamInFlux = m_warehouseContentsReportJamInFlux[jI];
+
+                        const int32_t knownCachedRiffCount = m_jamLibrary.loadKnownRiffCountForDatabaseID( m_warehouseContentsReport.m_jamCouchIDs[jI] );
 
                         if ( !jamNameFilter.PassFilter( m_warehouseContentsReportJamTitles[jI].c_str() ) )
                             continue;
@@ -2138,10 +2169,18 @@ int LoreApp::EntrypointOuro()
                             const auto unpopulated = m_warehouseContentsReport.m_unpopulatedRiffs[jI];
                             const auto populated   = m_warehouseContentsReport.m_populatedRiffs[jI];
 
+                            ImGui::Text( "%" PRIi64, populated );
+                            
                             if ( unpopulated > 0 )
-                                ImGui::Text( "%" PRIi64 " (+%" PRIi64 ")", populated, unpopulated );
-                            else
-                                ImGui::Text( "%" PRIi64, populated);
+                            {
+                                ImGui::SameLine( 0, 0 );
+                                ImGui::TextColored( TextColourDownloading, " (+%" PRIi64 ")", unpopulated );
+                            }
+                            else if ( knownCachedRiffCount > populated )
+                            {
+                                ImGui::SameLine( 0, 0 );
+                                ImGui::TextColored( TextColourDownloadable, " (" ICON_FA_ARROW_UP "%i)", knownCachedRiffCount - populated );
+                            }
                         }
                         ImGui::TableNextColumn();
 

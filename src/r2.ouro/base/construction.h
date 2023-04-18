@@ -7,27 +7,42 @@
 //
 
 #pragma once
+#include <type_traits>
 
 namespace base {
 
-// from the epic thread
-// https://stackoverflow.com/questions/8147027/how-do-i-call-stdmake-shared-on-a-class-with-only-protected-or-private-const
-//
-// allows use of make_shared with types with non-public ctors
-//
-template < typename Object, typename... Args >
-inline std::shared_ptr< Object >
-protected_make_shared( Args&&... args )
-{
-    struct helper : public Object
+    // from the epic thread
+    // https://stackoverflow.com/questions/8147027/how-do-i-call-stdmake-shared-on-a-class-with-only-protected-or-private-const
+    //
+    // allows use of make_shared with types with non-public ctors
+    //
+    template < typename TObject, typename... Args >
+    std::shared_ptr< TObject > protected_make_shared( Args&&... args )
     {
-        helper( Args&&... args )
-            : Object{ std::forward< Args >( args )... }
-        {}
-    };
+        struct helper : public TObject
+        {
+            explicit helper( Args&&... args )
+                : TObject( std::forward< Args >( args )... )
+            {
+            }
+        };
 
-    return std::make_shared< helper >( std::forward< Args >( args )... );
-}
+        return std::make_shared< helper >( std::forward< Args >( args )... );
+    }
+
+    template< typename TObject, typename... Args >
+    std::unique_ptr< TObject > protected_make_unique( Args&&... args )
+    {
+        struct helper : public TObject
+        {
+            explicit helper( Args&&... args )
+                : TObject( std::forward< Args >( args )... )
+            {
+            }
+        };
+
+        return std::make_unique< helper >( std::forward< Args >( args )... );
+    }
 
 } // namespace base
 

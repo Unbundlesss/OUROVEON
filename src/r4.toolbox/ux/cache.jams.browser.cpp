@@ -44,7 +44,7 @@ void modalUniversalJamBrowser(
         "Latest Riff",
     };
 
-    const ImVec2 configWindowSize = ImVec2( 750.0f, 420.0f ); // blaze it
+    const ImVec2 configWindowSize = ImVec2( 770.0f, 440.0f );
     ImGui::SetNextWindowContentSize( configWindowSize );
 
     const ImVec4 colourJamDisabled = GImGui->Style.Colors[ImGuiCol_TextDisabled];
@@ -116,13 +116,15 @@ void modalUniversalJamBrowser(
         ImGui::SameLine();
         ImGui::TextUnformatted( "Name Filter" );
 
-        ImGui::SameLine( 0, 220.0f );
+        ImGui::SameLine( 0, 200.0f );
         ImGui::TextUnformatted( "Sort By " );
 
         ImGui::SameLine();
         ImGui::RadioButton( "Time ", &jamSortOption, Jams::eIterateSortByTime );
         ImGui::SameLine();
         ImGui::RadioButton( "Name", &jamSortOption, Jams::eIterateSortByName );
+        ImGui::SameLine();
+        ImGui::RadioButton( "Riff", &jamSortOption, Jams::eIterateSortByRiffs );
 
         ImGui::Spacing();
         ImGui::Spacing();

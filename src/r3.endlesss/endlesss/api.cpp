@@ -274,9 +274,8 @@ bool CurrentJoinInJams::fetch( const NetConfiguration& ncfg )
 // ---------------------------------------------------------------------------------------------------------------------
 bool CurrentCollectibleJams::fetch( const NetConfiguration& ncfg, int32_t pageNo )
 {
-    // you might think we could use <100 and get a more efficient fetch but anything but 100 seems to error 
-    // constantly as you move through pages. D:
-    const auto requestUrl = fmt::format( FMTX( "/marketplace/collectible-jams?pageSize=100&pageNo={}" ), pageNo );
+    // pageSize 4 matches what the web site currently uses
+    const auto requestUrl = fmt::format( FMTX( "/marketplace/collectible-jams?pageSize=4&pageNo={}" ), pageNo );
 
     auto client = createEndlesssHttpClient( ncfg, UserAgent::WebAPI );
 

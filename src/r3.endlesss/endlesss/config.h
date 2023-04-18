@@ -161,7 +161,8 @@ OURO_CONFIG( CollectibleJamManifest )
         std::string             bandId;
         std::string             owner;
         std::vector< std::string > members;
-        uint64_t                rifftime;
+        uint64_t                rifftime = 0;
+        uint32_t                riffCount = 0;
 
         template<class Archive>
         void serialize( Archive& archive )
@@ -173,6 +174,7 @@ OURO_CONFIG( CollectibleJamManifest )
                    , CEREAL_NVP( owner )
                    , CEREAL_NVP( members )
                    , CEREAL_NVP( rifftime )
+                   , CEREAL_OPTIONAL_NVP( riffCount )
             );
         }
     };

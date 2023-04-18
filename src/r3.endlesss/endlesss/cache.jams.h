@@ -56,6 +56,7 @@ struct Jams
             archive( CEREAL_NVP( m_jamCID )
                    , CEREAL_NVP( m_displayName )
                    , CEREAL_NVP( m_description )
+                   , CEREAL_OPTIONAL_NVP( m_riffCount )     // may be calculated by the app and cached
                    , CEREAL_NVP( m_timestampOrdering )
                    , CEREAL_NVP( m_timestampEarliestStem )
                    , CEREAL_NVP( m_timestampLatestStem )
@@ -129,7 +130,12 @@ struct Jams
     using AsyncCallback = std::function< void( const AsyncFetchState state, const std::string& status )>;
 
     // fetch the users' latest jam membership state + list of active publics from the servers
-    void asyncCacheRebuild( const endlesss::api::NetConfiguration& apiCfg, tf::Taskflow& taskFlow, const AsyncCallback& asyncCallback );
+    void asyncCacheRebuild(
+        const endlesss::api::NetConfiguration& apiCfg,
+        const bool syncCollectibles,                        // go fetch the collectible jam data from (buggy) web endpoints?
+        const bool syncRiffCounts,                          // fetch riff counts for all private jams (may take a while)
+        tf::Taskflow& taskFlow,
+        const AsyncCallback& asyncCallback );
 
     ouro_nodiscard constexpr const std::string& getCacheFileState() const { return m_cacheFileState; }
 
@@ -159,12 +165,25 @@ struct Jams
         return false;
     }
 
+    // convenience function to fetch any known riff counts for a cached jam, or 0 if unknown, -1 on any error
+    ouro_nodiscard int32_t loadKnownRiffCountForDatabaseID( const endlesss::types::JamCouchID& couchID ) const
+    {
+        CacheIndex ci;
+        if ( getCacheIndexForDatabaseID( couchID, ci ) )
+        {
+            const std::vector< Data >* dataArray = getArrayPtrForType( ci.type() );
+            return dataArray->at( ci.index() ).m_riffCount;
+        }
+        return -1;
+    }
+
 
     // #HDD replace with metaenum for imgui use?
     enum IteratorSortingOption : int32_t
     {
         eIterateSortByTime,
-        eIterateSortByName
+        eIterateSortByName,
+        eIterateSortByRiffs,
     };
 
     // walk particular type of jam data, sorted by given order
@@ -178,15 +197,28 @@ struct Jams
         if ( dataArray == nullptr )
             return;
 
-        if ( sortOption == eIterateSortByTime )
+        switch ( sortOption )
         {
-            for ( const size_t jIndex : m_idxSortedByTime[typeAsIndex] )
-                iteratorFunction( dataArray->at(jIndex) );
-        }
-        else
-        {
-            for ( const size_t jIndex : m_idxSortedByName[typeAsIndex] )
-                iteratorFunction( dataArray->at(jIndex) );
+            case eIterateSortByTime:
+            {
+                for ( const size_t jIndex : m_idxSortedByTime[typeAsIndex] )
+                    iteratorFunction( dataArray->at( jIndex ) );
+            }
+            break;
+
+            case eIterateSortByName:
+            {
+                for ( const size_t jIndex : m_idxSortedByName[typeAsIndex] )
+                    iteratorFunction( dataArray->at( jIndex ) );
+            }
+            break;
+
+            case eIterateSortByRiffs:
+            {
+                for ( const size_t jIndex : m_idxSortedByRiffs[typeAsIndex] )
+                    iteratorFunction( dataArray->at( jIndex ) );
+            }
+            break;
         }
     }
 
@@ -230,6 +262,7 @@ private:
 
     JamIndicesPerType           m_idxSortedByTime;
     JamIndicesPerType           m_idxSortedByName;
+    JamIndicesPerType           m_idxSortedByRiffs;
 
 
     std::string                 m_cacheFileState;

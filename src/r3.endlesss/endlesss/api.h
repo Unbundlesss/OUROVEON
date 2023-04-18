@@ -136,6 +136,20 @@ inline static bool deserializeJson( const NetConfiguration& ncfg, const httplib:
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// leanest parse possible, just the number of results that would have been returned
+struct TotalRowsOnly
+{
+    uint32_t                    total_rows;
+
+    template<class Archive>
+    inline void serialize( Archive& archive )
+    {
+        archive( CEREAL_NVP( total_rows )
+        );
+    }
+};
+
+// ---------------------------------------------------------------------------------------------------------------------
 // most queries return a pile of 1-or-more results with this structure
 // as the top of the json; total_rows is not the size of rows[], it holds the size
 // of the unfiltered data on the server
@@ -570,6 +584,18 @@ struct JamFullSnapshot : public ResultRowHeader<ResultRiffAndStemIDs>
             fmt::format( "/user_appdata${}/_design/types/_view/rifffLoopsByCreateTime?descending=true", jamDatabaseID ).c_str() );
 
         return deserializeJson< JamFullSnapshot >( ncfg, res, *this, __FUNCTION__ );
+    }
+};
+
+// ---------------------------------------------------------------------------------------------------------------------
+struct JamRiffCount : public TotalRowsOnly
+{
+    bool fetch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID )
+    {
+        auto res = createEndlesssHttpClient( ncfg, UserAgent::Couchbase )->Get(
+            fmt::format( "/user_appdata${}/_design/types/_view/rifffsByCreateTime", jamDatabaseID ).c_str() );
+
+        return deserializeJson< JamRiffCount >( ncfg, res, *this, __FUNCTION__ );
     }
 };
 

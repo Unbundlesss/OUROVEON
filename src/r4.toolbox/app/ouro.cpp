@@ -535,7 +535,12 @@ int OuroApp::EntrypointGUI()
                             {
                                 if ( ImGui::IconButton( ICON_FA_ARROWS_ROTATE ) )
                                 {
-                                    m_jamLibrary.asyncCacheRebuild( m_apiNetworkConfiguration.value(), taskFlow, [&]( const endlesss::cache::Jams::AsyncFetchState state, const std::string& status )
+                                    m_jamLibrary.asyncCacheRebuild(
+                                        m_apiNetworkConfiguration.value(),
+                                        true,
+                                        true,
+                                        taskFlow,
+                                        [&]( const endlesss::cache::Jams::AsyncFetchState state, const std::string& status )
                                         {
                                             asyncFetchState = state;
                                             asyncState      = status;
@@ -560,7 +565,7 @@ int OuroApp::EntrypointGUI()
 
                                 case endlesss::cache::Jams::AsyncFetchState::Working:
                                     ImGui::Spinner( "##syncing", true, ImGui::GetTextLineHeight() * 0.4f, 3.0f, 0.0f, ImGui::GetColorU32( ImGuiCol_Text ) );
-                                    ImGui::SameLine( 0, 8.0f );
+                                    ImGui::SameLine( 0, 14.0f );
                                     ImGui::TextUnformatted( asyncState.c_str() );
                                     progressionInhibitionReason = "Busy fetching metadata";
                                     break;

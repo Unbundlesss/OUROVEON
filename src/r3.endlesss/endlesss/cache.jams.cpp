@@ -129,10 +129,18 @@ bool Jams::save( const config::IPathProvider& pathProvider )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void Jams::asyncCacheRebuild( const endlesss::api::NetConfiguration& ncfg, tf::Taskflow& taskFlow, const AsyncCallback& asyncCallback )
+void Jams::asyncCacheRebuild(
+    const endlesss::api::NetConfiguration& ncfg,
+    const bool syncCollectibles,
+    const bool syncRiffCounts,
+    tf::Taskflow& taskFlow,
+    const AsyncCallback& asyncCallback )
 {
-    taskFlow.emplace( [&, asyncCallback]()
+    taskFlow.emplace( [&, syncCollectibles, syncRiffCounts, asyncCallback]()
     {
+        static constexpr std::array< char, 4> busyAscii = { '\\', '|', '/', '-' };
+        int32_t busyCounter = 0;
+
         asyncCallback( AsyncFetchState::Working, "Fetching subscribed jams ..." );
 
         api::SubscribedJams jamSubscribed;
@@ -151,44 +159,60 @@ void Jams::asyncCacheRebuild( const endlesss::api::NetConfiguration& ncfg, tf::T
             return;
         }
 
-        // fetch all known pages of collectibles
-        std::vector< api::CurrentCollectibleJams::Data > collectedCollectibles;
-        for ( int32_t page = 0; page < 16; page ++ )    // just putting some kind of limit on this nonsense
+        if ( syncCollectibles )
         {
-            asyncCallback( AsyncFetchState::Working, fmt::format( FMTX( "Fetching collectibles, page {} ..." ), page ) );
-
-            api::CurrentCollectibleJams collectibles;
-            bool fetchOk = collectibles.fetch( ncfg, page );
-            if ( fetchOk && collectibles.ok && !collectibles.data.empty() )
+            // fetch all known pages of collectibles
+            std::vector< api::CurrentCollectibleJams::Data > collectedCollectibles;
+            for ( int32_t page = 0; page < 100; page++ )    // just putting some kind of limit on this nonsense, don't know if there's a way to get total pages
             {
-                collectedCollectibles.insert( collectedCollectibles.end(), collectibles.data.begin(), collectibles.data.end() );
+                asyncCallback( AsyncFetchState::Working, fmt::format( FMTX( "Fetching collectibles, page {} ..." ), page ) );
+
+                // if the fetch works, bolt the new list onto the existing pile
+                api::CurrentCollectibleJams collectibles;
+                bool fetchOk = collectibles.fetch( ncfg, page );
+                if ( fetchOk && collectibles.ok && !collectibles.data.empty() )
+                {
+                    collectedCollectibles.insert( collectedCollectibles.end(), collectibles.data.begin(), collectibles.data.end() );
+                }
+                else
+                {
+                    break;
+                }
             }
-            else
+            // convert to our cached collectibles type
             {
-                break;
+                m_configEndlesssCollectibles.jams.clear();
+                for ( const api::CurrentCollectibleJams::Data& cdata : collectedCollectibles )
+                {
+                    if ( cdata.name.empty() )
+                        continue;
+
+                    config::endlesss::CollectibleJamManifest::Jam cjam;
+
+                    cjam.jamId    = cdata.jamId;
+                    cjam.name     = cdata.name;
+                    cjam.bio      = cdata.bio;
+                    cjam.bandId   = cdata.legacy_id;
+                    cjam.owner    = cdata.owner;
+                    cjam.members  = cdata.members;
+                    cjam.rifftime = cdata.rifff.created;
+
+                    if ( syncRiffCounts )
+                    {
+                        asyncCallback( AsyncFetchState::Working, fmt::format( FMTX( "Analysing Collectibles ({})" ), busyAscii[busyCounter] ) );
+                        busyCounter = (busyCounter + 1) % 4;
+
+                        api::JamRiffCount riffCount;
+                        if ( riffCount.fetch( ncfg, endlesss::types::JamCouchID{ cjam.bandId } ) )
+                        {
+                            cjam.riffCount = riffCount.total_rows;
+                        }
+                    }
+
+                    m_configEndlesssCollectibles.jams.emplace_back( cjam );
+                }
+                blog::cache( "extracted {} collectible jams", m_configEndlesssCollectibles.jams.size() );
             }
-        }
-        // convert to our cached collectibles type
-        {
-            m_configEndlesssCollectibles.jams.clear();
-            for ( const api::CurrentCollectibleJams::Data& cdata : collectedCollectibles )
-            {
-                if ( cdata.name.empty() )
-                    continue;
-
-                config::endlesss::CollectibleJamManifest::Jam cjam;
-
-                cjam.jamId = cdata.jamId;
-                cjam.name = cdata.name;
-                cjam.bio = cdata.bio;
-                cjam.bandId = cdata.legacy_id;
-                cjam.owner = cdata.owner;
-                cjam.members = cdata.members;
-                cjam.rifftime = cdata.rifff.created;
-
-                m_configEndlesssCollectibles.jams.emplace_back( cjam );
-            }
-            blog::cache( "extracted {} collectible jams", m_configEndlesssCollectibles.jams.size() );
         }
 
         asyncCallback( AsyncFetchState::Working, "Updating jam metadata ..." );
@@ -206,10 +230,22 @@ void Jams::asyncCacheRebuild( const endlesss::api::NetConfiguration& ncfg, tf::T
                 continue;
             }
 
-            m_jamDataJoinIn.emplace_back( jdb,
-                                          jamProfile.displayName,
-                                          jamProfile.bio,
-                                          dummyTimestamp++ );
+            auto& newJamData = m_jamDataJoinIn.emplace_back( jdb,
+                                                             jamProfile.displayName,
+                                                             jamProfile.bio,
+                                                             dummyTimestamp++ );
+
+            if ( syncRiffCounts )
+            {
+                asyncCallback( AsyncFetchState::Working, fmt::format( FMTX( "Analysing Public ({})" ), busyAscii[busyCounter] ) );
+                busyCounter = (busyCounter + 1) % 4;
+
+                api::JamRiffCount riffCount;
+                if ( riffCount.fetch( ncfg, endlesss::types::JamCouchID{ jdb } ) )
+                {
+                    newJamData.m_riffCount = riffCount.total_rows;
+                }
+            }
         }
 
         m_jamDataUserSubscribed.clear();
@@ -225,10 +261,22 @@ void Jams::asyncCacheRebuild( const endlesss::api::NetConfiguration& ncfg, tf::T
 
             const auto jamTimestamp = spacetime::parseISO8601( jdb.key );
 
-            m_jamDataUserSubscribed.emplace_back( jdb.id,
-                                                  jamProfile.displayName,
-                                                  jamProfile.bio,
-                                                  jamTimestamp );
+            auto& newJamData = m_jamDataUserSubscribed.emplace_back( jdb.id,
+                                                                     jamProfile.displayName,
+                                                                     jamProfile.bio,
+                                                                     jamTimestamp );
+
+            if ( syncRiffCounts )
+            {
+                asyncCallback( AsyncFetchState::Working, fmt::format( FMTX( "Analysing Subscribed ({})" ), busyAscii[busyCounter] ) );
+                busyCounter = (busyCounter + 1) % 4;
+
+                api::JamRiffCount riffCount;
+                if ( riffCount.fetch( ncfg, endlesss::types::JamCouchID{ jdb.id } ) )
+                {
+                    newJamData.m_riffCount = riffCount.total_rows;
+                }
+            }
         }
 
         postProcessNewData();
@@ -272,11 +320,14 @@ void Jams::postProcessNewData()
                                                          cjam.name,
                                                          fmt::format("owned by [{}], with:\n{}", cjam.owner, fmt::join(cjam.members, "\n")),
                                                          cjam.rifftime / 1000 );    // riff time is unix-nano
+        pjd.m_riffCount = cjam.riffCount;
     }
 
     for ( auto& innerVec : m_idxSortedByTime )
         innerVec.clear();
     for ( auto& innerVec : m_idxSortedByName )
+        innerVec.clear();
+    for ( auto& innerVec : m_idxSortedByRiffs )
         innerVec.clear();
 
     m_jamCouchIDToJamIndexMap.clear();
@@ -292,6 +343,7 @@ void Jams::postProcessNewData()
         {
             m_idxSortedByTime[jamTypeIndex].push_back( idx );
             m_idxSortedByName[jamTypeIndex].push_back( idx );
+            m_idxSortedByRiffs[jamTypeIndex].push_back( idx );
 
             std::sort( m_idxSortedByTime[jamTypeIndex].begin(), m_idxSortedByTime[jamTypeIndex].end(),
                 [dataArray]( const size_t lhs, const size_t rhs ) -> bool
@@ -304,6 +356,13 @@ void Jams::postProcessNewData()
                 [dataArray]( const size_t lhs, const size_t rhs ) -> bool
                 {
                     return dataArray->at( lhs ).m_displayName < dataArray->at( rhs ).m_displayName;
+                });
+
+            std::sort( m_idxSortedByRiffs[jamTypeIndex].begin(), m_idxSortedByRiffs[jamTypeIndex].end(),
+                [dataArray]( const size_t lhs, const size_t rhs ) -> bool
+                {
+                    // largest first
+                    return dataArray->at(lhs).m_riffCount > dataArray->at(rhs).m_riffCount;
                 });
 
             m_jamCouchIDToJamIndexMap.try_emplace( dataArray->at(idx).m_jamCID, CacheIndex( jamType, idx ) );
