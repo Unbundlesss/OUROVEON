@@ -110,6 +110,7 @@ OURO_CONFIG( PublicJamManifest )
     {
         std::string             band_id;
         std::string             invite_id;
+        std::string             listen_id;
         std::string             jam_name;
         std::string             earliest_user;
         std::string             latest_user;
@@ -117,12 +118,14 @@ OURO_CONFIG( PublicJamManifest )
         uint32_t                latest_unixtime;
         uint32_t                estimated_days_of_activity;
         uint32_t                total_riffs;
+        uint32_t                subscribed_member_count;
 
         template<class Archive>
         void serialize( Archive& archive )
         {
             archive( CEREAL_NVP( band_id )
                    , CEREAL_NVP( invite_id )
+                   , CEREAL_NVP( listen_id )
                    , CEREAL_NVP( jam_name )
                    , CEREAL_NVP( earliest_user )
                    , CEREAL_NVP( latest_user )
@@ -130,6 +133,7 @@ OURO_CONFIG( PublicJamManifest )
                    , CEREAL_NVP( latest_unixtime )
                    , CEREAL_NVP( estimated_days_of_activity )
                    , CEREAL_NVP( total_riffs )
+                   , CEREAL_NVP( subscribed_member_count )
             );
         }
     };
