@@ -1,22 +1,6 @@
 {
     "jams": [
         {
-            "jamId": "477b6e5b2be4fc044ee144619cecad92f60837b42ea64e671faf5e719ca74d74",
-            "name": "Imagination Land",
-            "bio": "",
-            "bandId": "band9b4807b0b4",
-            "owner": "winkle89",
-            "members": [
-                "winkle89",
-                "firephly",
-                "thevoidinclusive",
-                "fancyspectacles",
-                "awro"
-            ],
-            "rifftime": 1680611989692,
-            "riffCount": 4049
-        },
-        {
             "jamId": "662703589770992cb547d23e4389f9892923959369f81185b9cd22801125f229",
             "name": "LANTIC MOTION",
             "bio": "",
@@ -28,63 +12,35 @@
                 "njlang",
                 "trinitou"
             ],
-            "rifftime": 1680525598849,
-            "riffCount": 1904
+            "rifftime": 1681871924103,
+            "riffCount": 1963
         },
         {
-            "jamId": "4922c2e3be54b4ade11182e6a5103894775da418909df55b45266465d50f115c",
-            "name": "Stellar Flame",
-            "bio": "Two fiery souls ignite the eternal Stellar Flame as ambient waves wash over intense rhythms & dissolve into prismatic particles amid ethereal echoes",
-            "bandId": "band0ee040437d",
+            "jamId": "2bf2f447bd9bace355c0a6733cff1f50f3affb7a317e777fd8f426a77634be35",
+            "name": "Cinevoid",
+            "bio": "",
+            "bandId": "bandc00ff4c170",
+            "owner": "paul_cine",
+            "members": [
+                "paul_cine",
+                "thevoidinclusive",
+                "littlewing"
+            ],
+            "rifftime": 1681857243669,
+            "riffCount": 1606
+        },
+        {
+            "jamId": "6be911ced3da008a195b116c6937afed20143c6bc89549c53bde0fa1e2d43ca1",
+            "name": "The Fire In The Void",
+            "bio": "thevoidinclusive :: Firephly",
+            "bandId": "band693b5fb583",
             "owner": "firephly",
             "members": [
                 "firephly",
-                "oddstar"
+                "thevoidinclusive"
             ],
-            "rifftime": 1680459369077,
-            "riffCount": 1063
-        },
-        {
-            "jamId": "41cade13abb7b647daff38630923a0628d33403dbabe6362946cd3b56b075368",
-            "name": "FELONIUS FIVE",
-            "bio": "FELONIUS AF",
-            "bandId": "band8fb63c1b77",
-            "owner": "fancyspectacles",
-            "members": [
-                "fancyspectacles",
-                "n0face",
-                "feloniousmonk",
-                "littlewing",
-                "omnijess"
-            ],
-            "rifftime": 1680317006556,
-            "riffCount": 1954
-        },
-        {
-            "jamId": "592ee1865a65c7ad7076163f471cf92d3bfcca4ca7944a8f56d22ea479548929",
-            "name": "Rise Bicoastal",
-            "bio": "",
-            "bandId": "band86fec3075e",
-            "owner": "feloniousmonk",
-            "members": [
-                "feloniousmonk",
-                "firephly"
-            ],
-            "rifftime": 1680314214186,
-            "riffCount": 410
-        },
-        {
-            "jamId": "1eaabbe4b702cd67cd898c8ba90cf8e265f35735b5363c33736d3794a7183796",
-            "name": "watermelon sea foam",
-            "bio": "",
-            "bandId": "banddd5cc2cd61",
-            "owner": "katinkera",
-            "members": [
-                "katinkera",
-                "feloniousmonk"
-            ],
-            "rifftime": 1680353576424,
-            "riffCount": 594
+            "rifftime": 1681845004768,
+            "riffCount": 694
         },
         {
             "jamId": "49728085cc867f333e7fc4f4cb3ebbbf1f7db53343fbbd53c978f2f0df5fd5ed",
@@ -99,21 +55,78 @@
                 "inphiltrate",
                 "galletly"
             ],
-            "rifftime": 1680307071013,
-            "riffCount": 1464
+            "rifftime": 1681775134062,
+            "riffCount": 1497
         },
         {
-            "jamId": "6e099b692afc3cd23714d14ecab0961fd005cb4a78e5f1e580a3d355166524a5",
-            "name": "FELONIUS SPECTACLE",
-            "bio": "Felonius & Fancy noodling on guitars and stuff...",
-            "bandId": "band36f04d578e",
+            "jamId": "1eaabbe4b702cd67cd898c8ba90cf8e265f35735b5363c33736d3794a7183796",
+            "name": "watermelon sea foam",
+            "bio": "",
+            "bandId": "banddd5cc2cd61",
+            "owner": "katinkera",
+            "members": [
+                "katinkera",
+                "feloniousmonk"
+            ],
+            "rifftime": 1681772306935,
+            "riffCount": 675
+        },
+        {
+            "jamId": "41cade13abb7b647daff38630923a0628d33403dbabe6362946cd3b56b075368",
+            "name": "FELONIUS FIVE",
+            "bio": "FELONIUS AF",
+            "bandId": "band8fb63c1b77",
             "owner": "fancyspectacles",
             "members": [
                 "fancyspectacles",
-                "feloniousmonk"
+                "n0face",
+                "feloniousmonk",
+                "littlewing",
+                "omnijess"
             ],
-            "rifftime": 1680295853596,
-            "riffCount": 1201
+            "rifftime": 1681763699459,
+            "riffCount": 2053
+        },
+        {
+            "jamId": "47bee9c983c44484cd2b39230b0b6f589c239c798fb208a84d1419f841ef12d2",
+            "name": "AMPsider Collectiv OGs Edition",
+            "bio": "Enjoy and collect music from the AMPsider Collectiv’s very own OGs: Applejaxx, Awro, Bozo, Sadza & Mng.. Bringing the Funk, Soul, Groove & Dance to U!",
+            "bandId": "band31fa709e5f",
+            "owner": "mng",
+            "members": [
+                "mng",
+                "sadza"
+            ],
+            "rifftime": 1681716178667,
+            "riffCount": 185
+        },
+        {
+            "jamId": "3d723d7a497c72dc0bc745e21407b1746393fa1ea847d08c6adb646d308a22e4",
+            "name": "Stereo Babies",
+            "bio": "What dem babies do?!",
+            "bandId": "band48a4eba344",
+            "owner": "ashtonmaxwell",
+            "members": [
+                "ashtonmaxwell",
+                "thevoidinclusive",
+                "firephly",
+                "katinkera",
+                "fry"
+            ],
+            "rifftime": 1681650301176,
+            "riffCount": 1556
+        },
+        {
+            "jamId": "7648f3713454d490aaf0a4c8905801ea3d0f5d93aa78e6a5649d9a2c4ee8c1f8",
+            "name": "Red Sky Lullaby",
+            "bio": "Red Sky Lullaby's collectible Jam",
+            "bandId": "band5d9466e5c4",
+            "owner": "redskylullaby",
+            "members": [
+                "redskylullaby"
+            ],
+            "rifftime": 1681359539817,
+            "riffCount": 456
         },
         {
             "jamId": "51da2046c457a2201588bc22387b77e01fa5ce5af8e47ab50180cc5cf1b78ac0",
@@ -125,8 +138,91 @@
                 "paul_cine",
                 "feloniousmonk"
             ],
-            "rifftime": 1680225990284,
-            "riffCount": 1311
+            "rifftime": 1681329605107,
+            "riffCount": 1312
+        },
+        {
+            "jamId": "3d2aca4406f4bdb8fa03c59094c5818c9ddc41f0dfcea01a968ca16e179ceca4",
+            "name": "Obviously Just Techno",
+            "bio": "",
+            "bandId": "bandb76cff7ed6",
+            "owner": "winkle89",
+            "members": [
+                "winkle89",
+                "fancyspectacles",
+                "littlewing",
+                "n0face"
+            ],
+            "rifftime": 1681236790244,
+            "riffCount": 2194
+        },
+        {
+            "jamId": "52ad701fd9808e4efeb87d6543d499c8b1aeb02c882a845939687b4a52882615",
+            "name": "remaining within",
+            "bio": "",
+            "bandId": "band4cbc45df89",
+            "owner": "lwlkc",
+            "members": [
+                "lwlkc",
+                "thevoidinclusive"
+            ],
+            "rifftime": 1681075649689,
+            "riffCount": 739
+        },
+        {
+            "jamId": "592ee1865a65c7ad7076163f471cf92d3bfcca4ca7944a8f56d22ea479548929",
+            "name": "Rise Bicoastal",
+            "bio": "",
+            "bandId": "band86fec3075e",
+            "owner": "feloniousmonk",
+            "members": [
+                "feloniousmonk",
+                "firephly"
+            ],
+            "rifftime": 1681046906404,
+            "riffCount": 421
+        },
+        {
+            "jamId": "6e099b692afc3cd23714d14ecab0961fd005cb4a78e5f1e580a3d355166524a5",
+            "name": "FELONIUS SPECTACLE",
+            "bio": "Felonius & Fancy noodling on guitars and stuff...",
+            "bandId": "band36f04d578e",
+            "owner": "fancyspectacles",
+            "members": [
+                "fancyspectacles",
+                "feloniousmonk"
+            ],
+            "rifftime": 1681029717556,
+            "riffCount": 1233
+        },
+        {
+            "jamId": "477b6e5b2be4fc044ee144619cecad92f60837b42ea64e671faf5e719ca74d74",
+            "name": "Imagination Land",
+            "bio": "",
+            "bandId": "band9b4807b0b4",
+            "owner": "winkle89",
+            "members": [
+                "winkle89",
+                "firephly",
+                "thevoidinclusive",
+                "fancyspectacles",
+                "awro"
+            ],
+            "rifftime": 1680750564046,
+            "riffCount": 4078
+        },
+        {
+            "jamId": "4922c2e3be54b4ade11182e6a5103894775da418909df55b45266465d50f115c",
+            "name": "Stellar Flame",
+            "bio": "Two fiery souls ignite the eternal Stellar Flame as ambient waves wash over intense rhythms & dissolve into prismatic particles amid ethereal echoes",
+            "bandId": "band0ee040437d",
+            "owner": "firephly",
+            "members": [
+                "firephly",
+                "oddstar"
+            ],
+            "rifftime": 1680459369077,
+            "riffCount": 1063
         },
         {
             "jamId": "2b6c859cca06e094d2800ac1829b7c135b1f8b3e527d32d5da1e654b473ce8c5",
@@ -151,35 +247,6 @@
             ],
             "rifftime": 1680069086707,
             "riffCount": 9
-        },
-        {
-            "jamId": "2bf2f447bd9bace355c0a6733cff1f50f3affb7a317e777fd8f426a77634be35",
-            "name": "Cinevoid",
-            "bio": "",
-            "bandId": "bandc00ff4c170",
-            "owner": "paul_cine",
-            "members": [
-                "paul_cine",
-                "thevoidinclusive",
-                "littlewing"
-            ],
-            "rifftime": 1679760950697,
-            "riffCount": 1534
-        },
-        {
-            "jamId": "3d2aca4406f4bdb8fa03c59094c5818c9ddc41f0dfcea01a968ca16e179ceca4",
-            "name": "Obviously Just Techno",
-            "bio": "",
-            "bandId": "bandb76cff7ed6",
-            "owner": "winkle89",
-            "members": [
-                "winkle89",
-                "fancyspectacles",
-                "littlewing",
-                "n0face"
-            ],
-            "rifftime": 1680426793647,
-            "riffCount": 1984
         },
         {
             "jamId": "4f30ffee6a02156f5ab82b298ed193a27d66b6b85de26b01b41020feb23e50b1",
@@ -233,21 +300,8 @@
                 "paul_cine",
                 "peteidm"
             ],
-            "rifftime": 1680438249034,
-            "riffCount": 193
-        },
-        {
-            "jamId": "6be911ced3da008a195b116c6937afed20143c6bc89549c53bde0fa1e2d43ca1",
-            "name": "The Fire In The Void",
-            "bio": "thevoidinclusive :: Firephly",
-            "bandId": "band693b5fb583",
-            "owner": "firephly",
-            "members": [
-                "firephly",
-                "thevoidinclusive"
-            ],
-            "rifftime": 1679198802156,
-            "riffCount": 632
+            "rifftime": 1680684464115,
+            "riffCount": 196
         },
         {
             "jamId": "304b299ba26bd9a444e67c84cfd61e7cf599754c96ae24fc70fea3f93dbb97cf",
@@ -287,18 +341,6 @@
             ],
             "rifftime": 1678972391690,
             "riffCount": 467
-        },
-        {
-            "jamId": "7648f3713454d490aaf0a4c8905801ea3d0f5d93aa78e6a5649d9a2c4ee8c1f8",
-            "name": "Red Sky Lullaby",
-            "bio": "Red Sky Lullaby's collectible Jam",
-            "bandId": "band5d9466e5c4",
-            "owner": "redskylullaby",
-            "members": [
-                "redskylullaby"
-            ],
-            "rifftime": 1678843094012,
-            "riffCount": 452
         },
         {
             "jamId": "69b1c99b76d6327a62b34da88aefdca496b68bb692b8b7c999f4c8b075659a30",
@@ -545,19 +587,6 @@
             "riffCount": 671
         },
         {
-            "jamId": "52ad701fd9808e4efeb87d6543d499c8b1aeb02c882a845939687b4a52882615",
-            "name": "remaining within",
-            "bio": "",
-            "bandId": "band4cbc45df89",
-            "owner": "lwlkc",
-            "members": [
-                "lwlkc",
-                "thevoidinclusive"
-            ],
-            "rifftime": 1676764144388,
-            "riffCount": 548
-        },
-        {
             "jamId": "774a4da0de08c903d75cf8f96ea8c7f478f5ea76973256802452ad40075a6a16",
             "name": "Manual 4D",
             "bio": "Be free",
@@ -657,22 +686,6 @@
             ],
             "rifftime": 1675917430845,
             "riffCount": 752
-        },
-        {
-            "jamId": "3d723d7a497c72dc0bc745e21407b1746393fa1ea847d08c6adb646d308a22e4",
-            "name": "Stereo Babies",
-            "bio": "What dem babies do?!",
-            "bandId": "band48a4eba344",
-            "owner": "ashtonmaxwell",
-            "members": [
-                "ashtonmaxwell",
-                "thevoidinclusive",
-                "firephly",
-                "katinkera",
-                "fry"
-            ],
-            "rifftime": 1675657562145,
-            "riffCount": 1507
         },
         {
             "jamId": "4eaedc5660509c0195d4f61269da8d3589edae04134460bb7e5021f36ef28598",
@@ -815,7 +828,8 @@
                 "elling",
                 "fry",
                 "theau",
-                "hlhl"
+                "hlhl",
+                "shambran"
             ],
             "rifftime": 1673522275148,
             "riffCount": 3017
@@ -2159,7 +2173,8 @@
             "members": [
                 "shamanicbeatbox",
                 "michaelonabolu",
-                "dontmesswithjuan"
+                "dontmesswithjuan",
+                "shambran"
             ],
             "rifftime": 1655943130137,
             "riffCount": 74
