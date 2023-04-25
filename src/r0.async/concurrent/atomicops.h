@@ -43,15 +43,26 @@
 // AE_UNUSED
 #define AE_UNUSED(x) ((void)x)
 
-// AE_NO_TSAN
+// AE_NO_TSAN/AE_TSAN_ANNOTATE_*
 #if defined(__has_feature)
 #if __has_feature(thread_sanitizer)
+#if __cplusplus >= 201703L  // inline variables require C++17
+namespace moodycamel { inline int ae_tsan_global; }
+#define AE_TSAN_ANNOTATE_RELEASE() AnnotateHappensBefore(__FILE__, __LINE__, (void *)(&::moodycamel::ae_tsan_global))
+#define AE_TSAN_ANNOTATE_ACQUIRE() AnnotateHappensAfter(__FILE__, __LINE__, (void *)(&::moodycamel::ae_tsan_global))
+extern "C" void AnnotateHappensBefore(const char*, int, void*);
+extern "C" void AnnotateHappensAfter(const char*, int, void*);
+#else  // when we can't work with tsan, attempt to disable its warnings
 #define AE_NO_TSAN __attribute__((no_sanitize("thread")))
-#else
+#endif
+#endif
+#endif
+#ifndef AE_NO_TSAN
 #define AE_NO_TSAN
 #endif
-#else
-#define AE_NO_TSAN
+#ifndef AE_TSAN_ANNOTATE_RELEASE
+#define AE_TSAN_ANNOTATE_RELEASE()
+#define AE_TSAN_ANNOTATE_ACQUIRE()
 #endif
 
 
@@ -208,10 +219,10 @@ AE_FORCEINLINE void fence(memory_order order) AE_NO_TSAN
 {
 	switch (order) {
 		case memory_order_relaxed: break;
-		case memory_order_acquire: std::atomic_thread_fence(std::memory_order_acquire); break;
-		case memory_order_release: std::atomic_thread_fence(std::memory_order_release); break;
-		case memory_order_acq_rel: std::atomic_thread_fence(std::memory_order_acq_rel); break;
-		case memory_order_seq_cst: std::atomic_thread_fence(std::memory_order_seq_cst); break;
+		case memory_order_acquire: AE_TSAN_ANNOTATE_ACQUIRE(); std::atomic_thread_fence(std::memory_order_acquire); break;
+		case memory_order_release: AE_TSAN_ANNOTATE_RELEASE(); std::atomic_thread_fence(std::memory_order_release); break;
+		case memory_order_acq_rel: AE_TSAN_ANNOTATE_ACQUIRE(); AE_TSAN_ANNOTATE_RELEASE(); std::atomic_thread_fence(std::memory_order_acq_rel); break;
+		case memory_order_seq_cst: AE_TSAN_ANNOTATE_ACQUIRE(); AE_TSAN_ANNOTATE_RELEASE(); std::atomic_thread_fence(std::memory_order_seq_cst); break;
 		default: assert(false);
 	}
 }
@@ -239,7 +250,7 @@ template<typename T>
 class weak_atomic
 {
 public:
-	AE_NO_TSAN weak_atomic() { }
+	AE_NO_TSAN weak_atomic() : value() { }
 #ifdef AE_VCPP
 #pragma warning(push)
 #pragma warning(disable: 4100)		// Get rid of (erroneous) 'unreferenced formal parameter' warning
@@ -352,6 +363,10 @@ extern "C" {
 #include <mach/mach.h>
 #elif defined(__unix__)
 #include <semaphore.h>
+#elif defined(FREERTOS)
+#include <FreeRTOS.h>
+#include <semphr.h>
+#include <task.h>
 #endif
 
 namespace moodycamel
@@ -389,7 +404,7 @@ namespace moodycamel
 		    Semaphore& operator=(const Semaphore& other);
 
 		public:
-		    AE_NO_TSAN Semaphore(int initialCount = 0)
+		    AE_NO_TSAN Semaphore(int initialCount = 0) : m_hSema()
 		    {
 		        assert(initialCount >= 0);
 		        const long maxLong = 0x7fffffff;
@@ -437,7 +452,7 @@ namespace moodycamel
 		    Semaphore& operator=(const Semaphore& other);
 
 		public:
-		    AE_NO_TSAN Semaphore(int initialCount = 0)
+		    AE_NO_TSAN Semaphore(int initialCount = 0) : m_sema()
 		    {
 		        assert(initialCount >= 0);
 		        kern_return_t rc = semaphore_create(mach_task_self(), &m_sema, SYNC_POLICY_FIFO, initialCount);
@@ -460,11 +475,11 @@ namespace moodycamel
 				return timed_wait(0);
 			}
 
-			bool timed_wait(std::int64_t timeout_usecs) AE_NO_TSAN
+			bool timed_wait(std::uint64_t timeout_usecs) AE_NO_TSAN
 			{
 				mach_timespec_t ts;
 				ts.tv_sec = static_cast<unsigned int>(timeout_usecs / 1000000);
-				ts.tv_nsec = (timeout_usecs % 1000000) * 1000;
+				ts.tv_nsec = static_cast<int>((timeout_usecs % 1000000) * 1000);
 
 				// added in OSX 10.10: https://developer.apple.com/library/prerelease/mac/documentation/General/Reference/APIDiffsMacOSX10_10SeedDiff/modules/Darwin.html
 				kern_return_t rc = semaphore_timedwait(m_sema, ts);
@@ -497,10 +512,10 @@ namespace moodycamel
 		    Semaphore& operator=(const Semaphore& other);
 
 		public:
-		    AE_NO_TSAN Semaphore(int initialCount = 0)
+		    AE_NO_TSAN Semaphore(int initialCount = 0) : m_sema()
 		    {
 		        assert(initialCount >= 0);
-		        int rc = sem_init(&m_sema, 0, initialCount);
+		        int rc = sem_init(&m_sema, 0, static_cast<unsigned int>(initialCount));
 		        assert(rc == 0);
 		        AE_UNUSED(rc);
 		    }
@@ -566,6 +581,73 @@ namespace moodycamel
 		        }
 		    }
 		};
+#elif defined(FREERTOS)
+		//---------------------------------------------------------
+		// Semaphore (FreeRTOS)
+		//---------------------------------------------------------
+		class Semaphore
+		{
+		private:
+			SemaphoreHandle_t m_sema;
+
+			Semaphore(const Semaphore& other);
+			Semaphore& operator=(const Semaphore& other);
+
+		public:
+			AE_NO_TSAN Semaphore(int initialCount = 0) : m_sema()
+			{
+				assert(initialCount >= 0);
+				m_sema = xSemaphoreCreateCounting(static_cast<UBaseType_t>(~0ull), static_cast<UBaseType_t>(initialCount));
+				assert(m_sema);
+			}
+
+			AE_NO_TSAN ~Semaphore()
+			{
+				vSemaphoreDelete(m_sema);
+			}
+
+			bool wait() AE_NO_TSAN
+			{
+				return xSemaphoreTake(m_sema, portMAX_DELAY) == pdTRUE;
+			}
+
+			bool try_wait() AE_NO_TSAN
+			{
+				// Note: In an ISR context, if this causes a task to unblock,
+				// the caller won't know about it
+				if (xPortIsInsideInterrupt())
+					return xSemaphoreTakeFromISR(m_sema, NULL) == pdTRUE;
+				return xSemaphoreTake(m_sema, 0) == pdTRUE;
+			}
+
+			bool timed_wait(std::uint64_t usecs) AE_NO_TSAN
+			{
+				std::uint64_t msecs = usecs / 1000;
+				TickType_t ticks = static_cast<TickType_t>(msecs / portTICK_PERIOD_MS);
+				if (ticks == 0)
+					return try_wait();
+				return xSemaphoreTake(m_sema, ticks) == pdTRUE;
+			}
+
+			void signal() AE_NO_TSAN
+			{
+				// Note: In an ISR context, if this causes a task to unblock,
+				// the caller won't know about it
+				BaseType_t rc;
+				if (xPortIsInsideInterrupt())
+					rc = xSemaphoreGiveFromISR(m_sema, NULL);
+				else
+					rc = xSemaphoreGive(m_sema);
+				assert(rc == pdTRUE);
+				AE_UNUSED(rc);
+			}
+
+			void signal(int count) AE_NO_TSAN
+			{
+				while (count-- > 0)
+					signal();
+			}
+		};
 #else
 #error Unsupported platform! (No semaphore wrapper available)
 #endif
@@ -626,7 +708,7 @@ namespace moodycamel
 		    }
 
 		public:
-		    AE_NO_TSAN LightweightSemaphore(ssize_t initialCount = 0) : m_count(initialCount)
+		    AE_NO_TSAN LightweightSemaphore(ssize_t initialCount = 0) : m_count(initialCount), m_sema()
 		    {
 		        assert(initialCount >= 0);
 		    }

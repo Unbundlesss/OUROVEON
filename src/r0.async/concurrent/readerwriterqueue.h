@@ -22,8 +22,8 @@
 // A lock-free queue for a single-consumer, single-producer architecture.
 // The queue is also wait-free in the common path (except if more memory
 // needs to be allocated, in which case malloc is called).
-// Allocates memory sparingly (O(lg(n) times, amortized), and only once if
-// the original maximum size estimate is never exceeded.
+// Allocates memory sparingly, and only once if the original maximum size
+// estimate is never exceeded.
 // Tested on x86/x64 processors, but semantics should be correct for all
 // architectures (given the right implementations in atomicops.h), provided
 // that aligned integer and pointer accesses are naturally atomic.
@@ -108,7 +108,6 @@ public:
 		,dequeuing(false)
 #endif
 	{
-		assert(size > 0);
 		assert(MAX_BLOCK_SIZE == ceilToPow2(MAX_BLOCK_SIZE) && "MAX_BLOCK_SIZE must be a power of 2");
 		assert(MAX_BLOCK_SIZE >= 2 && "MAX_BLOCK_SIZE must be at least 2");
 		
@@ -646,10 +645,10 @@ private:
 
 
 	// Disable copying
-	ReaderWriterQueue(ReaderWriterQueue const&) = delete;
+	ReaderWriterQueue(ReaderWriterQueue const&) {  }
 
 	// Disable assignment
-	ReaderWriterQueue& operator=( ReaderWriterQueue const& ) = delete;
+	ReaderWriterQueue& operator=(ReaderWriterQueue const&) {  }
 
 
 	AE_FORCEINLINE static size_t ceilToPow2(size_t x)
@@ -676,7 +675,7 @@ private:
 #ifndef NDEBUG
 	struct ReentrantGuard
 	{
-		AE_NO_TSAN ReentrantGuard(bool& _inSection)
+		AE_NO_TSAN ReentrantGuard(weak_atomic<bool>& _inSection)
 			: inSection(_inSection)
 		{
 			assert(!inSection && "Concurrent (or re-entrant) enqueue or dequeue operation detected (only one thread at a time may hold the producer or consumer role)");
@@ -689,7 +688,7 @@ private:
 		ReentrantGuard& operator=(ReentrantGuard const&);
 
 	private:
-		bool& inSection;
+		weak_atomic<bool>& inSection;
 	};
 #endif
 
@@ -750,8 +749,8 @@ private:
 	size_t largestBlockSize;
 
 #ifndef NDEBUG
-	bool enqueuing;
-	mutable bool dequeuing;
+	weak_atomic<bool> enqueuing;
+	mutable weak_atomic<bool> dequeuing;
 #endif
 };
 
