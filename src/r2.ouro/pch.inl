@@ -7,7 +7,7 @@
 //  
 //
 
-#define OURO_FRAMEWORK_VERSION    "0.7.0"
+#define OURO_FRAMEWORK_VERSION    "0.7.1"
 
 // std
 #include <bitset>
