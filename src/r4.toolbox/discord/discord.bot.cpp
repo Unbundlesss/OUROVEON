@@ -375,6 +375,8 @@ struct Bot::State
     ssp::OpusStream::SharedPtr              m_opusStreamProcessor;
     ssp::StreamProcessorInstanceID          m_opusStreamProcessorID;
 
+    dpp::discord_voice_client::OpusDispatchWorkingMemory
+                                            m_workingMemory;        // reusable memory block for encryption + send of opus packets
 
     const dpp::snowflake                    m_guildSID;
     GuildMetadataOptional                   m_guildMetadata;
@@ -405,7 +407,7 @@ void Bot::State::update( DispatchStats& stats )
 
     stats.m_voiceBufferQueueState = m_voiceBufferQueueState;
 
-    const size_t maxPacketsDispatchedPerUpdate = 1;
+    const size_t maxPacketsDispatchedPerUpdate = 4;
 
     // packet dispatch
     {
@@ -463,7 +465,11 @@ void Bot::State::update( DispatchStats& stats )
                 {
                     const size_t packetLength = m_opusPacketInProgress->m_opusPacketSizes[m_opusPacketInProgress->m_dispatchedPackets];
 
-                    m_liveVoice->send_audio_opus( &m_opusPacketInProgress->m_opusData[m_opusPacketInProgress->m_dispatchedSize], packetLength );
+                    // set working memory block with the data to send
+                    m_workingMemory.opusData = &m_opusPacketInProgress->m_opusData[m_opusPacketInProgress->m_dispatchedSize];
+                    m_workingMemory.opusLength = packetLength;
+
+                    m_liveVoice->send_audio_opus_memopt( m_workingMemory );
 
                     m_opusPacketInProgress->m_dispatchedPackets++;
                     m_opusPacketInProgress->m_dispatchedSize += packetLength;

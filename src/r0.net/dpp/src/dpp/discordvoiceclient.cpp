@@ -885,6 +885,41 @@ discord_voice_client& discord_voice_client::send_audio_opus(uint8_t* opus_packet
 	return *this;
 }
 
+// #HDD
+discord_voice_client& discord_voice_client::send_audio_opus_memopt( OpusDispatchWorkingMemory& dispatchMemory )
+{
+#if DPP_ENABLE_VOICE
+
+    const int samples = opus_packet_get_nb_samples( dispatchMemory.opusData, (opus_int32)dispatchMemory.opusLength, 48000 );
+    const uint64_t duration = (samples / 48) / (timescale / 1000000);
+    const int frameSize = (int)(48 * duration * (timescale / 1000000));
+
+
+    ++sequence;
+    constexpr int nonceSize = 24;
+    rtp_header header( sequence, timestamp, (uint32_t)ssrc );
+
+    int8_t nonce[nonceSize];
+    std::memcpy( nonce, &header, sizeof( header ) );
+    std::memset( nonce + sizeof( header ), 0, sizeof( nonce ) - sizeof( header ) );
+
+    const size_t totalEncryptionSize = sizeof( header ) + dispatchMemory.opusLength + crypto_secretbox_MACBYTES;
+    assert( totalEncryptionSize < dispatchMemory.encryptionBufferSize );
+    std::memcpy( dispatchMemory.encryptionBuffer, &header, sizeof( header ) );
+
+    crypto_secretbox_easy( dispatchMemory.encryptionBuffer + sizeof( header ), dispatchMemory.opusData, dispatchMemory.opusLength, (const unsigned char*)nonce, secret_key );
+
+    this->send( (const char*)dispatchMemory.encryptionBuffer, totalEncryptionSize, duration );
+    timestamp += frameSize;
+
+    speak();
+
+#else
+    throw dpp::voice_exception( "Voice support not enabled in this build of D++" );
+#endif
+    return *this;
+}
+
 discord_voice_client& discord_voice_client::speak() {
 	if (!this->sending) {
 		this->queue_message(json({

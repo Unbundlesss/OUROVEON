@@ -530,6 +530,18 @@ public:
 	 */
 	discord_voice_client& send_audio_opus(uint8_t* opus_packet, const size_t length);
 
+    struct OpusDispatchWorkingMemory
+    {
+        uint8_t* opusData;
+        size_t opusLength;
+
+        static constexpr size_t encryptionBufferSize = 1024 * 1024;
+        uint8_t encryptionBuffer[encryptionBufferSize];
+    };
+    // #HDD a version of this packet encrypt + dispatch that doesn't allocate all over the place
+    discord_voice_client& send_audio_opus_memopt( OpusDispatchWorkingMemory& dispatchMemory );
+
+
 	/**
 	 * @brief Send silence to the voice channel
 	 * 
