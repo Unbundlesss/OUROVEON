@@ -73,7 +73,7 @@ private:
 #define Gen_StringWrapperFormatter( _type )                                                                                 \
             template <> struct fmt::formatter<_type> : formatter<std::string> {                                             \
                 template <typename FormatContext>                                                                           \
-                auto format( const _type& c, FormatContext& ctx ) {                                                         \
+                auto format( const _type& c, FormatContext& ctx ) const -> decltype(ctx.out()) {                            \
                     return formatter<std::string>::format( c, ctx );                                                        \
                 }                                                                                                           \
             };

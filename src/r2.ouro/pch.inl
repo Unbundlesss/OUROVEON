@@ -7,7 +7,7 @@
 //  
 //
 
-#define OURO_FRAMEWORK_VERSION    "0.7.1"
+#define OURO_FRAMEWORK_VERSION    "0.7.2"
 
 // std
 #include <bitset>
@@ -23,10 +23,8 @@
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
-#include <source_location>
 #include <mutex>
 #include <concepts>
-
 
 
 // abseil
@@ -37,6 +35,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/cleanup/cleanup.h"
+
 
 #if ABSL_HAVE_CPP_ATTRIBUTE(nodiscard) || _MSC_VER >= 1911
 #define ouro_nodiscard  [[nodiscard]]
@@ -116,8 +115,10 @@ namespace fs = std::filesystem;
 #include "cereal/types/unordered_map.hpp"
 #include "cereal/archives/json.hpp"
 
+// cereal optional add-ins
 #include "optional_json.hpp"
 #include "optional_nvp.hpp"
+
 
 // nlohmann JSON
 #include "nlohmann/json.hpp"
@@ -136,7 +137,7 @@ namespace blog {
 namespace detail {
 
     template < const fmt::color _fg1, const fmt::color _fg2, typename S, typename... Args, fmt::FMT_ENABLE_IF( fmt::detail::is_string<S>::value )>
-    void _printer( const std::string_view& prefix, const S& format_str, const Args&... args )
+    void _printer( const std::string_view& prefix, const S& format_str, const Args&... args ) noexcept
     {
         const auto& vargs = fmt::make_format_args( args... );
 
@@ -153,7 +154,7 @@ namespace detail {
         static thread_local fmt::basic_memory_buffer<char> formatBuffer;
         {
             formatBuffer.clear();
-            fmt::detail::vformat_to( formatBuffer, fmt::to_string_view( format_str ), vargs, {} );
+            fmt::detail::vformat_to( formatBuffer, fmt::detail::to_string_view( format_str ), vargs, {} );
         }
 
         // build the final output by appending components
@@ -217,7 +218,7 @@ ADD_BLOG( stem,     0xe65ea9,    "STEM" )
 } // namespace blog
 
 // shortened FMT_STRING
-#define FMTX(s) FMT_STRING_IMPL(s, fmt::compile_string, )
+#define FMTX(s) FMT_STRING_IMPL(s, fmt::detail::compile_string, )
 
 
 // imgui
@@ -262,14 +263,13 @@ ADD_BLOG( stem,     0xe65ea9,    "STEM" )
 #include "utf8.h"
 
 // moodycamel concurrency
-#include "readerwriterqueue.h"
-#include "concurrentqueue.h"
 #include "atomicops.h"
+#include "blockingconcurrentqueue.h"
+#include "concurrentqueue.h"
 #include "lightweightsemaphore.h"
+#include "readerwritercircularbuffer.h"
+#include "readerwriterqueue.h"
 namespace mcc = moodycamel;
-
-// CityHash
-#include "city.h"
 
 // STB
 #include "stb_image.h"
