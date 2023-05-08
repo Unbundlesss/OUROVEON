@@ -193,6 +193,109 @@ OURO_CONFIG( CollectibleJamManifest )
     }
 };
 
+
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+// detailed data capture from public jams regarding user involvement
+OURO_CONFIG( PopulationPublics )
+{
+    // data routing
+    static constexpr auto StoragePath       = IPathProvider::PathFor::SharedData;       // snapshot ships with build
+    static constexpr auto StorageFilename   = "endlesss.population-publics.json";
+
+    struct JamScan
+    {
+        using UserContributions = absl::flat_hash_map< std::string, uint32_t >;
+
+        std::string                 jam_name;
+        uint32_t                    riff_scanned = 0;
+        uint32_t                    unique_users = 0;
+        std::vector< std::string >  subscribed_users;
+        UserContributions           user_and_riff_count;
+
+        template<class Archive>
+        void serialize( Archive& archive )
+        {
+            archive( CEREAL_NVP( jam_name )
+                   , CEREAL_NVP( riff_scanned )
+                   , CEREAL_NVP( unique_users )
+                   , CEREAL_NVP( subscribed_users )
+                   , CEREAL_NVP( user_and_riff_count )
+            );
+        }
+    };
+    using PerJamScan = absl::flat_hash_map< std::string, JamScan >;
+
+    PerJamScan  jampop;
+
+    template<class Archive>
+    void serialize( Archive& archive )
+    {
+        archive( CEREAL_NVP(jampop) );
+    }
+};
+
+// ---------------------------------------------------------------------------------------------------------------------
+// list of all the users we know about
+OURO_CONFIG( PopulationGlobalUsers )
+{
+    // data routing
+    static constexpr auto StoragePath       = IPathProvider::PathFor::SharedData;       // snapshot ships with build
+    static constexpr auto StorageFilename   = "endlesss.population-global.json";
+
+    std::vector<std::string> users;
+
+    template<class Archive>
+    void serialize( Archive & archive )
+    {
+        archive( CEREAL_NVP(users) );
+    }
+};
+
 } // namespace endlesss
 } // namespace config
     
+
+namespace cereal
+{
+    // specialisation for loading direct map of string:jamscan rather than cereal's default bloated way
+    template <class Archive, class C, class A> inline
+        void load( Archive& ar, absl::flat_hash_map<std::string, config::endlesss::PopulationPublics::JamScan, C, A>& map )
+    {
+        map.clear();
+
+        auto hint = map.begin();
+        while ( true )
+        {
+            const auto namePtr = ar.getNodeName();
+
+            if ( !namePtr )
+                break;
+
+            std::string key = namePtr;
+            config::endlesss::PopulationPublics::JamScan value; ar( value );
+            hint = map.emplace_hint( hint, std::move( key ), std::move( value ) );
+        }
+    }
+
+    // ditto user:count
+    template <class Archive, class C, class A> inline
+        void load( Archive& ar, absl::flat_hash_map<std::string, uint32_t, C, A>& map )
+    {
+        map.clear();
+
+        auto hint = map.begin();
+        while ( true )
+        {
+            const auto namePtr = ar.getNodeName();
+
+            if ( !namePtr )
+                break;
+
+            std::string key = namePtr;
+            uint32_t value; ar( value );
+            hint = map.emplace_hint( hint, std::move( key ), value );
+        }
+    }
+} // namespace cereal
