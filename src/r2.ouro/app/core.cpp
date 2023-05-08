@@ -82,18 +82,19 @@ OuroveonThreadScope::~OuroveonThreadScope()
 // ---------------------------------------------------------------------------------------------------------------------
 // external threading hooks for naming & rpmalloc tls
 //
-namespace tf
+struct TaskFlowWorkerHook : public tf::WorkerInterface
 {
-    // injected from taskflow executor, name the worker threads 
-    void _taskflow_worker_thread_init( size_t threadID )
+    void scheduler_prologue( tf::Worker& worker ) override
     {
-        ouroveonThreadEntry( fmt::format( FMTX( OURO_THREAD_PREFIX "TaskFlow:{}" ), threadID ).c_str() );
+        ouroveonThreadEntry( fmt::format( FMTX( OURO_THREAD_PREFIX "TaskFlow:{}" ), worker.id() ).c_str() );
     }
-    void _taskflow_worker_thread_exit( size_t threadID )
+
+    void scheduler_epilogue( tf::Worker& worker, std::exception_ptr ptr ) override
     {
         ouroveonThreadExit();
     }
-}
+};
+
 void _discord_dpp_thread_init( const char* name )
 {
     ouroveonThreadEntry( fmt::format( FMTX( OURO_THREAD_PREFIX "DPP:{}" ), name ).c_str() );
@@ -164,7 +165,7 @@ CoreStart::~CoreStart()
 // ---------------------------------------------------------------------------------------------------------------------
 Core::Core()
     : CoreStart()
-    , m_taskExecutor( std::clamp( std::thread::hardware_concurrency(), 2U, 8U ) )
+    , m_taskExecutor( std::clamp( std::thread::hardware_concurrency(), 2U, 8U ), std::make_shared<TaskFlowWorkerHook>() )
 {
 }
 
