@@ -643,7 +643,7 @@ protected:
     }
 
     std::string                                     m_warehouseWorkState;
-    bool                                            m_warehouseWorkUnderway;
+    bool                                            m_warehouseWorkUnderway = false;
 
     std::mutex                                      m_warehouseContentsReportMutex;
     endlesss::toolkit::Warehouse::ContentsReport    m_warehouseContentsReport;
