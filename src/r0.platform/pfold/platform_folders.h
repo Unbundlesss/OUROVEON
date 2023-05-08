@@ -59,7 +59,7 @@ std::string GetWindowsProgramFiles();
  * string data_home = getDataHome()+"/My Program Name/";
  * @endcode
  * On Windows this defaults to %APPDATA% (Roaming profile)
- * On Linux this defaults to ~/.local/share but can be configured
+ * On Linux this defaults to ~/.local/share but can be configured by the user
  * @return The base folder for storing program data.
  */
 std::string getDataHome();
@@ -71,7 +71,7 @@ std::string getDataHome();
  * string data_home = getConfigHome()+"/My Program Name/";
  * @endcode
  * On Windows this defaults to %APPDATA% (Roaming profile)
- * On Linux this defaults to ~/.config but can be configured
+ * On Linux this defaults to ~/.config but can be configured by the user
  * @return The base folder for storing config data.
  */
 std::string getConfigHome();
@@ -80,13 +80,27 @@ std::string getConfigHome();
  * Retrives the base folder for storing cache files.
  * You must add the program name yourself like this:
  * @code{.cpp}
- * string data_home = getCacheDir()+"/My Program Name/";
+ * string data_home = getCacheDir()+"/My Program Name/cache/";
  * @endcode
  * On Windows this defaults to %APPDATALOCAL%
- * On Linux this defaults to ~/.cache but can be configured
- * @return The base folder for storing data that do not need to be backed up.
+ * On Linux this defaults to ~/.cache but can be configured by the user
+ * Note that it is recommended to append "cache" after the program name to prevent conflicting with "StateDir" under Windows
+ * @return The base folder for storing data that do not need to be backed up and might be deleted.
  */
 std::string getCacheDir();
+
+/**
+ * Retrives the base folder used for state files.
+ * You must add the program name yourself like this:
+ * @code{.cpp}
+ * string data_home = getStateDir()+"/My Program Name/";
+ * @endcode
+ * On Windows this defaults to %APPDATALOCAL%
+ * On Linux this defaults to ~/.local/state but can be configured by the user
+ * On OS X this is the same as getDataHome()
+ * @return The base folder for storing data that do not need to be backed up but should not be reguarly deleted either.
+ */
+std::string getStateDir();
 
 /**
  * This will append extra folders that your program should be looking for data files in.
