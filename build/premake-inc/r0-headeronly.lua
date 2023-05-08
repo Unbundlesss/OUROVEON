@@ -42,7 +42,7 @@ end
 -- ------------------------------------------------------------------------------
 ModuleRefInclude["asio"] = function()
 
-    sysincludedirs
+    externalincludedirs
     {
         SrcDir() .. "r0.net/asio/include"
     }
@@ -67,7 +67,7 @@ end
 -- ------------------------------------------------------------------------------
 ModuleRefInclude["websocketpp"] = function()
 
-    sysincludedirs
+    externalincludedirs
     {
         SrcDir() .. "r0.net/websocketpp"
     }

@@ -5,7 +5,7 @@ LibRoot.Sodium = SrcDir() .. "r0.data/sodium"
 ModuleRefInclude["sodium"] = function()
 
     filter "system:Windows"
-    sysincludedirs
+    externalincludedirs
     {
         LibRoot.Sodium .. "/src/libsodium/include/",
     }
@@ -17,14 +17,14 @@ ModuleRefInclude["sodium"] = function()
     filter {}
 
     filter "system:linux"
-    sysincludedirs
+    externalincludedirs
     {
         "/usr/include/sodium/",
     }
     filter {}
 
     filter "system:macosx"
-    sysincludedirs
+    externalincludedirs
     {
         GetMacOSPackgesDir() .. "libsodium/include",
     }

@@ -3,7 +3,7 @@ LibRoot.muFFT = SrcDir() .. "r0.dsp/muFFT"
 
 -- ==============================================================================
 ModuleRefInclude["mufft"] = function()
-    sysincludedirs
+    externalincludedirs
     {
         LibRoot.muFFT,
     }

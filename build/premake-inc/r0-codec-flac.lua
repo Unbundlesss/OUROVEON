@@ -10,11 +10,11 @@ ModuleRefInclude["flac"] = function()
     }
 
     filter "system:Windows"
-    sysincludedirs ( LibRoot.Xiph .. "/include" )
+    externalincludedirs ( LibRoot.Xiph .. "/include" )
     filter {}
 
     filter "system:macosx"
-    sysincludedirs ( GetMacOSPackgesDir() .. "flac/include" )
+    externalincludedirs ( GetMacOSPackgesDir() .. "flac/include" )
     filter {}
 end
 

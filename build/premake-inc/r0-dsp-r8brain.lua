@@ -3,7 +3,7 @@ LibRoot.R8Brain = SrcDir() .. "r0.dsp/r8brain"
 
 -- ==============================================================================
 ModuleRefInclude["r8brain"] = function()
-    sysincludedirs
+    externalincludedirs
     {
         LibRoot.R8Brain,
     }

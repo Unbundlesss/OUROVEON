@@ -30,7 +30,7 @@ public:
     ~Instance();
 
     // a hash of the plugin path
-    inline int32_t getVSTUID() const { return m_uid; }
+    inline size_t getVSTUID() const { return m_uid; }
 
     // arbitrary user data
     inline void setUserData( uint64_t ud64 ) { m_userdata = ud64; }
@@ -78,7 +78,7 @@ public:
 
 private:
 
-    int32_t                 m_uid;
+    size_t                  m_uid;
     uint64_t                m_userdata;
 
     struct Data;

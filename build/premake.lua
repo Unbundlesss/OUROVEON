@@ -7,10 +7,8 @@ require('xcode')
 local xcode = premake.modules.xcode 
 xcode.cppLanguageStandards["C++20"] = "c++20"
 
-require("vstudio")
-premake.override(premake.vstudio.vc2010, "languageStandard", function(base, cfg)
-    premake.vstudio.vc2010.element("LanguageStandard", nil, 'stdcpp20')
-end)
+include "premake-inc/premake-build-vstudio.lua"
+
 
 -- ==============================================================================
 
@@ -172,6 +170,16 @@ workspace ("ouroveon_" .. _ACTION)
     }
     filter {}
 
+    solutionitems {
+        {
+            ["natvis"] = 
+            {
+                path.join( SrcDir(), "r0.data",     "json",       "nlohmann_json.natvis" ),
+                path.join( SrcDir(), "r0.scaffold", "abseil_ext", "abseil.natvis" ),
+            }
+        }
+    }
+
 -- ==============================================================================
 
 include "premake-inc/r0-headeronly.lua"
@@ -204,7 +212,6 @@ include "premake-inc/r0-codec-zlib.lua"
 group ""
 group "r0-data"
 
-include "premake-inc/r0-data-cityhash.lua"
 include "premake-inc/r0-data-sqlite3.lua"
 include "premake-inc/r0-data-sodium.lua"
 

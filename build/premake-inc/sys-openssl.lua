@@ -2,14 +2,14 @@
 ModuleRefInclude["openssl"] = function()
 
     filter "system:Windows"
-    sysincludedirs
+    externalincludedirs
     {
         GetPrebuiltLibs_Win64() .. "openssl/include"
     }
     filter {}
 
     filter "system:macosx"
-    sysincludedirs
+    externalincludedirs
     {
         GetMacOSPackgesDir() .. "openssl@1.1/include/",
     }

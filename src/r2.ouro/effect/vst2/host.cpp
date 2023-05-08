@@ -259,7 +259,7 @@ void Instance::UnregisterWndClass()
 Instance::Instance( const char* pluginPath, const float sampleRate, const uint32_t maximumBlockSize, const app::AudioPlaybackTimeInfo* unifiedTime )
     : m_userdata( 0 )
 {
-    m_uid = CityHash32( pluginPath, strlen( pluginPath ) );
+    m_uid = absl::Hash< const char* >{}(pluginPath);
 
     m_data = std::make_unique< Instance::Data >();
     m_data->m_path                      = pluginPath;

@@ -2,21 +2,21 @@
 ModuleRefInclude["freetype"] = function()
 
     filter "system:Windows"
-    sysincludedirs
+    externalincludedirs
     {
         GetPrebuiltLibs_Win64() .. "freetype/include/",
     }
     filter {}
 
     filter "system:linux"
-    sysincludedirs
+    externalincludedirs
     {
         "/usr/include/freetype2/",
     }
     filter {}
 
     filter "system:macosx"
-    sysincludedirs
+    externalincludedirs
     {
         GetMacOSPackgesDir() .. "freetype/include/freetype2/",
     }

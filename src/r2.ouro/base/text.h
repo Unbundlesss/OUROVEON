@@ -9,21 +9,8 @@
 #pragma once
 
 #include <string>
-#include "city.h"
 
 namespace base {
-
-// ---------------------------------------------------------------------------------------------------------------------
-inline uint64_t HashString64( const std::string_view& string )
-{
-    return CityHash64( string.data(), string.size() );
-}
-
-// ---------------------------------------------------------------------------------------------------------------------
-inline uint32_t HashString32( const std::string_view& string )
-{
-    return CityHash32( string.data(), string.size() );
-}
 
 // ---------------------------------------------------------------------------------------------------------------------
 inline void trimRight( std::string& str, const std::string& trimChars )

@@ -28,7 +28,7 @@ struct MidiDevice
     MidiDevice() = delete;
     MidiDevice( const std::string& name )
         : m_name( name )
-        , m_uid( base::HashString64( name ) )
+        , m_uid( absl::Hash< std::string >{}(name) )
     {}
 
     constexpr bool operator == ( const MidiDevice& rhs ) const { return rhs.m_uid == m_uid; }

@@ -3,7 +3,7 @@ LibRoot.DPP = SrcDir() .. "r0.net/dpp"
 
 -- ==============================================================================
 ModuleRefInclude["dpp"] = function()
-    sysincludedirs
+    externalincludedirs
     {
         LibRoot.DPP .. "/include",
     }

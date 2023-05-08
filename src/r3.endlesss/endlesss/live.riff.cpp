@@ -25,9 +25,7 @@ namespace live {
 // ---------------------------------------------------------------------------------------------------------------------
 endlesss::live::Riff::RiffCIDHash Riff::computeHashForRiffCID( const endlesss::types::RiffCouchID& riffCID )
 {
-    const auto idToHash = riffCID.c_str();
-    const auto idLength = riffCID.size();
-    return RiffCIDHash{ CityHash64( idToHash, idLength ) };
+    return RiffCIDHash{ absl::Hash< endlesss::types::RiffCouchID >{}(riffCID) };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

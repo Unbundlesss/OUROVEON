@@ -822,7 +822,7 @@ protected:
                 nameHighlightOn[nH]             = !jamVis.m_nameHighlighting[nH].m_name.empty();
                 if ( nameHighlightOn[nH] )
                 {
-                    nameHighlightHashes[nH]     = base::HashString64( jamVis.m_nameHighlighting[nH].m_name );
+                    nameHighlightHashes[nH]     = absl::Hash< std::string >{}( jamVis.m_nameHighlighting[nH].m_name );
                     nameHighlightColourU32[nH]  = ImGui::ColorConvertFloat4ToU32_BGRA_Flip( jamVis.m_nameHighlighting[nH].m_colour );
                 }
             }

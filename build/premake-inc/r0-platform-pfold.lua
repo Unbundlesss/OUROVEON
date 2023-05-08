@@ -3,7 +3,7 @@ LibRoot.PFold = SrcDir() .. "r0.platform/pfold"
 
 -- ==============================================================================
 ModuleRefInclude["pfold"] = function()
-    sysincludedirs
+    externalincludedirs
     {
         LibRoot.PFold,
     }

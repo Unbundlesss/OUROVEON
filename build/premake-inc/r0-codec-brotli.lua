@@ -3,7 +3,7 @@ LibRoot.Brotli = SrcDir() .. "r0.codec/brotli"
 
 -- ==============================================================================
 ModuleRefInclude["brotli"] = function()
-    sysincludedirs
+    externalincludedirs
     {
         LibRoot.Brotli .. "/include",
     }

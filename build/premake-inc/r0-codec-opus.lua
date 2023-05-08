@@ -16,14 +16,14 @@ ModuleRefInclude["opus"] = function()
     filter {}
 
     filter "system:linux"
-    sysincludedirs
+    externalincludedirs
     {
         "/usr/include/opus/",
     }
     filter {}
 
     filter "system:macosx"
-    sysincludedirs
+    externalincludedirs
     {
         GetMacOSPackgesDir() .. "opus/include/opus",
     }

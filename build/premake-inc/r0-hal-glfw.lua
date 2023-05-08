@@ -8,12 +8,12 @@ end
 
 -- ------------------------------------------------------------------------------
 function _GLFW_Include()
-    sysincludedirs
+    externalincludedirs
     {
         Root_GLFW() .. "include",
         Root_GLFW_Ext() .. "include",
     }
-    sysincludedirs
+    externalincludedirs
     {
         Root_GLFW() .. "deps",
     }

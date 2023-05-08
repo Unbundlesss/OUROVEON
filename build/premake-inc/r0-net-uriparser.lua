@@ -3,7 +3,7 @@ LibRoot.UriParser = SrcDir() .. "r0.net/uriparser"
 
 -- ==============================================================================
 ModuleRefInclude["uriparser"] = function()
-    sysincludedirs
+    externalincludedirs
     {
         LibRoot.UriParser .. "/include",
     }

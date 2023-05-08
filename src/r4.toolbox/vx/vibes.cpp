@@ -325,7 +325,7 @@ struct Vibes::State
 
     inline void setRandomSeedFromString()
     {
-        const auto newSeed = base::HashString32( m_randomString );
+        const auto newSeed = absl::Hash<std::string>{}(m_randomString);
         blog::app( FMTX( "New random seed set from '{}' => {}" ), m_randomString, newSeed );
         m_randomGen.reseed( newSeed );
     }

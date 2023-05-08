@@ -1384,7 +1384,7 @@ bool JamSliceTask::Work( TaskQueue& currentTasks )
                    stemCIDs[6],
                    stemCIDs[7] ) )
     {
-        const uint64_t hashedUsername = base::HashString64( username );
+        const uint64_t hashedUsername = absl::Hash<std::string_view>{}(username);
 
         const auto contextTimestamp = spacetime::InSeconds{ std::chrono::seconds{ timestamp } };
 
