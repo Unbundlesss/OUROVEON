@@ -1,0 +1,14 @@
+# EditorConfig is awesome: https://EditorConfig.org
+
+# top-most EditorConfig file
+root = true
+
+[*]
+# Don't specify the line endings so they match the host platform
+end_of_line = unset
+insert_final_newline = true
+
+indent_style = space
+indent_size = 4
+
+guidelines = 120
