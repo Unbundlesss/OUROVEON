@@ -40,7 +40,7 @@ struct ServiceBound
     constexpr const _T* operator->() const { return get(); }
 
 private:
-    template< typename _T > friend struct ServiceInstance;
+    template< typename _TS > friend struct ServiceInstance;
 
     ServiceBound( _T* inst, const std::shared_ptr<ServiceToken>& alive )
         : m_instance( inst )
