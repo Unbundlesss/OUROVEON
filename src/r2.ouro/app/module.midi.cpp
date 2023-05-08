@@ -218,7 +218,7 @@ std::vector< app::module::MidiDevice > Midi::fetchListOfInputDevices()
     const auto inputPortCount = midiIn->getPortCount();
 
     inputDevices.reserve( inputPortCount );
-    for ( auto pI = 0; pI < inputPortCount; pI++ )
+    for ( auto pI = 0U; pI < inputPortCount; pI++ )
     {
         const auto portName = midiIn->getPortName( pI );
         inputDevices.emplace_back( portName );
