@@ -44,7 +44,11 @@ project "r0-abseil"
     local abslcode = os.matchfiles( LibRoot.Abseil .. "/absl/**.cc" )
     for idx,val in pairs(abslcode) do
         if string.match( val, "_test" ) or 
+           string.match( val, "test_" ) or
            string.match( val, "_benchmark" ) or
+           string.match( val, "_mock_" ) or
+           string.match( val, "_gentables" ) or
+           string.match( val, "print_hash_of.cc") or
            string.match( val, "benchmarks.cc" ) then
         else
             files( val )

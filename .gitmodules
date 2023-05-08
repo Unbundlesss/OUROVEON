@@ -1,3 +1,6 @@
 [submodule "src/r0.async/taskflow"]
 	path = src/r0.async/taskflow
 	url = https://github.com/taskflow/taskflow
+[submodule "src/r0.scaffold/abseil"]
+	path = src/r0.scaffold/abseil
+	url = https://github.com/abseil/abseil-cpp
