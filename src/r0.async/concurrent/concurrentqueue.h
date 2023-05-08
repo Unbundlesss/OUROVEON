@@ -472,7 +472,7 @@ namespace details
 #ifdef _MSC_VER
 #pragma warning(suppress: 4554)
 #endif
-		return static_cast<T>(a - b) > static_cast<T>(static_cast<T>(1) << static_cast<T>(sizeof(T) * CHAR_BIT - 1));
+		return static_cast<T>(a - b) > static_cast<T>((static_cast<T>(1)) << (static_cast<T>(sizeof(T) * CHAR_BIT - 1)));
 	}
 	
 	template<typename U>
