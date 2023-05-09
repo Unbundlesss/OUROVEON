@@ -35,6 +35,7 @@ struct StringWrapper
     ouro_nodiscard constexpr std::size_t size() const { return _value.size(); }
     ouro_nodiscard constexpr std::string substr( size_t len ) const { return _value.substr( 0, len ); }
 
+    // enabled for archival via cereal
     template <class Archive,
         cereal::traits::EnableIf<cereal::traits::is_text_archive<Archive>::value>
         = cereal::traits::sfinae>
@@ -42,8 +43,6 @@ struct StringWrapper
     {
         return _value;
     }
-
-    // Enabled for text archives (e.g. XML, JSON)
     template <class Archive,
         cereal::traits::EnableIf<cereal::traits::is_text_archive<Archive>::value>
         = cereal::traits::sfinae>
@@ -54,6 +53,7 @@ struct StringWrapper
 
     using StringWrapperType = StringWrapper<_identity>;
 
+    // absl hash support
     template <typename H>
     friend H AbslHashValue( H h, const StringWrapperType& m )
     {
@@ -62,19 +62,20 @@ struct StringWrapper
 
 private:
     std::string _value;
-
 };
 
 } // namespace id
 } // namespace base
 
 
-// create shims for Fmt and Cereal
-#define Gen_StringWrapperFormatter( _type )                                                                                 \
-            template <> struct fmt::formatter<_type> : formatter<std::string> {                                             \
-                template <typename FormatContext>                                                                           \
-                auto format( const _type& c, FormatContext& ctx ) const -> decltype(ctx.out()) {                            \
-                    return formatter<std::string>::format( c, ctx );                                                        \
-                }                                                                                                           \
+// create output shims for {fmt}, sit on top of existing std::string formatting
+#define Gen_StringWrapperFormatter( _type )                                                         \
+            template <> struct fmt::formatter<_type> : formatter<std::string>                       \
+            {                                                                                       \
+                template <typename FormatContext>                                                   \
+                auto format( const _type& c, FormatContext& ctx ) const -> decltype(ctx.out())      \
+                {                                                                                   \
+                    return formatter<std::string>::format( c, ctx );                                \
+                }                                                                                   \
             };
 
