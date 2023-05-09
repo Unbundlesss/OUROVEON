@@ -75,6 +75,7 @@ ImU32 ParseHexColour( const char* hexColour );
 ImVec4 GetPulseColourVec4();
 ImU32 GetPulseColour();
 
+inline ImVec4 GetWarningTextColour() { return ImVec4( 0.981f, 0.874f, 0.378f, 0.985f ); }
 inline ImVec4 GetErrorTextColour() { return ImVec4(0.981f, 0.074f, 0.178f, 0.985f); }
 
 // ---------------------------------------------------------------------------------------------------------------------

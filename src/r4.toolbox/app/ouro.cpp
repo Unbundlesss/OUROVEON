@@ -623,7 +623,6 @@ int OuroApp::EntrypointGUI()
                         }
                         ImGui::PopItemWidth();
 
-
                         ImGui::TextUnformatted( "Output Device :" );
                         ImGui::PushItemWidth( ImGui::GetContentRegionAvail().x - 20.0f );
 
@@ -648,6 +647,16 @@ int OuroApp::EntrypointGUI()
                             ImGui::EndCombo();
                         }
                         ImGui::PopItemWidth();
+
+                        ImGui::Spacing();
+                        ImGui::Spacing();
+
+                        // note incompatibility with Opus streaming direct-to-discord; this has a fixed constraint of running at 48k
+                        if ( audioConfig.sampleRate != 48000 )
+                            ImGui::TextColored( ImGui::GetWarningTextColour(), ICON_FA_CIRCLE_INFO " Discord audio streaming requires 48khz output" );
+                        else
+                            ImGui::TextUnformatted( ICON_FA_CIRCLE_CHECK " Discord compatible audio output" );
+
 
                         ImGui::Unindent( perBlockIndent );
                         ImGui::Spacing();
@@ -731,10 +740,6 @@ int OuroApp::EntrypointGUI()
                             }
                             else
                             {
-                                if ( audioConfig.sampleRate != 48000 )
-                                    ImGui::TextColored( ImGui::GetErrorTextColour(), ICON_FA_TRIANGLE_EXCLAMATION " Discord audio streaming requires 48khz output" );
-                                else
-                                    ImGui::TextUnformatted( ICON_FA_CIRCLE_CHECK " Discord compatible audio output" );
                             }
                         }
                         ImGui::PopItemWidth();
