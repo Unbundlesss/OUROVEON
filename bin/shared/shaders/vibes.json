@@ -37,6 +37,22 @@
                     "bufferOut": "final"
                 }
             ]
+        },
+        {
+            "name": "Debug",
+            "copyright" : "ishani",
+            "operations": [
+                {
+                    "name": "render",
+                    "fragment": "debug",
+                    "bufferInA": "final",
+                    "bufferOut": "final",
+                    "toggles" : [
+                        { "name" : "Debug Display",
+                          "opts" : [ "PULSE", "ENERGY", "SCOPE", "GAIN", "BEAT", "UV" ], "default_value" : 0 }
+                    ]
+                }
+            ]
         }
     ]
 }

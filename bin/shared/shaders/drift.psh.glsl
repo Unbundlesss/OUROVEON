@@ -1,17 +1,7 @@
 
-#include "lib/common.glsl"
-#include "lib/colourspace.glsl"
+#include "lib/all.glsl"
 
 
-uniform vec2        iResolution;
-uniform vec4        iBeat;
-uniform float       iTime;
-uniform sampler2D   iAudio;
-uniform sampler2D   iInputBufferA;
-
-in vec2 oUV;
-
-layout (location = 0) out vec4 glOutColour;
 
 // --------------------------------------------------------------------------------------------
 
@@ -111,9 +101,10 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
 void main(void)
 {
     vec2 sampleUV = oUV;
+    vec2 cUV = ( (sampleUV) * iResolution.xy ) / max( iResolution.x, iResolution.y );
 
     vec4 resultColour;
-    mainImage( resultColour, sampleUV );
+    mainImage( resultColour, cUV );
 
     vec4 previous = texture(iInputBufferA, iViewportOffset + (oUV * iViewportUV));
 

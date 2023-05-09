@@ -1,7 +1,4 @@
 
-uniform vec2        iViewportUV;
-uniform vec2        iViewportOffset;
-
 const float PI          = 3.1415926535897932384626433832795;
 const float TAU         = PI * 2.0;
 const float HALF_PI     = PI * 0.5;

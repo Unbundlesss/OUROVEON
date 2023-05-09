@@ -259,7 +259,24 @@ struct VibePlan
                 glChecked( glUniform2f( vibeShader->m_glUniformResolution,  (float)targetWidth, (float)targetHeight ) );
                 glChecked( glUniform1f( vibeShader->m_glUniformTime,        timeValue ) );
 
-                glChecked( glUniform4f( vibeShader->m_glUniformBeat,        data.m_consensusBeat, data.m_riffBeatSegmentCount, data.m_riffBeatSegmentActive, 0.0f ) );
+                glChecked( glUniform4f( vibeShader->m_glUniformBeat,
+                    data.m_consensusBeat,
+                    data.m_riffBeatSegmentCount,
+                    data.m_riffBeatSegmentActive,
+                    data.m_riffPlaybackProgress
+                ) );
+
+                // turn the riff hash value into a float 0..1 random seed for shader use
+                const uint64_t riffHashMasked = 0x3FF0000000000000ULL | ((data.m_riffHash >> 12) | 1);
+                float riffRandom = (float)( *(double*)&riffHashMasked - 1.0 );
+
+                glChecked( glUniform4f( vibeShader->m_glUniformRiff,
+                    data.m_riffBPM,
+                    (float)data.m_riffRoot,
+                    (float)data.m_riffScale,
+                    riffRandom
+                ) );
+
 
                 glChecked( glBindVertexArray( vibeShader->m_glVAO ) );
                 glChecked( glDrawArrays( GL_TRIANGLES, 0, VibeShader::cRenderTriangleCount * VibeShader::cRenderVerticesPerTriangle ) );

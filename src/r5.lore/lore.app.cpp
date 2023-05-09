@@ -1492,7 +1492,8 @@ int LoreApp::EntrypointOuro()
         const auto currentRiff = currentRiffPtr.get();
 
         // update the Exchange data block; this also serves as a way to push sanitized beat / energy / playback 
-        // information around other parts of the app
+        // information around other parts of the app. this pulls data from a few different sources to try and 
+        // give a solid, accurate overview of what is coming out of the audio engine at this instant
         {
             // take basic riff & stem data from the Riff instance
             endlesss::toolkit::Exchange::copyDetailsFromRiff( m_endlesssExchange, currentRiffPtr, m_currentViewedJamName.c_str() );
@@ -1511,6 +1512,12 @@ int LoreApp::EntrypointOuro()
                     playbackProgression );
 
                 endlesss::toolkit::Exchange::copyDetailsFromProgression( m_endlesssExchange, playbackProgression );
+
+                // take a snapshot of the mixer layer gains and apply that to the exchange data so "stem gain" is 
+                // more representative of what's coming out of the audio pipeline
+                const auto currentMixPermutation = mixPreview.getCurrentPermutation();
+                for ( std::size_t i = 0; i < currentMixPermutation.m_layerGainMultiplier.size(); i++ )
+                    m_endlesssExchange.m_stemGain[i] *= currentMixPermutation.m_layerGainMultiplier[i];
 
                 // copy in the scope data
                 const dsp::Scope::Result& scopeResult = m_mdAudio->getCurrentScopeResult();

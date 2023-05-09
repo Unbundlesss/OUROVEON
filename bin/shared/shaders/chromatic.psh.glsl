@@ -1,21 +1,8 @@
 
-#include "lib/common.glsl"
-#include "lib/colourspace.glsl"
+#include "lib/all.glsl"
 
 
 // https://www.shadertoy.com/view/3tfcD8
-
-
-
-uniform vec2        iResolution;
-uniform vec4        iBeat;
-uniform float       iTime;
-uniform sampler2D   iAudio;
-uniform sampler2D   iInputBufferA;
-
-in vec2 oUV;
-
-layout (location = 0) out vec4 glOutColour;
 
 // --------------------------------------------------------------------------------------------
 vec3 ACESFilm(vec3 x)

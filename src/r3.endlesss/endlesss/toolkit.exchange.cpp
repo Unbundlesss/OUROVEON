@@ -62,7 +62,7 @@ void Exchange::copyDetailsFromRiff( Exchange& data, const live::RiffPtr& riff, c
 // ---------------------------------------------------------------------------------------------------------------------
 void Exchange::copyDetailsFromProgression( Exchange& data, const live::RiffProgression& progression )
 {
-    data.m_riffBeatSegmentActive = progression.m_playbackBar;
+    data.m_riffBeatSegmentActive = progression.m_playbackBarSegment;
     data.m_riffPlaybackProgress  = (float)progression.m_playbackPercentage;
 }
 

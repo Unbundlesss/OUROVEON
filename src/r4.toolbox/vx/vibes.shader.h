@@ -50,6 +50,7 @@ public:
     uint32_t            m_glUniformResolution   = 0;
     uint32_t            m_glUniformTime         = 0;
     uint32_t            m_glUniformBeat         = 0;
+    uint32_t            m_glUniformRiff         = 0;
     uint32_t            m_glUniformTexAudio     = 0;
     uint32_t            m_glUniformTexInputA    = 0;
     uint32_t            m_glUniformTexInputB    = 0;

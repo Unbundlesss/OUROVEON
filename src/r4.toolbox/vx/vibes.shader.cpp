@@ -46,6 +46,7 @@ absl::Status VibeShader::bind( const ArrayBufferHandles& arrayBufferHandles )
         m_glUniformResolution   = glCheckedCall( uniformBindingFailed, glGetUniformLocation( shaderHandle, "iResolution" ) );
         m_glUniformTime         = glCheckedCall( uniformBindingFailed, glGetUniformLocation( shaderHandle, "iTime" ) );
         m_glUniformBeat         = glCheckedCall( uniformBindingFailed, glGetUniformLocation( shaderHandle, "iBeat" ) );
+        m_glUniformRiff         = glCheckedCall( uniformBindingFailed, glGetUniformLocation( shaderHandle, "iRiff" ) );
         m_glUniformTexAudio     = glCheckedCall( uniformBindingFailed, glGetUniformLocation( shaderHandle, "iAudio" ) );
         m_glUniformTexInputA    = glCheckedCall( uniformBindingFailed, glGetUniformLocation( shaderHandle, "iInputBufferA" ) );
         m_glUniformTexInputB    = glCheckedCall( uniformBindingFailed, glGetUniformLocation( shaderHandle, "iInputBufferB" ) );
