@@ -26,10 +26,10 @@ struct RiffFetch
 {
     virtual ~RiffFetch() = default;
 
-    virtual ouro_nodiscard int32_t                                 getSampleRate() const = 0;          // target stem sample rate
-    virtual ouro_nodiscard const endlesss::api::NetConfiguration&  getNetConfiguration() const = 0;    // access keys
-    virtual ouro_nodiscard endlesss::cache::Stems&                 getStemCache() = 0;                 // cache storage for stems
-    virtual ouro_nodiscard tf::Executor&                           getTaskExecutor() = 0;              // parallelisation
+    ouro_nodiscard virtual int32_t                                  getSampleRate() const = 0;          // target stem sample rate
+    ouro_nodiscard virtual const endlesss::api::NetConfiguration&   getNetConfiguration() const = 0;    // access keys
+    ouro_nodiscard virtual endlesss::cache::Stems&                  getStemCache() = 0;                 // cache storage for stems
+    ouro_nodiscard virtual tf::Executor&                            getTaskExecutor() = 0;              // parallelisation
 };
 
 using RiffFetchInstance = base::ServiceInstance<RiffFetch>;     // the original instance that can provide the services

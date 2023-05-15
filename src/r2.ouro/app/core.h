@@ -47,12 +47,12 @@ concept ReturnsAbslStatus = requires (T t) {
 };
 
 template< ReturnsAbslStatus _ccall >
-bool checkedCoreCall( const char* context, const _ccall& cb )
+bool checkedCoreCall( const std::string_view& context, const _ccall& cb )
 {
     if ( const auto callStatus = cb(); !callStatus.ok() )
     {
         blog::error::core( FMTX( "{} failed; {}" ),
-            context, 
+            context,
             callStatus.ToString() );
 
         return false;
@@ -221,7 +221,7 @@ public:
     }
 
     // config::IPathProvider
-    ouro_nodiscard constexpr fs::path getPath( const PathFor p ) const override
+    ouro_nodiscard xconstexpr fs::path getPath( const PathFor p ) const override
     { 
         switch ( p )
         {

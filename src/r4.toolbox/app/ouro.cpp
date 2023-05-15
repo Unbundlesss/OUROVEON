@@ -49,6 +49,8 @@ int OuroApp::EntrypointGUI()
     static constexpr std::array< uint32_t,    4 > cSampleRateValues {  44100 ,  48000 ,  88200 ,  96000  };
     static constexpr std::array< const char*, 6 > cBufferSizeLabels {  "Auto",    "64",   "256",   "512",  "1024",  "2048" };
     static constexpr std::array< uint32_t,    6 > cBufferSizeValues {      0 ,     64 ,    256 ,    512 ,   1024 ,   2048  };
+    static constexpr std::array< const char*, 6 > cVibeRenderLabels {   "512",  "1024",  "2048",  "4096" };
+    static constexpr std::array< uint32_t,    6 > cVibeRenderValues {    512 ,   1024 ,   2048 ,   4096  };
 
 
     // try and fetch last audio settings from the stash; doesn't really matter if we can't, it is just saved defaults

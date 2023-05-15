@@ -7,7 +7,9 @@
 //  
 //
 
-#define OURO_FRAMEWORK_VERSION    "0.7.2"
+#define OURO_FRAMEWORK_VERSION    "0.7.3"
+
+// ---------------------------------------------------------------------------------------------------------------------
 
 // std
 #include <bitset>
@@ -26,6 +28,8 @@
 #include <mutex>
 #include <concepts>
 
+// shim for source_location support on compilers that have yet to natively support it (glares at Apple)
+#include "source_location/source_location.hpp"
 
 // abseil
 #include "absl/container/flat_hash_map.h"
@@ -36,6 +40,7 @@
 #include "absl/status/statusor.h"
 #include "absl/cleanup/cleanup.h"
 
+// ---------------------------------------------------------------------------------------------------------------------
 
 #if ABSL_HAVE_CPP_ATTRIBUTE(nodiscard) || _MSC_VER >= 1911
 #define ouro_nodiscard  [[nodiscard]]
@@ -45,6 +50,15 @@
 
 #define ouro_final  final
 
+// crap patch for the fact Apple Clang cannot handle a chunk of constexpr use at the moment, to the point where
+// it crashes the compiler
+#if OURO_PLATFORM_WIN
+#define xconstexpr  constexpr
+#else
+#define xconstexpr  inline
+#endif 
+
+// ---------------------------------------------------------------------------------------------------------------------
 
 // rpm
 #include "rpmalloc.h"
@@ -63,13 +77,7 @@ private:
 };
 
 
-
-#ifdef OURO_CXX20_SEMA
-#include <semaphore>
-#include <barrier>
-#include <latch>
-#endif // OURO_CXX20_SEMA
-
+// ---------------------------------------------------------------------------------------------------------------------
 
 // nb we include windows here as part of the order-dependent mess that is gl/glad/glfw/et/al
 // similarly, pushing APIENTRY as it gets undeffed (ok, fine) and then restored once glfw is done
@@ -98,6 +106,8 @@ private:
 #endif // OURO_PLATFORM_WIN
 
 
+// ---------------------------------------------------------------------------------------------------------------------
+
 // github.com/HowardHinnant/date
 #include "date/date.h"
 #include "date/tz.h"
@@ -123,6 +133,8 @@ namespace fs = std::filesystem;
 // nlohmann JSON
 #include "nlohmann/json.hpp"
 
+
+// ---------------------------------------------------------------------------------------------------------------------
 
 // {fmt}
 #include "fmt/core.h"
@@ -220,32 +232,33 @@ ADD_BLOG( stem,     0xe65ea9,    "STEM" )
 // shortened FMT_STRING
 #define FMTX(s) FMT_STRING_IMPL(s, fmt::detail::compile_string, )
 
+// ---------------------------------------------------------------------------------------------------------------------
 
 // imgui
 #define IM_VEC2_CLASS_EXTRA                                                                                             \
-        constexpr ImVec2 operator*( const float rhs ) const { return ImVec2( this->x * rhs, this->y * rhs ); }          \
-        constexpr ImVec2 operator/( const float rhs ) const { return ImVec2( this->x / rhs, this->y / rhs ); }          \
-        constexpr ImVec2 operator+( const ImVec2& rhs ) const { return ImVec2( this->x + rhs.x, this->y + rhs.y ); }    \
-        constexpr ImVec2 operator-( const ImVec2& rhs ) const { return ImVec2( this->x - rhs.x, this->y - rhs.y ); }    \
-        constexpr ImVec2 operator*( const ImVec2& rhs ) const { return ImVec2( this->x * rhs.x, this->y * rhs.y ); }    \
-        constexpr ImVec2 operator/( const ImVec2& rhs ) const { return ImVec2( this->x / rhs.x, this->y / rhs.y ); }    \
-        constexpr ImVec2& operator*=( const float rhs ) { this->x *= rhs; this->y *= rhs; return *this; }               \
-        constexpr ImVec2& operator/=( const float rhs ) { this->x /= rhs; this->y /= rhs; return *this; }               \
-        constexpr ImVec2& operator+=( const ImVec2& rhs ) { this->x += rhs.x; this->y += rhs.y; return *this; }         \
-        constexpr ImVec2& operator-=( const ImVec2& rhs ) { this->x -= rhs.x; this->y -= rhs.y; return *this; }         \
-        constexpr ImVec2& operator*=( const ImVec2& rhs ) { this->x *= rhs.x; this->y *= rhs.y; return *this; }         \
-        constexpr ImVec2& operator/=( const ImVec2& rhs ) { this->x /= rhs.x; this->y /= rhs.y; return *this; }
+        inline ImVec2 operator*( const float rhs ) const { return ImVec2( this->x * rhs, this->y * rhs ); }          \
+        inline ImVec2 operator/( const float rhs ) const { return ImVec2( this->x / rhs, this->y / rhs ); }          \
+        inline ImVec2 operator+( const ImVec2& rhs ) const { return ImVec2( this->x + rhs.x, this->y + rhs.y ); }    \
+        inline ImVec2 operator-( const ImVec2& rhs ) const { return ImVec2( this->x - rhs.x, this->y - rhs.y ); }    \
+        inline ImVec2 operator*( const ImVec2& rhs ) const { return ImVec2( this->x * rhs.x, this->y * rhs.y ); }    \
+        inline ImVec2 operator/( const ImVec2& rhs ) const { return ImVec2( this->x / rhs.x, this->y / rhs.y ); }    \
+        inline ImVec2& operator*=( const float rhs ) { this->x *= rhs; this->y *= rhs; return *this; }               \
+        inline ImVec2& operator/=( const float rhs ) { this->x /= rhs; this->y /= rhs; return *this; }               \
+        inline ImVec2& operator+=( const ImVec2& rhs ) { this->x += rhs.x; this->y += rhs.y; return *this; }         \
+        inline ImVec2& operator-=( const ImVec2& rhs ) { this->x -= rhs.x; this->y -= rhs.y; return *this; }         \
+        inline ImVec2& operator*=( const ImVec2& rhs ) { this->x *= rhs.x; this->y *= rhs.y; return *this; }         \
+        inline ImVec2& operator/=( const ImVec2& rhs ) { this->x /= rhs.x; this->y /= rhs.y; return *this; }
 
 // imgui
 #define IM_VEC4_CLASS_EXTRA                                                                                                                                 \
-        constexpr ImVec4(const std::array< float, 4 >& arf)  { x = arf[0]; y = arf[1]; z = arf[2]; w = arf[3]; }                                            \
-        constexpr friend ImVec4 operator*( const float lhs, const ImVec4& rhs ) { return ImVec4( rhs.x * lhs, rhs.y * lhs, rhs.z * lhs, rhs.w * lhs ); }    \
-        constexpr ImVec4 operator*( const float rhs ) const { return ImVec4( this->x * rhs, this->y * rhs, this->z * rhs, this->w * rhs ); }                \
-        constexpr ImVec4 operator+( const ImVec4& rhs ) const { return ImVec4( this->x + rhs.x, this->y + rhs.y, this->z + rhs.z, this->w + rhs.w ); }      \
-        constexpr ImVec4 operator*( const ImVec4& rhs ) const { return ImVec4( this->x * rhs.x, this->y * rhs.y, this->z * rhs.z, this->w * rhs.w ); }      \
-        constexpr ImVec4& operator*=( const float rhs ) { this->x *= rhs; this->y *= rhs; this->z *= rhs; this->w *= rhs; return *this; }                   \
-        constexpr ImVec4& operator+=( const ImVec4& rhs ) { this->x += rhs.x; this->y += rhs.y; this->z += rhs.z; this->w += rhs.w; return *this; }         \
-        constexpr ImVec4& operator*=( const ImVec4& rhs ) { this->x *= rhs.x; this->y *= rhs.y; this->z *= rhs.z; this->w *= rhs.w; return *this; }
+        inline ImVec4(const std::array< float, 4 >& arf)  { x = arf[0]; y = arf[1]; z = arf[2]; w = arf[3]; }                                            \
+        inline friend ImVec4 operator*( const float lhs, const ImVec4& rhs ) { return ImVec4( rhs.x * lhs, rhs.y * lhs, rhs.z * lhs, rhs.w * lhs ); }    \
+        inline ImVec4 operator*( const float rhs ) const { return ImVec4( this->x * rhs, this->y * rhs, this->z * rhs, this->w * rhs ); }                \
+        inline ImVec4 operator+( const ImVec4& rhs ) const { return ImVec4( this->x + rhs.x, this->y + rhs.y, this->z + rhs.z, this->w + rhs.w ); }      \
+        inline ImVec4 operator*( const ImVec4& rhs ) const { return ImVec4( this->x * rhs.x, this->y * rhs.y, this->z * rhs.z, this->w * rhs.w ); }      \
+        inline ImVec4& operator*=( const float rhs ) { this->x *= rhs; this->y *= rhs; this->z *= rhs; this->w *= rhs; return *this; }                   \
+        inline ImVec4& operator+=( const ImVec4& rhs ) { this->x += rhs.x; this->y += rhs.y; this->z += rhs.z; this->w += rhs.w; return *this; }         \
+        inline ImVec4& operator*=( const ImVec4& rhs ) { this->x *= rhs.x; this->y *= rhs.y; this->z *= rhs.z; this->w *= rhs.w; return *this; }
 
 
 #include "imgui.h"

@@ -100,6 +100,11 @@ enum class RiffExportMode
 
 struct RiffExportDestination
 {
+    RiffExportDestination( const app::StoragePaths& paths, const OutputSpec& spec )
+        : m_paths( paths )
+        , m_spec( spec )
+    {}
+
     const app::StoragePaths&        m_paths;
     const OutputSpec&               m_spec;
 };
@@ -152,4 +157,3 @@ OURO_CONFIG( Export )
 
 } // namespace endlesss
 } // namespace config
-    

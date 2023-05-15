@@ -117,16 +117,15 @@ absl::StatusOr< GLuint > compileProgram(
         glAbslChecked( glAttachShader( programId, *vertexShaderResult ) );
         glAbslChecked( glAttachShader( programId, *fragmentShaderResult ) );
         glAbslChecked( glLinkProgram( programId ) );
-        glAbslChecked( glValidateProgram( programId ) );
 
-        GLint programValidated = 0;
-        glChecked( glGetProgramiv( programId, GL_VALIDATE_STATUS, &programValidated ) );
+        // ensure that this succeeded
+        GLint programLinked = 0;
+        glChecked( glGetProgramiv( programId, GL_LINK_STATUS, &programLinked ) );
 
-        // validate link
-        if ( programValidated == 0 )
+        if ( programLinked == 0 )
         {
             const auto compilationLog = glGetErrorLog( programId );
-            return absl::InternalError( fmt::format( FMTX( "shader validation failure, log:\n{}" ), compilationLog ) );
+            return absl::InternalError( fmt::format( FMTX( "shader link failure, log:\n{}" ), compilationLog ) );
         }
     }
 
@@ -157,6 +156,27 @@ Shader::PtrOrStatus Shader::loadFromDisk(
         return compilationStatus.status();
 
     return std::make_shared<Shader>( shaderName, *compilationStatus );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+absl::Status Shader::validate() const
+{
+    if ( m_handle <= 0 )
+        return absl::InternalError( "invalid shader handle for validate()" );
+
+    glAbslChecked( glValidateProgram( m_handle ) );
+
+    GLint programValidated = 0;
+    glChecked( glGetProgramiv( m_handle, GL_VALIDATE_STATUS, &programValidated ) );
+
+    // validate link
+    if ( programValidated == 0 )
+    {
+        const auto compilationLog = glGetErrorLog( m_handle );
+        return absl::InternalError( fmt::format( FMTX( "shader validate() failure, log:\n{}" ), compilationLog ) );
+    }
+
+    return absl::OkStatus();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

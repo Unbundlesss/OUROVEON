@@ -261,8 +261,8 @@ struct VibePlan
 
                 glChecked( glUniform4f( vibeShader->m_glUniformBeat,
                     data.m_consensusBeat,
-                    data.m_riffBeatSegmentCount,
-                    data.m_riffBeatSegmentActive,
+                    (float)data.m_riffBeatSegmentCount,
+                    (float)data.m_riffBeatSegmentActive,
                     data.m_riffPlaybackProgress
                 ) );
 
@@ -344,7 +344,7 @@ struct Vibes::State
     {
         const auto newSeed = absl::Hash<std::string>{}(m_randomString);
         blog::app( FMTX( "New random seed set from '{}' => {}" ), m_randomString, newSeed );
-        m_randomGen.reseed( newSeed );
+        m_randomGen.reseed( base::reduce64To32( newSeed ) );
     }
 
     absl::Status initialize( const config::IPathProvider& pathProvider )
@@ -473,7 +473,7 @@ struct Vibes::State
 
                 planOp->m_fboInputA    = findFBObyName( op.bufferInA );
                 planOp->m_fboInputB    = findFBObyName( op.bufferInB );
-                planOp->m_fboOutput     = findFBObyName( op.bufferOut );
+                planOp->m_fboOutput    = findFBObyName( op.bufferOut );
 
                 if ( planOp->m_fboOutput == nullptr )
                     return absl::InternalError( fmt::format( FMTX("Could not resolve output FBO [{}] for operation [{}]"), op.bufferOut, op.name ) );
@@ -649,6 +649,8 @@ void Vibes::State::doImGuiDisplay( const endlesss::toolkit::Exchange& data, app:
     else
     {
         ImGui::TextUnformatted( "Shader Compilation Failure" );
+        ImGui::SameLine();
+        ImGui::TextDisabled( " [?]" );
         ImGui::CompactTooltip( currentStatus.ToString() );
 
         if ( ImGui::Button( "Recompile" ) )
@@ -699,7 +701,11 @@ void Vibes::State::doImGuiCtrlGlobal()
     ImGui::Spacing();
 
     ImGui::Checkbox( "Auto Oversample", &m_autoOversample );
+    ImGui::SameLine();
+    ImGui::TextDisabled( "[?]" );
+    ImGui::CompactTooltip( "Run shaders at maximum resolution regardless of viewport size (will increase GPU usage, potentially considerably)" );
 
+    ImGui::Spacing();
     if ( ImGui::Button( "Clean Buffers" ) )
     {
         for ( const auto& fbos : m_namedVibeFBOs )

@@ -14,15 +14,14 @@
 #include "dsp/scope.h"
 #include "dsp/fft.h"
 
-#include "mufft.h"
-#include "mufft_internal.h"
+#include "pffft.h"
 
 namespace dsp {
 
 // ---------------------------------------------------------------------------------------------------------------------
 Scope::Scope()
 {
-    m_mufftPlan = mufft_create_plan_1d_c2c( FFTWindow, MUFFT_FORWARD, MUFFT_CONV_METHOD_FLAG_STEREO_MONO );
+    m_pffftPlan = pffft_new_setup( FFTWindow, PFFFT_COMPLEX );
 
     m_input  = mem::alloc16<complexf>( FFTWindow );
     m_output = mem::alloc16<complexf>( FFTWindow );
@@ -37,7 +36,7 @@ Scope::~Scope()
     mem::free16( m_output );
     mem::free16( m_input );
 
-    mufft_free_plan_1d( m_mufftPlan );
+    pffft_destroy_setup( m_pffftPlan );
 }
 
 // if enabled, can ingest multiple fft-blocks' worth of samples in a single append, potentially running fft execute multiple times
@@ -68,7 +67,7 @@ void Scope::append( const float* samplesLeft, const float* samplesRight, std::si
         // if we filled the buffer, execute the fft and extract the frequency data we want
         if ( m_writeIndex == FFTWindow )
         {
-            mufft_execute_plan_1d( m_mufftPlan, m_output, m_input );
+            pffft_transform_ordered( m_pffftPlan, (float*)m_input, (float*)m_output, nullptr, PFFFT_FORWARD );
 
             m_bucketsBase.fill( 0.0f );
 
@@ -88,7 +87,7 @@ void Scope::append( const float* samplesLeft, const float* samplesRight, std::si
 
                 const float fftMag   = std::sqrt( fftPower ) * FFTBaseBucketsRcp;
 
-                m_bucketsBase[bandI]    = std::clamp( fftMag, 0.0f, 1.0f );
+                m_bucketsBase[bandI] = std::clamp( fftMag, 0.0f, 1.0f );
             }
 
             // average down to the final bucket values

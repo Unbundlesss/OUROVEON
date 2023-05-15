@@ -29,17 +29,17 @@ struct Moment
         return std::chrono::high_resolution_clock::now();
     }
 
-    constexpr std::chrono::seconds deltaSec()
+    xconstexpr std::chrono::seconds deltaSec()
     {
         return std::chrono::duration_cast<std::chrono::seconds>(now() - m_initialTime);
     }
 
-    constexpr std::chrono::milliseconds deltaMs()
+    xconstexpr std::chrono::milliseconds deltaMs()
     {
         return std::chrono::duration_cast<std::chrono::milliseconds>(now() - m_initialTime);
     }
 
-    constexpr std::chrono::microseconds deltaUs()
+    xconstexpr std::chrono::microseconds deltaUs()
     {
         return std::chrono::duration_cast<std::chrono::microseconds>(now() - m_initialTime);
     }

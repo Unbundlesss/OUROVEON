@@ -129,9 +129,10 @@ function addSimpleHeaderOnly( moduleName, pathTo )
     end
 end
 
-addSimpleHeaderOnly("concurrent",   "r0.async/concurrent")
-addSimpleHeaderOnly("taskflow",     "r0.async/taskflow/taskflow")
-addSimpleHeaderOnly("utf8",         "r0.data/utf8")
-addSimpleHeaderOnly("json",         "r0.data/json")
-addSimpleHeaderOnly("basen",        "r0.codec/basen")
+addSimpleHeaderOnly("concurrent",       "r0.async/concurrent")
+addSimpleHeaderOnly("taskflow",         "r0.async/taskflow/taskflow")
+addSimpleHeaderOnly("utf8",             "r0.data/utf8")
+addSimpleHeaderOnly("json",             "r0.data/json")
+addSimpleHeaderOnly("basen",            "r0.codec/basen")
+addSimpleHeaderOnly("source_location",  "r0.platform/source_location/include")
 

@@ -9,9 +9,8 @@
 
 #pragma once
 
-// mufft
-struct mufft_plan_1d;
-
+// pffft
+struct PFFFT_Setup;
 
 namespace dsp {
 
@@ -21,7 +20,7 @@ namespace dsp {
 //
 struct Scope
 {
-    constexpr static std::size_t FFTWindow          = 2048;                                 // FFT sample chuck size
+    constexpr static std::size_t FFTWindow          = 2048;                                 // FFT sample chunk size
     constexpr static int32_t     FFTBaseBuckets     = 16;                                   // initial set of frequency buckets
     constexpr static float       FFTBaseBucketsRcp  = 1.0f / (float)(FFTBaseBuckets);
     constexpr static int32_t     FFTFinalBuckets    = FFTBaseBuckets >> 1;                  // final number of buckets reported
@@ -56,7 +55,7 @@ private:
         float m_imag;
     };
 
-    mufft_plan_1d* m_mufftPlan = nullptr;
+    PFFFT_Setup*    m_pffftPlan     = nullptr;
 
     complexf*       m_input         = nullptr;
     complexf*       m_output        = nullptr;

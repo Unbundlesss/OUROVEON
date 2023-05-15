@@ -78,12 +78,6 @@ workspace ("ouroveon_" .. _ACTION)
 
     configurations  { "Debug", "Release" }
 
-    if os.is64bit() then
-        print( os.host() .. " 64-bit")
-    else
-        print( os.host() .. " 32-bit")
-    end
-
     location (rootBuildGenerationDir)
 
     filter "system:Windows"
@@ -102,9 +96,9 @@ workspace ("ouroveon_" .. _ACTION)
             "OURO_PLATFORM_OSX=0",
             "OURO_PLATFORM_NIX=0",
 
+            "OURO_HAS_ISPC=1",
+
             "OURO_FEATURE_VST24=1",
-            
-            "OURO_CXX20_SEMA=1",
 
             -- for DPP; needs adjusting at the highest level before winsock is included
             "FD_SETSIZE=1024"
@@ -131,6 +125,8 @@ workspace ("ouroveon_" .. _ACTION)
             "OURO_PLATFORM_OSX=0",
             "OURO_PLATFORM_NIX=1",
 
+            "OURO_HAS_ISPC=0",
+
             "OURO_FEATURE_VST24=0",
         }
         buildoptions
@@ -151,9 +147,9 @@ workspace ("ouroveon_" .. _ACTION)
             "OURO_PLATFORM_OSX=1",
             "OURO_PLATFORM_NIX=0",
 
-            "OURO_FEATURE_VST24=0",
+            "OURO_HAS_ISPC=0",
 
-            "OURO_CXX20_SEMA=0",
+            "OURO_FEATURE_VST24=0",
         }
         buildoptions
         {
@@ -218,7 +214,7 @@ include "premake-inc/r0-data-sodium.lua"
 group ""
 group "r0-dsp"
 
-include "premake-inc/r0-dsp-mufft.lua"
+include "premake-inc/r0-dsp-pffft.lua"
 include "premake-inc/r0-dsp-r8brain.lua"
 
 group ""

@@ -37,6 +37,10 @@ struct Shader
     ouro_nodiscard constexpr const std::string& getName() const { return m_name; }
     ouro_nodiscard constexpr int32_t getHandle() const { return m_handle; }
 
+
+    // validate a loaded shader against an execution context / pipeline to ensure it has a chance of working
+    ouro_nodiscard absl::Status validate() const;
+
 private:
 
     std::string     m_name;

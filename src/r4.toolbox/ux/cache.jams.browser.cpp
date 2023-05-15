@@ -44,7 +44,7 @@ void modalUniversalJamBrowser(
         "Latest Riff",
     };
 
-    const ImVec2 configWindowSize = ImVec2( 770.0f, 440.0f );
+    const ImVec2 configWindowSize = ImVec2( 800.0f, 460.0f );
     ImGui::SetNextWindowContentSize( configWindowSize );
 
     const ImVec4 colourJamDisabled = GImGui->Style.Colors[ImGuiCol_TextDisabled];

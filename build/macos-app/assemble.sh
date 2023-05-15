@@ -19,7 +19,7 @@ cp -a $1.Info.plist $local_appdir/Contents/Info.plist
 
 cp -a ../../brand/AppIcon_$1.icns ./$local_appdir/Contents/Resources/$1.icns
 
-codesign -s $2 -v --timestamp --deep --options runtime $local_appdir
+codesign -f -s $2 -v --timestamp --deep --options runtime $local_appdir
 
 current_time=$(date "+%Y%m%d-%H%M%S")
 submission_file=$current_time.$1.zip

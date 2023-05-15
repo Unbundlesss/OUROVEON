@@ -68,10 +68,10 @@ struct IEvent
 #define CREATE_EVENT_END()              }; }
 
 // register the given event type, reporting to the log if it fails
-#define APP_EVENT_REGISTER( _evtname )                                                                              \
-        checkedCoreCall( "{" __FUNCTION__ "} register [" #_evtname "]", [this]                                      \
-            {                                                                                                       \
-                return m_appEventBus->registerEventID( events::_evtname::ID, sizeof(::events::_evtname), 1024 );    \
+#define APP_EVENT_REGISTER( _evtname )                                                                                       \
+        checkedCoreCall( fmt::format( "{{{}}} register [{}]", source_location::current().function_name(), #_evtname), [this] \
+            {                                                                                                                \
+                return m_appEventBus->registerEventID( events::_evtname::ID, sizeof(::events::_evtname), 1024 );             \
             });
 
 
