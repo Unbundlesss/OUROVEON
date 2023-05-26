@@ -1,6 +1,6 @@
 ![](doc/ouroveon_vec.svg)
 
-Experimental audio projects built to interact with data from [Endlesss](https://endlesss.fm). **OUROVEON** is a set of interconnected apps, slowly being built from modular components around an evolving "Endlesss SDK"; one part a learning exercise in audio coding and one part laboratory for ideas that build upon Endlesss' particular data model.
+Experimental audio projects built to interact with data from multiplayer music collaboration app [Endlesss](https://endlesss.fm). **OUROVEON** is a set of interconnected apps, slowly being built from modular components around an evolving "Endlesss SDK"; one part a learning exercise in audio coding and one part laboratory for ideas that build upon Endlesss' particular data model.
 
 NB. These are experimental toys, not finished products (yet), so please set your expectations accordingly. That said, a lot of love, care and substantial real-world testing has been put into their development - just do be aware that functionality and UI is subject to change rapidly and randomly as the potentials are explored!
 
@@ -10,11 +10,11 @@ NB. These are experimental toys, not finished products (yet), so please set your
 
 **OUROVEON** is written in C++20, built using [Premake](premake.github.io) and targets *Windows*, *MacOS 10.15+* (Universal arm64 + x86_64) and *Linux*, although the latter is only being tested on *Ubuntu 21*. *Raspberry Pi 3+* is also hopefully possible.
 
-Pre-built releases are made available for **Windows** and **MacOS** (*signed + notarised*); check https://github.com/Unbundlesss/OUROVEON-build
+[Pre-built releases](https://github.com/Unbundlesss/OUROVEON/releases) are made available for **Windows** and **MacOS** (*signed + notarised*)
 
 The apps are designed to be largely 'portable' and require minimal configuration, only storing data in the user's configuration directory (eg. `%APPDATA%\OUROVEON` on Windows) and a nominated data storage root.
 
-At time of writing the only difference between the platforms is **VST support**, which is Windows-only presently. Cross-platform VST3 support is planned, as is VAMP support for stem data analysis.
+At time of writing the only difference between the platforms is **VST support**, which is Windows-only presently. Cross-platform VST3 support is planned, ditto CLAP.
 
 <hr>
 <br>

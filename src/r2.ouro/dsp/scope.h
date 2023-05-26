@@ -9,60 +9,77 @@
 
 #pragma once
 
+#include "dsp/fft.util.h"
+#include "config/spectrum.h"
+
+#include "q/synth/hann_gen.hpp"
+
 // pffft
 struct PFFFT_Setup;
 
 namespace dsp {
 
 // ---------------------------------------------------------------------------------------------------------------------
-// the fft scope accepts a continual stream of samples; once it has enough, it extracts frequency buckets
+// the 8-bucket fft scope accepts a continual stream of samples; once it has enough, it extracts frequency buckets
 // for visualisation elsewhere
 //
-struct Scope
+struct Scope8
 {
-    constexpr static std::size_t FFTWindow          = 2048;                                 // FFT sample chunk size
-    constexpr static int32_t     FFTBaseBuckets     = 16;                                   // initial set of frequency buckets
-    constexpr static float       FFTBaseBucketsRcp  = 1.0f / (float)(FFTBaseBuckets);
-    constexpr static int32_t     FFTFinalBuckets    = FFTBaseBuckets >> 1;                  // final number of buckets reported
-    constexpr static float       FFTFinalBucketsRcp = 1.0f / (float)(FFTFinalBuckets);
-    constexpr static float       FFTWindowRcp       = 1.0f / (float)(FFTWindow);
+    // 8 buckets chosen as standard here as we end up encoding them into the stem data texture for the visualiser
+    constexpr static std::size_t    FrequencyBucketCount = 8;
 
-    using Result = std::array< float, FFTFinalBuckets >;
+    using Result = std::array< float, FrequencyBucketCount >;
 
-    Scope();
-    ~Scope();
+    Scope8( const float measurementLengthSeconds, uint32_t sampleRate, const config::Spectrum& config );
+    ~Scope8();
+
+    // get/set a new batch of configuration values
+    inline const config::Spectrum& getConfiguration() const { return m_config; }
+    void setConfiguration( const config::Spectrum& config ) { m_config = config; }
 
     // add sampleCount number of samples from left/right buffers given, potentially running the extraction if the
     // FFT block is filled
-    void append( const float* samplesLeft, const float* samplesRight, std::size_t sampleCount );
+    void append( const float* samplesLeft, const float* samplesRight, uint32_t sampleCount );
 
-    // fetch the current analysis
-    constexpr const Result& getCurrentResult() const { return m_bucketsFinal; }
+    // fetch a copy of the current analysis
+    inline Result getCurrentResult() const
+    { 
+        const std::size_t current = m_outputBucketsIndex.load();
+        return m_outputBuckets.at(current);
+    }
+
 
 private:
-    
-    using BaseBuckets = std::array< float, FFTBaseBuckets >;
 
-    // same as muFFT
-    struct complexf
-    {
-        complexf( const float real, const float imag )
-            : m_real( real )
-            , m_imag( imag )
-        {}
+    using CountPerBucket = std::array< uint32_t, FrequencyBucketCount >;
+    using ResultBuffers  = std::array< Result, 2 >;
+    using ResultIndex    = std::atomic< std::size_t >;
+    using HannGen        = cycfi::q::hann_gen;
 
-        float m_real;
-        float m_imag;
-    };
 
-    PFFFT_Setup*    m_pffftPlan     = nullptr;
+    config::Spectrum    m_config;
 
-    complexf*       m_input         = nullptr;
-    complexf*       m_output        = nullptr;
-    std::size_t     m_writeIndex    = 0;
+    uint32_t            m_sampleRate        = 0;
+    uint32_t            m_fftWindowSize     = 0;        // size of the FFT input/output block
+    uint32_t            m_frequencyBinSize  = 0;        // size of the active frequency bins in the output ( half the fft window )
 
-    BaseBuckets     m_bucketsBase;
-    Result          m_bucketsFinal;
+    PFFFT_Setup*        m_pffftPlan         = nullptr;
+
+    uint32_t            m_inputWriteIndex   = 0;        // point we're actively writing into the input buffers
+    float*              m_inputL            = nullptr;  // accumulation buffer building FFT input data
+    float*              m_inputR            = nullptr;
+    complexf*           m_outputL           = nullptr;  // FFT output stages
+    complexf*           m_outputR           = nullptr;
+
+    CountPerBucket      m_countPerBucket;               // how many entries from the FFT block are funneled into each frequency bucket
+    uint8_t*            m_bucketIndices     = nullptr;  // per entry in the FFT block, which frequency bucket should it
+                                                        // be shunted into; precalculated during init
+
+    // double-buffered outputs to help avoid other bits of the tool fetching buffers while they are being modified
+    ResultIndex         m_outputBucketsIndex;
+    ResultBuffers       m_outputBuckets;
+
+    HannGen             m_hannGenerator;
 };
 
 } // namespace dsp

@@ -11,10 +11,10 @@
 
 #include "base/construction.h"
 #include "endlesss/core.types.h"
+#include "endlesss/live.stem.h"
 
 namespace endlesss {
 
-namespace live { struct Stem; using StemPtr = std::shared_ptr<Stem>; }
 namespace api  { struct NetConfiguration; }
 
 namespace cache {
@@ -44,13 +44,23 @@ struct Stems
     // given a stem ID, return a suitable path to write the cached data to
     ouro_nodiscard fs::path getCachePathForStem( const endlesss::types::StemCouchID& stemDocumentID ) const;
 
+    // return the single shared instance of read-only stem processing state
+    // used by riff resolving code after fetching audio data in
+    const endlesss::live::Stem::Processing& getStemProcessing() const
+    {
+        ABSL_ASSERT( m_processing != nullptr );
+        return *m_processing.get();
+    }
 
 private:
+
+    using StemProcessing    = endlesss::live::Stem::Processing::UPtr;
+    using StemDictionary    = absl::flat_hash_map< endlesss::types::StemCouchID, endlesss::live::StemPtr >;
+    using StemUsage         = absl::flat_hash_map< endlesss::types::StemCouchID, uint32_t >;
     
     fs::path            m_cacheStemRoot;
 
-    using StemDictionary = absl::flat_hash_map< endlesss::types::StemCouchID, endlesss::live::StemPtr >;
-    using StemUsage      = absl::flat_hash_map< endlesss::types::StemCouchID, uint32_t >;
+    StemProcessing      m_processing;
 
     StemDictionary      m_stems;
     StemUsage           m_usages;

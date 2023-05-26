@@ -294,12 +294,15 @@ namespace mcc = moodycamel;
 // http
 #include "httplib.h"
 
+// qlib dsp
+#include "q/support/base.hpp"
+#include "q/support/literals.hpp"
 
 
 namespace constants
 {
-static constexpr auto d_pi = 3.1415926535897932384626433832795028841971693993751058209749445923;
-static constexpr auto f_pi = 3.14159265358979323846264338f;
-static constexpr auto d_2pi = 6.2831853071795864769252867665590057683943387987502116419498891846;
-static constexpr auto f_2pi = 6.28318530717958647692528676f;
+    static constexpr auto d_pi = 3.1415926535897932384626433832795028841971693993751058209749445923;
+    static constexpr auto f_pi = 3.14159265358979323846264338f;
+    static constexpr auto d_2pi = 6.2831853071795864769252867665590057683943387987502116419498891846;
+    static constexpr auto f_2pi = 6.28318530717958647692528676f;
 } // namespace constants

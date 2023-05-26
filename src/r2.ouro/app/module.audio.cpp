@@ -93,9 +93,15 @@ void Audio::destroy()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-absl::Status Audio::initOutput( const config::Audio& outputDevice )
+absl::Status Audio::initOutput( const config::Audio& outputDevice, const config::Spectrum& scopeSpectrumConfig )
 {
     blog::core( "Establishing audio output using [{}] @ {}", outputDevice.lastDevice, outputDevice.sampleRate );
+
+    // cache sample rate
+    m_sampleRate = outputDevice.sampleRate;
+
+    // create the rolling spectrum scope
+    m_scope = std::make_unique< dsp::Scope8 >( 1.0f / 60.0f, m_sampleRate, scopeSpectrumConfig );
 
     PaStreamParameters outputParameters;
     if ( AudioDeviceQuery::generateStreamParametersFromDeviceConfig( outputDevice, outputParameters ) < 0 )
@@ -118,7 +124,6 @@ absl::Status Audio::initOutput( const config::Audio& outputDevice )
         return absl::UnavailableError( fmt::format( FMTX( "Pa_OpenStream failed [{}]" ), Pa_GetErrorText( err ) ) );
     }
 
-    m_sampleRate   = outputDevice.sampleRate;
     m_mixerBuffers = new OutputBuffer( getMaximumBufferSize() );
 
     err = Pa_StartStream( m_paStream );
@@ -345,7 +350,9 @@ int Audio::PortAudioCallbackInternal( void* outputBuffer, unsigned long framesPe
         resultChannelRight = outputs[1];
     }
 
-    m_scope.append( resultChannelLeft, resultChannelRight, framesPerBuffer );
+    m_scope->append( resultChannelLeft, resultChannelRight, framesPerBuffer );
+
+    m_state.mark( ExposedState::ExecutionStage::Scope );
 
     {
         float* out = (float*)outputBuffer;

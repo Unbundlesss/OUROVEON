@@ -12,6 +12,8 @@
 #include "endlesss/api.h"
 #include "core.types.h"
 
+struct PFFFT_Setup;
+
 namespace config { namespace endlesss { struct API; } }
 
 namespace endlesss {
@@ -33,12 +35,24 @@ struct Stem
         Failed_CacheDirectory,
     };
 
+    struct Processing
+    {
+        using UPtr = std::unique_ptr<Processing>;
+
+        ~Processing();
+
+        PFFFT_Setup* m_pffftPlan;
+        int32_t      m_fftWindowSize;
+    };
+    static Processing::UPtr createStemProcessing( const uint32_t targetSampleRate );
+
+
     Stem( const types::Stem& stemData, const uint32_t targetSampleRate );
     ~Stem();
 
     void fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath );
 
-    void fft();
+    void process( const Processing& processing );
 
     // stem needs a copy of the analysis task future to ensure that in the unlikely case
     // of destruction arriving before the task is done, we wait to avoid the analysis working with a deleted object

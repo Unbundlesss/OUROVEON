@@ -15,6 +15,7 @@
 #include "config/frontend.h"
 #include "config/data.h"
 #include "config/audio.h"
+#include "config/spectrum.h"
 
 #include "app/ouro.h"
 #include "app/imgui.ext.h"
@@ -60,6 +61,15 @@ int OuroApp::EntrypointGUI()
     if ( audioLoadResult != config::LoadResult::Success )
     {
         blog::cfg( "No default audio settings found, using defaults" );
+    }
+
+    // spectrum/scope config block also passed to audio engine setup; defaults is fine
+    config::Spectrum audioSpectrumConfig;
+    const auto spectrumLoadResult = config::load( *this, audioSpectrumConfig );
+    if ( spectrumLoadResult != config::LoadResult::Success &&
+         spectrumLoadResult != config::LoadResult::CannotFindConfigFile )
+    {
+        blog::cfg( "Spectrum config file failed to load, using defaults" );
     }
 
     // get default value strings for saved config values to display in the UI; these are updated if selection changes
@@ -794,7 +804,7 @@ int OuroApp::EntrypointGUI()
                         ImGui::Spacing();
                         ImGui::TextUnformatted( "Please wait, loading session..." );
 
-                        const auto audioInitStatus = m_mdAudio->initOutput( audioConfig );
+                        const auto audioInitStatus = m_mdAudio->initOutput( audioConfig, audioSpectrumConfig );
                         if ( audioInitStatus.ok() )
                             successfulBreakFromLoop = true;
                     }

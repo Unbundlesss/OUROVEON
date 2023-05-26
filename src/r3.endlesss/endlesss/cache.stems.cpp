@@ -46,6 +46,9 @@ absl::Status Stems::initialise( const fs::path& cachePath, const uint32_t target
 
     m_stemGeneration = 0;
 
+    // single processing instance, used during post-fetch stem analysis
+    m_processing = endlesss::live::Stem::createStemProcessing( targetSampleRate );
+
 //     spacetime::Moment pruneTimer;
 //     for ( const auto& dirEntry : recursive_directory_iterator( m_cacheStemRoot ) )
 //     {

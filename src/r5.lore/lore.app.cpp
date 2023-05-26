@@ -790,6 +790,8 @@ protected:
 
         void raster( gfx::Sketchbook& sketchbook, const JamVisualisation& jamVis, const int32_t viewWidth )
         {
+            ABSL_ASSERT( viewWidth > 0 );   // BUG track down why viewWidth coming in negative
+
             m_textures.clear();
             m_jamViewRenderUserHashFMap.clear();
 
@@ -1520,8 +1522,8 @@ int LoreApp::EntrypointOuro()
                     m_endlesssExchange.m_stemGain[i] *= currentMixPermutation.m_layerGainMultiplier[i];
 
                 // copy in the scope data
-                const dsp::Scope::Result& scopeResult = m_mdAudio->getCurrentScopeResult();
-                static_assert(dsp::Scope::FFTFinalBuckets == endlesss::toolkit::Exchange::ScopeBucketCount, "fft bucket count mismatch");
+                const dsp::Scope8::Result& scopeResult = m_mdAudio->getCurrentScopeResult();
+                static_assert(dsp::Scope8::FrequencyBucketCount == endlesss::toolkit::Exchange::ScopeBucketCount, "fft bucket count mismatch");
                 for ( std::size_t i = 0; i < endlesss::toolkit::Exchange::ScopeBucketCount; i++ )
                     m_endlesssExchange.m_scope[i] = scopeResult[i];
 

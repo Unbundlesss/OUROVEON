@@ -9,23 +9,51 @@
 
 #include "pch.h"
 
-#include "spacetime/moment.h"
-#include "math/rng.h"
-#include "dsp/fft.h"
 #include "app/module.frontend.h"
 #include "base/text.h"
-#include "filesys/fsutil.h"
-
+#include "dsp/fft.util.h"
+#include "dsp/octave.h"
 #include "endlesss/live.stem.h"
+#include "filesys/fsutil.h"
+#include "math/rng.h"
+#include "spacetime/moment.h"
 
+// vorbis decode
 #define STB_VORBIS_HEADER_ONLY
 #include "stb_vorbis.c"
+
+// fft
+#include "pffft.h"
 
 // r8brain
 #include "CDSPResampler.h"
 
+// q
+#include "q/fx/schmitt_trigger.hpp"
+
+
 namespace endlesss {
 namespace live {
+
+// ---------------------------------------------------------------------------------------------------------------------
+Stem::Processing::~Processing()
+{
+    if ( m_pffftPlan != nullptr )
+    {
+        pffft_destroy_setup( m_pffftPlan );
+        m_pffftPlan = nullptr;
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+Stem::Processing::UPtr Stem::createStemProcessing( const uint32_t targetSampleRate )
+{
+    Processing::UPtr result = std::make_unique<Processing>();
+    result->m_fftWindowSize = 1024;
+    result->m_pffftPlan     = pffft_new_setup( result->m_fftWindowSize, PFFFT_COMPLEX );
+
+    return result;
+}
 
 // ---------------------------------------------------------------------------------------------------------------------
 Stem::Stem( const types::Stem& stemData, const uint32_t targetSampleRate )
@@ -121,6 +149,7 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
         // things can take a while to propogate to the CDN; wait longer each cycle and try repeatedly
         for ( auto remoteFetchAttempst = 0; remoteFetchAttempst < 3; remoteFetchAttempst++ )
         {
+            // extend fetch delay each time we start a full fetch attempt
             const auto fetchDelayMs = lRng.genInt32( 250, 750 ) + ( remoteFetchAttempst * 1500 );
 
             // jitter our calls to the CDN
@@ -169,7 +198,7 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
 
     if ( m_sampleCount <= 0 )
     {
-        blog::error::stem( "vorbis decode fail [{} | {}", m_data.couchID, m_sampleCount );
+        blog::error::stem( "vorbis decode fail [{}] | {}", m_data.couchID, m_sampleCount );
         m_state = State::Failed_Vorbis;
         free( oggData );
         return;
@@ -177,7 +206,7 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
 
     if ( oggChannels != 2 )
     {
-        blog::error::stem( "we only expect stereo [{} | ch:{}", m_data.couchID, oggChannels );
+        blog::error::stem( "we only expect stereo [{}] | ch:{}", m_data.couchID, oggChannels );
         m_state = State::Failed_Vorbis;
         free( oggData );
         return;
@@ -189,7 +218,9 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
         ofs.write( (char*)audioMemory.m_rawAudio, audioMemory.m_rawReceived );
     }
 
-    const double shortToDoubleNormalisedRcp = 1.0 / 32768.0;
+    static constexpr double shortToDoubleNormalisedRcp = 1.0 / 32768.0;
+
+    // if the ogg is coming in at a different sample rate, up or downsample it to match our chosen mixer rate
     if ( oggSampleRate != m_sampleRate )
     {
         blog::stem( "resampling [{}] from {}", m_data.couchID, oggSampleRate );
@@ -204,19 +235,23 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
         const auto outputSampleLength = resampler24.getMaxOutLen( 0 );
         double* resampleOut = mem::alloc16<double>( outputSampleLength );
 
+        // resample each channel to the chosen sample rate using r8brain
         for ( int channel = 0; channel < 2; channel++ )
         {
+            // convert sint16 to doubles
             for ( size_t s = 0, readIndex = channel; s < m_sampleCount; s++, readIndex += 2 )
             {
                 resampleIn[s] = (double)oggData[readIndex] * shortToDoubleNormalisedRcp;
             }
 
+            // resample stem as one-shot, standalone task
             resampler24.oneshot( resampleIn, m_sampleCount, resampleOut, outputSampleLength );
 
+            // allocate actual channel data storage and copy across, out of resampling buffer
             m_channel[channel] = mem::alloc16<float>( outputSampleLength );
             for ( size_t s = 0; s < outputSampleLength; s++ )
             {
-                m_channel[channel][s] = (float)resampleOut[s];
+                m_channel[channel][s] = static_cast<float>( resampleOut[s] );
             }
         }
 
@@ -239,8 +274,10 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
         }
     }
 
+    // stb mallocs, we discard the data it gave us
     free( oggData );
 
+    // immediate post-processing steps that modify samples
     applyLoopCrossfade();
 
     m_state = State::Complete;
@@ -374,12 +411,16 @@ bool Stem::attemptRemoteFetch( const api::NetConfiguration& ncfg, const uint32_t
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// a fairly basic edit applied to each stem that cross-fades it with itself, blending a tiny blob of the front/end samples
+// to avoid trivial clicks that happen when loops don't perfectly loop (which is often). A better version of this would be to mirror 
+// (say) Audacity's sample healing tool which does something far more elegant and complicated
+//
 void Stem::applyLoopCrossfade()
 {
     constexpr int32_t xfadeWindowSize = 128;
     constexpr double xfadeWindowSizeRecp = 1.0 / (double)xfadeWindowSize;
 
-    // 1..0 constant power blend over the window size
+    // 1..0 constant-power blend over the window size
     constexpr auto xfadeBlendCoeff{ []() constexpr 
     {
         std::array<float, xfadeWindowSize> result{};
@@ -391,13 +432,15 @@ void Stem::applyLoopCrossfade()
         return result;
     }() };
 
-    // looking at you, blackest jammmmmmmmmmmmm
+    // looking at you (again), Blackest Jammmmmmmmmmmmm, bless your heart
     if ( m_sampleCount <= xfadeWindowSize * 2 )
     {
         return;
     }
 
     {
+        // very simple - read samples advancing forward from start and backward from end
+        // and do a blend over that range
         const float startL = m_channel[0][0];
         const float startR = m_channel[1][0];
         for ( int i = 0; i < xfadeWindowSize; ++i )
@@ -417,9 +460,143 @@ void Stem::applyLoopCrossfade()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void Stem::fft()
+void Stem::process( const Processing& processing )
 {
-    constexpr int32_t fftWindowSize     = 1024;
+    // such a small stem that we can't really do much? shout out to Blackest Jammmmmmmmmmm for unearthing this
+    if ( m_sampleCount <= processing.m_fftWindowSize )
+    {
+        blog::stem( "bypassing stem processing, stem C:{} only has {} samples", m_data.couchID, m_sampleCount );
+        return;
+    }
+
+    const int32_t fftWindowSize  = processing.m_fftWindowSize;
+    const uint64_t fftTimeSlices = m_sampleCount / fftWindowSize;
+
+    auto* fftDataIn       = mem::alloc16<dsp::complexf>( fftWindowSize );
+    auto* fftDataOut      = mem::alloc16<dsp::complexf>( fftWindowSize );
+    auto* fftOutMagnitude = mem::alloc16<float>( m_sampleCount );
+    auto* fftOutLowBand   = mem::alloc16<float>( fftTimeSlices );
+    auto* fftOutAvgEnergy = mem::alloc16<float>( fftTimeSlices );
+
+    const float fftWindowRcp = 1.0f / (float)(fftWindowSize);
+
+    const int32_t binToSubBandDivisor = fftWindowSize / 32;
+
+    constexpr int32_t fftEnergyHistory = 42;
+    constexpr float   fftEnergyRcp = 1.0f / (float)(fftEnergyHistory);
+
+    std::array< float, 32 > subband;
+    std::array< float, fftEnergyHistory > energy0;
+
+    uint64_t lowBandIndex = 0;
+
+    for ( uint64_t xI = 0; xI < m_sampleCount - fftWindowSize; xI += fftWindowSize )
+    {
+        subband.fill( 0.0f );
+
+        // fill fft input, interleave left/right channels
+        for ( int32_t fftSample = 0; fftSample < fftWindowSize; fftSample++ )
+        {
+            fftDataIn[fftSample] = dsp::complexf( m_channel[0][xI + fftSample], m_channel[1][xI + fftSample] );
+        }
+
+        pffft_transform_ordered( processing.m_pffftPlan, (float*)fftDataIn, (float*)fftDataOut, nullptr, PFFFT_FORWARD );
+
+        for ( std::size_t freqBin = 1; freqBin < fftWindowSize; freqBin++ )
+        {
+            const float fftMag       = fftDataOut[freqBin].hypot();
+            const float fftMagScaled = 2.0f * fftMag * fftWindowRcp;
+
+            fftOutMagnitude[xI + freqBin] = fftMagScaled;
+
+            const auto subbandIdx = freqBin / binToSubBandDivisor;
+            subband[subbandIdx] += fftMagScaled;
+        }
+        {
+            const auto lowBand = std::max( subband[0], subband[32 - 1] );
+
+            ABSL_ASSERT( lowBandIndex < fftTimeSlices );
+            fftOutLowBand[lowBandIndex] = (lowBand > 0.0001f) ? lowBand : 0.0f;
+            lowBandIndex++;
+        }
+    }
+
+    const uint64_t lowBandRecords = lowBandIndex;
+
+    int32_t energyIndex = 0;
+    energy0.fill( 0.0f );
+
+    // run the average energy twice to ensure we represent how energy flows in the loop
+    for ( uint32_t avgPass = 0; avgPass < 2; avgPass++ )
+    {
+        for ( uint64_t tsI = 0; tsI < lowBandRecords; tsI++ )
+        {
+            float averageEnergy = 0.0f;
+            for ( int i = 0; i < fftEnergyHistory; i++ )
+                averageEnergy += energy0[i];
+            averageEnergy *= fftEnergyRcp;
+
+            energy0[energyIndex] = fftOutLowBand[tsI];
+            energyIndex = (energyIndex + 1) % fftEnergyHistory;
+
+            ABSL_ASSERT( isfinite( averageEnergy ) );
+            if ( avgPass == 0 )
+                fftOutAvgEnergy[tsI] = averageEnergy;
+            else
+                fftOutAvgEnergy[tsI] = std::max( fftOutAvgEnergy[tsI], averageEnergy );
+        }
+    }
+
+    cycfi::q::schmitt_trigger beatTrigger( 0.125f ); // #todo data drive this
+
+    // controls the size of the band of values considered for variance
+    const int32_t     varianceBandSize = 32;
+    const float        varianceBandRcp = 1.0f / (float)(varianceBandSize);
+
+    m_sampleEnergy.resize( m_sampleCount );
+    m_sampleBeat.resize( ( m_sampleCount >> 6 ) + 1 );
+
+    lowBandIndex = 0;
+    for ( uint64_t xI = 0; xI < m_sampleCount - fftWindowSize; xI += fftWindowSize )
+    {
+        const float lowBand       = fftOutLowBand[lowBandIndex];
+        const float averageEnergy = fftOutAvgEnergy[lowBandIndex];
+
+
+        float variance = 0.0f;
+        for ( int i = 0; i < 32; i++ )
+        {
+            const float fftVar = fftOutMagnitude[xI + i] - lowBand;
+            variance += (fftVar * fftVar);
+        }
+        variance *= varianceBandRcp;
+
+
+        const float beatCoeff = (-0.3f * variance) + 1.125f; // #todo data drive this
+
+        for ( uint64_t eI = 0; eI < fftWindowSize; eI ++ )
+            m_sampleEnergy[xI + eI] = averageEnergy;
+
+        if ( beatTrigger( lowBand, averageEnergy * beatCoeff ) )
+        {
+            const uint64_t bitBlock = xI >> 6;
+            const uint64_t bitBit   = xI - (bitBlock << 6);
+            m_sampleBeat[bitBlock] |= 1ULL << bitBit;
+        }
+
+        lowBandIndex++;
+    }
+
+
+    mem::free16( fftOutAvgEnergy );
+    mem::free16( fftOutLowBand );
+    mem::free16( fftOutMagnitude );
+    mem::free16( fftDataIn );
+
+    m_hasValidAnalysis = true;
+
+
+#if 0
     constexpr int32_t fftBandBuckets    = 32;
     constexpr int32_t fftWindowToBucket = 5;    // >> value from window->bucketing
     constexpr int32_t fftEnergyHistory  = 42;
@@ -429,16 +606,9 @@ void Stem::fft()
 
     static_assert((fftWindowSize >> fftWindowToBucket) == fftBandBuckets, "incorrect bitshift value for window->bucket");
 
-    // such a small stem that we can't really do much? shout out to Blackest Jammmmmmmmmmm
-    if ( m_sampleCount <= fftWindowSize )
-        return;
 
-    const uint64_t    fftTimeSlices     = m_sampleCount / fftWindowSize;
+
     
-    auto* fftDataIn       = mem::alloc16<float>( fftWindowSize * 2 );
-    auto* fftOutMagnitude = mem::alloc16<float>( m_sampleCount );
-    auto* fftOutLowBand   = mem::alloc16<float>( fftTimeSlices );
-    auto* fftOutAvgEnergy = mem::alloc16<float>( fftTimeSlices );
 
     std::array< float, fftBandBuckets > subband;
     std::array< float, fftEnergyHistory > energy0;
@@ -501,6 +671,7 @@ void Stem::fft()
 
     // run the average energy twice to ensure we represent how energy flows in the loop
     for ( uint32_t avgPass = 0; avgPass < 2; avgPass++ )
+    {
         for ( uint64_t tsI = 0; tsI < lowBandRecords; tsI++ )
         {
             float averageEnergy = 0.0f;
@@ -517,8 +688,9 @@ void Stem::fft()
             else
                 fftOutAvgEnergy[tsI] = std::max( fftOutAvgEnergy[tsI], averageEnergy );
         }
+    }
 
-    dsp::SchmittLatch<double> beatTrigger( 0.125 ); // #todo data drive this
+    cycfi::q::schmitt_trigger<double> beatTrigger( 0.125 ); // #todo data drive this
 
     // controls the size of the band of values considered for variance
     constexpr int32_t varianceBandBitShift = 5;
@@ -565,6 +737,7 @@ void Stem::fft()
     mem::free16( fftDataIn );
 
     m_hasValidAnalysis = true;
+#endif 
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

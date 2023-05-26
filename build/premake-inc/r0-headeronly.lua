@@ -135,4 +135,5 @@ addSimpleHeaderOnly("utf8",             "r0.data/utf8")
 addSimpleHeaderOnly("json",             "r0.data/json")
 addSimpleHeaderOnly("basen",            "r0.codec/basen")
 addSimpleHeaderOnly("source_location",  "r0.platform/source_location/include")
+addSimpleHeaderOnly("q_lib",            "r0.dsp/q_lib/include")
 

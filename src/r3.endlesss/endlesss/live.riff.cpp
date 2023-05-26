@@ -69,6 +69,8 @@ void Riff::fetch( services::RiffFetchProvider& services )
 {
     m_syncState = SyncState::Working;
 
+    const auto& stemProcessing = services->getStemCache().getStemProcessing();
+
     m_stemSampleRate = services->getSampleRate();
     const double targetSampleRateD = (double)m_stemSampleRate;
 
@@ -144,13 +146,13 @@ void Riff::fetch( services::RiffFetchProvider& services )
                 // if this was a fresh stem, enqueue it for loading via task graph
                 if ( loopStemRaw->m_state == endlesss::live::Stem::State::Empty )
                 {
-                    stemLoadFlow.emplace( [&, loopStemRaw]()
+                    stemLoadFlow.emplace( [&stemData, &services, loopStemRaw]()
                     {
                         loopStemRaw->fetch( services->getNetConfiguration(), services->getStemCache().getCachePathForStem( stemData.couchID ) );
                     });
-                    stemAnalysisFlow.emplace( [loopStemRaw]()
+                    stemAnalysisFlow.emplace( [&stemProcessing, loopStemRaw]()
                     {
-                        loopStemRaw->fft();
+                        loopStemRaw->process( stemProcessing );
                     });
                     stemsWithAsyncAnalysis.push_back( loopStemRaw );
                 }

@@ -118,8 +118,8 @@ struct Audio ouro_final
     virtual std::string getModuleName() const override { return "Audio"; };
 
 
-    // initialise chosen audio device
-    ouro_nodiscard absl::Status initOutput( const config::Audio& outputDevice );
+    // initialise chosen audio device, configure streaming scope processing
+    ouro_nodiscard absl::Status initOutput( const config::Audio& outputDevice, const config::Spectrum& scopeSpectrumConfig );
     void termOutput();
 
     ouro_nodiscard constexpr int32_t getSampleRate() const { ABSL_ASSERT( m_sampleRate > 0 ); return m_sampleRate; }
@@ -135,6 +135,7 @@ struct Audio ouro_final
             Start,
             Mixer,                  // mixer logic
             VSTs,                   // external VST processing
+            Scope,                  // streaming frequency analysis, fed back to visualisation / exchange
             Interleave,             // move results into PA buffers
             SampleProcessing,       // pushing new samples out to any attached processors, like record-to-disk or discord-transmit
             Count
@@ -144,6 +145,7 @@ struct Audio ouro_final
             "Start",
             "Mixer",
             "VSTs",
+            "Scope",
             "Interleave",
             "SampleProcessing"
             "Invalid"
@@ -202,7 +204,11 @@ struct Audio ouro_final
     ouro_nodiscard constexpr bool isMuted() const { return m_mute; }
 
     // get copy of the rolling FFT analysis of audio output
-    ouro_nodiscard constexpr dsp::Scope::Result getCurrentScopeResult() const { return m_scope.getCurrentResult(); }
+    ouro_nodiscard inline dsp::Scope8::Result getCurrentScopeResult() const
+    {
+        ABSL_ASSERT( m_scope != nullptr );
+        return m_scope->getCurrentResult();
+    }
 
 private:
 
@@ -250,7 +256,7 @@ private:
 
     ExposedState                        m_state;
 
-    dsp::Scope                          m_scope;
+    std::unique_ptr<dsp::Scope8>         m_scope;
 
 #if OURO_FEATURE_VST24
     using VSTFxSlots = std::vector< vst::Instance* >;

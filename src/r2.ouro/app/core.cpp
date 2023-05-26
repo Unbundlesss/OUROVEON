@@ -838,10 +838,12 @@ void CoreGUI::ImGuiPerformanceTracker()
         ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalPerf[1] );
         ImGui::TableNextColumn(); ImGui::TextUnformatted( "VST" );
         ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalPerf[2] );
-        ImGui::TableNextColumn(); ImGui::TextUnformatted( "Interleave" );
+        ImGui::TableNextColumn(); ImGui::TextUnformatted( "Scope" );
         ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalPerf[3] );
-        ImGui::TableNextColumn(); ImGui::TextUnformatted( "Recorder" );
+        ImGui::TableNextColumn(); ImGui::TextUnformatted( "Interleave" );
         ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalPerf[4] );
+        ImGui::TableNextColumn(); ImGui::TextUnformatted( "Recorder" );
+        ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalPerf[5] );
         ImGui::TableNextColumn(); ImGui::TextUnformatted( "Total" );
         ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalSum );
         ImGui::TableNextColumn(); ImGui::TextUnformatted( "Load" );

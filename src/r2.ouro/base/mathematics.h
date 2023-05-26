@@ -44,40 +44,6 @@ constexpr uint32_t nextPow2( uint32_t v )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-inline float oscSine( const float phase )
-{
-    return std::sin( phase * constants::f_2pi );
-}
-
-// ---------------------------------------------------------------------------------------------------------------------
-constexpr float oscTriangle( const float phase )
-{
-    float rV;
-
-    if ( phase <= 0.5f )
-        rV = phase * 2.0f;
-    else
-        rV = (1.0f - phase) * 2.0f;
-
-    return (rV * 2.0f) - 1.0f;
-}
-
-// ---------------------------------------------------------------------------------------------------------------------
-constexpr float oscSquare( const float phase )
-{
-    if ( phase <= 0.5f )
-        return 1.0f;
-    else
-        return -1.0f;
-}
-
-// ---------------------------------------------------------------------------------------------------------------------
-constexpr float oscSawtooth( const float phase )
-{
-    return ((phase * 2.0f) - 1.0f) * -1.0f;
-}
-
-// ---------------------------------------------------------------------------------------------------------------------
 inline float fract( const float x )
 {
     return x - std::floor( x );
@@ -105,19 +71,6 @@ constexpr _T remapRange( const _T inputValue, const _T sourceRangeMin, const _T 
 {
     ABSL_ASSERT( sourceRangeMax != sourceRangeMin );
     return targetRangeMin + ((targetRangeMax - targetRangeMin) * (inputValue - sourceRangeMin)) / (sourceRangeMax - sourceRangeMin);
-}
-
-// ---------------------------------------------------------------------------------------------------------------------
-inline float hardClip( const float s )
-{
-    return std::clamp( s, -1.0f, 1.0f );
-}
-
-// ---------------------------------------------------------------------------------------------------------------------
-inline float softClip( const float s )
-{
-    float r = std::clamp( s, -1.0f, 1.0f );
-    return 1.5f * r - 0.5f * r * r * r;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

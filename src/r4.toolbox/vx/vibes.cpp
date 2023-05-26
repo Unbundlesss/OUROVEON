@@ -696,6 +696,7 @@ void Vibes::State::doImGuiCtrlShader()
 // ---------------------------------------------------------------------------------------------------------------------
 void Vibes::State::doImGuiCtrlGlobal()
 {
+
     ImGui::Spacing();
     ImGui::TextUnformatted( "Rendering" );
     ImGui::Spacing();
@@ -706,11 +707,15 @@ void Vibes::State::doImGuiCtrlGlobal()
     ImGui::CompactTooltip( "Run shaders at maximum resolution regardless of viewport size (will increase GPU usage, potentially considerably)" );
 
     ImGui::Spacing();
-    if ( ImGui::Button( "Clean Buffers" ) )
+    if ( ImGui::Button( "Clear All Buffers" ) )
     {
         for ( const auto& fbos : m_namedVibeFBOs )
             fbos.second->bufferClear();
     }
+    ImGui::SameLine();
+    ImGui::TextDisabled( "[?]" );
+    ImGui::CompactTooltip( "Forcibly blank all intermediary buffers" );
+
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
