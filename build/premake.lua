@@ -170,8 +170,8 @@ workspace ("ouroveon_" .. _ACTION)
         {
             ["natvis"] = 
             {
-                path.join( SrcDir(), "r0.data",     "json",       "nlohmann_json.natvis" ),
-                path.join( SrcDir(), "r0.scaffold", "abseil_ext", "abseil.natvis" ),
+                path.join( SrcDir(), "r0.data",     "json",       "nlohmann",    "nlohmann_json.natvis" ),
+                path.join( SrcDir(), "r0.scaffold", "abseil_ext",                "abseil.natvis" ),
             }
         }
     }
