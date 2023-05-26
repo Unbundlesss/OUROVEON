@@ -178,7 +178,7 @@ void EffectStack::chooseNewVST( app::CoreGUI& coreGUI )
 {
     auto fileDialog = std::make_unique< ImGuiFileDialog >();
 
-    fileDialog->OpenModal( "FxFileDlg", "Choose VST 2.x Plugin", ".dll", m_lastBrowsedPath.c_str() );
+    fileDialog->OpenDialog( "FxFileDlg", "Choose VST 2.x Plugin", ".dll", m_lastBrowsedPath.c_str() );
     coreGUI.activateFileDialog( std::move(fileDialog), [this]( ImGuiFileDialog& dlg )
     {
         addVST( dlg.GetFilePathName().c_str(), m_incrementalLoadId++ );
@@ -287,7 +287,7 @@ void EffectStack::imgui(
         // only bother adding headers if we are using more than just the list of effects
         if ( addDataBusUI )
         {
-            ImGui::TableSetupColumn( "Effect Chain", ImGuiTableColumnFlags_WidthAutoResize );
+            ImGui::TableSetupColumn( "Effect Chain", ImGuiTableColumnFlags_WidthFixed ); // #IMGUIUPGRADE
             ImGui::TableSetupColumn( "Parameter Maps", ImGuiTableColumnFlags_None );
             ImGui::TableHeadersRow();
         }
@@ -325,7 +325,7 @@ void EffectStack::imgui(
         {
             ImGui::BeginDisabledControls( isVSTBypassEnabled );
 
-            const bool offerSwapButton = ( ImGui::GetMergedKeyModFlags() & ImGuiKeyModFlags_Ctrl );
+            const bool offerSwapButton = ( ImGui::GetMergedModFlags() & ImGuiModFlags_Ctrl );
 
             for ( auto orderIndex = 0; orderIndex < m_order.size(); orderIndex ++ )
             {

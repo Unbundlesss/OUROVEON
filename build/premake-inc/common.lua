@@ -13,9 +13,11 @@ function SetDefaultBuildConfiguration()
         flags {
             "MultiProcessorCompile"     -- /MP on MSVC to locally distribute compile
         }
+        externalwarnings "Off"
         buildoptions {
             "/Zc:__cplusplus",          -- enable __cplusplus compiler macro
             "/Zc:__STDC__",             -- as above so below
+            "/external:anglebrackets",  -- treat all < > includes as 'external'; to turn their warnings off, per externalwarnings "Off"
         }
         -- silence all non-portable MSVC security whining
         defines {

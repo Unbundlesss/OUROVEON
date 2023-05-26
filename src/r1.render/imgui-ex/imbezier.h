@@ -143,12 +143,12 @@ namespace ImGui
             return false;
 
         // header and spacing
-        int changed = SliderFloat4( label, P, 0, 1, "%.3f", 1.0f );
+        int changed = SliderFloat4( label, P, 0, 1, "%.3f" );
         int hovered = IsItemActive() || IsItemHovered(); // IsItemDragged() ?
         Dummy( ImVec2( 0, 3 ) );
 
         // prepare canvas
-        const float avail = GetContentRegionAvailWidth();
+        const float avail = GetContentRegionAvail().x;
         const float dim = AREA_WIDTH > 0 ? AREA_WIDTH : avail;
         ImVec2 Canvas( dim, dim );
 

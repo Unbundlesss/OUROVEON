@@ -61,11 +61,11 @@ int main(int, char**)
     ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
-    imnodes::Initialize();
+    ImNodes::CreateContext();
 
     // Setup style
     ImGui::StyleColorsDark();
-    imnodes::StyleColorsDark();
+    ImNodes::StyleColorsDark();
 
     bool done = false;
     bool initialized = false;
@@ -90,7 +90,7 @@ int main(int, char**)
 
         // Start the Dear ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplSDL2_NewFrame(window);
+        ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
 
         if (!initialized)
@@ -114,7 +114,7 @@ int main(int, char**)
     }
 
     example::NodeEditorShutdown();
-    imnodes::Shutdown();
+    ImNodes::DestroyContext();
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();

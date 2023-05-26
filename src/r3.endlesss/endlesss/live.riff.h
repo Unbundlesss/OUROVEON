@@ -18,7 +18,7 @@
 #include "endlesss/core.services.h"
 #include "endlesss/api.h"
 
-namespace config { namespace endlesss { struct API; } }
+namespace config { namespace endlesss { struct rAPI; } }
 
 namespace endlesss {
 namespace cache { struct Stems; }

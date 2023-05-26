@@ -321,7 +321,7 @@ absl::Status Frontend::create( const app::Core* appCore )
             m_fontLogo     = io.Fonts->AddFontFromFileTTF( FONT_AT(FsTitle),  56.0f );
             m_fontMedium   = io.Fonts->AddFontFromFileTTF( FONT_AT(FsMedium), 50.0f );
 
-            ImGuiFreeType::BuildFontAtlas( io.Fonts, ImGuiFreeType::LightHinting );
+            ImGuiFreeType::BuildFontAtlas( io.Fonts );// #IMGUIUPGRADE , ImGuiFreeType::LightHinting );
         }
     }
 

@@ -1874,7 +1874,7 @@ int LoreApp::EntrypointOuro()
 
                                         if ( ImGui::IsItemClicked() )
                                         {
-                                            if ( ImGui::GetMergedKeyModFlags() & ImGuiKeyModFlags_Alt )
+                                            if ( ImGui::GetMergedModFlags() & ImGuiModFlags_Alt )
                                             {
                                                 if ( m_jamSliceRangeClick < 0 )
                                                 {

@@ -321,7 +321,7 @@ int Core::Run()
     {
         // can't continue without the API config
         blog::error::cfg( FMTX( "Unable to load required Endlesss API configuration data [{}]" ),
-            config::getFullPath< config::endlesss::API >( *this ).string() );
+            config::getFullPath< config::endlesss::rAPI >( *this ).string() );
 
         return -2;
     }

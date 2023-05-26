@@ -238,7 +238,8 @@ int OuroApp::EntrypointGUI()
             constexpr float perColumnIndent = 5.0f;
             constexpr float perBlockIndent = 10.0f;
 
-            if ( ImGui::BeginTable( "##databusknobs", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ColumnsWidthFixed | ImGuiTableFlags_NoSavedSettings ) )
+            // ImGuiTableFlags_SizingFixedFit #IMGUIUPGRADE
+            if ( ImGui::BeginTable( "##databusknobs", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings ) )
             {
                 ImGui::TableSetupColumn( "X", ImGuiTableColumnFlags_WidthFixed, configWindowColumn1 );
                 ImGui::TableSetupColumn( "Y", ImGuiTableColumnFlags_WidthFixed, configWindowColumn2 );

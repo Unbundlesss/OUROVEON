@@ -24,16 +24,16 @@ struct NetConfiguration
 
     // initialise without Endlesss auth for a network layer that can't talk to Couch, etc (but can grab stuff from CDN)
     NetConfiguration(
-        const config::endlesss::API& api,
+        const config::endlesss::rAPI& api,
         const fs::path& tempDir );                  // writable temp location for verbose/debug logging if enabled
 
     // initialise with validated Endlesss auth for full access
     NetConfiguration(
-        const config::endlesss::API& api,
+        const config::endlesss::rAPI& api,
         const config::endlesss::Auth& auth,
         const fs::path& tempDir );                  // writable temp location for verbose/debug logging if enabled
 
-    ouro_nodiscard constexpr const config::endlesss::API&  api()  const { return m_api; }
+    ouro_nodiscard constexpr const config::endlesss::rAPI& api()  const { return m_api; }
     ouro_nodiscard constexpr const config::endlesss::Auth& auth() const { return m_auth; }
     ouro_nodiscard constexpr const bool hasValidEndlesssAuth()    const { return m_hasValidEndlesssAuth; }
 
@@ -51,7 +51,7 @@ private:
 
     inline static std::atomic_uint32_t  m_writeIndex = 0;
 
-    config::endlesss::API       m_api;
+    config::endlesss::rAPI      m_api;
     config::endlesss::Auth      m_auth;
 
     bool                        m_hasValidEndlesssAuth = false;

@@ -25,7 +25,7 @@ static constexpr auto cMimeApplicationJson      = "application/json";
 static constexpr auto cRegexLengthTypeMismatch  = "\"length\":\"([0-9]+)\"";
 
 // ---------------------------------------------------------------------------------------------------------------------
-NetConfiguration::NetConfiguration( const config::endlesss::API& api, const fs::path& tempDir )
+NetConfiguration::NetConfiguration( const config::endlesss::rAPI& api, const fs::path& tempDir )
     : m_api( api )
     , m_tempDir( tempDir )
     , m_dataFixRegex_lengthTypeMismatch( cRegexLengthTypeMismatch )
@@ -33,7 +33,7 @@ NetConfiguration::NetConfiguration( const config::endlesss::API& api, const fs::
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-NetConfiguration::NetConfiguration( const config::endlesss::API& api, const config::endlesss::Auth& auth, const fs::path& tempDir )
+NetConfiguration::NetConfiguration( const config::endlesss::rAPI& api, const config::endlesss::Auth& auth, const fs::path& tempDir )
     : m_api( api )
     , m_auth( auth )
     , m_hasValidEndlesssAuth( true )

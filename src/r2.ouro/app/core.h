@@ -178,7 +178,7 @@ protected:
 
     config::DataOptional                    m_configData = std::nullopt;
     config::Performance                     m_configPerf;
-    config::endlesss::API                   m_configEndlesssAPI;            // loaded from app install, will be used with
+    config::endlesss::rAPI                  m_configEndlesssAPI;            // loaded from app install, will be used with
                                                                             // an auth block to initialise NetConfiguration
 
     // mash of Endlesss access configuration and authentication credentials, required for all our API calls

@@ -12,7 +12,7 @@
 #include "dsp/fft.util.h"
 #include "config/spectrum.h"
 
-#include "q/synth/hann_gen.hpp"
+#include <q/synth/hann_gen.hpp>
 
 // pffft
 struct PFFFT_Setup;

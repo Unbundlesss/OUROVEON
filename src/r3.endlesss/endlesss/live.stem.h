@@ -14,7 +14,7 @@
 
 struct PFFFT_Setup;
 
-namespace config { namespace endlesss { struct API; } }
+namespace config { namespace endlesss { struct rAPI; } }
 
 namespace endlesss {
 namespace live {

@@ -42,7 +42,7 @@ OURO_CONFIG( Auth )
 
 // ---------------------------------------------------------------------------------------------------------------------
 // config required for all the remote calls to pull data from endlesss backend
-OURO_CONFIG( API )
+OURO_CONFIG( rAPI )
 {
     // data routing
     static constexpr auto StoragePath       = IPathProvider::PathFor::SharedData;       // api config ships with app

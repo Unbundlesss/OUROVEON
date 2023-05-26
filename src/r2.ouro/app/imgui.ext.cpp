@@ -15,6 +15,181 @@ static float g_cycleTimerFast;
 
 namespace ImGui {
 
+//     bool ImGui::BeginMainMenuBar()
+//     {
+//         ImGuiContext& g = *GImGui;
+//         ImGuiViewportP* viewport = (ImGuiViewportP*)(void*)GetMainViewport();
+// 
+//         // Notify of viewport change so GetFrameHeight() can be accurate in case of DPI change
+//         SetCurrentViewport( NULL, viewport );
+// 
+//         // For the main menu bar, which cannot be moved, we honor g.Style.DisplaySafeAreaPadding to ensure text can be visible on a TV set.
+//         // FIXME: This could be generalized as an opt-in way to clamp window->DC.CursorStartPos to avoid SafeArea?
+//         // FIXME: Consider removing support for safe area down the line... it's messy. Nowadays consoles have support for TV calibration in OS settings.
+//         g.NextWindowData.MenuBarOffsetMinVal = ImVec2( g.Style.DisplaySafeAreaPadding.x, ImMax( g.Style.DisplaySafeAreaPadding.y - g.Style.FramePadding.y, 0.0f ) );
+//         ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_MenuBar;
+//         float height = GetFrameHeight();
+//         bool is_open = BeginViewportSideBar( "##MainMenuBar", viewport, ImGuiDir_Up, height, window_flags );
+//         g.NextWindowData.MenuBarOffsetMinVal = ImVec2( 0.0f, 0.0f );
+// 
+//         if ( is_open )
+//             BeginMenuBar();
+//         else
+//             End();
+//         return is_open;
+//     }
+
+bool BeginStatusBar()
+{
+    ImGuiContext& g = *GImGui;
+    ImGuiViewportP* viewport = (ImGuiViewportP*)(void*)GetMainViewport();
+    ImGuiWindow* status_bar_window = FindWindowByName("##StatusBar");
+
+    const ImVec2 menu_bar_pos  = viewport->Pos + ImVec2( 0, viewport->Size.y - 22.0f );
+    const ImVec2 menu_bar_size = ImVec2( viewport->Size.x - viewport->WorkSize.x + viewport->WorkSize.x, 22.0f );
+
+    // Get our rectangle at the top of the work area
+    if (status_bar_window == NULL || status_bar_window->BeginCount == 0)
+    {
+        // Set window position
+        // We don't attempt to calculate our height ahead, as it depends on the per-viewport font size. However menu-bar will affect the minimum window size so we'll get the right height.
+        SetNextWindowPos(menu_bar_pos);
+        SetNextWindowSize(menu_bar_size);
+    }
+
+    // Create window
+    SetNextWindowViewport(viewport->ID); // Enforce viewport so we don't create our own viewport when ImGuiConfigFlags_ViewportsNoMerge is set.
+    PushStyleColor( ImGuiCol_WindowBg, g.Style.Colors[ImGuiCol_MenuBarBg] );
+    PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(0, 0));    // Lift normal size constraint, however the presence of a menu-bar will give us the minimum height we want.
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings;
+    bool is_open = Begin("##StatusBar", NULL, window_flags);
+    PopStyleVar(2);
+    PopStyleColor();
+
+    // Report our size into work area (for next frame) using actual window size
+    status_bar_window = GetCurrentWindow();
+    if ( status_bar_window->BeginCount == 1 )
+        viewport->WorkSize.y -= status_bar_window->Size.y;
+
+    if (!is_open)
+    {
+        End();
+        return false;
+    }
+
+    {
+        ImGuiWindow* window = GetCurrentWindow();
+        BeginGroup();
+        window->DC.CursorPos = window->DC.CursorMaxPos = ImVec2( menu_bar_pos.x + window->DC.MenuBarOffset.x, menu_bar_pos.y + window->DC.MenuBarOffset.y );
+        window->DC.LayoutType = ImGuiLayoutType_Horizontal;
+        AlignTextToFramePadding();
+    }
+
+    return true; //-V1020
+}
+
+void EndStatusBar()
+{
+    {
+        ImGuiWindow* window = GetCurrentWindow();
+        window->DC.LayoutType = ImGuiLayoutType_Vertical;
+        EndGroup();
+    }
+
+    // When the user has left the menu layer (typically: closed menus through activation of an item), we restore focus to the previous window
+    // FIXME: With this strategy we won't be able to restore a NULL focus.
+    ImGuiContext& g = *GImGui;
+    if ( g.CurrentWindow == g.NavWindow && g.NavLayer == ImGuiNavLayer_Main && !g.NavAnyRequest )
+        FocusTopMostWindowUnderOne( g.NavWindow, NULL, NULL, ImGuiFocusRequestFlags_UnlessBelowModal | ImGuiFocusRequestFlags_RestoreFocusedChild );
+
+    End();
+}
+
+bool IconButton( const char* label, const bool visible )
+{
+    ImGuiWindow* window = GetCurrentWindow();
+    if ( window->SkipItems )
+        return false;
+
+    static const ImVec2 customPadding(  2.0f,  0.0f );
+    static const ImVec2 customInset(    4.0f, -0.5f );
+    static const ImVec2 customOffset(   3.0f,  3.0f );
+
+    ImGuiContext& g = *GImGui;
+    const ImGuiStyle& style = g.Style;
+    const ImGuiID id = window->GetID( label );
+    const ImVec2 label_size = CalcTextSize( label, NULL, true );
+
+    ImVec2 pos = window->DC.CursorPos;
+           pos.y += window->DC.CurrLineTextBaseOffset - customPadding.y;
+    ImVec2 size = CalcItemSize( ImVec2( 0, 0 ), label_size.x + customPadding.x * 2.0f, label_size.y + customPadding.y * 2.0f );
+
+    const ImRect bb( pos - customOffset, pos + size + customOffset );
+    ItemSize( size, customPadding.y );
+    if ( !ItemAdd( bb, id ) )
+        return false;
+
+    if ( !visible )
+        return false;
+
+    ImGuiButtonFlags flags = ImGuiButtonFlags_None;
+    if ( g.LastItemData.InFlags & ImGuiItemFlags_ButtonRepeat )
+        flags |= ImGuiButtonFlags_Repeat;
+    bool hovered, held;
+    bool pressed = ButtonBehavior( bb, id, &hovered, &held, flags );
+
+    // Render
+    const ImU32 col = GetColorU32( (held && hovered) ? ImGuiCol_ButtonActive : hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button );
+    RenderNavHighlight( bb, id );
+    RenderFrame( bb.Min, bb.Max, col, true, style.FrameRounding );
+    RenderTextClipped( bb.Min + customInset, bb.Max - customPadding, label, NULL, &label_size, style.ButtonTextAlign, &bb );
+
+
+    IMGUI_TEST_ENGINE_ITEM_INFO( id, label, g.LastItemData.StatusFlags );
+    return pressed;
+}
+
+
+bool PrecisionButton( const char* label, const ImVec2& size, const float adjust_x, const float adjust_y )
+{
+    ImGuiWindow* window = GetCurrentWindow();
+    if ( window->SkipItems )
+        return false;
+
+    ImGuiContext& g = *GImGui;
+    const ImGuiStyle& style = g.Style;
+    const ImGuiID id = window->GetID( label );
+    const ImVec2 label_size = CalcTextSize( label, NULL, true );
+
+    ImVec2 pos = window->DC.CursorPos;
+
+    const ImRect bb( pos, pos + size );
+    ItemSize( size, 0 );
+    if ( !ItemAdd( bb, id ) )
+        return false;
+
+    ImGuiButtonFlags flags = ImGuiButtonFlags_None;
+    if ( g.LastItemData.InFlags & ImGuiItemFlags_ButtonRepeat )
+        flags |= ImGuiButtonFlags_Repeat;
+    bool hovered, held;
+    bool pressed = ButtonBehavior( bb, id, &hovered, &held, flags );
+
+    static const ImVec2 outerPad( 1.0f, 1.0f );
+    const ImVec2 adjust( adjust_x, adjust_y );
+
+    // Render
+    const ImU32 col = GetColorU32( (held && hovered) ? ImGuiCol_ButtonActive : hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button );
+    RenderNavHighlight( bb, id );
+    RenderFrame( bb.Min + outerPad, bb.Max - outerPad, col, true, style.FrameRounding );
+    RenderTextClipped( bb.Min + adjust, bb.Max + adjust, label, NULL, &label_size, style.ButtonTextAlign, &bb );
+
+
+    IMGUI_TEST_ENGINE_ITEM_INFO( id, label, g.LastItemData.StatusFlags );
+    return pressed;
+}
+
+
 // ---------------------------------------------------------------------------------------------------------------------
 // https://github.com/ocornut/imgui/wiki/Image-Loading-and-Displaying-Examples
 //

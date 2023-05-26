@@ -38,7 +38,7 @@ void RiffDetails(
 
         // print the state & changes data
         if ( ImGui::IconButton( ICON_FA_FLOPPY_DISK ) || 
-             ImGui::Shortcut( ImGuiKeyModFlags_Ctrl, ImGuiKey_E, false ) )
+             ImGui::Shortcut( ImGuiModFlags_Ctrl, ImGuiKey_E, false ) )
         {
             eventBusClient.Send< ::events::ExportRiff >( riffPtr, defaultAdjustments );
         }
@@ -49,7 +49,7 @@ void RiffDetails(
         ImGui::Spacing();
 
         // hold ALT to enable debug data for the riff copy
-        const bool useDebugView = ( ImGui::GetMergedKeyModFlags() & ImGuiKeyModFlags_Alt );
+        const bool useDebugView = ( ImGui::GetMergedModFlags() & ImGuiModFlags_Alt );
         if ( ImGui::IconButton( useDebugView ? ICON_FA_CALENDAR_PLUS : ICON_FA_CALENDAR ) )
         {
             ImGui::SetClipboardText( useDebugView ?

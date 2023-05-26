@@ -111,13 +111,22 @@ end
 
 -- ------------------------------------------------------------------------------
 
-function addSimpleHeaderOnly( moduleName, pathTo )
+function addSimpleHeaderOnly( isExternal, moduleName, pathTo )
 
-    ModuleRefInclude[moduleName] = function()
-        includedirs
-        {
-            SrcDir() .. pathTo,
-        }
+    if ( isExternal ) then
+        ModuleRefInclude[moduleName] = function()
+            includedirs
+            {
+                SrcDir() .. pathTo,
+            }
+        end
+    else
+        ModuleRefInclude[moduleName] = function()
+            externalincludedirs
+            {
+                SrcDir() .. pathTo,
+            }
+        end
     end
 
     ModuleHeaderOnlyFiles[moduleName] = function()
@@ -129,11 +138,11 @@ function addSimpleHeaderOnly( moduleName, pathTo )
     end
 end
 
-addSimpleHeaderOnly("concurrent",       "r0.async/concurrent")
-addSimpleHeaderOnly("taskflow",         "r0.async/taskflow/taskflow")
-addSimpleHeaderOnly("utf8",             "r0.data/utf8")
-addSimpleHeaderOnly("json",             "r0.data/json")
-addSimpleHeaderOnly("basen",            "r0.codec/basen")
-addSimpleHeaderOnly("source_location",  "r0.platform/source_location/include")
-addSimpleHeaderOnly("q_lib",            "r0.dsp/q_lib/include")
+addSimpleHeaderOnly( true, "concurrent",       "r0.async/concurrent")
+addSimpleHeaderOnly( true, "taskflow",         "r0.async/taskflow/taskflow")
+addSimpleHeaderOnly( true, "utf8",             "r0.data/utf8")
+addSimpleHeaderOnly( true, "json",             "r0.data/json")
+addSimpleHeaderOnly( true, "basen",            "r0.codec/basen")
+addSimpleHeaderOnly( true, "source_location",  "r0.platform/source_location/include")
+addSimpleHeaderOnly( true, "q_lib",            "r0.dsp/q_lib/include")
 

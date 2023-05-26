@@ -6,6 +6,7 @@
 //
 
 #include "pch.h"
+#include "app/imgui.ext.h"
 
 #include "vx/vibes.driver.h"
 

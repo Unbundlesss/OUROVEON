@@ -29,7 +29,7 @@
 #include "CDSPResampler.h"
 
 // q
-#include "q/fx/schmitt_trigger.hpp"
+#include <q/fx/schmitt_trigger.hpp>
 
 
 namespace endlesss {
@@ -591,6 +591,7 @@ void Stem::process( const Processing& processing )
     mem::free16( fftOutAvgEnergy );
     mem::free16( fftOutLowBand );
     mem::free16( fftOutMagnitude );
+    mem::free16( fftDataOut );
     mem::free16( fftDataIn );
 
     m_hasValidAnalysis = true;

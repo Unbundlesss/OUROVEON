@@ -8,7 +8,7 @@ ModuleRefInclude["imgui"] = function()
     {
         LibRoot.Imgui .. "/",
         LibRoot.Imgui .. "/backends/",
-        LibRoot.Imgui .. "/freetype/",
+        LibRoot.Imgui .. "/misc/freetype/",
         LibRoot.Imgui .. "/misc/cpp/",
 
         LibRoot.Imgui .. "-ex/",
@@ -34,17 +34,21 @@ project "r1-imgui"
     defines 
     {
         "IMGUI_IMPL_OPENGL_LOADER_GLAD2",
+        "IMGUI_DEFINE_MATH_OPERATORS",
     }
     files
     {
         LibRoot.Imgui .. "/*.cpp",
         LibRoot.Imgui .. "/*.h",
-        LibRoot.Imgui .. "/freetype/*.cpp",
-        LibRoot.Imgui .. "/freetype/*.h",
+        LibRoot.Imgui .. "/misc/freetype/*.cpp",
+        LibRoot.Imgui .. "/misc/freetype/*.h",
         LibRoot.Imgui .. "/backends/imgui_impl_glfw.*",
         LibRoot.Imgui .. "/backends/imgui_impl_opengl3.*",
 
         LibRoot.Imgui .. "/misc/cpp/*.*",
+
+        LibRoot.Imgui .. "-cmd/*.cpp",
+        LibRoot.Imgui .. "-cmd/*.h",
 
         LibRoot.Imgui .. "-nodes/*.cpp",
         LibRoot.Imgui .. "-nodes/*.h",
@@ -54,6 +58,9 @@ project "r1-imgui"
 
         LibRoot.Imgui .. "-filedlg/*.cpp",
         LibRoot.Imgui .. "-filedlg/*.h",
+
+        LibRoot.Imgui .. "-ex/*.cpp",
+        LibRoot.Imgui .. "-ex/*.h",
     }
 
 

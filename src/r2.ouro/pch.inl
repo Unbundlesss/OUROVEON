@@ -263,6 +263,7 @@ ADD_BLOG( stem,     0xe65ea9,    "STEM" )
 
 #include "imgui.h"
 #include "imgui_stdlib.h"
+#include "imgui_stdlib_ex.h"
 #include "implot.h"
 #include "imbezier.h"
 #include "imnodes.h"
@@ -295,8 +296,8 @@ namespace mcc = moodycamel;
 #include "httplib.h"
 
 // qlib dsp
-#include "q/support/base.hpp"
-#include "q/support/literals.hpp"
+#include <q/support/base.hpp>
+#include <q/support/literals.hpp>
 
 
 namespace constants

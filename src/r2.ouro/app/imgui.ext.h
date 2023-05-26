@@ -25,18 +25,54 @@ inline ImVec4 lerpVec4( const ImVec4& from, const ImVec4& to, const float t )
 // ---------------------------------------------------------------------------------------------------------------------
 namespace ImGui {
 
+bool          BeginStatusBar();  // create and append to a full screen menu-bar.
+void          EndStatusBar();    // only call EndMainMenuBar() if BeginMainMenuBar() returns true!
+
+bool IconButton( const char* label, const bool visible = true );
+bool PrecisionButton( const char* label, const ImVec2& size = ImVec2( 0, 0 ), const float adjust_x = 0, const float adjust_y = 0 );
+
+
+inline ImU32 ColorConvertFloat4ToU32_BGRA_Flip( const ImVec4& in )
+{
+    ImU32 out;
+    out  = ((ImU32)IM_F32_TO_INT8_SAT( in.x )) << IM_COL32_B_SHIFT;
+    out |= ((ImU32)IM_F32_TO_INT8_SAT( in.y )) << IM_COL32_G_SHIFT;
+    out |= ((ImU32)IM_F32_TO_INT8_SAT( in.z )) << IM_COL32_R_SHIFT;
+    out |= ((ImU32)IM_F32_TO_INT8_SAT( in.w )) << IM_COL32_A_SHIFT;
+    return out;
+}
+
+inline ImVec2 MeasureSpace( const ImVec2& size )
+{
+    return CalcItemSize( size, 0.0f, 0.0f );
+}
+
 inline void MakeTabVisible( const char* window_name )
 {
     ImGuiWindow* window = ImGui::FindWindowByName( window_name );
     if ( window == nullptr || window->DockNode == nullptr || window->DockNode->TabBar == nullptr )
         return;
 
-    window->DockNode->TabBar->NextSelectedTabId = window->ID;
+    window->DockNode->TabBar->NextSelectedTabId = window->TabId;
+
+    FocusWindow( window );
 }
 
-inline bool Shortcut( ImGuiKeyModFlags mod, ImGuiKey key, bool repeat )
+
+inline ImGuiModFlags GetMergedModFlags()
 {
-	return mod == GetMergedKeyModFlags() && IsKeyPressed( GetKeyIndex(key), repeat );
+    ImGuiContext& g = *GImGui;
+    ImGuiModFlags key_mod_flags = ImGuiModFlags_None;
+    if ( g.IO.KeyCtrl  ) { key_mod_flags |= ImGuiModFlags_Ctrl;  }
+    if ( g.IO.KeyShift ) { key_mod_flags |= ImGuiModFlags_Shift; }
+    if ( g.IO.KeyAlt   ) { key_mod_flags |= ImGuiModFlags_Alt;   }
+    if ( g.IO.KeySuper ) { key_mod_flags |= ImGuiModFlags_Super; }
+    return key_mod_flags;
+}
+
+inline bool Shortcut( ImGuiModFlags mod, ImGuiKey key, bool repeat )
+{
+	return mod == GetMergedModFlags() && IsKeyPressed( GetKeyIndex(key), repeat );
 }
 
 template < typename _HandleType >
@@ -61,7 +97,8 @@ inline void SeparatorBreak()
 inline void ColumnSeparatorBreak()
 {
     ImGui::Spacing();
-    ImGui::ColumnSeparator();
+    ImGui::Separator();
+    //ImGui::ColumnSeparator(); // #IMGUIUPGRADE
     ImGui::Spacing();
 }
 
