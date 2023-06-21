@@ -93,7 +93,8 @@ struct Warehouse
     void setCallbackWorkReport( const WorkUpdateCallback& cb );
     void setCallbackContentsReport( const ContentsReportCallback& cb );
 
-    void syncFromJamCache( const cache::Jams& jamCache );
+    void upsertJamDictionaryFromCache( const cache::Jams& jamCache );
+    void extractJamDictionary( types::JamIDToNameMap& jamDictionary ) const;
     
     void addOrUpdateJamSnapshot( const types::JamCouchID& jamCouchID );
 

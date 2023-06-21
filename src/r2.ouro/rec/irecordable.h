@@ -19,7 +19,7 @@ struct IRecordable
     virtual void stopRecording() = 0;
     virtual bool isRecording() const = 0;
     virtual uint64_t getRecordingDataUsage() const = 0;
-    virtual const char* getRecorderName() const = 0;
+    virtual std::string_view getRecorderName() const = 0;
     virtual const char* getFluxState() const { return nullptr; }
 };
 

@@ -116,11 +116,18 @@ inline ImVec4 GetWarningTextColour() { return ImVec4( 0.981f, 0.874f, 0.378f, 0.
 inline ImVec4 GetErrorTextColour() { return ImVec4(0.981f, 0.074f, 0.178f, 0.985f); }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void CompactTooltip( const char* tip );
-void CompactTooltip( const std::string& tip );
+void CompactTooltip( const std::string_view& tip );
 
 // ---------------------------------------------------------------------------------------------------------------------
-bool KnobFloat( const char* label, const float outerRadius, float* p_value, float v_min, float v_max, float v_step );
+bool KnobFloat(
+    const char* label,
+    const float outerRadius,
+    float* p_value,
+    float v_min,
+    float v_max,
+    float v_notches,
+    float default_value = 0.0f,
+    const std::function< std::string ( const float percentage01, const float value ) >& tooltipCallback = nullptr );
 
 // ---------------------------------------------------------------------------------------------------------------------
 bool Spinner( const char* label, bool active, float radius, float thickness, float yOffset, const ImU32& color );
@@ -296,15 +303,14 @@ bool ValueArrayComboBox(
     const _containerT&  entryValues,
     _entryT&            variable,
     std::string&        previewString,
-    const bool          addYOffset )
+    const float         sameLineGap = 0.0f )
 {
     ABSL_ASSERT( entryLabels.size() == entryValues.size() );
 
     ImGui::TextUnformatted( title );
     ImGui::SameLine();
 
-    if ( addYOffset )
-        ImGui::SetCursorPosY( ImGui::GetCursorPosY() - 3.0f );
+    ImGui::SetCursorPosY( ImGui::GetCursorPosY() - 3.0f );
 
     bool changed = false;
     if ( ImGui::BeginCombo( label, previewString.c_str() ) )
@@ -322,6 +328,12 @@ bool ValueArrayComboBox(
                 ImGui::SetItemDefaultFocus();
         }
         ImGui::EndCombo();
+    }
+
+    if ( sameLineGap > 0 )
+    {
+        ImGui::SameLine( 0, sameLineGap );
+        ImGui::SetCursorPosY( ImGui::GetCursorPosY() - 3.0f );
     }
 
     return changed;

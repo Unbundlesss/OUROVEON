@@ -49,19 +49,20 @@ void StemDataProcessor::handleNewStemAmalgam( const base::IEvent& eventPtr )
     const events::StemDataAmalgamGenerated* stemDataEvent = dynamic_cast<const events::StemDataAmalgamGenerated*>(&eventPtr);
     ABSL_ASSERT( stemDataEvent != nullptr );
 
+    m_stemAmalgam = stemDataEvent->m_stemDataAmalgam;
+
     int32_t simultaneousBeats = 0;
     for ( auto stemI = 0U; stemI < 8; stemI++ )
     {
-        if ( stemDataEvent->m_stemDataAmalgam.m_beat[stemI] )
+        if ( m_stemAmalgam.m_beat[stemI] >= 1.0f )
         {
-            m_stemAmalgamBeats[stemI] = 1.0f;
             simultaneousBeats++;
         }
-
-        m_stemAmalgamEnergy[stemI] = stemDataEvent->m_stemDataAmalgam.m_energy[stemI];
     }
     if ( simultaneousBeats >= 3 )
+    {
         m_stemAmalgamConsensus = 1.0f;
+    }
 }
 
 } // namespace mix

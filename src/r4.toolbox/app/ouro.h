@@ -66,10 +66,6 @@ protected:
     tf::Taskflow                            m_stemCachePruneTask;
     std::optional< tf::Future<void> >       m_stemCachePruneFuture = std::nullopt;
 
-    // -------------
-
-    // discord config done on preflight screen
-    config::discord::Connection             m_configDiscord;
 
     // -------------
 

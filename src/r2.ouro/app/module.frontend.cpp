@@ -16,7 +16,7 @@
 #include "gfx/gl/enumstring.h"
 
 #include "config/frontend.h"
-
+#include "config/display.h"
 
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -28,13 +28,14 @@
 namespace app {
 namespace module {
 
+
 // ---------------------------------------------------------------------------------------------------------------------
 void ApplyOuroveonImGuiStyle()
 {
     ImGuiStyle& style                     = ImGui::GetStyle();
     style.WindowRounding                  = 1.0f;
     style.ChildRounding                   = 1.0f;
-    style.FrameRounding                   = 4.0f;
+    style.FrameRounding                   = 3.0f;
     style.GrabRounding                    = 2.0f;
     style.PopupRounding                   = 1.0f;
     style.ScrollbarRounding               = 10.0f;
@@ -51,9 +52,9 @@ void ApplyOuroveonImGuiStyle()
     colors[ImGuiCol_FrameBg]               = ImVec4( 0.12f, 0.14f, 0.18f, 1.00f );
     colors[ImGuiCol_FrameBgHovered]        = ImVec4( 0.14f, 0.17f, 0.27f, 1.00f );
     colors[ImGuiCol_FrameBgActive]         = ImVec4( 0.16f, 0.21f, 0.32f, 1.00f );
-    colors[ImGuiCol_TitleBg]               = ImVec4( 0.11f, 0.22f, 0.46f, 1.00f );
-    colors[ImGuiCol_TitleBgActive]         = ImVec4( 0.13f, 0.23f, 0.45f, 1.00f );
-    colors[ImGuiCol_TitleBgCollapsed]      = ImVec4( 0.12f, 0.22f, 0.43f, 1.00f );
+    colors[ImGuiCol_TitleBg]               = ImVec4( 0.03f, 0.09f, 0.23f, 1.00f );
+    colors[ImGuiCol_TitleBgActive]         = ImVec4( 0.04f, 0.10f, 0.26f, 1.00f );
+    colors[ImGuiCol_TitleBgCollapsed]      = ImVec4( 0.01f, 0.06f, 0.15f, 1.00f );
     colors[ImGuiCol_MenuBarBg]             = ImVec4( 0.05f, 0.13f, 0.34f, 1.00f );
     colors[ImGuiCol_ScrollbarBg]           = ImVec4( 0.11f, 0.13f, 0.18f, 0.71f );
     colors[ImGuiCol_ScrollbarGrab]         = ImVec4( 0.40f, 0.46f, 0.53f, 0.39f );
@@ -75,11 +76,11 @@ void ApplyOuroveonImGuiStyle()
     colors[ImGuiCol_ResizeGripHovered]     = ImVec4( 0.33f, 0.51f, 0.88f, 1.00f );
     colors[ImGuiCol_ResizeGripActive]      = ImVec4( 0.23f, 0.60f, 0.88f, 1.00f );
     colors[ImGuiCol_Tab]                   = ImVec4( 0.08f, 0.19f, 0.42f, 1.00f );
-    colors[ImGuiCol_TabHovered]            = ImVec4( 0.15f, 0.27f, 0.53f, 1.00f );
-    colors[ImGuiCol_TabActive]             = ImVec4( 0.09f, 0.29f, 0.72f, 1.00f );
-    colors[ImGuiCol_TabUnfocused]          = ImVec4( 0.17f, 0.26f, 0.45f, 1.00f );
-    colors[ImGuiCol_TabUnfocusedActive]    = ImVec4( 0.09f, 0.19f, 0.40f, 1.00f );
-    colors[ImGuiCol_DockingPreview]        = ImVec4( 0.14f, 0.51f, 0.85f, 0.80f );
+    colors[ImGuiCol_TabHovered]            = ImVec4( 0.09f, 0.29f, 0.72f, 1.00f );
+    colors[ImGuiCol_TabActive]             = ImVec4( 0.09f, 0.33f, 0.82f, 1.00f );
+    colors[ImGuiCol_TabUnfocused]          = ImVec4( 0.08f, 0.19f, 0.42f, 0.78f );
+    colors[ImGuiCol_TabUnfocusedActive]    = ImVec4( 0.09f, 0.33f, 0.82f, 0.78f );
+    colors[ImGuiCol_DockingPreview]        = ImVec4( 0.22f, 0.58f, 0.94f, 1.00f );
     colors[ImGuiCol_DockingEmptyBg]        = ImVec4( 0.04f, 0.04f, 0.05f, 1.00f );
     colors[ImGuiCol_PlotLines]             = ImVec4( 0.61f, 0.61f, 0.61f, 1.00f );
     colors[ImGuiCol_PlotLinesHovered]      = ImVec4( 0.56f, 0.16f, 0.04f, 1.00f );
@@ -98,12 +99,13 @@ void ApplyOuroveonImGuiStyle()
     colors[ImGuiCol_ModalWindowDimBg]      = ImVec4( 0.80f, 0.80f, 0.80f, 0.35f );
 }
 
+
 // ---------------------------------------------------------------------------------------------------------------------
 Frontend::Frontend( const config::Frontend& feConfig, const char* name )
     : m_feConfigCopy( feConfig )
     , m_appName( name )
     , m_imguiLayoutIni( nullptr )
-    , m_GlfwWindow( nullptr )
+    , m_glfwWindow( nullptr )
     , m_fontFixed( nullptr )
     , m_fontMedium( nullptr )
     , m_fontLogo( nullptr )
@@ -116,7 +118,7 @@ Frontend::~Frontend()
 {
     delete[]m_imguiLayoutIni;
 
-    if ( m_GlfwWindow != nullptr )
+    if ( m_glfwWindow != nullptr )
         destroy();
 }
 
@@ -125,10 +127,14 @@ static void glfwErrorCallback( int error, const char* description )
     blog::error::core( "[glfw] error %i : %s", error, description );
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
 enum FontSlots
 {
-    FsFixed,
+    FsFixed_EN,
+    FsFixed_JP,
     FsFontAwesome,
+    FsFontAwesomeBrands,
+    FsFontAudio,
     FsTitle,
     FsMedium,
     FsCount
@@ -143,20 +149,21 @@ absl::Status Frontend::create( const app::Core* appCore )
 
     const auto fontLoadpath = appCore->getSharedDataPath() / "fonts";
 
-    auto fontAt = [&fontLoadpath](const char* localPath)
-    {
-        return (fontLoadpath / fs::path(localPath) );
-    };
-
+    // set the expected font locations
     std::array< fs::path, FsCount > fontFilesSlots;
-    fontFilesSlots[ FsFixed ]       = fontAt( "FiraCode-Regular.ttf" );
-    fontFilesSlots[ FsFontAwesome ] = fontLoadpath / "icons" / fs::path(FONT_ICON_FILE_NAME_FAS);
-    fontFilesSlots[ FsTitle ]       = fontAt( "Warheed.otf" );
-    fontFilesSlots[ FsMedium ]      = fontAt( "Oswald-Light.ttf" );
+    {
+        fontFilesSlots[ FsFixed_EN ]            = fontLoadpath / "FiraCode-Regular.ttf";
+        fontFilesSlots[ FsFixed_JP ]            = fontLoadpath / "jp" / "migu-1m-regular.ttf";
+        fontFilesSlots[ FsFontAwesome ]         = fontLoadpath / "icons" / FONT_ICON_FILE_NAME_FAS;
+        fontFilesSlots[ FsFontAwesomeBrands ]   = fontLoadpath / "icons" / FONT_ICON_FILE_NAME_FAB;
+        fontFilesSlots[ FsFontAudio ]           = fontLoadpath / "audio" / "fontaudio.ttf";
+        fontFilesSlots[ FsTitle ]               = fontLoadpath / "Warheed.otf";
+        fontFilesSlots[ FsMedium ]              = fontLoadpath / "Oswald-Light.ttf";
+    }
 
     #define FONT_AT( _idx ) fontFilesSlots[_idx].string().c_str()
 
-    // preflight checks on the font data
+    // preflight checks on the font data, just check the files exist or abort boot if it fails
     for ( const auto& fontPath : fontFilesSlots )
     {
         if ( !fs::exists( fontPath ) )
@@ -184,14 +191,14 @@ absl::Status Frontend::create( const app::Core* appCore )
 
 
     blog::core( "creating main window" );
-    m_GlfwWindow = glfwCreateWindow(
+    m_glfwWindow = glfwCreateWindow(
         m_feConfigCopy.appWidth,
         m_feConfigCopy.appHeight,
-        fmt::format( "OUROVEON {} // ishani.org 2022", m_appName ).c_str(),
+        fmt::format( FMTX( "OUROVEON // {} // " OURO_FRAMEWORK_CREDIT ), m_appName ).c_str(),
         nullptr,
         nullptr
     );
-    if ( !m_GlfwWindow )
+    if ( !m_glfwWindow )
     {
         glfwTerminate();
         return absl::UnavailableError( "GLFW unable to create main window" );
@@ -199,17 +206,17 @@ absl::Status Frontend::create( const app::Core* appCore )
 
 
     blog::core( "creating main GL context" );
-    glfwMakeContextCurrent( m_GlfwWindow );
+    glfwMakeContextCurrent( m_glfwWindow );
 
     // set a saved position if we have one (and if it fits on screen); otherwise just centre on an appropriate monitor
     if ( m_feConfigCopy.appPositionValid && 
-         glfwIsWindowPositionValid( m_GlfwWindow, m_feConfigCopy.appPositionX, m_feConfigCopy.appPositionY ) )
+         glfwIsWindowPositionValid( m_glfwWindow, m_feConfigCopy.appPositionX, m_feConfigCopy.appPositionY ) )
     {
-        glfwSetWindowPos( m_GlfwWindow, m_feConfigCopy.appPositionX, m_feConfigCopy.appPositionY );
+        glfwSetWindowPos( m_glfwWindow, m_feConfigCopy.appPositionX, m_feConfigCopy.appPositionY );
     }
     else
     {
-        glfwSetWindowCenter( m_GlfwWindow );
+        glfwSetWindowCenter( m_glfwWindow );
     }
     // save the initial window pos/size, update (or create) the serialised version
     m_currentWindowGeometry = getWindowGeometry();
@@ -218,13 +225,43 @@ absl::Status Frontend::create( const app::Core* appCore )
 
 
     blog::core( "loading GLAD ..." );
-    int gladErr = gladLoadGLLoader( (GLADloadproc)glfwGetProcAddress );
+    int32_t gladErr = gladLoadGLLoader( (GLADloadproc)glfwGetProcAddress );
     if ( gladErr == 0 )
     {
         return absl::UnavailableError( fmt::format( FMTX( "OpenGL loader failed, {}" ), gladErr ) );
     }
 
     glfwSwapInterval( 1 );
+
+    // fetch desktop / display scaling factor and stash it for later use
+    {
+        // load configurable display scaling override
+        config::Display displayConfig;
+        const auto dcLoad = config::load( *appCore, displayConfig );
+        if ( dcLoad != config::LoadResult::Success )
+        {
+            blog::core( FMTX( "display configuration did not load, using defaults" ) );
+        }
+
+
+        float displayScaleX = 1.0f, displayScaleY = 1.0f;
+        glfwGetWindowContentScale( m_glfwWindow, &displayScaleX, &displayScaleY );
+
+        // not sure what to do about this
+        if ( displayScaleX != displayScaleY )
+        {
+            blog::error::app( "nonlinear display scaling found, X:{} Y:{}", displayScaleX, displayScaleY );
+        }
+
+        if ( displayConfig.useDisplayScale )
+        {
+            blog::app( "applying display scale override {}x", displayConfig.displayScale );
+            displayScaleX = displayConfig.displayScale;
+        }
+
+        m_displayScale.set( displayScaleX );
+        blog::app( "window display scale {}", m_displayScale.getDisplayScaleFactor() );
+    }
 
     m_isBorderless = true;
     applyBorderless();
@@ -245,8 +282,6 @@ absl::Status Frontend::create( const app::Core* appCore )
         blog::core( "      GL_TEXTURE_IMAGE_TYPE = ({:x}) {}", type, gl::enumToString( type ) );
     }
 
-
-
     {
         blog::core( "initialising ImGui {}", IMGUI_VERSION );
 
@@ -258,8 +293,9 @@ absl::Status Frontend::create( const app::Core* appCore )
         ImGui::StyleColorsDark();
         ApplyOuroveonImGuiStyle();
 
+
         // configure rendering with SDL/GL
-        ImGui_ImplGlfw_InitForOpenGL( m_GlfwWindow, true );
+        ImGui_ImplGlfw_InitForOpenGL( m_glfwWindow, true );
         ImGui_ImplOpenGL3_Init( nullptr );
 
 
@@ -294,34 +330,94 @@ absl::Status Frontend::create( const app::Core* appCore )
             io.ConfigWindowsMoveFromTitleBarOnly  = true;
             io.ConfigDockingWithShift             = true;
 
+            // setup default font with a good range of standard characters
             {
-                static const ImWchar fontRange[] =
+                ImFontConfig iconConfigEN;
+                iconConfigEN.RasterizerMultiply = 1.2f;     // tighten contrast, I think it looks better
+
+                static constexpr ImWchar fontRangeEN[] =
                 {
-                    0x0020, 0x017E, // Extended Latin 
-                    0x0370, 0x052F, // Greek and Cyrillic
+                    // courtesy ChatGPT
+                    0x0020, 0x007F, // Basic Latin
+                    0x0080, 0x00FF, // Latin-1 Supplement
+                    0x0100, 0x017F, // Latin Extended-A
+                    0x0180, 0x024F, // Latin Extended-B
+                    0x0250, 0x02AF, // IPA Extensions
+                    0x02B0, 0x02FF, // Spacing Modifier Letters
+                    0x0300, 0x036F, // Combining Diacritical Marks
+                    0x0370, 0x03FF, // Greek and Coptic
+                    0x0400, 0x052F, // Cyrillic
+                    0xA640, 0xA69F, // Cyrillic Extended-B
+                    0x1E00, 0x1EFF, // Latin Extended Additional
+                    0x2000, 0x206F, // General Punctuation
+                    0x2DE0, 0x2DFF, // Cyrillic Extended-A
+
+                    // check Font.FiraCode.hpp
                     0x2580, 0x25F7, // Fira console shapes
                     0xEE00, 0xEE0B, // Fira progress bits
                     0,
                 };
 
-                m_fontFixed = io.Fonts->AddFontFromFileTTF( FONT_AT(FsFixed), 16.0f, nullptr, fontRange );
+                m_fontFixed = io.Fonts->AddFontFromFileTTF(
+                    FONT_AT(FsFixed_EN),
+                    16.0f,
+                    &iconConfigEN,
+                    fontRangeEN );
+            }
+
+            // embed JP font choice
+            {
+                ImFontConfig iconConfigJP;
+                iconConfigJP.RasterizerMultiply = 1.05f;
+                iconConfigJP.MergeMode          = true;
+                iconConfigJP.PixelSnapH         = true;
+
+                static constexpr ImWchar fontRangeJP[] =
+                {
+                    // courtesy ChatGPT
+                    0x3040, 0x309F, // Hiragana
+                    0x30A0, 0x30FF, // Katakana
+                    0x4E00, 0x9FFF, // Kanji
+                    0xFF65, 0xFF9F, // Half-width Katakana
+                    0x3000, 0x303F, // Japanese punctuation
+                    0,
+                };
+
+                io.Fonts->AddFontFromFileTTF(
+                    FONT_AT( FsFixed_JP ),
+                    18.0f,
+                    &iconConfigJP,
+                    fontRangeJP );
             }
 
             // embed FontAwesome glyphs into default font so we can use them without switching
             {
-                static const ImWchar faIconRange[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
-                ImFontConfig faIconConfig;
-                faIconConfig.MergeMode          = true;
-                faIconConfig.PixelSnapH         = true;
-                faIconConfig.GlyphOffset        = ImVec2( 0.0f, 2.0f );
-                faIconConfig.GlyphExtraSpacing  = ImVec2( 1.0f, 0.0f );
-                io.Fonts->AddFontFromFileTTF( FONT_AT(FsFontAwesome), 15.0f, &faIconConfig, faIconRange );
+                ImFontConfig iconConfigFA;
+                iconConfigFA.MergeMode          = true;
+                iconConfigFA.PixelSnapH         = true;
+                iconConfigFA.GlyphOffset        = ImVec2( 0.0f, 2.0f );
+                iconConfigFA.GlyphExtraSpacing  = ImVec2( 1.0f, 0.0f );
+
+                static constexpr ImWchar fontRangeFA[] =
+                {
+                    ICON_MIN_FA, ICON_MAX_FA,
+                    0
+                };
+                io.Fonts->AddFontFromFileTTF( FONT_AT(FsFontAwesome), 15.0f, &iconConfigFA, fontRangeFA );
+
+                static constexpr ImWchar fontRangeFAB[] =
+                {
+                    ICON_MIN_FAB, ICON_MAX_FAB,
+                    0
+                };
+                io.Fonts->AddFontFromFileTTF( FONT_AT( FsFontAwesomeBrands ), 15.0f, &iconConfigFA, fontRangeFAB );
             }
+
             m_fixedSmaller = io.Fonts->AddFontDefault();
             m_fontLogo     = io.Fonts->AddFontFromFileTTF( FONT_AT(FsTitle),  56.0f );
             m_fontMedium   = io.Fonts->AddFontFromFileTTF( FONT_AT(FsMedium), 50.0f );
 
-            ImGuiFreeType::BuildFontAtlas( io.Fonts );// #IMGUIUPGRADE , ImGuiFreeType::LightHinting );
+            ImGuiFreeType::BuildFontAtlas( io.Fonts, ImGuiFreeTypeBuilderFlags_LightHinting );
         }
     }
 
@@ -338,10 +434,10 @@ void Frontend::destroy()
     ImPlot::DestroyContext();
     ImGui::DestroyContext();
 
-    glfwDestroyWindow( m_GlfwWindow );
+    glfwDestroyWindow( m_glfwWindow );
     glfwTerminate();
 
-    m_GlfwWindow = nullptr;
+    m_glfwWindow = nullptr;
 
     Module::destroy();
 }
@@ -350,7 +446,7 @@ void Frontend::destroy()
 bool Frontend::appTick()
 {
     bool shouldQuit = m_quitRequested;
-         shouldQuit |= ( glfwWindowShouldClose( m_GlfwWindow ) != 0 );
+         shouldQuit |= ( glfwWindowShouldClose( m_glfwWindow ) != 0 );
 
     // track changes to the window size/position and write out new configuration after a delay
     // (to absorb rapid changes, such as is likely when dragging around windows)
@@ -400,7 +496,7 @@ void Frontend::appRenderImguiDispatch()
 // ---------------------------------------------------------------------------------------------------------------------
 void Frontend::appRenderFinalise()
 {
-    glfwSwapBuffers( m_GlfwWindow );
+    glfwSwapBuffers( m_glfwWindow );
     glfwPollEvents();
 }
 
@@ -415,8 +511,8 @@ void Frontend::toggleBorderless()
 Frontend::WindowGeometry Frontend::getWindowGeometry() const
 {
     WindowGeometry result;
-    glfwGetWindowSize( m_GlfwWindow, &result.m_width, &result.m_height );
-    glfwGetWindowPos( m_GlfwWindow, &result.m_positionX, &result.m_positionY );
+    glfwGetWindowSize( m_glfwWindow, &result.m_width, &result.m_height );
+    glfwGetWindowPos( m_glfwWindow, &result.m_positionX, &result.m_positionY );
     return result;
 }
 
@@ -447,8 +543,8 @@ void Frontend::updateAndSaveFrontendConfig()
 // ---------------------------------------------------------------------------------------------------------------------
 void Frontend::applyBorderless() const
 {
-    glfwSetWindowAttrib( m_GlfwWindow, GLFW_DECORATED, m_isBorderless ? 0 : 1 );
-    glfwSetWindowAttrib( m_GlfwWindow, GLFW_RESIZABLE, m_isBorderless ? 0 : 1 );
+    glfwSetWindowAttrib( m_glfwWindow, GLFW_DECORATED, m_isBorderless ? 0 : 1 );
+    glfwSetWindowAttrib( m_glfwWindow, GLFW_RESIZABLE, m_isBorderless ? 0 : 1 );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -473,8 +569,8 @@ void Frontend::resetWindowPositionAndSizeToDefault()
     m_isBorderless = true;
     applyBorderless();
 
-    glfwSetWindowSize( m_GlfwWindow, config::Frontend::DefaultWidth, config::Frontend::DefaultHeight );
-    glfwSetWindowCenter( m_GlfwWindow );
+    glfwSetWindowSize( m_glfwWindow, config::Frontend::DefaultWidth, config::Frontend::DefaultHeight );
+    glfwSetWindowCenter( m_glfwWindow );
 
     m_currentWindowGeometry = getWindowGeometry();
     updateAndSaveFrontendConfig();

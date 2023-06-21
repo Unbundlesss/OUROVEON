@@ -3801,6 +3801,28 @@ IMPLOT_API void TagYV(double y, const ImVec4& color, const char* fmt, va_list ar
     TagV(gp.CurrentPlot->CurrentY, y, color, fmt, args);
 }
 
+IMPLOT_API void OverlayLineX( const float value, const ImVec4& col, float thickness ) {
+    ImPlotContext& gp = *GImPlot;
+    IM_ASSERT_USER_ERROR( gp.CurrentPlot != NULL, "OverlayLinesX() needs to be called between BeginPlot() and EndPlot()!" );
+    const float grab_size = ImMax( 5.0f, thickness );
+    float yt = gp.CurrentPlot->PlotRect.Min.y;
+    float yb = gp.CurrentPlot->PlotRect.Max.y;
+
+    const ImU32  col32 = ImGui::ColorConvertFloat4ToU32( col );
+    ImDrawList& DrawList = *GetPlotDrawList();
+    PushPlotClipRect();
+
+    {
+        float x = IM_ROUND( PlotToPixels( value, 0 ).x );
+        const bool outside = x < (gp.CurrentPlot->PlotRect.Min.x - grab_size / 2) || x >( gp.CurrentPlot->PlotRect.Max.x + grab_size / 2 );
+        if ( !outside )
+            DrawList.AddLine( ImVec2( x, yt ), ImVec2( x, yb ), col32, thickness );
+    }
+
+    PopPlotClipRect();
+}
+
+
 static const float DRAG_GRAB_HALF_SIZE = 4.0f;
 
 bool DragPoint(int n_id, double* x, double* y, const ImVec4& col, float radius, ImPlotDragToolFlags flags) {

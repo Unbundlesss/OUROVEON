@@ -712,6 +712,61 @@ struct SubscribedJams : public ResultRowHeader<ResultJamMembership>
     bool fetch( const NetConfiguration& ncfg, const std::string& userName );
 };
 
+// ---------------------------------------------------------------------------------------------------------------------
+//
+struct SharedRiffsByUser
+{
+    struct Riff
+    {
+        std::string             jamId;
+        std::string             image;
+
+        template<class Archive>
+        inline void serialize( Archive& archive )
+        {
+            archive( CEREAL_OPTIONAL_NVP( jamId )   // these don't always seem to be present
+                   , CEREAL_OPTIONAL_NVP( image )   //  ^ ^
+            );
+        }
+    };
+
+    struct Data
+    {
+        std::string             doc_id;
+        uint64_t                action_timestamp;
+        std::string             title;
+        Riff                    rifff;
+        std::vector< ResultStemDocument >
+                                loops;
+        std::string             image_url;
+        bool                    image;
+
+        template<class Archive>
+        inline void serialize( Archive& archive )
+        {
+            archive( CEREAL_NVP( doc_id )
+                   , CEREAL_NVP( action_timestamp )
+                   , CEREAL_NVP( title )
+                   , CEREAL_NVP( rifff )
+                   , CEREAL_NVP( loops )
+                   , CEREAL_NVP( image_url )
+                   , CEREAL_NVP( image )
+            );
+        }
+    };
+
+    std::vector< Data >   data;
+
+    template<class Archive>
+    inline void serialize( Archive& archive )
+    {
+        archive( CEREAL_NVP( data )
+        );
+    }
+
+    bool fetch( const NetConfiguration& ncfg, const std::string& userName, int32_t count, int32_t offset );
+};
+
 namespace pull {
 
 // ---------------------------------------------------------------------------------------------------------------------

@@ -20,12 +20,16 @@ struct StemDataAmalgam
 {
     constexpr void reset()
     {
-        m_beat.fill( false );
-        m_energy.fill( 0.0f );
+        m_wave.fill( 0.0f );
+        m_beat.fill( 0.0f );
+        m_low.fill( 0.0f );
+        m_high.fill( 0.0f );
     }
 
-    std::array< bool, 8 >   m_beat;
-    std::array< float, 8 >  m_energy;
+    std::array< float, 8 >  m_wave;
+    std::array< float, 8 >  m_beat;
+    std::array< float, 8 >  m_low;
+    std::array< float, 8 >  m_high;
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -42,20 +46,15 @@ struct StemDataProcessor
 
     constexpr void reset()
     {
-        m_stemAmalgamBeats.fill( 0 );
-        m_stemAmalgamEnergy.fill( 0 );
+        m_stemAmalgam.reset();
         m_stemAmalgamConsensus = 0.0f;
     }
 
     // tick value decays
     constexpr void update( const float deltaTime, const float timeToDecayInSec )
     {
-        const float decayValue = ( 1.0f / timeToDecayInSec ) * deltaTime;
+        const float decayValue = (1.0f / timeToDecayInSec) * deltaTime;
 
-        for ( std::size_t i = 0; i < 8; i++ )
-        {
-            m_stemAmalgamBeats[i] = std::max( 0.0f, m_stemAmalgamBeats[i] - decayValue );
-        }
         m_stemAmalgamConsensus = std::max( 0.0f, m_stemAmalgamConsensus - decayValue );
     }
 
@@ -64,23 +63,24 @@ struct StemDataProcessor
     {
         for ( auto stemI = 0U; stemI < 8; stemI++ )
         {
-            exchangeData.m_stemPulse[stemI] = m_stemAmalgamBeats[stemI];
-            exchangeData.m_stemEnergy[stemI] = m_stemAmalgamEnergy[stemI];
+            exchangeData.m_stemBeat[stemI]   = m_stemAmalgam.m_beat[stemI];
+            exchangeData.m_stemWave[stemI]   = m_stemAmalgam.m_wave[stemI];
+            exchangeData.m_stemWaveLF[stemI] = m_stemAmalgam.m_low[stemI];
+            exchangeData.m_stemWaveHF[stemI] = m_stemAmalgam.m_high[stemI];
         }
         exchangeData.m_consensusBeat = m_stemAmalgamConsensus;
     }
 
     // accessors for the current state
-    ouro_nodiscard constexpr const std::array< float, 8 >& getBeats() const { return m_stemAmalgamBeats; }
-    ouro_nodiscard constexpr const std::array< float, 8 >& getEnergy() const { return m_stemAmalgamEnergy; }
+    ouro_nodiscard constexpr const std::array< float, 8 >& getWave() const { return m_stemAmalgam.m_wave; }
+    ouro_nodiscard constexpr const std::array< float, 8 >& getBeat() const { return m_stemAmalgam.m_beat; }
     ouro_nodiscard constexpr float getConsensus() const { return m_stemAmalgamConsensus; }
 
 protected:
 
     base::EventListenerID                   m_eventListenerStemDataAmalgam = base::EventListenerID::invalid();
 
-    std::array< float, 8 >                  m_stemAmalgamBeats;
-    std::array< float, 8 >                  m_stemAmalgamEnergy;
+    StemDataAmalgam                         m_stemAmalgam;
     float                                   m_stemAmalgamConsensus;
 
     void handleNewStemAmalgam( const base::IEvent& eventPtr );

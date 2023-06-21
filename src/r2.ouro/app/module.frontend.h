@@ -10,6 +10,7 @@
 
 #pragma once
 #include "app/module.h"
+#include "app/display.scale.h"
 #include "config/frontend.h"
 #include "base/utils.h"
 #include "base/construction.h"
@@ -108,7 +109,8 @@ private:
     fs::path            m_imguiLayoutDefaultPath;
     char*               m_imguiLayoutIni;
 
-    GLFWwindow*         m_GlfwWindow;
+    GLFWwindow*         m_glfwWindow;
+    DisplayScale        m_displayScale;
     bool                m_isBorderless;
 
     WindowGeometry      m_currentWindowGeometry;

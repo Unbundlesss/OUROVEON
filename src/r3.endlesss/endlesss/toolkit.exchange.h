@@ -41,10 +41,12 @@ struct Exchange
 
 
 
-    static constexpr size_t MaxJamName          = 32;    // who knows
-    static constexpr size_t MaxJammerName       = 32;    // no idea, probably less; also .. utf8??
+    static constexpr size_t MaxJamName              = 32;   // who knows
+    static constexpr size_t MaxJammerName           = 32;   // no idea, probably less; also .. utf8??
 
-    static constexpr size_t ScopeBucketCount    = 8;     // frequency buckets storage
+    static constexpr size_t ScopeBucketCount        = 8;    // frequency buckets storage
+    static constexpr uint32_t ExchangeDataVersion   = 2;    // basic magic version number to help hosts to
+                                                            // identify incoming packets' format
 
 
     // flags to set to denote what fields can be considered valid
@@ -66,12 +68,13 @@ struct Exchange
     ouro_nodiscard constexpr bool hasPlaybackData() const { return ( m_dataflags & DataFlags_Playback ) == DataFlags_Playback; }
     ouro_nodiscard constexpr bool hasScopeData() const    { return ( m_dataflags & DataFlags_Scope    ) == DataFlags_Scope;    }
 
+    uint32_t    m_exchangeDataVersion = ExchangeDataVersion;
 
     uint32_t    m_dataflags;                    //      DataFlags_## declaring what of the following should be valid
     uint32_t    m_dataWriteCounter;             //      incremented from 0 each time block is updated so external apps
                                                 //          can have some reference as to when data has changed or not
 
-    char        m_jamName[MaxJamName];          // [R  ] which jam we jammin
+    char        m_jamName[MaxJamName];          // [R  ] which jam we jammin in
     uint64_t    m_riffHash;                     // [R  ] u64 hash derived from original riff couch ID as some kind of UID
 
     uint64_t    m_riffTimestamp;                // [R  ] sys_clock seconds timestamp of riff submission
@@ -81,12 +84,15 @@ struct Exchange
     uint32_t    m_riffBeatSegmentCount;         // [R  ] number of ---- ---- ---- ---- bar segments computed for the riff timing values
     uint32_t    m_riffBeatSegmentActive;        // [ P ] .. and which one is currently live, based on playback time
 
-    float       m_stemPulse[8];                 // [ P ] data per stem, some from endlesss, some computed live
-    float       m_stemEnergy[8];                // [ P ] 
-    float       m_stemGain[8];                  // [ P ] 
-    uint32_t    m_stemColour[8];                // [ P ] 
+                                                //       data per stem, some from endlesss, some computed live
+    float       m_stemBeat[8];                  // [ P ] detected beat signals, peak-followed for falloff
+    float       m_stemWave[8];                  // [ P ] rms-follower curve from the input signal
+    float       m_stemWaveLF[8];                // [ P ] low-frequency components of input signal, follower-smoothed
+    float       m_stemWaveHF[8];                // [ P ] high-frequency components, like the above
+    float       m_stemGain[8];                  // [ P ] 0..1 linear gain values per stem
+    uint32_t    m_stemColour[8];                // [ P ] original instrument colours from Endlesss
 
-    float       m_scope[ScopeBucketCount];      // [  S] frequency band scope data from final audio-out fft
+    float       m_scope[ScopeBucketCount];      // [  S] frequency band scope data from final audio-out fft, 0 being lowest frequency band
 
     float       m_consensusBeat;                // [ P ] if a number of stems are all reporting beats at the same time, 
                                                 //          we emphasise the fact by tracking a 'consensus beat' value which
@@ -150,7 +156,9 @@ struct Exchange
         return nullptr;
     }
 };
-static_assert( std::is_trivially_copyable<Exchange>::value && std::is_standard_layout<Exchange>::value, 
+static_assert(
+    std::is_trivially_copyable<Exchange>::value &&
+    std::is_standard_layout<Exchange>::value,
     "Exchange data is designed to be shared with other languages / across the network and as such needs to be 'POD' as possible" );
 
 } // namespace toolkit

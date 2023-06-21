@@ -15,87 +15,33 @@ static float g_cycleTimerFast;
 
 namespace ImGui {
 
-//     bool ImGui::BeginMainMenuBar()
-//     {
-//         ImGuiContext& g = *GImGui;
-//         ImGuiViewportP* viewport = (ImGuiViewportP*)(void*)GetMainViewport();
-// 
-//         // Notify of viewport change so GetFrameHeight() can be accurate in case of DPI change
-//         SetCurrentViewport( NULL, viewport );
-// 
-//         // For the main menu bar, which cannot be moved, we honor g.Style.DisplaySafeAreaPadding to ensure text can be visible on a TV set.
-//         // FIXME: This could be generalized as an opt-in way to clamp window->DC.CursorStartPos to avoid SafeArea?
-//         // FIXME: Consider removing support for safe area down the line... it's messy. Nowadays consoles have support for TV calibration in OS settings.
-//         g.NextWindowData.MenuBarOffsetMinVal = ImVec2( g.Style.DisplaySafeAreaPadding.x, ImMax( g.Style.DisplaySafeAreaPadding.y - g.Style.FramePadding.y, 0.0f ) );
-//         ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_MenuBar;
-//         float height = GetFrameHeight();
-//         bool is_open = BeginViewportSideBar( "##MainMenuBar", viewport, ImGuiDir_Up, height, window_flags );
-//         g.NextWindowData.MenuBarOffsetMinVal = ImVec2( 0.0f, 0.0f );
-// 
-//         if ( is_open )
-//             BeginMenuBar();
-//         else
-//             End();
-//         return is_open;
-//     }
-
 bool BeginStatusBar()
 {
     ImGuiContext& g = *GImGui;
     ImGuiViewportP* viewport = (ImGuiViewportP*)(void*)GetMainViewport();
-    ImGuiWindow* status_bar_window = FindWindowByName("##StatusBar");
 
-    const ImVec2 menu_bar_pos  = viewport->Pos + ImVec2( 0, viewport->Size.y - 22.0f );
-    const ImVec2 menu_bar_size = ImVec2( viewport->Size.x - viewport->WorkSize.x + viewport->WorkSize.x, 22.0f );
+    // Notify of viewport change so GetFrameHeight() can be accurate in case of DPI change
+    SetCurrentViewport( NULL, viewport );
 
-    // Get our rectangle at the top of the work area
-    if (status_bar_window == NULL || status_bar_window->BeginCount == 0)
-    {
-        // Set window position
-        // We don't attempt to calculate our height ahead, as it depends on the per-viewport font size. However menu-bar will affect the minimum window size so we'll get the right height.
-        SetNextWindowPos(menu_bar_pos);
-        SetNextWindowSize(menu_bar_size);
-    }
+    // For the main menu bar, which cannot be moved, we honor g.Style.DisplaySafeAreaPadding to ensure text can be visible on a TV set.
+    // FIXME: This could be generalized as an opt-in way to clamp window->DC.CursorStartPos to avoid SafeArea?
+    // FIXME: Consider removing support for safe area down the line... it's messy. Nowadays consoles have support for TV calibration in OS settings.
+    g.NextWindowData.MenuBarOffsetMinVal = ImVec2( g.Style.DisplaySafeAreaPadding.x, ImMax( g.Style.DisplaySafeAreaPadding.y - g.Style.FramePadding.y, 0.0f ) );
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_MenuBar;
+    float height = GetFrameHeight();
+    bool is_open = BeginViewportSideBar( "##OvStatusBar", viewport, ImGuiDir_Down, height, window_flags );
+    g.NextWindowData.MenuBarOffsetMinVal = ImVec2( 0.0f, 0.0f );
 
-    // Create window
-    SetNextWindowViewport(viewport->ID); // Enforce viewport so we don't create our own viewport when ImGuiConfigFlags_ViewportsNoMerge is set.
-    PushStyleColor( ImGuiCol_WindowBg, g.Style.Colors[ImGuiCol_MenuBarBg] );
-    PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-    PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(0, 0));    // Lift normal size constraint, however the presence of a menu-bar will give us the minimum height we want.
-    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings;
-    bool is_open = Begin("##StatusBar", NULL, window_flags);
-    PopStyleVar(2);
-    PopStyleColor();
-
-    // Report our size into work area (for next frame) using actual window size
-    status_bar_window = GetCurrentWindow();
-    if ( status_bar_window->BeginCount == 1 )
-        viewport->WorkSize.y -= status_bar_window->Size.y;
-
-    if (!is_open)
-    {
+    if ( is_open )
+        BeginMenuBar();
+    else
         End();
-        return false;
-    }
-
-    {
-        ImGuiWindow* window = GetCurrentWindow();
-        BeginGroup();
-        window->DC.CursorPos = window->DC.CursorMaxPos = ImVec2( menu_bar_pos.x + window->DC.MenuBarOffset.x, menu_bar_pos.y + window->DC.MenuBarOffset.y );
-        window->DC.LayoutType = ImGuiLayoutType_Horizontal;
-        AlignTextToFramePadding();
-    }
-
-    return true; //-V1020
+    return is_open;
 }
 
 void EndStatusBar()
 {
-    {
-        ImGuiWindow* window = GetCurrentWindow();
-        window->DC.LayoutType = ImGuiLayoutType_Vertical;
-        EndGroup();
-    }
+    EndMenuBar();
 
     // When the user has left the menu layer (typically: closed menus through activation of an item), we restore focus to the previous window
     // FIXME: With this strategy we won't be able to restore a NULL focus.
@@ -275,21 +221,9 @@ ImU32 GetPulseColour()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void CompactTooltip( const char* tip )
+void CompactTooltip( const std::string_view& tip )
 {
-    if ( ImGui::IsItemHovered() )
-    {
-        ImGui::BeginTooltip();
-        ImGui::PushTextWrapPos( ImGui::GetFontSize() * 35.0f );
-        ImGui::TextUnformatted( tip );
-        ImGui::PopTextWrapPos();
-        ImGui::EndTooltip();
-    }
-}
-
-void CompactTooltip( const std::string& tip )
-{
-    if ( ImGui::IsItemHovered() )
+    if ( ImGui::IsItemHovered( ImGuiHoveredFlags_DelayNormal ) )
     {
         ImGui::BeginTooltip();
         ImGui::PushTextWrapPos( ImGui::GetFontSize() * 35.0f );
@@ -413,7 +347,16 @@ void CenteredColouredText( const ImVec4& col, const char* text )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-bool KnobFloat( const char* label, const float outerRadius, float* p_value, float v_min, float v_max, float v_step )
+bool KnobFloat(
+    const char* label,
+    const float outerRadius,
+    float* p_value,
+    float v_min,
+    float v_max,
+    float v_notches,
+    float default_value,
+    const std::function< std::string ( const float percentage01, const float value ) >& tooltipCallback
+    )
 {
     constexpr float cAngleMin       = constants::f_pi * 0.75f;
     constexpr float cAngleMax       = constants::f_pi * 2.25f;
@@ -435,22 +378,42 @@ bool KnobFloat( const char* label, const float outerRadius, float* p_value, floa
     ImGui::InvisibleButton( label, ImVec2( outerRadius * 2, outerRadius * 2 + extendHeightForLabel ) );
     const bool is_active        = ImGui::IsItemActive();
     const bool is_hovered       = ImGui::IsItemHovered();
-    const bool is_interactable  = v_step > 0;
+    const bool is_interactable  = v_notches > 0;
 
     bool value_changed = false;
-    if ( is_active && 
-         is_interactable &&
-         io.MouseDelta.y != 0.0f )
+    float input_step = 0;
+
+    if ( is_hovered &&
+         io.MouseWheel != 0 )
     {
-        float step = (v_max - v_min) / v_step;
-        *p_value += (-io.MouseDelta.y) * step;
+        input_step = io.MouseWheel * 10.0f;
+    }
+    if ( is_active &&
+         is_interactable &&
+         io.MouseDelta.y != 0 )
+    {
+        input_step = -io.MouseDelta.y;
+    }
+
+    // shift to move quicker
+    if ( io.KeyShift )
+    {
+        input_step *= 4.0f;
+    }
+
+    if ( input_step != 0 )
+    {
+        float step = (v_max - v_min) / v_notches;
+        *p_value += input_step * step;
 
         if ( *p_value < v_min ) 
             *p_value = v_min;
         if ( *p_value > v_max ) 
             *p_value = v_max;
+
         value_changed = true;
     }
+
 #if 0
     if ( is_active )
     {
@@ -466,9 +429,11 @@ bool KnobFloat( const char* label, const float outerRadius, float* p_value, floa
         value_changed = true;
     }
 #endif
-    else if ( is_hovered && is_interactable && (io.MouseDoubleClicked[0] || io.MouseClicked[2]) )
+    
+    // reset on double/right click
+    if ( is_hovered && is_interactable && (io.MouseDoubleClicked[0] || io.MouseClicked[2]) )
     {
-        *p_value = (v_max + v_min) * 0.5f;  // reset value
+        *p_value = default_value;
         value_changed = true;
     }
 
@@ -476,8 +441,8 @@ bool KnobFloat( const char* label, const float outerRadius, float* p_value, floa
     const auto innerColor = ImGui::GetColorU32( is_active ? ImGuiCol_FrameBgActive : is_hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg );
 
 
-    float t            = (*p_value - v_min) / (v_max - v_min);
-    float angle        = cAngleMin + (cAngleMax - cAngleMin) * t;
+    float pct01        = (*p_value - v_min) / (v_max - v_min);
+    float angle        = cAngleMin + (cAngleMax - cAngleMin) * pct01;
     float angle_cos    = std::cos( angle ), angle_sin = std::sin( angle );
     float radius_inner = adjustedRadius * 0.35f;
     draw_list->AddCircleFilled( center, adjustedRadius - 2.0f, outerColor, 24 );
@@ -493,11 +458,16 @@ bool KnobFloat( const char* label, const float outerRadius, float* p_value, floa
     draw_list->PathLineTo( ImVec2( center.x + angle_cos * radius_inner, center.y + angle_sin * radius_inner ) );
     draw_list->PathStroke( ImGui::GetColorU32( is_interactable ? ImGuiCol_SliderGrabActive : ImGuiCol_PlotHistogram ), false, 2.0f );
 
-    if ( is_active || is_hovered ) 
+    if ( is_active || is_hovered )
     {
         ImGui::SetNextWindowPos( ImVec2( pos.x - style.WindowPadding.x, pos.y - line_height - style.ItemInnerSpacing.y - style.WindowPadding.y ) );
         ImGui::BeginTooltip();
-        ImGui::Text( "%.0f%%", t * 100.0f );
+        {
+            if ( tooltipCallback )
+                ImGui::TextUnformatted( tooltipCallback( pct01, *p_value ).c_str() );
+            else
+                ImGui::Text( "%.0f%%", pct01 * 100.0f );    // default is "<value>%" 
+        }
         ImGui::EndTooltip();
     }
 

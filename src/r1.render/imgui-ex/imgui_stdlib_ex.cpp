@@ -1,12 +1,12 @@
 #include "imgui.h"
 #include "imgui_stdlib_ex.h"
 
-void ImGui::TextUnformatted( const std::string& str )
+void ImGui::TextUnformatted( const std::string_view& str )
 {
-    ImGui::TextUnformatted( str.c_str(), &str.back() + 1 );
+    ImGui::TextUnformatted( str.data(), &str.back() + 1 );
 }
 
-ImVec2 ImGui::CalcTextSize( const std::string& str )
+ImVec2 ImGui::CalcTextSize( const std::string_view& str )
 {
-    return ImGui::CalcTextSize( str.c_str(), &str.back() + 1 );
+    return ImGui::CalcTextSize( str.data(), &str.back() + 1 );
 }

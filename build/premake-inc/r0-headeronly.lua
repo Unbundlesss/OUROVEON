@@ -145,4 +145,5 @@ addSimpleHeaderOnly( true, "json",             "r0.data/json")
 addSimpleHeaderOnly( true, "basen",            "r0.codec/basen")
 addSimpleHeaderOnly( true, "source_location",  "r0.platform/source_location/include")
 addSimpleHeaderOnly( true, "q_lib",            "r0.dsp/q_lib/include")
+addSimpleHeaderOnly( true, "sol",              "r0.scripting/sol-330")
 

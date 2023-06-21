@@ -282,7 +282,10 @@ int Audio::PortAudioCallbackInternal( void* outputBuffer, unsigned long framesPe
     // pass control to the installed mixer, if we have one
     if ( m_mixerInterface != nullptr )
     {
-        m_mixerInterface->update( *m_mixerBuffers, m_gain, framesPerBuffer, m_state.m_samplePos );
+        OutputSignal outputSignal;
+        outputSignal.m_linearGain   = m_outputSignalGain;
+
+        m_mixerInterface->update( *m_mixerBuffers, outputSignal, framesPerBuffer, m_state.m_samplePos );
     }
     // otherwise, ssshhh
     else

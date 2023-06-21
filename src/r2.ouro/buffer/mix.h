@@ -15,7 +15,7 @@ namespace buffer {
 
 // ---------------------------------------------------------------------------------------------------------------------
 // 
-inline void downmix_8channel_stereo( 
+constexpr void downmix_8channel_stereo( 
     const float  global_gain,
     const int    sample_count,
     float        input_left_channel_0[],
@@ -40,7 +40,7 @@ inline void downmix_8channel_stereo(
 {
     for ( auto i = 0; i < sample_count; i++ )
     {
-        output_left[i]  = ( input_left_channel_0[i] + 
+        const float sV  = ( input_left_channel_0[i] + 
                             input_left_channel_1[i] + 
                             input_left_channel_2[i] + 
                             input_left_channel_3[i] + 
@@ -49,7 +49,12 @@ inline void downmix_8channel_stereo(
                             input_left_channel_6[i] + 
                             input_left_channel_7[i] ) * global_gain;
 
-        output_right[i] = ( input_right_channel_0[i] + 
+        output_left[i] = sV;
+    }
+
+    for ( auto i = 0; i < sample_count; i++ )
+    {
+        const float sV  = ( input_right_channel_0[i] +
                             input_right_channel_1[i] + 
                             input_right_channel_2[i] + 
                             input_right_channel_3[i] + 
@@ -57,6 +62,8 @@ inline void downmix_8channel_stereo(
                             input_right_channel_5[i] + 
                             input_right_channel_6[i] + 
                             input_right_channel_7[i] ) * global_gain;
+
+        output_right[i] = sV;
     }
 }
 
@@ -64,7 +71,7 @@ inline void downmix_8channel_stereo(
 // ---------------------------------------------------------------------------------------------------------------------
 // convert two channels of float samples, clamp to 0..1, convert to 24-bit int, store interleaved in a 32-bit int output stream
 //
-inline void interleave_float_to_int24(
+constexpr void interleave_float_to_int24(
     const int    sample_count,
     float        input_left[],
     float        input_right[],

@@ -11,6 +11,8 @@
 
 #include "endlesss/api.h"
 #include "core.types.h"
+#include "base/float.util.h"
+#include "dsp/octave.h"
 
 struct PFFFT_Setup;
 
@@ -18,6 +20,78 @@ namespace config { namespace endlesss { struct rAPI; } }
 
 namespace endlesss {
 namespace live {
+
+// ---------------------------------------------------------------------------------------------------------------------
+// upon asynchronous load, an analysis pass is run against each stem, producing data for use by visualisation / debugging etc
+//
+struct StemAnalysisData
+{
+    static constexpr std::size_t    BeatBitsShift = 6;      // shift left/right by 64
+
+    ouro_nodiscard inline std::size_t estimateMemoryUsageBytes() const
+    {
+        std::size_t result = 0;
+        result += m_psaWave.size()      * sizeof( uint8_t );
+        result += m_psaBeat.size()      * sizeof( uint8_t );
+        result += m_psaLowFreq.size()   * sizeof( uint8_t );
+        result += m_psaHighFreq.size()  * sizeof( uint8_t );
+        result += m_beatBitfield.size() * sizeof( uint64_t );
+
+        return result;
+    }
+
+    void resize( int32_t sampleCount )
+    {
+        m_psaWave.resize( sampleCount );
+        m_psaBeat.resize( sampleCount );
+        m_psaLowFreq.resize( sampleCount );
+        m_psaHighFreq.resize( sampleCount );
+        
+        m_beatBitfield.resize( (sampleCount >> BeatBitsShift) + 1 );
+    }
+
+
+    ouro_nodiscard constexpr uint8_t getWaveU8( const int64_t sampleIndex ) const { return m_psaWave[sampleIndex]; }
+    ouro_nodiscard constexpr float   getWaveF(  const int64_t sampleIndex ) const { return base::LUT::u8_to_float[ getWaveU8(sampleIndex) ]; }
+
+    ouro_nodiscard constexpr uint8_t getBeatU8( const int64_t sampleIndex ) const { return m_psaBeat[sampleIndex]; }
+    ouro_nodiscard constexpr float   getBeatF(  const int64_t sampleIndex ) const { return base::LUT::u8_to_float[ getBeatU8(sampleIndex) ]; }
+
+    ouro_nodiscard constexpr uint8_t getLowFreqU8( const int64_t sampleIndex ) const { return m_psaLowFreq[sampleIndex]; }
+    ouro_nodiscard constexpr float   getLowFreqF(  const int64_t sampleIndex ) const { return base::LUT::u8_to_float[ getLowFreqU8(sampleIndex) ]; }
+
+    ouro_nodiscard constexpr uint8_t getHighFreqU8( const int64_t sampleIndex ) const { return m_psaHighFreq[sampleIndex]; }
+    ouro_nodiscard constexpr float   getHighFreqF(  const int64_t sampleIndex ) const { return base::LUT::u8_to_float[ getHighFreqU8(sampleIndex) ]; }
+
+
+    // all the per-sample 0..1 analysis data is stored quantised as mostly we're using it for visualisation
+    // or debugging / alignment, full precision generally isn't required. `psa` being per-sample average, just for a name for it
+    //
+    std::vector< uint8_t >          m_psaWave;         // rms-follower of original waveform
+    std::vector< uint8_t >          m_psaBeat;         // peak-follower on detected beats, giving smooth decay off each
+    std::vector< uint8_t >          m_psaLowFreq;      // smoothed extraction of lower-band frequencies
+    std::vector< uint8_t >          m_psaHighFreq;     // smoothed extraction of higher-band frequencies
+
+
+    inline void setBeatAtSample( const int64_t sampleIndex )
+    {
+        const uint64_t bitBlock = sampleIndex >> BeatBitsShift;
+        const uint64_t bitBit = sampleIndex - (bitBlock << BeatBitsShift);
+
+        m_beatBitfield[bitBlock] |= 1ULL << bitBit;
+    }
+
+    ouro_nodiscard inline bool queryBeatAtSample( const int64_t sampleIndex ) const
+    {
+        const uint64_t bitBlock = sampleIndex >> BeatBitsShift;
+        const uint64_t bitBit = sampleIndex - (bitBlock << BeatBitsShift);
+
+        return (m_beatBitfield[bitBlock] >> bitBit) != 0;
+    }
+
+    // one bit per sample bitfield, talk to it via functions above
+    std::vector< uint64_t >         m_beatBitfield;
+};
 
 // ---------------------------------------------------------------------------------------------------------------------
 struct Stem
@@ -35,24 +109,51 @@ struct Stem
         Failed_CacheDirectory,
     };
 
+    // data used during stem processing; we keep a single one of these as a const singleton, shared between
+    // all stem processing (so it includes no working buffers, etc)
     struct Processing
     {
         using UPtr = std::unique_ptr<Processing>;
+        using FFTOctaves = dsp::FFTOctaveBuckets< 3 >;      // bucketing used during frequency collection
 
         ~Processing();
 
-        PFFFT_Setup* m_pffftPlan;
-        int32_t      m_fftWindowSize;
+        PFFFT_Setup*    m_pffftPlan;                        // pffft setup, valid to share between simultaneous workers
+        int32_t         m_fftWindowSize;
+        float           m_sampleRateF;
+
+        FFTOctaves      m_octaves;
+
+        // tuning values used during processing for various filters
+        // these have been settled upon after some browsing through jams with the Stem Analysis UI and trying to 
+        // search for values that work across a wide range of audio
+        struct Tuning
+        {
+            float       m_beatFollowDuration = 0.350f;      // decay duration on beat peak-following
+            float       m_waveFollowDuration = 0.040f;      // follower duration for main waveform signal
+
+            float       m_trackerSensitivity = 0.980f;      // peak-tracker settings for beat detection
+            float       m_trackerHysteresis  = 0.100f;
+
+        }               m_tuning;
     };
+
     static Processing::UPtr createStemProcessing( const uint32_t targetSampleRate );
 
 
     Stem( const types::Stem& stemData, const uint32_t targetSampleRate );
     ~Stem();
 
+
+    // instigate a fetch of the stem data from either the cache or the network
+    // note this is a blocking call and is designed to be called from a background thread in most cases
     void fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath );
 
-    void process( const Processing& processing );
+    // run analysis pass, producing things like onsets / peak-following / etc into the given result;
+    // this result is passed as an argument so that we can also run this in debug tools to tune the processing
+    void analyse( const Processing& processing, StemAnalysisData& result ) const;
+    void analyse( const Processing& processing );   // convenience function that calls the above on current instance, also then toggling m_hasValidAnalysis
+
 
     // stem needs a copy of the analysis task future to ensure that in the unlikely case
     // of destruction arriving before the task is done, we wait to avoid the analysis working with a deleted object
@@ -62,17 +163,12 @@ struct Stem
         m_analysisFuture = analysisFuture;
     }
 
-    ouro_nodiscard inline bool isAnalysisComplete() const
-    {
-        return m_hasValidAnalysis;
-    }
-
     ouro_nodiscard constexpr bool hasFailed() const
     {
-        return ( m_state == State::Failed_Http          ||
-                 m_state == State::Failed_DataUnderflow ||
-                 m_state == State::Failed_DataOverflow  ||
-                 m_state == State::Failed_Vorbis        ||
+        return ( m_state == State::Failed_Http           ||
+                 m_state == State::Failed_DataUnderflow  ||
+                 m_state == State::Failed_DataOverflow   ||
+                 m_state == State::Failed_Vorbis         ||
                  m_state == State::Failed_CacheDirectory );
     }
 
@@ -86,14 +182,21 @@ struct Stem
         // buffer data
         result += ( m_sampleCount * 2 ) * sizeof( float );
 
-        // analysis chunk
+        // add analysis chunk if it is ready
         if ( isAnalysisComplete() )
         {
-            result += m_sampleEnergy.size() * sizeof( float );
-            result += m_sampleBeat.size() * sizeof( uint64_t );
+            result += m_analysisData.estimateMemoryUsageBytes();
         }
         return result;
     }
+
+    ouro_nodiscard inline bool isAnalysisComplete() const
+    {
+        return m_hasValidAnalysis;
+    }
+
+    ouro_nodiscard constexpr const StemAnalysisData& getAnalysisData() const { return m_analysisData; }
+    ouro_nodiscard constexpr StemAnalysisData& getAnalysisData() { return m_analysisData; }
 
 private:
 
@@ -117,15 +220,15 @@ private:
 
     // blend a small window of samples at each end of the stem to reduce clicks on looping
     // (as best we can tell Endlesss also does something like this)
-    void applyLoopCrossfade();
+    void applyLoopSewingBlend();
 
-
-    ouro_nodiscard size_t computeMemoryUsage() const;
 
 
     std::shared_future<void>        m_analysisFuture;
     std::atomic_bool                m_hasValidAnalysis; // set in async analysis if analysis data is to be trusted
 
+
+    // #TODO move into accessors
 public:
     const types::Stem               m_data;
     ImU32                           m_colourU32;        // converted from m_data and cached
@@ -135,8 +238,8 @@ public:
     int32_t                         m_sampleCount;
     std::array<float*, 2>           m_channel;
 
-    std::vector< float >            m_sampleEnergy;
-    std::vector< uint64_t >         m_sampleBeat;
+private:
+    StemAnalysisData                m_analysisData;
 };
 
 using StemPtr = std::shared_ptr<Stem>;

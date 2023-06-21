@@ -47,7 +47,7 @@ void main(void)
     resultColour = texture(iAudio, uv).ggg;
 
 #elif defined(SCOPE)
-    resultColour = spectrum( 0.75 + texture(iAudio, vec2(1.0-uv.y, uv.x)).b );   // flip spectrum so it runs bottom-top (low -> high freq) and left-right (time)
+    resultColour = texture(iAudio, vec2(1.0-uv.y, uv.x)).bbb;
 
 #elif defined(GAIN)
     resultColour = texture(iAudio, uv).aaa;

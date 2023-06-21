@@ -28,11 +28,11 @@ void RiffMixerBase::mixChannelsWriteSilence(
 
 void RiffMixerBase::mixChannelsToOutput( 
     const app::module::Audio::OutputBuffer& outputBuffer,
-    const float globalMultiplier,
+    const app::module::Audio::OutputSignal& outputSignal,
     const uint32_t samplesToWrite )
 {
     buffer::downmix_8channel_stereo(
-        globalMultiplier,
+        outputSignal.m_linearGain,
         samplesToWrite,
         m_mixChannelLeft[0],
         m_mixChannelLeft[1],
@@ -51,7 +51,8 @@ void RiffMixerBase::mixChannelsToOutput(
         m_mixChannelRight[6],
         m_mixChannelRight[7],
         outputBuffer.m_workingLR[0],
-        outputBuffer.m_workingLR[1] );
+        outputBuffer.m_workingLR[1]
+    );
 }
 
 }

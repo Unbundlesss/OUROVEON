@@ -170,8 +170,9 @@ workspace ("ouroveon_" .. _ACTION)
         {
             ["natvis"] = 
             {
-                path.join( SrcDir(), "r0.data",     "json",       "nlohmann",    "nlohmann_json.natvis" ),
-                path.join( SrcDir(), "r0.scaffold", "abseil_ext",                "abseil.natvis" ),
+                path.join( SrcDir(), "r0.data",      "json",       "nlohmann",    "nlohmann_json.natvis" ),
+                path.join( SrcDir(), "r0.scaffold",  "abseil_ext",                "abseil.natvis" ),
+                path.join( SrcDir(), "r0.scripting", "sol-330",                   "sol2.natvis" ),
             }
         }
     }
@@ -228,6 +229,11 @@ group ""
 group "r0-platform"
 
 include "premake-inc/r0-platform-pfold.lua"
+
+group ""
+group "r0-scripting"
+
+include "premake-inc/r0-scripting-lua.lua"
 
 group ""
 group "r1-render"

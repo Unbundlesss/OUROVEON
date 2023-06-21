@@ -11,10 +11,11 @@ ModuleRefInclude["imgui"] = function()
         LibRoot.Imgui .. "/misc/freetype/",
         LibRoot.Imgui .. "/misc/cpp/",
 
+        LibRoot.Imgui .. "-term/include/",
         LibRoot.Imgui .. "-ex/",
-        LibRoot.Imgui .. "-nodes/",
-        LibRoot.Imgui .. "-implot/",
         LibRoot.Imgui .. "-filedlg/",
+        LibRoot.Imgui .. "-implot/",
+        LibRoot.Imgui .. "-nodes/",
     }
     ModuleRefInclude["freetype"]()
 end
@@ -47,20 +48,20 @@ project "r1-imgui"
 
         LibRoot.Imgui .. "/misc/cpp/*.*",
 
-        LibRoot.Imgui .. "-cmd/*.cpp",
-        LibRoot.Imgui .. "-cmd/*.h",
+        LibRoot.Imgui .. "-term/include/*.cpp",
+        LibRoot.Imgui .. "-term/include/*.hpp",
 
-        LibRoot.Imgui .. "-nodes/*.cpp",
-        LibRoot.Imgui .. "-nodes/*.h",
-
-        LibRoot.Imgui .. "-implot/*.cpp",
-        LibRoot.Imgui .. "-implot/*.h",
+        LibRoot.Imgui .. "-ex/*.cpp",
+        LibRoot.Imgui .. "-ex/*.h",
 
         LibRoot.Imgui .. "-filedlg/*.cpp",
         LibRoot.Imgui .. "-filedlg/*.h",
 
-        LibRoot.Imgui .. "-ex/*.cpp",
-        LibRoot.Imgui .. "-ex/*.h",
+        LibRoot.Imgui .. "-implot/*.cpp",
+        LibRoot.Imgui .. "-implot/*.h",
+
+        LibRoot.Imgui .. "-nodes/*.cpp",
+        LibRoot.Imgui .. "-nodes/*.h",
     }
 
 

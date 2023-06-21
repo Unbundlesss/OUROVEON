@@ -301,5 +301,15 @@ bool SubscribedJams::fetch( const NetConfiguration& ncfg, const std::string& use
     return deserializeJson< SubscribedJams >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, userName ) );
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+bool SharedRiffsByUser::fetch( const NetConfiguration& ncfg, const std::string& userName, int32_t count, int32_t offset )
+{
+    const auto requestUrl = fmt::format( FMTX( "/api/v3/feed/shared_by/{}?size={}&from={}" ), userName, count, offset );
+
+    auto res = createEndlesssHttpClient( ncfg, UserAgent::WebAPI )->Get( requestUrl );
+
+    return deserializeJson< SharedRiffsByUser >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, userName ) );
+}
+
 } // namespace remote
 } // namespace endlesss

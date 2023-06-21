@@ -17,6 +17,7 @@
 #include "filesys/fsutil.h"
 #include "math/rng.h"
 #include "spacetime/moment.h"
+#include "config/spectrum.h"
 
 // vorbis decode
 #define STB_VORBIS_HEADER_ONLY
@@ -30,6 +31,10 @@
 
 // q
 #include <q/fx/schmitt_trigger.hpp>
+#include <q/fx/signal_conditioner.hpp>
+#include <q/fx/differentiator.hpp>
+#include <q/fx/envelope.hpp>
+#include <q/fx/peak.hpp>
 
 
 namespace endlesss {
@@ -48,9 +53,21 @@ Stem::Processing::~Processing()
 // ---------------------------------------------------------------------------------------------------------------------
 Stem::Processing::UPtr Stem::createStemProcessing( const uint32_t targetSampleRate )
 {
+    static constexpr float measurementLengthSeconds = 1.0f / 60.0f;
+
+    // work out an FFT size that is about the size required to sample at the requested measurement length
+    const uint32_t samplesPerMeasurement = static_cast<uint32_t>( measurementLengthSeconds * static_cast<float>(targetSampleRate) );
+
+
     Processing::UPtr result = std::make_unique<Processing>();
-    result->m_fftWindowSize = 1024;
-    result->m_pffftPlan     = pffft_new_setup( result->m_fftWindowSize, PFFFT_COMPLEX );
+    result->m_fftWindowSize = base::nextPow2( samplesPerMeasurement );
+    result->m_sampleRateF   = static_cast<float>( targetSampleRate );
+    result->m_pffftPlan     = pffft_new_setup( result->m_fftWindowSize, PFFFT_REAL );
+
+    result->m_octaves.configure(
+        { 3, 4, 10 },
+        targetSampleRate,
+        result->m_fftWindowSize );
 
     return result;
 }
@@ -278,14 +295,14 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
     free( oggData );
 
     // immediate post-processing steps that modify samples
-    applyLoopCrossfade();
+    applyLoopSewingBlend();
 
     m_state = State::Complete;
 
     // report on our hard work
     {
         auto stemTime = stemTiming.stop();
-        const auto humanisedMemoryUsage = base::humaniseByteSize( "using approx mem : ", computeMemoryUsage() );
+        const auto humanisedMemoryUsage = base::humaniseByteSize( "using approx mem : ", estimateMemoryUsageBytes() );
 
         blog::stem( "finalizing took {}, {}",
             stemTime,
@@ -413,9 +430,9 @@ bool Stem::attemptRemoteFetch( const api::NetConfiguration& ncfg, const uint32_t
 // ---------------------------------------------------------------------------------------------------------------------
 // a fairly basic edit applied to each stem that cross-fades it with itself, blending a tiny blob of the front/end samples
 // to avoid trivial clicks that happen when loops don't perfectly loop (which is often). A better version of this would be to mirror 
-// (say) Audacity's sample healing tool which does something far more elegant and complicated
+// (say) Audacity's sample healing tool which does something far more elegant and complicated and could work on a slightly larger window
 //
-void Stem::applyLoopCrossfade()
+void Stem::applyLoopSewingBlend()
 {
     constexpr int32_t xfadeWindowSize = 128;
     constexpr double xfadeWindowSizeRecp = 1.0 / (double)xfadeWindowSize;
@@ -460,8 +477,11 @@ void Stem::applyLoopCrossfade()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void Stem::process( const Processing& processing )
+void Stem::analyse( const Processing& processing, StemAnalysisData& result ) const
 {
+    using namespace dsp;
+    using namespace cycfi::q::literals;
+
     // such a small stem that we can't really do much? shout out to Blackest Jammmmmmmmmmm for unearthing this
     if ( m_sampleCount <= processing.m_fftWindowSize )
     {
@@ -469,294 +489,134 @@ void Stem::process( const Processing& processing )
         return;
     }
 
-    const int32_t fftWindowSize  = processing.m_fftWindowSize;
-    const uint64_t fftTimeSlices = m_sampleCount / fftWindowSize;
+    // default spectrum data for normalising freq data; we could load this from disk potentially
+    const config::Spectrum audioSpectrumConfig;
 
-    auto* fftDataIn       = mem::alloc16<dsp::complexf>( fftWindowSize );
-    auto* fftDataOut      = mem::alloc16<dsp::complexf>( fftWindowSize );
-    auto* fftOutMagnitude = mem::alloc16<float>( m_sampleCount );
+    const int32_t fftWindowSize = processing.m_fftWindowSize;
+    const int32_t fftTimeSlices = m_sampleCount / fftWindowSize;
+
+    // fft output working buffers
+    complexf* fftOutputL  = mem::alloc16<complexf>( fftWindowSize );
+    complexf* fftOutputR  = mem::alloc16<complexf>( fftWindowSize );
+
+    // transient frequency band buffers that then get smoothed afterwards
     auto* fftOutLowBand   = mem::alloc16<float>( fftTimeSlices );
-    auto* fftOutAvgEnergy = mem::alloc16<float>( fftTimeSlices );
+    auto* fftOutHighBand  = mem::alloc16<float>( fftTimeSlices );
 
-    const float fftWindowRcp = 1.0f / (float)(fftWindowSize);
 
-    const int32_t binToSubBandDivisor = fftWindowSize / 32;
+    // prepare the analysis output
+    result.resize( m_sampleCount );
 
-    constexpr int32_t fftEnergyHistory = 42;
-    constexpr float   fftEnergyRcp = 1.0f / (float)(fftEnergyHistory);
-
-    std::array< float, 32 > subband;
-    std::array< float, fftEnergyHistory > energy0;
-
-    uint64_t lowBandIndex = 0;
-
-    for ( uint64_t xI = 0; xI < m_sampleCount - fftWindowSize; xI += fftWindowSize )
+    for ( int64_t sI = 0, fftBandLimit = 0; sI <= m_sampleCount - fftWindowSize; sI += fftWindowSize, fftBandLimit++ )
     {
-        subband.fill( 0.0f );
+        // perform FFT on each stereo channel
+        pffft_transform_ordered( processing.m_pffftPlan, &(m_channel[0][sI]), reinterpret_cast<float*>(fftOutputL), nullptr, PFFFT_FORWARD );
+        pffft_transform_ordered( processing.m_pffftPlan, &(m_channel[1][sI]), reinterpret_cast<float*>(fftOutputR), nullptr, PFFFT_FORWARD );
 
-        // fill fft input, interleave left/right channels
-        for ( int32_t fftSample = 0; fftSample < fftWindowSize; fftSample++ )
+        std::array< float, 3 > frequencyBuckets;
+        frequencyBuckets.fill( 0 );
+
+        // sum the resulting spectrum into the precomputed buckets
+        for ( std::size_t freqBin = 0; freqBin < fftWindowSize / 2; freqBin++ )
         {
-            fftDataIn[fftSample] = dsp::complexf( m_channel[0][xI + fftSample], m_channel[1][xI + fftSample] );
+            const float fftMagL      = fftOutputL[freqBin].hypot();
+            const float fftMagR      = fftOutputR[freqBin].hypot();
+
+            const float fftMag       = (fftMagL + fftMagR) * 0.5f; // #hdd average of magnitudes 'correct' here?
+
+            frequencyBuckets[ processing.m_octaves.getBucketForFFTIndex( freqBin ) ] += fftMag;
         }
 
-        pffft_transform_ordered( processing.m_pffftPlan, (float*)fftDataIn, (float*)fftDataOut, nullptr, PFFFT_FORWARD );
-
-        for ( std::size_t freqBin = 1; freqBin < fftWindowSize; freqBin++ )
+        // reduce and normalise the buckets we're interested in
         {
-            const float fftMag       = fftDataOut[freqBin].hypot();
-            const float fftMagScaled = 2.0f * fftMag * fftWindowRcp;
+            frequencyBuckets[0] *= processing.m_octaves.getRecpSizeOfBucketAt( 0 );
+            frequencyBuckets[0]  = audioSpectrumConfig.headroomNormaliseDb( frequencyBuckets[0] );
 
-            fftOutMagnitude[xI + freqBin] = fftMagScaled;
+            fftOutLowBand[fftBandLimit] = frequencyBuckets[0];
 
-            const auto subbandIdx = freqBin / binToSubBandDivisor;
-            subband[subbandIdx] += fftMagScaled;
-        }
-        {
-            const auto lowBand = std::max( subband[0], subband[32 - 1] );
+            frequencyBuckets[2] *= processing.m_octaves.getRecpSizeOfBucketAt( 2 );
+            frequencyBuckets[2] = audioSpectrumConfig.headroomNormaliseDb( frequencyBuckets[2] );
 
-            ABSL_ASSERT( lowBandIndex < fftTimeSlices );
-            fftOutLowBand[lowBandIndex] = (lowBand > 0.0001f) ? lowBand : 0.0f;
-            lowBandIndex++;
+            fftOutHighBand[fftBandLimit] = frequencyBuckets[2];
         }
     }
 
-    const uint64_t lowBandRecords = lowBandIndex;
+    mem::free16( fftOutputR );
+    mem::free16( fftOutputL );
 
-    int32_t energyIndex = 0;
-    energy0.fill( 0.0f );
+    const cycfi::q::duration beatFollowDuration( processing.m_tuning.m_beatFollowDuration );
+    const cycfi::q::duration waveFollowDuration( processing.m_tuning.m_waveFollowDuration );
 
-    // run the average energy twice to ensure we represent how energy flows in the loop
-    for ( uint32_t avgPass = 0; avgPass < 2; avgPass++ )
+    cycfi::q::peak_envelope_follower     beatFollower(   beatFollowDuration, processing.m_sampleRateF );
+    cycfi::q::fast_rms_envelope_follower waveFollower(   waveFollowDuration, processing.m_sampleRateF );
+    cycfi::q::fast_rms_envelope_follower waveFollowerLF( waveFollowDuration, processing.m_sampleRateF );
+    cycfi::q::fast_rms_envelope_follower waveFollowerHF( waveFollowDuration, processing.m_sampleRateF );
+    cycfi::q::peak peakTracker(
+        processing.m_tuning.m_trackerSensitivity,
+        processing.m_tuning.m_trackerHysteresis );
+
+
+    #define PSA_ENCODE( _v ) static_cast<uint8_t>( _v * 255.0f );
+
+    // run two loops of the signal followers, ensuring that we get a good representation of the looping signal;
+    // this is also when we run peak-finding to get some beats extracted 
+    for ( auto cycle = 0; cycle < 2; cycle++ )
     {
-        for ( uint64_t tsI = 0; tsI < lowBandRecords; tsI++ )
+        std::size_t fftBandIndex = 0;
+        for ( int64_t sI = 0, fftI = 0; sI < m_sampleCount; sI++, fftI++ )
         {
-            float averageEnergy = 0.0f;
-            for ( int i = 0; i < fftEnergyHistory; i++ )
-                averageEnergy += energy0[i];
-            averageEnergy *= fftEnergyRcp;
+            // increment [fftBandIndex] every [fftWindowSize] samples, matching how they were computed above
+            if ( fftI == fftWindowSize )
+            {
+                fftBandIndex++;
+                fftI = 0;
 
-            energy0[energyIndex] = fftOutLowBand[tsI];
-            energyIndex = (energyIndex + 1) % fftEnergyHistory;
+                // as the last block of samples might not have the FFT process run (as we just dumbly fit to N x WindowSize)
+                // then allow this band index to lock to the top of the allowed limit, just copying the final values from the last bucket
+                if ( fftBandIndex == fftTimeSlices )
+                    fftBandIndex = fftTimeSlices - 1;
+            }
 
-            ABSL_ASSERT( isfinite( averageEnergy ) );
-            if ( avgPass == 0 )
-                fftOutAvgEnergy[tsI] = averageEnergy;
+            // don't imagine max() here is terribly scientific
+            const float signalInput     = std::max( m_channel[0][sI], m_channel[1][sI] );
+            const float signalFollow    = waveFollower( signalInput );
+            const float signalFollowLF  = waveFollowerLF( fftOutLowBand[fftBandIndex] );
+            const float signalFollowHF  = waveFollowerHF( fftOutHighBand[fftBandIndex] );
+
+            float beatPeak = 0;
+
+            // clear out beats on first cycle through
+            if ( cycle == 0 )
+            {
+                result.m_beatBitfield[sI >> StemAnalysisData::BeatBitsShift] = 0;
+            }
+            // run the tracker on second pass
             else
-                fftOutAvgEnergy[tsI] = std::max( fftOutAvgEnergy[tsI], averageEnergy );
+            {
+                result.m_psaWave[sI]     = PSA_ENCODE( signalFollow   );
+                result.m_psaLowFreq[sI]  = PSA_ENCODE( signalFollowLF );
+                result.m_psaHighFreq[sI] = PSA_ENCODE( signalFollowHF );
+
+                if ( peakTracker( signalInput, signalFollow ) )
+                {
+                    result.setBeatAtSample( sI );
+                    beatPeak = 1.0f;
+                }
+            }
+
+            result.m_psaBeat[sI] = PSA_ENCODE( beatFollower( beatPeak ) );
         }
     }
 
-    cycfi::q::schmitt_trigger beatTrigger( 0.125f ); // #todo data drive this
-
-    // controls the size of the band of values considered for variance
-    const int32_t     varianceBandSize = 32;
-    const float        varianceBandRcp = 1.0f / (float)(varianceBandSize);
-
-    m_sampleEnergy.resize( m_sampleCount );
-    m_sampleBeat.resize( ( m_sampleCount >> 6 ) + 1 );
-
-    lowBandIndex = 0;
-    for ( uint64_t xI = 0; xI < m_sampleCount - fftWindowSize; xI += fftWindowSize )
-    {
-        const float lowBand       = fftOutLowBand[lowBandIndex];
-        const float averageEnergy = fftOutAvgEnergy[lowBandIndex];
-
-
-        float variance = 0.0f;
-        for ( int i = 0; i < 32; i++ )
-        {
-            const float fftVar = fftOutMagnitude[xI + i] - lowBand;
-            variance += (fftVar * fftVar);
-        }
-        variance *= varianceBandRcp;
-
-
-        const float beatCoeff = (-0.3f * variance) + 1.125f; // #todo data drive this
-
-        for ( uint64_t eI = 0; eI < fftWindowSize; eI ++ )
-            m_sampleEnergy[xI + eI] = averageEnergy;
-
-        if ( beatTrigger( lowBand, averageEnergy * beatCoeff ) )
-        {
-            const uint64_t bitBlock = xI >> 6;
-            const uint64_t bitBit   = xI - (bitBlock << 6);
-            m_sampleBeat[bitBlock] |= 1ULL << bitBit;
-        }
-
-        lowBandIndex++;
-    }
-
-
-    mem::free16( fftOutAvgEnergy );
+    mem::free16( fftOutHighBand );
     mem::free16( fftOutLowBand );
-    mem::free16( fftOutMagnitude );
-    mem::free16( fftDataOut );
-    mem::free16( fftDataIn );
-
-    m_hasValidAnalysis = true;
-
-
-#if 0
-    constexpr int32_t fftBandBuckets    = 32;
-    constexpr int32_t fftWindowToBucket = 5;    // >> value from window->bucketing
-    constexpr int32_t fftEnergyHistory  = 42;
-    constexpr float   fftWindowRcp      = 1.0f / (float)(fftWindowSize);
-    constexpr float   fftEnergyRcp      = 1.0f / (float)(fftEnergyHistory);
-    constexpr float   fftVarianceRcp    = 1.0f / (float)(fftWindowSize / fftBandBuckets);
-
-    static_assert((fftWindowSize >> fftWindowToBucket) == fftBandBuckets, "incorrect bitshift value for window->bucket");
-
-
-
-    
-
-    std::array< float, fftBandBuckets > subband;
-    std::array< float, fftEnergyHistory > energy0;
-
-
-    const double stemLengthInSeconds = (double)m_sampleCount / (double)m_sampleRate;
-    const double sampleToPct = stemLengthInSeconds / (double)m_sampleCount;
-
-
-    for ( auto i = 0; i < m_sampleCount; i++ )
-        fftOutMagnitude[i] = 0.0f;
-
-    uint64_t lowBandIndex = 0;
-
-    for ( uint64_t xI = 0; xI < m_sampleCount - fftWindowSize; xI += fftWindowSize )
-    {
-        subband.fill( 0.0f );
-
-        for ( int i = 0; i < fftWindowSize; i++ )
-        {
-            // fft<> expects data interleaved with real/imaginary
-            const int32_t interleavedIndex = i << 1;
-            fftDataIn[interleavedIndex] = m_channel[0][xI + i];
-            fftDataIn[interleavedIndex + 1] = 0;
-        }
-
-        dsp::fft<fftWindowSize>( fftDataIn );
-
-        for ( int i = 0; i < fftWindowSize; i++ )
-        {
-            const int32_t interleavedIndex = i << 1;
-
-            const float outReal = fftDataIn[interleavedIndex];
-            const float outImag = fftDataIn[interleavedIndex + 1];
-
-            const float fftPower = ( outReal * outReal ) +
-                                   ( outImag * outImag );
-
-            const float fftMag = 2.0f * std::sqrt( fftPower ) * fftWindowRcp;
-
-            fftOutMagnitude[xI + i] = fftMag;
-
-            const auto subbandIdx = i >> fftWindowToBucket;
-            subband[subbandIdx] += fftMag;
-        }
-
-        {
-            const auto lowBand = std::max( subband[0], subband[fftBandBuckets - 1] );
-
-            assert( lowBandIndex < fftTimeSlices );
-            fftOutLowBand[lowBandIndex] = (lowBand > 0.0001f) ? lowBand : 0.0f;
-            lowBandIndex++;
-        }
-    }
-
-    const uint64_t lowBandRecords = lowBandIndex;
-
-    int32_t energyIndex = 0;
-    energy0.fill( 0.0f );
-
-    // run the average energy twice to ensure we represent how energy flows in the loop
-    for ( uint32_t avgPass = 0; avgPass < 2; avgPass++ )
-    {
-        for ( uint64_t tsI = 0; tsI < lowBandRecords; tsI++ )
-        {
-            float averageEnergy = 0.0f;
-            for ( int i = 0; i < fftEnergyHistory; i++ )
-                averageEnergy += energy0[i];
-            averageEnergy *= fftEnergyRcp;
-
-            energy0[energyIndex] = fftOutLowBand[tsI];
-            energyIndex = (energyIndex + 1) % fftEnergyHistory;
-
-            assert( isfinite( averageEnergy ) );
-            if ( avgPass == 0 )
-                fftOutAvgEnergy[tsI] = averageEnergy;
-            else
-                fftOutAvgEnergy[tsI] = std::max( fftOutAvgEnergy[tsI], averageEnergy );
-        }
-    }
-
-    cycfi::q::schmitt_trigger<double> beatTrigger( 0.125 ); // #todo data drive this
-
-    // controls the size of the band of values considered for variance
-    constexpr int32_t varianceBandBitShift = 5;
-    constexpr int32_t     varianceBandSize = fftWindowSize >> varianceBandBitShift;
-    constexpr float        varianceBandRcp = 1.0f / (float)(varianceBandSize);
-
-    m_sampleEnergy.resize( m_sampleCount );
-    m_sampleBeat.resize( ( m_sampleCount >> 6 ) + 1 );
-
-    lowBandIndex = 0;
-    for ( uint64_t xI = 0; xI < m_sampleCount - fftWindowSize; xI += fftWindowSize )
-    {
-        const float lowBand       = fftOutLowBand[lowBandIndex];
-        const float averageEnergy = fftOutAvgEnergy[lowBandIndex];
-
-
-        float variance = 0.0f;
-        for ( int i = 0; i < fftWindowSize >> varianceBandBitShift; i++ )
-        {
-            const float fftVar = fftOutMagnitude[xI + i] - lowBand;
-            variance += (fftVar * fftVar);
-        }
-        variance *= varianceBandRcp;
-
-
-        const float beatCoeff = (-0.3f * variance) + 1.125f; // #todo data drive this
-
-        for ( uint64_t eI = 0; eI < fftWindowSize; eI ++ )
-            m_sampleEnergy[xI + eI] = averageEnergy;
-
-        if ( beatTrigger( lowBand, averageEnergy * beatCoeff ) )
-        {
-            const uint64_t bitBlock = xI >> 6;
-            const uint64_t bitBit   = xI - (bitBlock << 6);
-            m_sampleBeat[bitBlock] |= 1ULL << bitBit;
-        }
-
-        lowBandIndex++;
-    }
-
-    mem::free16( fftOutAvgEnergy );
-    mem::free16( fftOutLowBand );
-    mem::free16( fftOutMagnitude );
-    mem::free16( fftDataIn );
-
-    m_hasValidAnalysis = true;
-#endif 
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-size_t Stem::computeMemoryUsage() const
+void Stem::analyse( const Processing& processing )
 {
-    size_t result = 0;
-
-    result += sizeof( types::Stem );
-    result += sizeof( int32_t ) * 4;
-    result += m_sampleCount * sizeof( float ) * 2;
-
-    if ( m_hasValidAnalysis )
-    {
-        result += m_sampleEnergy.size() * sizeof( float );
-        result += m_sampleBeat.size() * sizeof( uint64_t );
-    }
-
-    return result;
+    analyse( processing, m_analysisData );
+    m_hasValidAnalysis = true;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

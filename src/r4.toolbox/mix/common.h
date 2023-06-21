@@ -77,7 +77,7 @@ protected:
     // mash all 8 channels down into a stereo output buffer
     void mixChannelsToOutput(
         const app::module::Audio::OutputBuffer& outputBuffer,
-        const float globalMultiplier,
+        const app::module::Audio::OutputSignal& outputSignal,
         const uint32_t samplesToWrite );
 
     int32_t                         m_audioMaxBufferSize    = 0;

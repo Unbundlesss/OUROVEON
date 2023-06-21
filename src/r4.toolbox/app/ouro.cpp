@@ -11,6 +11,7 @@
 
 #include "spacetime/chronicle.h"
 #include "base/text.h"
+#include "colour/preset.h"
 
 #include "config/frontend.h"
 #include "config/data.h"
@@ -85,10 +86,10 @@ int OuroApp::EntrypointGUI()
     {
         auto t  = date::make_zoned( timezoneUTC, std::chrono::system_clock::now() );
         auto tf = date::format( spacetime::defaultDisplayTimeFormatTZ, t );
-        const auto servertTime = fmt::format( FMTX( "{} | {}" ), timezoneUTC->name(), tf );
+        const auto serverTime = fmt::format( FMTX( "{} | {}" ), timezoneUTC->name(), tf );
 
         ImGui::PushStyleColor( ImGuiCol_Text, IM_COL32_WHITE );
-        ImGui::TextUnformatted( servertTime );
+        ImGui::TextUnformatted( serverTime );
         ImGui::PopStyleColor();
     });
     // add local timezone time on right 
@@ -111,7 +112,6 @@ int OuroApp::EntrypointGUI()
     // load any saved configs
     config::endlesss::Auth endlesssAuth;
     /* const auto authLoadResult    = */ config::load( *this, endlesssAuth );
-    /* const auto discordLoadResult = */ config::load( *this, m_configDiscord );
 
     // #HDD check and do something with config load results?
 
@@ -224,7 +224,7 @@ int OuroApp::EntrypointGUI()
 
         const float  configWindowColumn1 = 500.0f;
         const float  configWindowColumn2 = 500.0f;
-        const ImVec2 configWindowSize = ImVec2( configWindowColumn1 + configWindowColumn2, 610.0f );
+        const ImVec2 configWindowSize = ImVec2( configWindowColumn1 + configWindowColumn2, 630.0f );
         const ImVec2 viewportWorkSize = ImGui::GetMainViewport()->GetCenter();
 
         ImGui::SetNextWindowPos( viewportWorkSize - ( configWindowSize * 0.5f ) );
@@ -432,6 +432,10 @@ int OuroApp::EntrypointGUI()
                         m_mdFrontEnd->titleText( "Endlesss Accesss" );
                         ImGui::Indent( perBlockIndent );
 
+                        // used to enable/disable buttons if the jam cache update thread is working
+                        const bool jamsAreUpdating = (asyncFetchState == endlesss::cache::Jams::AsyncFetchState::Working);
+
+                        // endlesss unix times are in nano precision
                         const auto authExpiryUnixTime = endlesssAuth.expires / 1000;
 
                         uint32_t expireDays, expireHours, expireMins, expireSecs;
@@ -442,21 +446,27 @@ int OuroApp::EntrypointGUI()
                             ImGui::BeginDisabledControls( !offerOfflineMode );
                             ImGui::Checkbox( " Enable Offline Mode", &endlesssWorkOffline );
                             ImGui::EndDisabledControls( !offerOfflineMode );
+
+                            // give context-aware tooltip help
                             if ( !supportsOfflineEndlesssMode() )
                                 ImGui::CompactTooltip( "This app does not support Offline Mode" );
                             else if ( endlesssAuthExpired )
                                 ImGui::CompactTooltip( "Enable to allow booting without valid Endlesss\nauthentication, which may limit some features" );
+                            else 
+                                ImGui::CompactTooltip( "Offline mode only available when signed-out of Endlesss" );
+
                             ImGui::Spacing();
                         }
 
                         if ( endlesssAuthExpired )
                         {
                             ImGui::TextColored(
-                                ImVec4( 1.0f, 0.2f, 0.2f, 1.0f ),
+                                colour::shades::errors.neutral(),
                                 "Authentication expired, please sign in to refresh" );
                         }
                         else
                         {
+                            ImGui::BeginDisabledControls( jamsAreUpdating );
                             if ( ImGui::IconButton( ICON_FA_RIGHT_FROM_BRACKET ) )
                             {
                                 // zero out the disk copy and our local cache
@@ -465,12 +475,13 @@ int OuroApp::EntrypointGUI()
                                 config::load( *this, endlesssAuth );
                             }
                             ImGui::CompactTooltip( "Log out" );
+                            ImGui::EndDisabledControls( jamsAreUpdating );
                             ImGui::SameLine( 0, 12.0f );
 
                             ImGui::TextUnformatted( "Authentication expires in" );
                             ImGui::SameLine();
                             ImGui::TextColored(
-                                ImGui::GetStyleColorVec4( ImGuiCol_SliderGrabActive ),
+                                colour::shades::callout.neutral(),
                                 "%u day(s), %u hours", expireDays, expireHours );
                         }
                         
@@ -538,8 +549,6 @@ int OuroApp::EntrypointGUI()
                                 m_apiNetworkConfiguration = endlesss::api::NetConfiguration( m_configEndlesssAPI, endlesssAuth, m_sharedDataPath );
                             }
 
-                            const bool jamsAreUpdating = (asyncFetchState == endlesss::cache::Jams::AsyncFetchState::Working);
-
                             // stop closing the boot window if we're running background threads or we have no jam data
                             if ( !m_jamLibrary.hasJamData() )
                                 progressionInhibitionReason = "No jam metadata found";
@@ -550,8 +559,7 @@ int OuroApp::EntrypointGUI()
                                 {
                                     m_jamLibrary.asyncCacheRebuild(
                                         m_apiNetworkConfiguration.value(),
-                                        true,
-                                        true,
+                                        endlesssAuth.sync_options,
                                         taskFlow,
                                         [&]( const endlesss::cache::Jams::AsyncFetchState state, const std::string& status )
                                         {
@@ -563,30 +571,55 @@ int OuroApp::EntrypointGUI()
                                         });
                                     m_taskExecutor.run( taskFlow );
                                 }
-                                ImGui::CompactTooltip( "Sync and update your list of jams\nand current publics" );
-                                ImGui::SameLine( 0, 12.0f );
+                                ImGui::CompactTooltip( "Sync and update your list of jams\nand current join-ins" );
                             }
                             ImGui::EndDisabledControls( jamsAreUpdating );
-
+                            ImGui::SameLine( 0, 12.0f );
                             {
-                                switch ( asyncFetchState )
+                                ImGui::TextUnformatted( "Jam Cache :" );
+                                ImGui::SameLine();
                                 {
-                                case endlesss::cache::Jams::AsyncFetchState::Success:
-                                case endlesss::cache::Jams::AsyncFetchState::None:
-                                    ImGui::TextUnformatted( m_jamLibrary.getCacheFileState().c_str() );
-                                    break;
+                                    ImGui::PushStyleColor( ImGuiCol_Text, colour::shades::callout.neutral() );
 
-                                case endlesss::cache::Jams::AsyncFetchState::Working:
-                                    ImGui::Spinner( "##syncing", true, ImGui::GetTextLineHeight() * 0.4f, 3.0f, 0.0f, ImGui::GetColorU32( ImGuiCol_Text ) );
-                                    ImGui::SameLine( 0, 14.0f );
-                                    ImGui::TextUnformatted( asyncState.c_str() );
-                                    progressionInhibitionReason = "Busy fetching metadata";
-                                    break;
+                                    switch ( asyncFetchState )
+                                    {
+                                    case endlesss::cache::Jams::AsyncFetchState::Success:
+                                    case endlesss::cache::Jams::AsyncFetchState::None:
+                                        ImGui::TextUnformatted( m_jamLibrary.getCacheFileState().c_str() );
+                                        break;
 
-                                case endlesss::cache::Jams::AsyncFetchState::Failed:
-                                    ImGui::TextUnformatted( asyncState.c_str() );
-                                    break;
+                                    case endlesss::cache::Jams::AsyncFetchState::Working:
+                                        ImGui::Spinner( "##syncing", true, ImGui::GetTextLineHeight() * 0.3f, 3.0f, 0.0f, ImGui::GetColorU32( ImGuiCol_Text ) );
+                                        ImGui::SameLine( 0, 14.0f );
+                                        ImGui::SetCursorPosY( ImGui::GetCursorPosY() - 3.0f );
+                                        ImGui::TextUnformatted( asyncState.c_str() );
+                                        progressionInhibitionReason = "Busy fetching metadata";
+                                        break;
+
+                                    case endlesss::cache::Jams::AsyncFetchState::Failed:
+                                        ImGui::TextUnformatted( asyncState.c_str() );
+                                        break;
+                                    }
+
+                                    ImGui::PopStyleColor();
                                 }
+                            }
+                            // configuration of jam cache sync
+                            {
+                                bool syncOptionsChanged = false;
+
+                                ImGui::Spacing();
+                                ImGui::Indent( perBlockIndent * 3 );
+                                ImGui::BeginDisabledControls( jamsAreUpdating );
+                                syncOptionsChanged |= ImGui::Checkbox( " Fetch Collectibles", &endlesssAuth.sync_options.sync_collectibles );
+                                                      ImGui::CompactTooltip( "Query and store all the 'collectible' jams\nDue to API issues, this may take a few minutes" );
+                                syncOptionsChanged |= ImGui::Checkbox( " Fetch Jam State", &endlesssAuth.sync_options.sync_state );
+                                                      ImGui::CompactTooltip( "For every jam we know about, query basic data like riff counts\nThis can take a little while but provides the most complete\nview of the jam metadata" );
+                                ImGui::EndDisabledControls( jamsAreUpdating );
+                                ImGui::Unindent( perBlockIndent * 3 );
+
+                                if ( syncOptionsChanged )
+                                    config::save( *this, endlesssAuth );
                             }
                         }
 
@@ -613,28 +646,34 @@ int OuroApp::EntrypointGUI()
                         m_mdFrontEnd->titleText( "Audio Engine" );
                         ImGui::Indent( perBlockIndent );
 
-                        {
-                            if ( ImGui::Checkbox( "Prefer Low Latency", &audioConfig.lowLatency ) )
-                                fnUpdateDeviceQuery();
-
-                            ImGui::Spacing();
-                            ImGui::Spacing();
-                        }
-
-                        ImGui::PushItemWidth( ImGui::GetContentRegionAvail().x * 0.22f );
+                        // clamp size of drop-downs
+                        ImGui::PushItemWidth( 80.0f );
                         {
                             // choose a sample rate; changing causes device options to be reconsidered
-                            if ( ImGui::ValueArrayComboBox( "Sample Rate :", "##smpr", cSampleRateLabels, cSampleRateValues, audioConfig.sampleRate, previewSampleRate, true ) )
+                            if ( ImGui::ValueArrayComboBox( "Sample Rate :", "##smpr", cSampleRateLabels, cSampleRateValues, audioConfig.sampleRate, previewSampleRate, 16.0f ) )
                             {
                                 fnUpdateDeviceQuery();
                             }
-                            ImGui::SameLine( 0, 25.0f );
-                            ImGui::ValueArrayComboBox( "Buffer Size :", "##buff", cBufferSizeLabels, cBufferSizeValues, audioConfig.bufferSize, previewBufferSize, false );
+
+                            // note incompatibility with Opus streaming direct-to-discord; this has a fixed constraint of running at 48k
+                            if ( audioConfig.sampleRate != 48000 )
+                                ImGui::TextColored( colour::shades::callout.neutral(), ICON_FAB_DISCORD " Streaming requires 48kHz" );
+                            else
+                                ImGui::TextUnformatted( ICON_FAB_DISCORD " Streaming compatible" );
 
                             ImGui::Spacing();
                             ImGui::Spacing();
+
+                            ImGui::ValueArrayComboBox( "Buffer Size :", "##buff", cBufferSizeLabels, cBufferSizeValues, audioConfig.bufferSize, previewBufferSize, 16.0f );
                         }
                         ImGui::PopItemWidth();
+
+                        if ( ImGui::Checkbox( "Prefer Low Latency", &audioConfig.lowLatency ) )
+                            fnUpdateDeviceQuery();
+
+                        ImGui::Spacing();
+                        ImGui::Spacing();
+                        ImGui::Spacing();
 
                         ImGui::TextUnformatted( "Output Device :" );
                         ImGui::PushItemWidth( ImGui::GetContentRegionAvail().x - 20.0f );
@@ -661,16 +700,6 @@ int OuroApp::EntrypointGUI()
                         }
                         ImGui::PopItemWidth();
 
-                        ImGui::Spacing();
-                        ImGui::Spacing();
-
-                        // note incompatibility with Opus streaming direct-to-discord; this has a fixed constraint of running at 48k
-                        if ( audioConfig.sampleRate != 48000 )
-                            ImGui::TextColored( ImGui::GetWarningTextColour(), ICON_FA_CIRCLE_INFO " Discord audio streaming requires 48khz output" );
-                        else
-                            ImGui::TextUnformatted( ICON_FA_CIRCLE_CHECK " Discord compatible audio output" );
-
-
                         ImGui::Unindent( perBlockIndent );
                         ImGui::Spacing();
                         ImGui::Spacing();
@@ -696,10 +725,6 @@ int OuroApp::EntrypointGUI()
                             const auto panelRegionAvailable = ImGui::GetContentRegionAvail();
                             ImGui::Dummy( ImVec2( panelRegionAvailable.x - 200.0f, 0.0f ) );
                             ImGui::SameLine();
-
-                            // crap hack to re-align the InputInt - it isn't on the text baseline for some reason
-                            ImGuiWindow* window = ImGui::GetCurrentWindow();
-                            window->DC.CursorPos.y -= 2.0f;
                         };
 
                         ImGui::PushItemWidth( 150.0f );
@@ -729,33 +754,10 @@ int OuroApp::EntrypointGUI()
                     }
 
                     // ---------------------------------------------------------------------------------------------------------
-                    // i love to chat and friends
+                    // 
                     {
-                        m_mdFrontEnd->titleText( "Discord Streaming" );
+                        m_mdFrontEnd->titleText( "--" );
                         ImGui::Indent( perBlockIndent );
-
-                        ImGui::PushItemWidth( configWindowColumn1 * 0.75f );
-                        {
-                            ImGui::InputText( " Bot Token", &m_configDiscord.botToken, ImGuiInputTextFlags_Password );
-                            ImGui::CompactTooltip( "from https://discord.com/developers/applications/<bot_id>/bot" );
-
-                            // enable Developer Mode in your account settings, then you get Copy ID on right-click menus
-                            ImGui::InputText( " Guild ID", &m_configDiscord.guildSID, ImGuiInputTextFlags_CharsDecimal );
-                            ImGui::CompactTooltip( "Snowflake ID of the guild to connect with" );
-
-                            ImGui::Spacing();
-                            ImGui::Spacing();
-
-                            if ( m_configDiscord.botToken.empty() ||
-                                 m_configDiscord.guildSID.empty() )
-                            {
-                                ImGui::TextDisabled( "No credentials supplied" );
-                            }
-                            else
-                            {
-                            }
-                        }
-                        ImGui::PopItemWidth();
 
 
                         ImGui::Unindent( perBlockIndent );
@@ -853,12 +855,6 @@ int OuroApp::EntrypointGUI()
         {
             blog::error::cfg( "Unable to save performance configuration" );
         }
-
-        const auto discordSaveResult = config::save( *this, m_configDiscord );
-        if ( discordSaveResult != config::SaveResult::Success )
-        {
-            blog::error::cfg( "Unable to save discord configuration" );
-        }
     }
 
     if ( m_mdFrontEnd->wasQuitRequested() )
@@ -873,6 +869,7 @@ int OuroApp::EntrypointGUI()
     }
     m_stemCacheLastPruneCheck.restart();
     m_stemCachePruneTask.emplace( [this]() { m_stemCache.lockAndPrune( false ); } );
+
 
     // unplug status bar bits
     unregisterStatusBarBlock( sbbTimeStatusLeftID );

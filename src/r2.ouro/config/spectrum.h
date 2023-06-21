@@ -10,8 +10,10 @@
 #pragma once
 
 #include "config/base.h"
-
 #include "base/utils.h"
+
+// q
+#include <q/support/decibel.hpp>
 
 namespace config {
 
@@ -32,6 +34,21 @@ OURO_CONFIG( Spectrum )
                , CEREAL_NVP( minDb )
                , CEREAL_NVP( maxDb )
         );
+    }
+
+    // convert value to decibels and normalise between the current min/max levels
+    ouro_nodiscard inline float headroomNormaliseDb( float linearValue ) const
+    {
+        const double headroom   = maxDb - minDb;
+
+        // convert to dB to help normalise the range
+        double fftDb = cycfi::q::lin_to_db( linearValue ).rep;
+
+        // then clip and rescale to 0..1 via headroom dB range
+        fftDb = std::max( 0.0, fftDb + std::abs( minDb ) );
+        fftDb = std::min( 1.0, fftDb / headroom );
+
+        return static_cast<float>(fftDb);
     }
 };
 using SpectrumOptional = std::optional< Spectrum >;

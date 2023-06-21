@@ -776,7 +776,7 @@ void Warehouse::setCallbackContentsReport( const ContentsReportCallback& cb )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void Warehouse::syncFromJamCache( const cache::Jams& jamCache )
+void Warehouse::upsertJamDictionaryFromCache( const cache::Jams& jamCache )
 {
     jamCache.iterateAllJams( []( const cache::Jams::Data& jamData )
         {
@@ -788,6 +788,26 @@ void Warehouse::syncFromJamCache( const cache::Jams& jamCache )
         });
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+void Warehouse::extractJamDictionary( types::JamIDToNameMap& jamDictionary ) const
+{
+    static constexpr char _extractJamData[] = R"(
+                select JamCID, PublicName from jams;
+            )";
+
+    auto query = Warehouse::SqlDB::query<_extractJamData>();
+
+    jamDictionary.clear();
+
+    std::string_view jamCID;
+    std::string_view publicName;
+
+    while ( query( jamCID,
+                   publicName ) )
+    {
+        jamDictionary.emplace( jamCID, publicName );
+    }
+}
 
 // ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::addOrUpdateJamSnapshot( const types::JamCouchID& jamCouchID )

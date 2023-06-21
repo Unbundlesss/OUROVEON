@@ -211,6 +211,7 @@ struct Bot::State
         if ( guildInstance == nullptr )
         {
             blog::error::discord( FMTX( "guild data fetch failed, cannot isolate voice channels" ) );
+            m_phase = Bot::ConnectionPhase::UnableToStart;
             return;
         }
 

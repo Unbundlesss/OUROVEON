@@ -106,6 +106,11 @@ struct Audio ouro_final
         float*                  m_runoff;           // empty output channel to pad out for VSTs using >2 outputs
     };
 
+    // standard controls for how the final signal is processed before it is handed off to VST / etc
+    struct OutputSignal
+    {
+        float   m_linearGain    = 1.0f;             // multiply result of 8x stem combination at end of mixers
+    };
 
     // an arbitrary choice, as some things need an estimate upfront - and even once a portaudio stream is open the sample count
     // can potentially change. Choose something big to give us breathing room. 
@@ -197,8 +202,10 @@ struct Audio ouro_final
     ouro_nodiscard constexpr const ExposedState& getState() const { return m_state; }
     ouro_nodiscard double getAudioEngineCPULoadPercent() const;
 
-    ouro_nodiscard inline float getMasterGain() const { return m_gain; }
-    inline void setMasterGain( const float v ) { m_gain = v; }
+    ouro_nodiscard inline float getOutputSignalGain() const { return m_outputSignalGain; }
+    inline void setOutputSignalGain( const float gain ) { m_outputSignalGain = gain; }
+
+
 
     AsyncCommandCounter toggleMute();
     ouro_nodiscard constexpr bool isMuted() const { return m_mute; }
@@ -242,6 +249,8 @@ private:
         unsigned long framesPerBuffer,
         const PaStreamCallbackTimeInfo* timeInfo );
 
+
+
     MixThreadCommandQueue               m_mixThreadCommandQueue;
     std::atomic_uint32_t                m_mixThreadCommandsIssued   = 0;
     std::atomic_uint32_t                m_mixThreadCommandsComplete = 0;
@@ -256,7 +265,7 @@ private:
 
     ExposedState                        m_state;
 
-    std::unique_ptr<dsp::Scope8>         m_scope;
+    std::unique_ptr<dsp::Scope8>        m_scope;
 
 #if OURO_FEATURE_VST24
     using VSTFxSlots = std::vector< vst::Instance* >;
@@ -265,7 +274,7 @@ private:
     bool                                m_vstBypass = false;
 #endif // OURO_FEATURE_VST24
 
-    std::atomic<float>                  m_gain            = 0.8f;           // generic 0..1 global gain control
+    std::atomic<float>                  m_outputSignalGain  = 0.75f;        // gain control applied after merging stems, pre-VST
 
     MixerInterface*                     m_mixerInterface    = nullptr;
 
@@ -282,7 +291,7 @@ public:
     void stopRecording() override;
     bool isRecording() const override;
     uint64_t getRecordingDataUsage() const override;
-    const char* getRecorderName() const override { return " Final Mix "; }
+    std::string_view getRecorderName() const override { return " Final Mix "; }
 
 
 public: 
@@ -313,11 +322,10 @@ struct MixerInterface
 {
     virtual ~MixerInterface() {}
 
-
     // called from the realtime audio processing thread
     virtual void update(
         const Audio::OutputBuffer& outputBuffer,
-        const float                outputVolume,
+        const Audio::OutputSignal& outputSignal,
         const uint32_t             samplesToWrite,
         const uint64_t             samplePosition ) = 0;
 

@@ -43,7 +43,7 @@ std::string generateVibesControlTitle( const VibesControl::Enum _vwv )
 #define _ACTIVE_ICON(_ty)             _vwv == VibesControl::_ty ? ICON_FC_FILLED_SQUARE : ICON_FC_HOLLOW_SQUARE,
 #define _ICON_PRINT(_ty)             "{}"
 
-    return fmt::format( FMTX( "Vibes Control [" _VB_VIEW( _ICON_PRINT ) "]###vibes_control" ),
+    return fmt::format( FMTX( ICON_FA_TV " Vibes Deck [" _VB_VIEW( _ICON_PRINT ) "]###vibes_control" ),
         _VB_VIEW( _ACTIVE_ICON )
         "" );
 
@@ -754,7 +754,7 @@ void Vibes::doImGui(
     // main rendering panel
     do 
     {
-        if ( ImGui::Begin( "Vibes###vibes_view" ) )
+        if ( ImGui::Begin( ICON_FA_TV " Vibes###vibes_view" ) )
         {
             // did Vibes stuff actually boot ok?
             if ( !isInitialised() )

@@ -29,6 +29,7 @@ struct Preview ouro_final : public app::module::MixerInterface,
                             public RiffMixerBase
 {
     using AudioBuffer           = app::module::Audio::OutputBuffer;
+    using AudioSignal           = app::module::Audio::OutputSignal;
 
     // support playback permutations with a queue + operation callback system
     using Permutation           = endlesss::types::RiffPlaybackPermutation;
@@ -42,7 +43,7 @@ struct Preview ouro_final : public app::module::MixerInterface,
     // app::module::Audio::MixerInterface
     virtual void update(
         const AudioBuffer&  outputBuffer,
-        const float         outputVolume,
+        const AudioSignal&  outputSignal,
         const uint32_t      samplesToWrite,
         const uint64_t      samplePosition ) override;
 
@@ -204,7 +205,7 @@ public:
     bool isRecording() const override;
     uint64_t getRecordingDataUsage() const override;
 
-    inline const char* getRecorderName() const override { return " 8-Track (Pre FX) "; }
+    inline std::string_view getRecorderName() const override { return " 8-Track (Pre FX) "; }
     inline const char* getFluxState() const override
     {
         if ( m_multiTrackInFlux )

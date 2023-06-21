@@ -1031,6 +1031,9 @@ enum ImGuiWindowFlags_
     ImGuiWindowFlags_Modal                  = 1 << 27,  // Don't use! For internal use by BeginPopupModal()
     ImGuiWindowFlags_ChildMenu              = 1 << 28,  // Don't use! For internal use by BeginMenu()
     ImGuiWindowFlags_DockNodeHost           = 1 << 29,  // Don't use! For internal use by Begin()/NewFrame()
+
+    // #HDD OUROVEON
+    ImGuiWindowFlags_Ouro_MultiDimensional  = 1 << 30,  // Window has tab-swappable view, mark it up as such if appropriate
 };
 
 // Flags for ImGui::InputText()

@@ -178,7 +178,15 @@ void EffectStack::chooseNewVST( app::CoreGUI& coreGUI )
 {
     auto fileDialog = std::make_unique< ImGuiFileDialog >();
 
-    fileDialog->OpenDialog( "FxFileDlg", "Choose VST 2.x Plugin", ".dll", m_lastBrowsedPath.c_str() );
+    fileDialog->OpenDialog(
+        "FxFileDlg",
+        "Choose VST 2.x Plugin",
+        ".dll",
+        m_lastBrowsedPath.c_str(),
+        1,
+        nullptr,
+        ImGuiFileDialogFlags_Modal );
+
     coreGUI.activateFileDialog( std::move(fileDialog), [this]( ImGuiFileDialog& dlg )
     {
         addVST( dlg.GetFilePathName().c_str(), m_incrementalLoadId++ );
@@ -325,7 +333,7 @@ void EffectStack::imgui(
         {
             ImGui::BeginDisabledControls( isVSTBypassEnabled );
 
-            const bool offerSwapButton = ( ImGui::GetMergedModFlags() & ImGuiModFlags_Ctrl );
+            const bool offerSwapButton = ( ImGui::GetMergedModFlags() & ImGuiModFlags_Alt );
 
             for ( auto orderIndex = 0; orderIndex < m_order.size(); orderIndex ++ )
             {

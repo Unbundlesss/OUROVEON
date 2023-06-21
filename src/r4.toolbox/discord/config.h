@@ -31,6 +31,7 @@ OURO_CONFIG( Connection )
         );
     }
 };
+using ConnectionOptional = std::optional< Connection >;
 
 } // namespace discord
 } // namespace config

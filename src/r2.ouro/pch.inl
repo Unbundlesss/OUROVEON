@@ -7,7 +7,8 @@
 //  
 //
 
-#define OURO_FRAMEWORK_VERSION    "0.7.3"
+#define OURO_FRAMEWORK_VERSION    "0.7.4"
+#define OURO_FRAMEWORK_CREDIT     "ishani.org 2023"
 
 // ---------------------------------------------------------------------------------------------------------------------
 
@@ -269,6 +270,7 @@ ADD_BLOG( stem,     0xe65ea9,    "STEM" )
 #include "imnodes.h"
 #include "ImGuiFileDialog.h"
 
+
 // sqlite
 #include "sqlite3.h"
 #include "SQLiteWrapper.h"
@@ -299,11 +301,27 @@ namespace mcc = moodycamel;
 #include <q/support/base.hpp>
 #include <q/support/literals.hpp>
 
+// lua via sol
+#define SOL_ALL_SAFETIES_ON     1
+#include <sol/sol.hpp>
 
+
+// https://keisan.casio.com/calculator
 namespace constants
 {
-    static constexpr auto d_pi = 3.1415926535897932384626433832795028841971693993751058209749445923;
-    static constexpr auto f_pi = 3.14159265358979323846264338f;
-    static constexpr auto d_2pi = 6.2831853071795864769252867665590057683943387987502116419498891846;
-    static constexpr auto f_2pi = 6.28318530717958647692528676f;
+    static constexpr auto d_pi          = 3.1415926535897932384626433832795028841971693993751058209749445923;
+    static constexpr auto f_pi          = 3.14159265358979323846264338f;
+
+    static constexpr auto d_2pi         = 6.2831853071795864769252867665590057683943387987502116419498891846;
+    static constexpr auto f_2pi         = 6.28318530717958647692528676f;
+
+    static constexpr auto d_half_pi     = 1.5707963267948966192313216916397514420985846996875529104874722961;
+    static constexpr auto f_half_pi     = 1.57079632679489661923132169f;
+                                          
+    static constexpr auto d_third_pi    = 1.0471975511965977461542144610931676280657231331250352736583148641;
+    static constexpr auto f_third_pi    = 1.04719755119659774615421446f;
+
+    static constexpr auto d_quarter_pi  = 0.7853981633974483096156608458198757210492923498437764552437361481;
+    static constexpr auto f_quarter_pi  = 0.78539816339744830961566084f;
+    
 } // namespace constants

@@ -24,7 +24,7 @@ namespace dsp {
 // ---------------------------------------------------------------------------------------------------------------------
 Scope8::Scope8( const float measurementLengthSeconds, const uint32_t sampleRate, const config::Spectrum& config )
     : m_sampleRate( sampleRate )
-    , m_hannGenerator( cycfi::q::duration(1.0), sampleRate ) // this has no default ctor, so this is a dummy, it gets rewrited elsewhere
+    , m_hannGenerator( cycfi::q::duration(1.0), 1.0f ) // this has no default ctor, so this is a dummy, it gets reconfigured below
 {
     // stash default config
     setConfiguration( config );
@@ -39,12 +39,8 @@ Scope8::Scope8( const float measurementLengthSeconds, const uint32_t sampleRate,
     m_pffftPlan = pffft_new_setup( m_fftWindowSize, PFFFT_REAL );
 
     // configure hann window with chosen size
-    m_hannGenerator.config( cycfi::q::duration( (double)m_fftWindowSize / (double)m_sampleRate ), m_sampleRate );
+    m_hannGenerator.config( cycfi::q::duration( (double)m_fftWindowSize / (double)m_sampleRate ), static_cast<float>( m_sampleRate ) );
 
-
-    // https://www.nti-audio.com/en/support/know-how/fast-fourier-transform-fft
-    const uint32_t nyquist = sampleRate / 2; // theoretical maximum frequency that can be determined by the FFT
-    const double nyquistRecp = 1.0 / static_cast<double>(nyquist);
 
     const uint32_t frequencyBinSize  = m_fftWindowSize / 2;
     const double frequencyBinSizeDbl = static_cast<double>(frequencyBinSize);
@@ -61,43 +57,15 @@ Scope8::Scope8( const float measurementLengthSeconds, const uint32_t sampleRate,
     m_outputBuckets[0].fill( 0.0f );
     m_outputBuckets[1].fill( 0.0f );
 
-    m_bucketIndices = mem::alloc16<uint8_t>( m_fftWindowSize );
-
-    m_countPerBucket.fill( 0 );
-
-    // precompute frequency binning, splitting per octave 
-    int previousSample = 0;
-    uint8_t bucket = 0;
-    for ( std::size_t octave = 3; octave <= 10; octave++, bucket++ )
-    {
-        const uint32_t midSample = std::min( (uint32_t)(std::ceil( cycfi::q::as_double( OctaveBands[octave].m_center ) * nyquistRecp * frequencyBinSizeDbl )), frequencyBinSize );
-        const uint32_t endSample = std::min( (uint32_t)(std::ceil( cycfi::q::as_double( OctaveBands[octave].m_high )   * nyquistRecp * frequencyBinSizeDbl )), frequencyBinSize );
-
-        for ( uint32_t s = previousSample; s < endSample; s++ )
-        {
-            m_bucketIndices[s] = bucket;
-        }
-        m_countPerBucket[bucket] = endSample - previousSample;
-
-        // blog::core( "bin {} |  {} Hz |  {} | {}  ", octave, cycfi::q::as_float( OctaveBands[octave].m_high ), midSample, endSample );
-
-        previousSample = endSample;
-    }
-    if ( previousSample > 0 )
-    {
-        // if the end bucket came in under the fft window size, just fill it in with the end bucket
-        for ( uint32_t s = previousSample; s < m_fftWindowSize; s++ )
-        {
-            m_bucketIndices[s] = m_bucketIndices[previousSample - 1];
-        }
-    }
+    m_octaves.configure(
+        { 3, 4, 5, 6, 7, 8, 9, 10 },
+        sampleRate,
+        m_fftWindowSize );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 Scope8::~Scope8()
 {
-    mem::free16( m_bucketIndices );
-
     mem::free16( m_outputR );
     mem::free16( m_outputL );
     mem::free16( m_inputR );
@@ -160,31 +128,20 @@ void Scope8::append( const float* samplesLeft, const float* samplesRight, uint32
             Result& bucketResult = m_outputBuckets[writeBufferIdx];
             bucketResult.fill( 0 );
 
-            const double maxDb      = m_config.maxDb;
-            const double minDb      = m_config.minDb;
-            const double headroom   = maxDb - minDb;
-
             // sum magnitudes into the chosen buckets
             for ( std::size_t freqBin = 0; freqBin < m_fftWindowSize / 2; freqBin++ )
             {
                 const float fftMagL = m_outputL[freqBin].hypot();
                 const float fftMagR = m_outputR[freqBin].hypot();
 
-                bucketResult[m_bucketIndices[freqBin]] += (fftMagL + fftMagR) * 0.5f; // #hdd average of magnitudes 'correct' here?
+                bucketResult[ m_octaves.getBucketForFFTIndex(freqBin) ] += (fftMagL + fftMagR) * 0.5f; // #hdd average of magnitudes 'correct' here?
             }
-            // then process each bucket
+
+            // .. then process each bucket
             for ( std::size_t bucketIndex = 0; bucketIndex < bucketResult.size(); bucketIndex++ )
             {
-                bucketResult[bucketIndex] /= static_cast<float>( m_countPerBucket[bucketIndex] );
-
-                // convert to dB to help normalise the range
-                double fftDb = cycfi::q::lin_to_db( bucketResult[bucketIndex] ).rep;
-
-                // then clip and rescale to 0..1 via headroom dB range
-                       fftDb = std::max( 0.0, fftDb + std::abs( minDb ) );
-                       fftDb = std::min( 1.0, fftDb / headroom );
-
-                bucketResult[bucketIndex] = static_cast<float>( fftDb );
+                bucketResult[bucketIndex] *= m_octaves.getRecpSizeOfBucketAt(bucketIndex);
+                bucketResult[bucketIndex]  = m_config.headroomNormaliseDb( bucketResult[bucketIndex] );
             }
 
             // flip buffers by updating the current index with the one we just wrote into

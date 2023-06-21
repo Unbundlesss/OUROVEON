@@ -25,8 +25,9 @@ namespace stdp = std::placeholders;
 
 #include "ux/diskrecorder.h"
 #include "ux/cache.jams.browser.h"
+#include "ux/stem.beats.h"
+#include "ux/stem.analysis.h"
 
-#include "vx/stembeats.h"
 #include "vx/vibes.h"
 
 #include "discord/discord.bot.ui.h"
@@ -58,7 +59,7 @@ std::string generateWarehouseViewTitle( const WarehouseView::Enum _vwv )
 #define _ACTIVE_ICON(_ty)             _vwv == WarehouseView::_ty ? ICON_FC_FILLED_SQUARE : ICON_FC_HOLLOW_SQUARE,
 #define _ICON_PRINT(_ty)             "{}"
 
-    return fmt::format( FMTX( "Data Warehouse [" _WH_VIEW( _ICON_PRINT ) "]###data_warehouse_view" ),
+    return fmt::format( FMTX( ICON_FA_DATABASE " Data Warehouse [" _WH_VIEW( _ICON_PRINT ) "]###data_warehouse_view" ),
         _WH_VIEW( _ACTIVE_ICON )
         "" );
 
@@ -252,7 +253,7 @@ struct LoreApp : public app::OuroApp
         : app::OuroApp()
         , m_rpClient( GetAppName() )
     {
-        m_discordBotUI = std::make_unique<discord::BotWithUI>( *this, m_configDiscord );
+        m_discordBotUI = std::make_unique<discord::BotWithUI>( *this );
     }
 
     ~LoreApp()
@@ -483,11 +484,19 @@ protected:
     std::unique_ptr< vx::Vibes >            m_vibes;
 
 
+    // jam ID -> public name data that has been cached in the Warehouse database, used as secondary lookup
+    // for IDs that we don't recognise as the normal jam library might be missing jams the user has left etc
+    endlesss::types::JamIDToNameMap         m_jamHistoricalFromWarehouse;
+
+
     base::EventListenerID                   m_eventListenerRiffChange;
     base::EventListenerID                   m_eventListenerOpComplete;
 
 
     mix::StemDataProcessor                  m_stemDataProcessor;
+
+
+    bool                                    m_showStemAnalysis = false;
 
 
 // riff playback management #HDD build into common module?
@@ -588,10 +597,35 @@ protected:
         m_warehouseContentsReport = report;
         m_warehouseContentsReportJamIDs.clear();
         m_warehouseContentsReportJamTitles.clear();
+        m_warehouseContentsReportJamTimestamp.clear();
         m_warehouseContentsReportJamInFlux.clear();
         m_warehouseContentsReportJamInFluxSet.clear();
 
-        endlesss::cache::Jams::Data jamData;
+        const auto resolveJamPublicNameFromCID = [&]( const endlesss::types::JamCouchID& cid )
+        {
+            endlesss::cache::Jams::Data jamData;
+
+            if ( m_jamLibrary.loadDataForDatabaseID( cid, jamData ) )
+            {
+                m_warehouseContentsReportJamTimestamp.emplace_back( jamData.m_timestampOrdering );
+                m_warehouseContentsReportJamTitles.emplace_back( jamData.m_displayName );
+                return;
+            }
+
+            // no usable timestamp data for fall-back paths, sort to the bottom of the list
+            m_warehouseContentsReportJamTimestamp.emplace_back( m_warehouseContentsReportJamTimestamp.size() );
+
+            // check first fall-back data source, the "historical" list from the Warehouse db
+            const auto historicalIt = m_jamHistoricalFromWarehouse.find( cid );
+            if ( historicalIt != m_jamHistoricalFromWarehouse.end() )
+            {
+                m_warehouseContentsReportJamTitles.emplace_back( historicalIt->second );
+                return;
+            }
+
+            // no luck, no idea what this ID is :(
+            m_warehouseContentsReportJamTitles.emplace_back( "[ Unknown ID ]" );
+        };
 
         for ( auto jIdx = 0; jIdx < m_warehouseContentsReport.m_jamCouchIDs.size(); jIdx++ )
         {
@@ -599,10 +633,7 @@ protected:
 
             m_warehouseContentsReportJamIDs.emplace( jamCID );
 
-            if ( m_jamLibrary.loadDataForDatabaseID( jamCID, jamData ) )
-                m_warehouseContentsReportJamTitles.emplace_back( jamData.m_displayName );
-            else
-                m_warehouseContentsReportJamTitles.emplace_back( "[ Unknown ID ]" );
+            resolveJamPublicNameFromCID( jamCID );
 
             if ( m_warehouseContentsReport.m_unpopulatedRiffs[jIdx] > 0 ||
                  m_warehouseContentsReport.m_unpopulatedStems[jIdx] > 0 )
@@ -619,28 +650,48 @@ protected:
         generateWarehouseContentsSortOrder();
     }
 
-    enum class WarehouseContentsSortMode
-    {
-        ByJoinTime,
-        ByName,
-    };
+    #define _WAREHOUSE_SORT(_action)   \
+        _action(ByJoinTime)            \
+        _action(ByName)
+    REFLECT_ENUM( WarehouseContentsSortMode, uint32_t, _WAREHOUSE_SORT );
+    #undef _WAREHOUSE_SORT
 
     void generateWarehouseContentsSortOrder()
     {
+        // create a simple array of indices that represent the jam entries
+        // when we then sort this array using the jam data as reference, producing a sorted look-up list
         m_warehouseContentsSortedIndices.clear();
+        m_warehouseContentsSortedIndices.reserve( m_warehouseContentsReportJamTitles.size() );
         for ( auto sortIndex = 0; sortIndex < m_warehouseContentsReportJamTitles.size(); sortIndex++ )
             m_warehouseContentsSortedIndices.emplace_back( sortIndex );
 
-        if ( m_warehouseContentsSortMode == WarehouseContentsSortMode::ByName )
-        {
-            std::sort( m_warehouseContentsSortedIndices.begin(), m_warehouseContentsSortedIndices.end(),
-                [&]( const std::size_t lhsIdx, const std::size_t rhsIdx ) -> bool
+        std::sort( m_warehouseContentsSortedIndices.begin(), m_warehouseContentsSortedIndices.end(),
+            [&]( const std::size_t lhsIdx, const std::size_t rhsIdx ) -> bool
+            {
+                switch ( m_warehouseContentsSortMode )
                 {
-                    return m_warehouseContentsReportJamTitles[lhsIdx] < 
-                           m_warehouseContentsReportJamTitles[rhsIdx];
-                });
-        }
+                    case WarehouseContentsSortMode::ByName:
+                        return m_warehouseContentsReportJamTitles[lhsIdx] <
+                               m_warehouseContentsReportJamTitles[rhsIdx];
+
+                    case WarehouseContentsSortMode::ByJoinTime:
+                        return m_warehouseContentsReportJamTimestamp[lhsIdx] <
+                               m_warehouseContentsReportJamTimestamp[rhsIdx];
+
+                    default:
+                        ABSL_ASSERT( 0 );
+                        return 0;
+                }
+            });
     }
+
+    // for calling generateWarehouseContentsSortOrder() again, after the fact, to re-sort dynamically
+    void updateWarehouseContentsSortOrder()
+    {
+        std::scoped_lock<std::mutex> reportLock( m_warehouseContentsReportMutex );
+        generateWarehouseContentsSortOrder();
+    }
+
 
     std::string                                     m_warehouseWorkState;
     bool                                            m_warehouseWorkUnderway = false;
@@ -649,9 +700,10 @@ protected:
     endlesss::toolkit::Warehouse::ContentsReport    m_warehouseContentsReport;
     endlesss::types::JamCouchIDSet                  m_warehouseContentsReportJamIDs;
     std::vector< std::string >                      m_warehouseContentsReportJamTitles;
+    std::vector< int64_t >                          m_warehouseContentsReportJamTimestamp;
     std::vector< bool >                             m_warehouseContentsReportJamInFlux;
     endlesss::types::JamCouchIDSet                  m_warehouseContentsReportJamInFluxSet;      // any jams that have unfetched data
-    WarehouseContentsSortMode                       m_warehouseContentsSortMode                 = WarehouseContentsSortMode::ByName;
+    WarehouseContentsSortMode::Enum                 m_warehouseContentsSortMode                 = WarehouseContentsSortMode::ByName;
     std::vector< std::size_t >                      m_warehouseContentsSortedIndices;
 
 
@@ -748,7 +800,7 @@ protected:
     int32_t                                 m_jamViewWidthToCommit = 0;
     int32_t                                 m_jamViewWidthCommitCount = -1;
 
-    static constexpr int32_t                cJamBitmapGridCell  = 16;
+    static constexpr int32_t                cJamBitmapGridCell  = 20;
 
     using UserHashFMap = absl::flat_hash_map< uint64_t, float >;
 
@@ -1273,8 +1325,13 @@ int LoreApp::EntrypointOuro()
 
 
     // create warehouse instance to manage ambient downloading
-    endlesss::toolkit::Warehouse warehouse( m_storagePaths.value(), m_apiNetworkConfiguration.value() );
-    warehouse.syncFromJamCache( m_jamLibrary );
+    endlesss::toolkit::Warehouse warehouse(
+        m_storagePaths.value(),
+        m_apiNetworkConfiguration.value() );
+
+    warehouse.upsertJamDictionaryFromCache( m_jamLibrary );             // update warehouse list of jam IDs -> names from the current cache
+    warehouse.extractJamDictionary( m_jamHistoricalFromWarehouse );     // pull full list of jam IDs -> names from warehouse as "historical" list
+
     warehouse.setCallbackWorkReport( std::bind( &LoreApp::handleWarehouseWorkUpdate, this, stdp::_1, stdp::_2 ) );
     warehouse.setCallbackContentsReport( std::bind( &LoreApp::handleWarehouseContentsReport, this, stdp::_1 ) );
 
@@ -1325,6 +1382,9 @@ int LoreApp::EntrypointOuro()
 
     // examine our midi state, extract port names
     initMidi();
+
+    // add developer menu entry for stem analysis flag
+    addDeveloperMenuFlag( "Stem Analysis", &m_showStemAnalysis );
 
 
     // create and install the mixer engine
@@ -1412,6 +1472,7 @@ int LoreApp::EntrypointOuro()
         {
         });
 
+
     // UI core loop begins
     while ( beginInterfaceLayout( (app::CoreGUI::ViewportFlags)(
         app::CoreGUI::VF_WithDocking   |
@@ -1425,65 +1486,84 @@ int LoreApp::EntrypointOuro()
         // run jam slice computation that needs to run on the main thread
         m_sketchbook.processPendingUploads();
 
-        m_stemDataProcessor.update( GImGui->IO.DeltaTime, 0.5f );
+        m_stemDataProcessor.update( GImGui->IO.DeltaTime, 0.35f );
 
         // tidy up any messages from our riff-sync background thread
         synchroniseRiffWork();
 
-        ImGuiPerformanceTracker();
 
         {
-            ImGui::Begin( "Audio" );
-
-            // expose gain control
+            if ( ImGui::Begin( ICON_FA_MUSIC " Audio Output###audio_output" ) )
             {
-                float gainF = m_mdAudio->getMasterGain() * 1000.0f;
-                if ( ImGui::KnobFloat( "##mix_gain", 24.0f, &gainF, 0.0f, 1000.0f, 2000.0f ) )
-                    m_mdAudio->setMasterGain( gainF * 0.001f );
-            }
-            ImGui::SameLine( 0, 8.0f );
+                // expose gain control
+                {
+                    float gainF = m_mdAudio->getOutputSignalGain();
+                    if ( ImGui::KnobFloat(
+                        "##mix_gain",
+                        24.0f,
+                        &gainF,
+                        0.0f,
+                        1.0f,
+                        2000.0f,
+                        0.75f,
+                        // custom tooltip
+                        []( const float percentage01, const float value ) -> std::string
+                        {
+                            if ( percentage01 <= std::numeric_limits<float>::min() )
+                                return "-INF";
 
-            // button to toggle end-chain mute on audio engine (but leave processing, WAV output etc intact)
-            const bool isMuted = m_mdAudio->isMuted();
-            {
-                const char* muteIcon = isMuted ? ICON_FA_VOLUME_OFF : ICON_FA_VOLUME_HIGH;
+                            const auto dB = cycfi::q::lin_to_db( percentage01 );
+                            return fmt::format( FMTX( "{:.2f} dB" ), dB.rep );
+                        }))
+                    {
+                        m_mdAudio->setOutputSignalGain( gainF );
+                    }
+                }
+                ImGui::SameLine( 0, 8.0f );
 
+                // button to toggle end-chain mute on audio engine (but leave processing, WAV output etc intact)
+                const bool isMuted = m_mdAudio->isMuted();
                 {
                     ImGui::Scoped::ToggleButton bypassOn( isMuted );
-                    if ( ImGui::Button( muteIcon, ImVec2( 48.0f, 48.0f ) ) )
+                    if ( ImGui::Button( ICON_FA_VOLUME_XMARK, ImVec2( 48.0f, 48.0f ) ) )
+                    {
                         m_mdAudio->toggleMute();
+                    }
+                    ImGui::CompactTooltip( "Mute final audio output\nThis does not affect streaming or disk-recording" );
                 }
-                ImGui::CompactTooltip( "Mute final audio output\nThis does not affect streaming or disk-recording" );
-            }
-            ImGui::SameLine( 0, 8.0f );
-            {
-                ImGui::Scoped::ToggleButton isClearing( m_riffPipelineClearInProgress );
-                if ( ImGui::Button( ICON_FA_BAN, ImVec2( 48.0f, 48.0f ) ) )
+                ImGui::SameLine( 0, 8.0f );
+
                 {
-                    m_riffPipelineClearInProgress = true;
-                    m_riffPipeline->requestClear();
+                    ImGui::Scoped::ToggleButton isClearing( m_riffPipelineClearInProgress );
+                    if ( ImGui::Button( ICON_FA_BAN, ImVec2( 48.0f, 48.0f ) ) )
+                    {
+                        m_riffPipelineClearInProgress = true;
+                        m_riffPipeline->requestClear();
+                    }
+                    ImGui::CompactTooltip( "Panic stop all playback, buffering, pre-fetching, etc" );
                 }
-                ImGui::CompactTooltip( "Panic stop all playback, buffering, pre-fetching, etc" );
+
+                ImGui::SameLine( 0, 8.0f );
+                if ( ImGui::BeginChild( "disk-recorders", ImVec2( 250.0f, 0 ) ) )
+                {
+                    ux::widget::DiskRecorder( *m_mdAudio, m_storagePaths->outputApp );
+
+                    auto* mixRecordable = mixPreview.getRecordable();
+                    if ( mixRecordable != nullptr )
+                        ux::widget::DiskRecorder( *mixRecordable, m_storagePaths->outputApp );
+                }
+                ImGui::EndChild();
             }
-
-            ImGui::Spacing();
-            ImGui::TextUnformatted( "Disk Recorders" );
-            {
-                ux::widget::DiskRecorder( *m_mdAudio, m_storagePaths->outputApp );
-
-                auto* mixRecordable = mixPreview.getRecordable();
-                if ( mixRecordable != nullptr )
-                    ux::widget::DiskRecorder( *mixRecordable, m_storagePaths->outputApp );
-            }
-
-#if OURO_FEATURE_VST24
-            ImGui::Spacing();
-            ImGui::Spacing();
-
-            m_effectStack->imgui( *this );
-#endif // OURO_FEATURE_VST24
-
             ImGui::End();
+        }
+        {
+#if OURO_FEATURE_VST24
+            if ( ImGui::Begin( ICON_FA_HURRICANE " Effect Chain###effect_chain" ) )
+            {
+                m_effectStack->imgui( *this );
+            }
+            ImGui::End();
+#endif // OURO_FEATURE_VST24
         }
 
 
@@ -1492,6 +1572,12 @@ int LoreApp::EntrypointOuro()
         // take a shared ptr copy here, just in case the riff is swapped out mid-tick
         endlesss::live::RiffPtr currentRiffPtr = m_nowPlayingRiff;
         const auto currentRiff = currentRiffPtr.get();
+
+        // optionally pop the stem debug analysis
+        if ( m_showStemAnalysis )
+        {
+            ImGui::ux::StemAnalysis( currentRiffPtr, m_mdAudio->getSampleRate() );
+        }
 
         // update the Exchange data block; this also serves as a way to push sanitized beat / energy / playback 
         // information around other parts of the app. this pulls data from a few different sources to try and 
@@ -1545,7 +1631,7 @@ int LoreApp::EntrypointOuro()
             mixPreview.imgui();
 
 
-            if ( ImGui::Begin( "Riff Details" ) )
+            if ( ImGui::Begin( ICON_FA_BARS " Riff Details###riff_details" ) )
             {
 
                 struct TableFixedColumn
@@ -1592,7 +1678,7 @@ int LoreApp::EntrypointOuro()
                 }
 
                 ImGui::Dummy( ImVec2( 0.0f, 4.0f ) );
-                ImGui::vx::StemBeats( "##stem_beat", m_endlesssExchange, 18.0f, false );
+                ImGui::ux::StemBeats( "##stem_beat", m_endlesssExchange, 18.0f, false );
                 ImGui::Dummy( ImVec2( 0.0f, 8.0f ) );
 
                 if ( visibleColumns >= 3 && // only bother if there's actually enough space to make it worth while viewing
@@ -1793,7 +1879,7 @@ int LoreApp::EntrypointOuro()
         }
 
         {
-            ImGui::Begin( "Jam View" );
+            ImGui::Begin( ICON_FA_GRIP " Jam View###jam_view" );
 
             ImGui::PushFont( m_mdFrontEnd->getFont( app::module::Frontend::FontChoice::FixedSmaller ) );
 
@@ -2011,16 +2097,21 @@ int LoreApp::EntrypointOuro()
             static ImGuiTextFilter jamNameFilter;
 
             {
-                ImGuiWindow* window = ImGui::GetCurrentWindow();
-                window->DC.CursorPos.y += 3.0f;
-                ImGui::TextUnformatted( "Filter : " );
-                ImGui::SameLine( 0, 2.0f );
-                window->DC.CursorPos.y -= 3.0f;
-                jamNameFilter.Draw( "##NameFilter", 220.0f );
+                jamNameFilter.Draw( "##NameFilter", 200.0f );
                 ImGui::SameLine( 0, 2.0f );
                 if ( ImGui::Button( ICON_FA_CIRCLE_XMARK ) )
                     jamNameFilter.Clear();
-                ImGui::SameLine( 0, 2.0f );
+                ImGui::SameLine( 0, 16.0f );
+
+                ImGui::TextUnformatted( "Sort" );
+                ImGui::SameLine();
+
+                ImGui::SetNextItemWidth( 150.0f );
+                if ( WarehouseContentsSortMode::ImGuiCombo( "###sort_order", m_warehouseContentsSortMode ) )
+                {
+                    updateWarehouseContentsSortOrder();
+                }
+                ImGui::SameLine();
             }
 
             {
@@ -2032,23 +2123,8 @@ int LoreApp::EntrypointOuro()
                 // extra tools in a pile
                 if ( warehouseView == WarehouseView::Default )
                 {
-                    ImGui::SameLine( 0, warehouseViewWidth - ( toolbarButtonSize.x * 2.0f ) - 6.0f );
+                    ImGui::SameLine( 0, warehouseViewWidth - ( toolbarButtonSize.x * 1.0f ) - 6.0f );
 
-                    // note if the warehouse is running ops, if not then disable new-task buttons
-                    const bool warehouseIsPaused = warehouse.workerIsPaused();
-
-                    {
-                        // enable or disable the worker thread
-                        ImGui::Scoped::ToggleButton highlightButton( !warehouseIsPaused, true );
-                        if ( ImGui::Button( warehouseIsPaused ?
-                                            ICON_FA_CIRCLE_PLAY  " RESUME  " :
-                                            ICON_FA_CIRCLE_PAUSE " RUNNING ", toolbarButtonSize ) )
-                        {
-                            warehouse.workerTogglePause();
-                        }
-                    }
-                    
-                    ImGui::SameLine();
 
                     ImGui::BeginDisabledControls( !warehouseHasEndlesssAccess );
                     if ( ImGui::Button( ICON_FA_CIRCLE_PLUS " Add Jam...", toolbarButtonSize ) )
@@ -2067,6 +2143,25 @@ int LoreApp::EntrypointOuro()
                     }
                     ImGui::EndDisabledControls( !warehouseHasEndlesssAccess );
                 }
+                else if ( warehouseView == WarehouseView::Maintenance )
+                {
+                    ImGui::SameLine( 0, warehouseViewWidth - (toolbarButtonSize.x * 1.0f) - 6.0f );
+
+                    // note if the warehouse is running ops, if not then disable new-task buttons
+                    const bool bWarehouseIsPaused = warehouse.workerIsPaused();
+
+                    {
+                        // enable or disable the worker thread
+                        ImGui::Scoped::ToggleButton highlightButton( !bWarehouseIsPaused, true );
+                        if ( ImGui::Button( bWarehouseIsPaused ?
+                            ICON_FA_CIRCLE_PLAY  " RESUME  " :
+                            ICON_FA_CIRCLE_PAUSE " RUNNING ", toolbarButtonSize ) )
+                        {
+                            warehouse.workerTogglePause();
+                        }
+                    }
+                }
+
             }
 
             ImGui::SeparatorBreak();
@@ -2132,7 +2227,7 @@ int LoreApp::EntrypointOuro()
                         if ( warehouseView == WarehouseView::Default )
                         {
                             ImGui::BeginDisabledControls( isJamInFlux );
-                            if ( ImGui::PrecisionButton( ICON_FA_EYE, buttonSizeMidTable, 1.0f ) )
+                            if ( ImGui::PrecisionButton( ICON_FA_GRIP, buttonSizeMidTable, 1.0f ) )
                             {
                                 clearJamSlice();
 
@@ -2143,7 +2238,8 @@ int LoreApp::EntrypointOuro()
 
                                 warehouse.addJamSliceRequest( m_currentViewedJam, std::bind( &LoreApp::newJamSliceGenerated, this, std::placeholders::_1, std::placeholders::_2 ) );
 
-                                ImGui::MakeTabVisible( "Jam View" );
+                                // force-switch over to make the jam view in focus
+                                ImGui::MakeTabVisible( "###jam_view" );
                             }
                             ImGui::EndDisabledControls( isJamInFlux );
 
@@ -2154,6 +2250,10 @@ int LoreApp::EntrypointOuro()
                         if ( warehouseView == WarehouseView::Maintenance )
                         {
                             ImGui::TextDisabled( "ID" );
+                            if ( ImGui::IsItemClicked() )
+                            {
+                                ImGui::SetClipboardText( m_warehouseContentsReport.m_jamCouchIDs[jI].c_str() );
+                            }
                             ImGui::CompactTooltip( m_warehouseContentsReport.m_jamCouchIDs[jI].c_str() );
                             ImGui::SameLine();
                         }

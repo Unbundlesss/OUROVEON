@@ -18,7 +18,7 @@
 #include "ssp/ssp.file.wav.h"
 
 #include "ux/live.riff.details.h"
-#include "vx/stembeats.h"
+#include "ux/stem.beats.h"
 
 #include "endlesss/core.constants.h"
 #include "endlesss/live.stem.h"
@@ -36,7 +36,7 @@ std::string generatePreviewViewTitle( const PreviewView::Enum _vwv )
 #define _ACTIVE_ICON(_ty)             _vwv == PreviewView::_ty ? ICON_FC_FILLED_SQUARE : ICON_FC_HOLLOW_SQUARE,
 #define _ICON_PRINT(_ty)             "{}"
 
-    return fmt::format( FMTX( "Playback Engine [" _PV_VIEW( _ICON_PRINT ) "]###preview_mix_playback" ),
+    return fmt::format( FMTX( ICON_FA_WAVE_SQUARE " Playback Engine [" _PV_VIEW( _ICON_PRINT ) "]###preview_mix_playback" ),
         _PV_VIEW( _ACTIVE_ICON )
         "" );
 
@@ -159,6 +159,8 @@ void Preview::renderCurrentRiff(
         float lastSampleLeft  = 0;
         float lastSampleRight = 0;
 
+        auto& stemAnalysis = stemInst->getAnalysisData();
+
         for ( auto sI = 0U; sI < samplesToWrite; sI++ )
         {
             const auto sampleCount = stemInst->m_sampleCount;
@@ -177,13 +179,15 @@ void Preview::renderCurrentRiff(
             // contribute data from the stem analysis to amalgamated block of data as we go
             if ( stemAnalysed[stemI] && permGain > 0 )
             {
-                const uint64_t bitBlock = finalSampleIdx >> 6;
-                const uint64_t bitBit   = finalSampleIdx - ( bitBlock << 6 );
+                const float stemWave = stemAnalysis.getWaveF( finalSampleIdx ) * permGain;
+                const float stemBeat = stemAnalysis.getBeatF( finalSampleIdx ) * permGain;
+                const float stemLow  = stemAnalysis.getLowFreqF( finalSampleIdx ) * permGain;
+                const float stemHigh = stemAnalysis.getHighFreqF( finalSampleIdx ) * permGain;
 
-                m_stemDataAmalgam.m_beat[stemI]  |= (stemInst->m_sampleBeat[bitBlock] >> bitBit) != 0;
-                m_stemDataAmalgam.m_energy[stemI] = std::max(
-                    m_stemDataAmalgam.m_energy[stemI],
-                    stemInst->m_sampleEnergy[finalSampleIdx] * permGain );
+                m_stemDataAmalgam.m_wave[stemI] = std::max( m_stemDataAmalgam.m_wave[stemI], stemWave );
+                m_stemDataAmalgam.m_beat[stemI] = std::max( m_stemDataAmalgam.m_beat[stemI], stemBeat );
+                m_stemDataAmalgam.m_low[stemI]  = std::max( m_stemDataAmalgam.m_low[stemI],  stemLow  );
+                m_stemDataAmalgam.m_high[stemI] = std::max( m_stemDataAmalgam.m_high[stemI], stemHigh );
             }
 
             lastSampleLeft  = stemInst->m_channel[0][finalSampleIdx] * stemGain * permGain;
@@ -363,7 +367,7 @@ void Preview::processCommandQueue()
 // ---------------------------------------------------------------------------------------------------------------------
 void Preview::update( 
     const AudioBuffer&  outputBuffer,
-    const float         outputVolume,
+    const AudioSignal&  outputSignal,
     const uint32_t      samplesToWrite,
     const uint64_t      samplePosition )
 {
@@ -599,7 +603,7 @@ void Preview::update(
         }
     }
 
-    mixChannelsToOutput( outputBuffer, outputVolume, samplesToWrite );
+    mixChannelsToOutput( outputBuffer, outputSignal, samplesToWrite );
 }
 
 
@@ -620,7 +624,7 @@ void Preview::imgui()
     static PreviewView::Enum previewView = PreviewView::Default;
     const auto viewTitle = generatePreviewViewTitle( previewView );
 
-    if ( ImGui::Begin( viewTitle.c_str() ) )
+    if ( ImGui::Begin( viewTitle.c_str(), nullptr, ImGuiWindowFlags_Ouro_MultiDimensional ) )
     {
         if ( ImGui::IsWindowHovered( ImGuiHoveredFlags_RootAndChildWindows ) && 
              ImGui::IsKeyPressedMap( ImGuiKey_Tab, false ) )

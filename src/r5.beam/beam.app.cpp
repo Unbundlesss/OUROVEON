@@ -14,7 +14,7 @@
 #include "ux/diskrecorder.h"
 #include "ux/cache.jams.browser.h"
 #include "ux/live.riff.details.h"
-#include "vx/stembeats.h"
+#include "ux/stem.beats.h"
 
 #include "ssp/ssp.file.flac.h"
 
@@ -38,6 +38,7 @@ struct MixEngine : public app::module::MixerInterface,
                    public rec::IRecordable
 {
     using AudioBuffer = app::module::Audio::OutputBuffer;
+    using AudioSignal = app::module::Audio::OutputSignal;
 
     static constexpr uint32_t cSampleCountMax = std::numeric_limits<uint32_t>::max();
 
@@ -234,17 +235,17 @@ struct MixEngine : public app::module::MixerInterface,
 
     void update(
         const AudioBuffer&  outputBuffer,
-        const float         outputVolume,
+        const AudioSignal&  outputSignal,
         const uint32_t      samplesToWrite,
         const uint64_t      samplePosition ) override;
 
     void commit(
         const AudioBuffer&  outputBuffer,
-        const float         outputVolume,
+        const AudioSignal&  outputSignal,
         const uint32_t      samplesToWrite )
     {
         buffer::downmix_8channel_stereo(
-            outputVolume,
+            outputSignal.m_linearGain,
             samplesToWrite,
             m_mixChannelLeft[0],
             m_mixChannelLeft[1],
@@ -323,8 +324,8 @@ struct MixEngine : public app::module::MixerInterface,
         beatEx.m_consensusBeat = m_stemBeatConsensus;
         for ( auto stemI = 0U; stemI < 8; stemI++ )
         {
-            beatEx.m_stemPulse[stemI]  = m_stemBeats[stemI].m_pulse;
-            beatEx.m_stemEnergy[stemI] = m_stemEnergy[stemI];
+            beatEx.m_stemBeat[stemI]  = m_stemBeats[stemI].m_pulse;
+            beatEx.m_stemWave[stemI] = m_stemEnergy[stemI];
         }
 
         for ( auto layer = 0U; layer < 8; layer++ )
@@ -422,7 +423,7 @@ public:
         return usage;
     }
 
-    inline const char* getRecorderName() const override { return " Multitrack "; }
+    inline std::string_view getRecorderName() const override { return " Multitrack "; }
     inline const char* getFluxState() const override
     {
         if ( m_repcomState != RepComState::Unpaused )
@@ -468,7 +469,7 @@ private:
 // ---------------------------------------------------------------------------------------------------------------------
 void MixEngine::update(
     const AudioBuffer&  outputBuffer,
-    const float         outputVolume,
+    const AudioSignal&  outputSignal,
     const uint32_t      samplesToWrite,
     const uint64_t      samplePosition )
 {
@@ -830,13 +831,13 @@ void MixEngine::update(
             finalSampleIdx %= sampleCount;
 
 
-            const uint64_t bitBlock = finalSampleIdx >> 6;
-            const uint64_t bitBit   = finalSampleIdx - (bitBlock << 6);
-
+            // #TODO replace with new system
             if ( stemInst->isAnalysisComplete() )
             {
-                stemHasBeat[stemI] |= (stemInst->m_sampleBeat[bitBlock] >> bitBit) != 0;
-                stemEnergy[stemI] = std::max( stemEnergy[stemI], stemInst->m_sampleEnergy[finalSampleIdx] );
+                const auto stemAnalysis = stemInst->getAnalysisData();
+
+                stemHasBeat[stemI] |= stemAnalysis.queryBeatAtSample( finalSampleIdx );
+                //stemEnergy[stemI] = std::max( stemEnergy[stemI], stemAnalysis.m_peak[finalSampleIdx] );
             }
 
             m_mixChannelLeft[stemI][sI]  = stemInst->m_channel[0][finalSampleIdx] * stemGain;
@@ -879,6 +880,7 @@ void MixEngine::update(
         }
     }
 
+    // #TODO replace with new system
     int32_t simultaneousBeats = 0;
     for ( auto stemI = 0U; stemI < 8; stemI++ )
     {
@@ -894,7 +896,7 @@ void MixEngine::update(
         m_stemBeatConsensus = 1.0f;
 
 
-    commit( outputBuffer, outputVolume, samplesToWrite );
+    commit( outputBuffer, outputSignal, samplesToWrite );
 }
 
 
@@ -955,7 +957,7 @@ struct BeamApp : public app::OuroApp
         data::providers::registerDefaults( m_dataBus.m_providerFactory, m_dataBus.m_providerNames );
 #endif // OURO_FEATURE_VST24
 
-        m_discordBotUI = std::make_unique<discord::BotWithUI>( *this, m_configDiscord );
+        m_discordBotUI = std::make_unique<discord::BotWithUI>( *this );
     }
 
     const char* GetAppName() const override { return OUROVEON_BEAM; }
@@ -1108,8 +1110,6 @@ int BeamApp::EntrypointOuro()
             m_endlesssExchange.m_riffTransition        = mixEngine.m_transitionValue;
         }
 
-        ImGuiPerformanceTracker();
-
 #if OURO_FEATURE_VST24
 
         m_dataBus.update();
@@ -1133,9 +1133,9 @@ int BeamApp::EntrypointOuro()
 
             // expose gain control
             {
-                float gainF = m_mdAudio->getMasterGain() * 1000.0f;
+                float gainF = m_mdAudio->getOutputSignalGain() * 1000.0f;
                 if ( ImGui::KnobFloat( "Gain", 24.0f, &gainF, 0.0f, 1000.0f, 2000.0f ) )
-                    m_mdAudio->setMasterGain( gainF * 0.001f );
+                    m_mdAudio->setOutputSignalGain( gainF * 0.001f );
             }
             ImGui::SameLine( 0, 8.0f );
             // button to toggle end-chain mute on audio engine (but leave processing, WAV output etc intact)
@@ -1429,7 +1429,7 @@ int BeamApp::EntrypointOuro()
                     ImGui::EndTable();
 
                     ImGui::Dummy( ImVec2( 0.0f, 12.0f ) );
-                    ImGui::vx::StemBeats( "##stem_beat", m_endlesssExchange, 18.0f, false );
+                    ImGui::ux::StemBeats( "##stem_beat", m_endlesssExchange, 18.0f, false );
 
                 }
             }

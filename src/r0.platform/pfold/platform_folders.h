@@ -52,6 +52,11 @@ std::string GetWindowsProgramFiles();
 
 #endif  //DOXYGEN_SHOULD_SKIP_THIS
 
+
+// #HDD added a function that sort of belongs here, opens a new Explorer / Finder window at a path
+void openExplorerWindowAtPath( const std::string& pathToOpen );
+
+
 /**
  * Retrives the base folder for storing data files.
  * You must add the program name yourself like this:

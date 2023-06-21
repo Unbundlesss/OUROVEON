@@ -10,6 +10,8 @@
 #include "spacetime/chronicle.h"
 #include "base/text.h"
 
+#include "pfold/platform_folders.h"
+
 namespace ux {
 namespace widget {
 
@@ -30,16 +32,47 @@ void DiskRecorder( rec::IRecordable& recordable, const fs::path& recordingRootPa
         "['\"`-._] ",
         "[\"`-.__] ",
     };
+
+    // modifier to jump open the output directory in Explorer etc
+    const bool bOpenOutputDirectoryOnClick = ( ImGui::GetMergedModFlags() & ImGuiModFlags_Alt );
    
+    const auto recordableName   = recordable.getRecorderName();
+    const auto recordableUID    = ImGui::GetID( recordableName.data() );
+    const auto animCycleOffset  = recordableUID & 0xff;
 
-    const auto recordableUID = ImGui::GetID( recordable.getRecorderName() );
+    const bool bRecodingInProgress = recordable.isRecording();
+
     ImGui::PushID( recordableUID );
-    const auto animCycleOffset = recordableUID & 0xff;
 
-    const bool recodingInProgress = recordable.isRecording();
+    {
+        const auto hostContainerPosSS = ImGui::GetWindowPos();
+        const auto hostContainerSize  = ImGui::GetWindowSize();
+
+        // when the mouse is over the host container and the modifier is down,
+        // early out with a button that takes the user to where the recordings are stored
+        if ( ImGui::IsMouseHoveringRect( hostContainerPosSS, hostContainerPosSS + hostContainerSize ) &&
+             bOpenOutputDirectoryOnClick )
+        {
+            const auto pathToOpen = recordingRootPath.string();
+
+            if ( ImGui::Button( ICON_FA_UP_RIGHT_FROM_SQUARE, commonButtonSize ) )
+            {
+                sago::openExplorerWindowAtPath( pathToOpen.data() );
+            }
+
+            ImGui::SameLine( 0.0f, 4.0f );
+            ImGui::PushItemWidth( ImGui::GetContentRegionAvail().x );
+            ImGui::TextUnformatted( " Open Output Directory ..." );
+            ImGui::CompactTooltip( pathToOpen );
+            ImGui::PopItemWidth();
+
+            ImGui::PopID();
+            return;
+        }
+    }
 
     // recorder may be in a state of flux; if so, display what it's telling us
-    if ( recodingInProgress &&
+    if ( bRecodingInProgress &&
          recordable.getFluxState() != nullptr )
     {
         {
@@ -58,7 +91,7 @@ void DiskRecorder( rec::IRecordable& recordable, const fs::path& recordingRootPa
     // otherwise it will be recording or not, so handle those default states
     else
     {
-        if ( !recodingInProgress )
+        if ( !bRecodingInProgress )
         {
             bool beginRecording = false;
 
@@ -67,7 +100,8 @@ void DiskRecorder( rec::IRecordable& recordable, const fs::path& recordingRootPa
             ImGui::Scoped::ButtonTextAlignLeft leftAlign;
 
             ImGui::SameLine( 0.0f, 4.0f );
-            beginRecording |= ImGui::Button( recordable.getRecorderName(), ImVec2( ImGui::GetContentRegionAvail().x, 0.0f ) );
+            beginRecording |= ImGui::Button( recordableName.data(), ImVec2(ImGui::GetContentRegionAvail().x, 0.0f));
+
 
             if ( beginRecording )
             {

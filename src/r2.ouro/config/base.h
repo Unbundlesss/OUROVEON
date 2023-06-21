@@ -20,8 +20,9 @@ struct IPathProvider
 
     enum class PathFor
     {
-        SharedConfig,       // directory for storing shared core configuration (eg. audio driver choice)
         SharedData,         // shared data directory root common for all apps (eg. fonts)
+
+        SharedConfig,       // directory for storing shared core configuration (eg. audio driver choice)
         PerAppConfig,       // directory for storing per-app data (eg. current window state, app-specific blobs)
     };
 

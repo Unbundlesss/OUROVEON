@@ -38,7 +38,9 @@
 #include "effect/vst2/host.h"
 #endif 
 
+// ---------------------------------------------------------------------------------------------------------------------
 // manual exposure for the one-off init/term in Operations
+
 namespace base
 {
     extern void OperationsInit();
@@ -211,8 +213,20 @@ int Core::Run()
     // sup
     blog::core( FMTX( "Hello from OUROVEON {} [{}]" ), GetAppNameWithVersion(), getOuroveonPlatform() );
 
+    // scripting
+    blog::core( FMTX( "initialising {}" ), LUA_VERSION );
+    {
+        m_lua.open_libraries(
+            sol::lib::base,
+            sol::lib::coroutine,
+            sol::lib::math,
+            sol::lib::string,
+            sol::lib::io
+        );
+    }
+
     // big and wide
-    blog::core( FMTX( "launched taskflow {} with {} worker threads" ), tf::version(), m_taskExecutor.num_workers() );
+    blog::core( FMTX( "initialising taskflow {} with {} worker threads" ), tf::version(), m_taskExecutor.num_workers() );
 
     // configure app event bus
     {
@@ -507,14 +521,24 @@ int CoreGUI::Entrypoint()
 
             ImGui::EndMenu();
         }
+
+        ImGui::Separator();
+
+        if ( ImGui::BeginMenu( "Developer" ) )
+        {
+            for ( const auto& developerFlag : m_developerMenuRegistry )
+            {
+                ImGui::MenuItem( developerFlag.first.c_str(), "", developerFlag.second );
+            }
+            ImGui::EndMenu();
+        }
     });
 
+    addDeveloperMenuFlag( "Performance Tracing", &m_showPerformanceWindow );
 #if OURO_DEBUG
-    registerMainMenuEntry( 1000, "DEBUG", [this]()
-    {
-        ImGui::MenuItem( "ImGUI Demo", "", &m_showImGuiDebugWindow );
-    });
-#endif
+    addDeveloperMenuFlag( "ImGui Demo", &m_showImGuiDebugWindow );
+#endif // OURO_DEBUG
+
 
     // run the app main loop
     int appResult = EntrypointGUI();
@@ -567,7 +591,7 @@ bool CoreGUI::beginInterfaceLayout( const ViewportFlags viewportFlags )
             if ( ImGui::BeginMenu( "OUROVEON" ) )
             {
                 ImGui::MenuItem( GetAppNameWithVersion(), nullptr, nullptr, false );
-                ImGui::MenuItem( "ishani.org 2022", nullptr, nullptr, false );
+                ImGui::MenuItem( OURO_FRAMEWORK_CREDIT, nullptr, nullptr, false );
 
                 ImGui::Separator();
                 if ( ImGui::MenuItem( "Quit" ) )
@@ -665,6 +689,8 @@ bool CoreGUI::beginInterfaceLayout( const ViewportFlags viewportFlags )
 
     ImGui::PushFont( m_mdFrontEnd->getFont( app::module::Frontend::FontChoice::FixedMain ) );
 
+    if ( m_showPerformanceWindow )
+        ImGuiPerformanceTracker();
 
     // run active modal dialog callbacks
     for ( const auto& modalPair : m_modalsActive )
@@ -717,7 +743,6 @@ bool CoreGUI::beginInterfaceLayout( const ViewportFlags viewportFlags )
             m_fileDialogCallbackOnOK = nullptr;
         }
     }
-
 
     return true;
 }
@@ -775,127 +800,130 @@ void CoreGUI::finishInterfaceLayoutAndRender()
 // ---------------------------------------------------------------------------------------------------------------------
 void CoreGUI::ImGuiPerformanceTracker()
 {
-    ImGui::Begin( "Profiling" );
+    if ( !m_showPerformanceWindow )
+        return;
 
-    const float column0size = 90.0f;
-    const auto& aeState = m_mdAudio->getState();
-
-    if ( ImGui::BeginTable( "##aengine", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg ) )
+    if ( ImGui::Begin( ICON_FA_CLOCK " Profiling###coregui_profiling" ) )
     {
-        ImGui::PushStyleColor( ImGuiCol_Text, ImGui::GetStyleColorVec4( ImGuiCol_ResizeGripHovered ) );
-        ImGui::TableSetupColumn( "Buffers", ImGuiTableColumnFlags_WidthFixed, column0size );
-        ImGui::TableSetupColumn( "", ImGuiTableColumnFlags_None );
-        ImGui::TableHeadersRow();
-        ImGui::PopStyleColor();
+        const float column0size = 90.0f;
+        const auto& aeState = m_mdAudio->getState();
 
-        ImGui::TableNextColumn(); ImGui::TextUnformatted( "Min" );
-        ImGui::TableNextColumn(); ImGui::Text( "  %7i", m_mdAudio->getState().m_minBufferFillSize );
-        ImGui::TableNextColumn(); ImGui::TextUnformatted( "Max" );
-        ImGui::TableNextColumn(); ImGui::Text( "  %7i", m_mdAudio->getState().m_maxBufferFillSize );
-        ImGui::TableNextColumn(); ImGui::TextUnformatted( "Rate" );
-        ImGui::TableNextColumn(); ImGui::Text( "  %7i", m_mdAudio->getSampleRate() );
-
-        ImGui::EndTable();
-    }
-
-    static constexpr auto executionStages = app::module::Audio::ExposedState::cNumExecutionStages;
-    using PerfPoints = std::array< uint64_t, executionStages >;
-
-    static int32_t maxCountdown = 256;       // ignore early [max] readings to disregard boot-up spikes
-    static PerfPoints maxPerf = { 0, 0, 0, 0, 0 };
-    PerfPoints totalPerf;
-    totalPerf.fill( 0 );
-
-    for ( auto cI = 1; cI < executionStages; cI++ )
-    {
-        const uint64_t perfValue = (uint64_t)aeState.m_perfCounters[cI].m_average;
-
-        // only update max scores once initial grace period has passed
-        if ( maxCountdown == 0 )
+        if ( ImGui::BeginTable( "##aengine", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg ) )
         {
-            maxPerf[cI] = std::max( maxPerf[cI], perfValue );
+            ImGui::PushStyleColor( ImGuiCol_Text, ImGui::GetStyleColorVec4( ImGuiCol_ResizeGripHovered ) );
+            ImGui::TableSetupColumn( "Buffers", ImGuiTableColumnFlags_WidthFixed, column0size );
+            ImGui::TableSetupColumn( "", ImGuiTableColumnFlags_None );
+            ImGui::TableHeadersRow();
+            ImGui::PopStyleColor();
+
+            ImGui::TableNextColumn(); ImGui::TextUnformatted( "Min" );
+            ImGui::TableNextColumn(); ImGui::Text( "  %7i", m_mdAudio->getState().m_minBufferFillSize );
+            ImGui::TableNextColumn(); ImGui::TextUnformatted( "Max" );
+            ImGui::TableNextColumn(); ImGui::Text( "  %7i", m_mdAudio->getState().m_maxBufferFillSize );
+            ImGui::TableNextColumn(); ImGui::TextUnformatted( "Rate" );
+            ImGui::TableNextColumn(); ImGui::Text( "  %7i", m_mdAudio->getSampleRate() );
+
+            ImGui::EndTable();
         }
 
-        totalPerf[cI] += perfValue;
-    }
-    maxCountdown = std::max( 0, maxCountdown - 1 );
+        static constexpr auto executionStages = app::module::Audio::ExposedState::cNumExecutionStages;
+        using PerfPoints = std::array< uint64_t, executionStages >;
 
-    uint64_t totalSum = 0;
-    for ( auto cI = 0; cI < executionStages; cI++ )
-    {
-        totalSum += totalPerf[cI];
-    }
+        static int32_t maxCountdown = 256;       // ignore early [max] readings to disregard boot-up spikes
+        static PerfPoints maxPerf = { 0, 0, 0, 0, 0 };
+        PerfPoints totalPerf;
+        totalPerf.fill( 0 );
 
-    if ( ImGui::BeginTable( "##perf_stats_avg", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg ) )
-    {
-        ImGui::PushStyleColor( ImGuiCol_Text, ImGui::GetStyleColorVec4( ImGuiCol_ResizeGripHovered ) );
-        ImGui::TableSetupColumn( "AVERAGE", ImGuiTableColumnFlags_WidthFixed, column0size );
-        ImGui::TableSetupColumn( "", ImGuiTableColumnFlags_None );
-        ImGui::TableHeadersRow();
-        ImGui::PopStyleColor();
-        
-        ImGui::TableNextColumn(); ImGui::TextUnformatted( "Mixer" );
-        ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalPerf[1] );
-        ImGui::TableNextColumn(); ImGui::TextUnformatted( "VST" );
-        ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalPerf[2] );
-        ImGui::TableNextColumn(); ImGui::TextUnformatted( "Scope" );
-        ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalPerf[3] );
-        ImGui::TableNextColumn(); ImGui::TextUnformatted( "Interleave" );
-        ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalPerf[4] );
-        ImGui::TableNextColumn(); ImGui::TextUnformatted( "Recorder" );
-        ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalPerf[5] );
-        ImGui::TableNextColumn(); ImGui::TextUnformatted( "Total" );
-        ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalSum );
-        ImGui::TableNextColumn(); ImGui::TextUnformatted( "Load" );
-        ImGui::TableNextColumn(); ImGui::Text( "%9.1f %%", m_mdAudio->getAudioEngineCPULoadPercent() );
-
-        ImGui::EndTable();
-    }
-    if ( ImGui::BeginTable( "##perf_stats_max", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg ) )
-    {
-        ImGui::PushStyleColor( ImGuiCol_Text, ImGui::GetStyleColorVec4( ImGuiCol_ResizeGripHovered ) );
-        ImGui::TableSetupColumn( "PEAK", ImGuiTableColumnFlags_WidthFixed, column0size );
-        ImGui::TableSetupColumn( "", ImGuiTableColumnFlags_None );
-        ImGui::TableHeadersRow();
-        ImGui::PopStyleColor();
-
-        ImGui::TableNextColumn(); ImGui::TextUnformatted( "Mixer" );
-        ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", maxPerf[1] );
-        ImGui::TableNextColumn(); ImGui::TextUnformatted( "VST" );
-        ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", maxPerf[2] );
-        ImGui::TableNextColumn(); ImGui::TextUnformatted( "Interleave" );
-        ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", maxPerf[3] );
-        ImGui::TableNextColumn(); ImGui::TextUnformatted( "Recorder" );
-        ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", maxPerf[4] );
-
-        ImGui::TableNextColumn(); 
-        ImGui::Spacing();
-        if ( ImGui::Button( "Reset" ) )
+        for ( auto cI = 1; cI < executionStages; cI++ )
         {
-            maxPerf.fill( 0 );
+            const uint64_t perfValue = (uint64_t)aeState.m_perfCounters[cI].m_average;
+
+            // only update max scores once initial grace period has passed
+            if ( maxCountdown == 0 )
+            {
+                maxPerf[cI] = std::max( maxPerf[cI], perfValue );
+            }
+
+            totalPerf[cI] += perfValue;
         }
-        ImGui::Spacing(); ImGui::TableNextColumn();
+        maxCountdown = std::max( 0, maxCountdown - 1 );
 
-        ImGui::EndTable();
+        uint64_t totalSum = 0;
+        for ( auto cI = 0; cI < executionStages; cI++ )
+        {
+            totalSum += totalPerf[cI];
+        }
+
+        if ( ImGui::BeginTable( "##perf_stats_avg", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg ) )
+        {
+            ImGui::PushStyleColor( ImGuiCol_Text, ImGui::GetStyleColorVec4( ImGuiCol_ResizeGripHovered ) );
+            ImGui::TableSetupColumn( "AVERAGE", ImGuiTableColumnFlags_WidthFixed, column0size );
+            ImGui::TableSetupColumn( "", ImGuiTableColumnFlags_None );
+            ImGui::TableHeadersRow();
+            ImGui::PopStyleColor();
+
+            ImGui::TableNextColumn(); ImGui::TextUnformatted( "Mixer" );
+            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalPerf[1] );
+            ImGui::TableNextColumn(); ImGui::TextUnformatted( "VST" );
+            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalPerf[2] );
+            ImGui::TableNextColumn(); ImGui::TextUnformatted( "Scope" );
+            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalPerf[3] );
+            ImGui::TableNextColumn(); ImGui::TextUnformatted( "Interleave" );
+            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalPerf[4] );
+            ImGui::TableNextColumn(); ImGui::TextUnformatted( "Recorder" );
+            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalPerf[5] );
+            ImGui::TableNextColumn(); ImGui::TextUnformatted( "Total" );
+            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalSum );
+            ImGui::TableNextColumn(); ImGui::TextUnformatted( "Load" );
+            ImGui::TableNextColumn(); ImGui::Text( "%9.1f %%", m_mdAudio->getAudioEngineCPULoadPercent() );
+
+            ImGui::EndTable();
+        }
+        if ( ImGui::BeginTable( "##perf_stats_max", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg ) )
+        {
+            ImGui::PushStyleColor( ImGuiCol_Text, ImGui::GetStyleColorVec4( ImGuiCol_ResizeGripHovered ) );
+            ImGui::TableSetupColumn( "PEAK", ImGuiTableColumnFlags_WidthFixed, column0size );
+            ImGui::TableSetupColumn( "", ImGuiTableColumnFlags_None );
+            ImGui::TableHeadersRow();
+            ImGui::PopStyleColor();
+
+            ImGui::TableNextColumn(); ImGui::TextUnformatted( "Mixer" );
+            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", maxPerf[1] );
+            ImGui::TableNextColumn(); ImGui::TextUnformatted( "VST" );
+            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", maxPerf[2] );
+            ImGui::TableNextColumn(); ImGui::TextUnformatted( "Interleave" );
+            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", maxPerf[3] );
+            ImGui::TableNextColumn(); ImGui::TextUnformatted( "Recorder" );
+            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", maxPerf[4] );
+
+            ImGui::TableNextColumn();
+            ImGui::Spacing();
+            if ( ImGui::Button( "Reset" ) )
+            {
+                maxPerf.fill( 0 );
+            }
+            ImGui::Spacing(); ImGui::TableNextColumn();
+
+            ImGui::EndTable();
+        }
+        if ( ImGui::BeginTable( "##perf_stats_ext", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg ) )
+        {
+            ImGui::PushStyleColor( ImGuiCol_Text, ImGui::GetStyleColorVec4( ImGuiCol_ResizeGripHovered ) );
+            ImGui::TableSetupColumn( "UI", ImGuiTableColumnFlags_WidthFixed, column0size );
+            ImGui::TableSetupColumn( "", ImGuiTableColumnFlags_None );
+            ImGui::TableHeadersRow();
+            ImGui::PopStyleColor();
+
+            ImGui::TableNextColumn(); ImGui::TextUnformatted( "Event Bus" );
+            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " ms", m_perfData.m_uiEventBus.count() );
+            ImGui::TableNextColumn(); ImGui::TextUnformatted( "Build" );
+            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " ms", m_perfData.m_uiPreRender.count() );
+            ImGui::TableNextColumn(); ImGui::TextUnformatted( "Dispatch" );
+            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " ms", m_perfData.m_uiPostRender.count() );
+
+            ImGui::EndTable();
+        }
     }
-    if ( ImGui::BeginTable( "##perf_stats_ext", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg ) )
-    {
-        ImGui::PushStyleColor( ImGuiCol_Text, ImGui::GetStyleColorVec4( ImGuiCol_ResizeGripHovered ) );
-        ImGui::TableSetupColumn( "UI", ImGuiTableColumnFlags_WidthFixed, column0size );
-        ImGui::TableSetupColumn( "", ImGuiTableColumnFlags_None );
-        ImGui::TableHeadersRow();
-        ImGui::PopStyleColor();
-
-        ImGui::TableNextColumn(); ImGui::TextUnformatted( "Event Bus" );
-        ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " ms", m_perfData.m_uiEventBus.count() );
-        ImGui::TableNextColumn(); ImGui::TextUnformatted( "Build" );
-        ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " ms", m_perfData.m_uiPreRender.count() );
-        ImGui::TableNextColumn(); ImGui::TextUnformatted( "Dispatch" );
-        ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " ms", m_perfData.m_uiPostRender.count() );
-
-        ImGui::EndTable();
-    }
-
     ImGui::End();
 }
 

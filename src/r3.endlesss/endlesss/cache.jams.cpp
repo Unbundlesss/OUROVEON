@@ -34,7 +34,7 @@ bool Jams::load( const config::IPathProvider& pathProvider )
     if ( publicsLoadResult != config::LoadResult::Success )
     {
         // we expect the public jam manifest, although we could survive without it tbh
-        blog::error::cfg( "Unable to load Endlesss public jam manifest [{}]",
+        blog::error::cfg( FMTX("Unable to load Endlesss public jam manifest [{}]"),
             config::getFullPath< config::endlesss::PublicJamManifest >( pathProvider ).string() );
     }
     blog::core( "loaded {} public jams from snapshot manifest", m_configEndlesssPublics.jams.size() );
@@ -44,9 +44,25 @@ bool Jams::load( const config::IPathProvider& pathProvider )
     const auto collectibleLoadResult = config::load( pathProvider, m_configEndlesssCollectibles );
     if ( collectibleLoadResult != config::LoadResult::Success )
     {
-        // thats ok, we can update one from the net
+        // if it failed to load or wasn't present
+        // try and copy over the snapshot data, then try and reload it
+        const fs::path fromPath = getFullPath<config::endlesss::CollectibleJamManifestSnapshot>( pathProvider );
+        const fs::path toPath   = getFullPath<config::endlesss::CollectibleJamManifest>( pathProvider );
+
+        std::error_code copyErrorCode;
+        fs::copy_file( fromPath, toPath, fs::copy_options::overwrite_existing, copyErrorCode );
+
+        if ( copyErrorCode )
+        {
+            blog::error::cfg( FMTX( "Error occured while copying collectibles snapshot : {}"), copyErrorCode.message() );
+        }
+        else
+        {
+            blog::core( FMTX("copied collectible snapshot, reloading...") );
+            config::load( pathProvider, m_configEndlesssCollectibles );
+        }
     }
-    blog::core( "loaded {} collectible jams from snapshot manifest", m_configEndlesssCollectibles.jams.size() );
+    blog::core( FMTX("loaded {} collectible jams from snapshot manifest"), m_configEndlesssCollectibles.jams.size());
 
 
     // dynamic jam cache is shared between apps
@@ -55,7 +71,7 @@ bool Jams::load( const config::IPathProvider& pathProvider )
 
     if ( fs::exists( jamLibraryCacheFile ) )
     {
-        blog::cache( "loading dynamic jam cache [{}]", jamLibraryCacheFile.string() );
+        blog::cache( FMTX("loading dynamic jam cache [{}]"), jamLibraryCacheFile.string() );
         try
         {
             std::ifstream is( jamLibraryCacheFile );
@@ -75,7 +91,7 @@ bool Jams::load( const config::IPathProvider& pathProvider )
 
                 const auto cacheTimeDelta = spacetime::calculateDeltaFromNow( timePointSec ).asPastTenseString(2);
 
-                m_cacheFileState = fmt::format( "Jam cache updated {}", cacheTimeDelta );
+                m_cacheFileState = fmt::format( "Updated {}", cacheTimeDelta );
             }
 
             postProcessNewData();
@@ -88,7 +104,7 @@ bool Jams::load( const config::IPathProvider& pathProvider )
         }
     }
 
-    m_cacheFileState = "No jam cache found";
+    m_cacheFileState = "Not found";
     return false;
 }
 
@@ -115,7 +131,7 @@ bool Jams::save( const config::IPathProvider& pathProvider )
         serialize( archive );
 
         {
-            m_cacheFileState = fmt::format( "Jam cache synchronised" );
+            m_cacheFileState = fmt::format( "Synchronised" );
         }
 
         return true;
@@ -131,12 +147,11 @@ bool Jams::save( const config::IPathProvider& pathProvider )
 // ---------------------------------------------------------------------------------------------------------------------
 void Jams::asyncCacheRebuild(
     const endlesss::api::NetConfiguration& ncfg,
-    const bool syncCollectibles,
-    const bool syncRiffCounts,
+    const config::endlesss::SyncOptions& syncOptions,
     tf::Taskflow& taskFlow,
     const AsyncCallback& asyncCallback )
 {
-    taskFlow.emplace( [&, syncCollectibles, syncRiffCounts, asyncCallback]()
+    taskFlow.emplace( [&, syncOptions, asyncCallback]()
     {
         static constexpr std::array< char, 4> busyAscii = { '\\', '|', '/', '-' };
         int32_t busyCounter = 0;
@@ -159,7 +174,7 @@ void Jams::asyncCacheRebuild(
             return;
         }
 
-        if ( syncCollectibles )
+        if ( syncOptions.sync_collectibles )
         {
             // fetch all known pages of collectibles
             std::vector< api::CurrentCollectibleJams::Data > collectedCollectibles;
@@ -197,11 +212,11 @@ void Jams::asyncCacheRebuild(
                     cjam.members  = cdata.members;
                     cjam.rifftime = cdata.rifff.created;
 
-                    if ( syncRiffCounts )
-                    {
-                        asyncCallback( AsyncFetchState::Working, fmt::format( FMTX( "Analysing Collectibles ({})" ), busyAscii[busyCounter] ) );
-                        busyCounter = (busyCounter + 1) % 4;
+                    asyncCallback( AsyncFetchState::Working, fmt::format( FMTX( "Analysing Collectibles ({})" ), busyAscii[busyCounter] ) );
+                    busyCounter = (busyCounter + 1) % 4;
 
+                    if ( syncOptions.sync_state )
+                    {
                         api::JamRiffCount riffCount;
                         if ( riffCount.fetch( ncfg, endlesss::types::JamCouchID{ cjam.bandId } ) )
                         {
@@ -235,11 +250,11 @@ void Jams::asyncCacheRebuild(
                                                              jamProfile.bio,
                                                              dummyTimestamp++ );
 
-            if ( syncRiffCounts )
-            {
-                asyncCallback( AsyncFetchState::Working, fmt::format( FMTX( "Analysing Public ({})" ), busyAscii[busyCounter] ) );
-                busyCounter = (busyCounter + 1) % 4;
+            asyncCallback( AsyncFetchState::Working, fmt::format( FMTX( "Analysing Public ({})" ), busyAscii[busyCounter] ) );
+            busyCounter = (busyCounter + 1) % 4;
 
+            if ( syncOptions.sync_state )
+            {
                 api::JamRiffCount riffCount;
                 if ( riffCount.fetch( ncfg, endlesss::types::JamCouchID{ jdb } ) )
                 {
@@ -266,11 +281,11 @@ void Jams::asyncCacheRebuild(
                                                                      jamProfile.bio,
                                                                      jamTimestamp );
 
-            if ( syncRiffCounts )
-            {
-                asyncCallback( AsyncFetchState::Working, fmt::format( FMTX( "Analysing Subscribed ({})" ), busyAscii[busyCounter] ) );
-                busyCounter = (busyCounter + 1) % 4;
+            asyncCallback( AsyncFetchState::Working, fmt::format( FMTX( "Analysing Subscribed ({})" ), busyAscii[busyCounter] ) );
+            busyCounter = (busyCounter + 1) % 4;
 
+            if ( syncOptions.sync_state )
+            {
                 api::JamRiffCount riffCount;
                 if ( riffCount.fetch( ncfg, endlesss::types::JamCouchID{ jdb.id } ) )
                 {

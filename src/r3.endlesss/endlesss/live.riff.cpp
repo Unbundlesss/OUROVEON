@@ -152,7 +152,7 @@ void Riff::fetch( services::RiffFetchProvider& services )
                     });
                     stemAnalysisFlow.emplace( [&stemProcessing, loopStemRaw]()
                     {
-                        loopStemRaw->process( stemProcessing );
+                        loopStemRaw->analyse( stemProcessing );
                     });
                     stemsWithAsyncAnalysis.push_back( loopStemRaw );
                 }

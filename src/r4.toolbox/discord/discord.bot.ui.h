@@ -11,8 +11,7 @@
 
 #include "app/core.h"
 #include "base/utils.h"
-
-namespace config::discord { struct Connection; }
+#include "discord/config.h"
 
 namespace discord {
 
@@ -22,7 +21,7 @@ struct Bot;
 // little wrapper around running the discord bot interface via an imgui panel
 struct BotWithUI
 {
-    BotWithUI( app::ICoreServices& coreServices, const config::discord::Connection& configConnection );
+    BotWithUI( app::ICoreServices& coreServices );
     ~BotWithUI();
 
     void imgui( app::CoreGUI& coreGUI );
@@ -33,7 +32,7 @@ private:
     std::unique_ptr< Bot >                  m_discordBot;
 
     app::ICoreServices&                     m_services;
-    const config::discord::Connection&      m_config;
+    config::discord::ConnectionOptional     m_config;
 
     base::RollingAverage< 10 >              m_avgPacketSize;
 

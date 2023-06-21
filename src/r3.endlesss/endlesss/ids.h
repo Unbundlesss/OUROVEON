@@ -28,10 +28,11 @@ using JamCouchIDSet  = absl::flat_hash_set< JamCouchID >;
 using RiffCouchIDSet = absl::flat_hash_set< RiffCouchID >;
 using StemCouchIDSet = absl::flat_hash_set< StemCouchID >;
 
+using JamIDToNameMap = absl::flat_hash_map< types::JamCouchID, std::string >;
+
 } // namespace types
 } // namespace endlesss
 
 Gen_StringWrapperFormatter( endlesss::types::JamCouchID )
 Gen_StringWrapperFormatter( endlesss::types::RiffCouchID )
 Gen_StringWrapperFormatter( endlesss::types::StemCouchID )
-

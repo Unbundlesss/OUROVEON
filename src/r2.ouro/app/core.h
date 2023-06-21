@@ -20,6 +20,7 @@
 #include "endlesss/config.h"
 #include "endlesss/api.h"
 #include "endlesss/cache.jams.h"
+#include "endlesss/cache.shares.h"
 #include "endlesss/cache.stems.h"
 #include "endlesss/toolkit.exchange.h"
 #include "endlesss/toolkit.riff.export.h"
@@ -98,8 +99,12 @@ struct CoreStart
 struct ICoreServices
 {
     virtual ~ICoreServices() {}
-    virtual app::AudioModule& getAudioModule() = 0;
-    virtual const endlesss::toolkit::Exchange& getEndlesssExchange() = 0;
+
+    virtual app::AudioModule&                   getAudioModule() = 0;
+    virtual app::MidiModule&                    getMidiModule() = 0;
+    virtual const endlesss::toolkit::Exchange&  getEndlesssExchange() = 0;
+    virtual tf::Executor&                       getTaskExecutor() = 0;
+    virtual sol::state_view&                    getLuaState() = 0;
 };
 
 // exposure of custom render injection callbacks as interface
@@ -189,6 +194,10 @@ protected:
     // multithreading bro ever heard of it
     tf::Executor                            m_taskExecutor;
 
+    // application-wide lua state wrapper
+    sol::state                              m_lua;
+
+
     // master event bus
     base::EventBusPtr                       m_appEventBus;
     std::optional< base::EventBusClient >   m_appEventBusClient = std::nullopt;
@@ -196,6 +205,7 @@ protected:
 
     // the cached jam metadata - public names et al
     endlesss::cache::Jams                   m_jamLibrary;
+
 
     // standard state exchange data, filled when possible with the current playback state
     endlesss::toolkit::Exchange             m_endlesssExchange;
@@ -234,8 +244,11 @@ public:
     }
 
     // ICoreServices
-    virtual app::AudioModule& getAudioModule() override { return m_mdAudio; }
-    virtual const endlesss::toolkit::Exchange& getEndlesssExchange() override { return m_endlesssExchange; }
+    app::AudioModule&                   getAudioModule() override       { return m_mdAudio; }
+    app::MidiModule&                    getMidiModule() override        { return m_mdMidi; }
+    const endlesss::toolkit::Exchange&  getEndlesssExchange() override  { return m_endlesssExchange; }
+    tf::Executor&                       getTaskExecutor() override      { return m_taskExecutor; }
+    sol::state_view&                    getLuaState() override          { return m_lua; }
 };
 
 
@@ -370,6 +383,14 @@ protected:
         return ( viewportFlags & vFlag ) == vFlag;
     }
 
+    // register a developer menu entry by name, will toggle the bool pointer on menu selection
+    inline void addDeveloperMenuFlag( std::string menuName, bool* boolFlagAddress )
+    {
+        ABSL_ASSERT( boolFlagAddress != nullptr );
+        *boolFlagAddress = false;
+        m_developerMenuRegistry.emplace( std::move( menuName ), boolFlagAddress );
+    }
+
 
     config::Frontend        m_configFrontend;
     app::FrontendModule     m_mdFrontEnd;       // UI canvas management
@@ -409,12 +430,19 @@ protected:
 
 private:
 
+    using DeveloperFlagRegistry = absl::flat_hash_map< std::string, bool* >;
+
+
     void checkLayoutConfig();
 
+    DeveloperFlagRegistry   m_developerMenuRegistry;
+
 #if OURO_DEBUG
-    bool                    m_showImGuiDebugWindow    = false;
+    bool                    m_showImGuiDebugWindow      = false;
 #endif // OURO_DEBUG
-    bool                    m_resetLayoutInNextUpdate = false;
+    bool                    m_showPerformanceWindow     = false;
+    bool                    m_showCommandPaletteWindow  = false;
+    bool                    m_resetLayoutInNextUpdate   = false;
 };
 
 } // namespace app

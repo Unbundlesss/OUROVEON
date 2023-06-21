@@ -81,8 +81,8 @@ void VibeDriver::sync( const endlesss::toolkit::Exchange& exchangeData )
     for ( std::size_t stemI = 0; stemI < 8; stemI++ )
     {
         m_texData[currentBuffer][stemI] = ImGui::ColorConvertFloat4ToU32_BGRA_Flip( ImVec4(
-            exchangeData.m_stemPulse[stemI],
-            exchangeData.m_stemEnergy[stemI],
+            exchangeData.m_stemBeat[stemI],
+            exchangeData.m_stemWave[stemI],
             exchangeData.m_scope[stemI],
             exchangeData.m_stemGain[stemI]
         ) );

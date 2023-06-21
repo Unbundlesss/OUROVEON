@@ -132,8 +132,7 @@ struct Jams
     // fetch the users' latest jam membership state + list of active publics from the servers
     void asyncCacheRebuild(
         const endlesss::api::NetConfiguration& apiCfg,
-        const bool syncCollectibles,                        // go fetch the collectible jam data from (buggy) web endpoints?
-        const bool syncRiffCounts,                          // fetch riff counts for all private jams (may take a while)
+        const config::endlesss::SyncOptions& syncOptions,
         tf::Taskflow& taskFlow,
         const AsyncCallback& asyncCallback );
 

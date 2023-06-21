@@ -6284,7 +6284,7 @@ void ImGui::RenderWindowDecorations(ImGuiWindow* window, const ImRect& title_bar
         ImGuiDockNode* node = window->DockNode;
         if (window->DockIsActive && node->IsHiddenTabBar() && !node->IsNoTabBar())
         {
-            float unhide_sz_draw = ImFloor(g.FontSize * 0.70f);
+            float unhide_sz_draw = ImFloor(g.FontSize * 0.60f); // #HDD reduced slightly
             float unhide_sz_hit = ImFloor(g.FontSize * 0.55f);
             ImVec2 p = node->Pos;
             ImRect r(p, p + ImVec2(unhide_sz_hit, unhide_sz_hit));
@@ -6296,9 +6296,33 @@ void ImGui::RenderWindowDecorations(ImGuiWindow* window, const ImRect& title_bar
             else if (held && IsMouseDragging(0))
                 StartMouseMovingWindowOrNode(window, node, true);
 
+            // #HDD custom colours for multi-dimensional windows and a sliced triangle motif
+            const float extra_emboss_dist = unhide_sz_draw;
+
+            ImGuiCol_ c_active  = ImGuiCol_ButtonActive;
+            ImGuiCol_ c_hover   = ImGuiCol_ButtonHovered;
+            ImGuiCol_ c_default = ImGuiCol_Button;
+
+            const bool is_multidim = flags & ImGuiWindowFlags_Ouro_MultiDimensional;
+            if ( is_multidim )
+            {
+                unhide_sz_draw -= 4.0f;
+
+                c_active = ImGuiCol_TabActive;
+                c_hover = ImGuiCol_TabHovered;
+            }
+            // #HDD
+
             // FIXME-DOCK: Ideally we'd use ImGuiCol_TitleBgActive/ImGuiCol_TitleBg here, but neither is guaranteed to be visible enough at this sort of size..
-            ImU32 col = GetColorU32(((held && hovered) || (node->IsFocused && !hovered)) ? ImGuiCol_ButtonActive : hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button);
+            ImU32 col = GetColorU32(((held && hovered) || (node->IsFocused && !hovered)) ? c_active : hovered ? c_hover : c_default );
             window->DrawList->AddTriangleFilled(p, p + ImVec2(unhide_sz_draw, 0.0f), p + ImVec2(0.0f, unhide_sz_draw), col);
+
+            // #HDD
+            if ( is_multidim )
+            {
+                window->DrawList->AddLine( p + ImVec2( extra_emboss_dist, 0.0f ), p + ImVec2( 0.0f, extra_emboss_dist ), col, 2.0f );
+            }
+            // #HDD
         }
 
         // Scrollbars
@@ -10695,6 +10719,13 @@ bool ImGui::BeginTooltipEx(ImGuiTooltipFlags tooltip_flags, ImGuiWindowFlags ext
                 ImFormatString(window_name, IM_ARRAYSIZE(window_name), "##Tooltip_%02d", ++g.TooltipOverrideCount);
             }
     ImGuiWindowFlags flags = ImGuiWindowFlags_Tooltip | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking;
+
+    // #HDD #OUROVEON start | tooltip styles
+    PushStyleVar( ImGuiStyleVar_PopupBorderSize, 2.0f );
+    PushStyleColor( ImGuiCol_PopupBg, GetColorU32( ImGuiCol_HeaderHovered ) );
+    PushStyleColor( ImGuiCol_Border, IM_COL32( 0, 0, 0, 255 ) );
+    // #HDD #OUROVEON end
+
     Begin(window_name, NULL, flags | extra_window_flags);
     // 2023-03-09: Added bool return value to the API, but currently always returning true.
     // If this ever returns false we need to update BeginDragDropSource() accordingly.
@@ -10708,6 +10739,11 @@ void ImGui::EndTooltip()
 {
     IM_ASSERT(GetCurrentWindowRead()->Flags & ImGuiWindowFlags_Tooltip);   // Mismatched BeginTooltip()/EndTooltip() calls
     End();
+
+    // #HDD #OUROVEON start | tooltip styles
+    PopStyleColor( 2 );
+    PopStyleVar();
+    // #HDD #OUROVEON end
 }
 
 void ImGui::SetTooltipV(const char* fmt, va_list args)

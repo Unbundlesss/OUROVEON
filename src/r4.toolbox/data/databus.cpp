@@ -193,9 +193,9 @@ void DataBus::imgui()
                 ImGui::Dummy( ImVec2( (tableCellWidth * 0.5f) - 30.0f, 0.0f ) ); ImGui::SameLine( 0, 0 );
 
                 if ( m_busProviders[bus] == nullptr )
-                    ImGui::KnobFloat( "##knob", 30.0f, &m_busConfigs[bus].m_value, 0.0f, 1.0f, 100.0f );
+                    ImGui::KnobFloat( "##knob", 30.0f, &m_busConfigs[bus].m_value, 0.0f, 1.0f, 100.0f, 0.0f );
                 else
-                    ImGui::KnobFloat( "##knob", 30.0f, &m_busOutputs[bus], 0.0f, 1.0f, -1.0f );
+                    ImGui::KnobFloat( "##knob", 30.0f, &m_busOutputs[bus], 0.0f, 1.0f, -1.0f, 0.0f );
 
                 ImGui::RadioButton( m_busNames[bus], &m_busEditIndex, bus );
                 ImGui::PopID();

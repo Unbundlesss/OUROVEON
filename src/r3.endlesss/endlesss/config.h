@@ -15,6 +15,21 @@ namespace config {
 namespace endlesss {
 
 // ---------------------------------------------------------------------------------------------------------------------
+struct SyncOptions
+{
+    bool            sync_collectibles = false;  // go fetch the collectible jam data from (buggy) web endpoints?
+    bool            sync_state        = true;   // fetch riff counts for all private jams (may take a while)
+
+    template<class Archive>
+    void serialize( Archive& archive )
+    {
+        archive( CEREAL_NVP( sync_collectibles )
+               , CEREAL_NVP( sync_state )
+        );
+    }
+};
+
+// ---------------------------------------------------------------------------------------------------------------------
 // extraction of the default web login response, to gather login tokens
 OURO_CONFIG( Auth )
 {
@@ -28,6 +43,7 @@ OURO_CONFIG( Auth )
 
     uint64_t        expires = 0;
 
+    SyncOptions     sync_options;
 
     template<class Archive>
     void serialize( Archive& archive )
@@ -36,6 +52,7 @@ OURO_CONFIG( Auth )
                , CEREAL_NVP( password )
                , CEREAL_NVP( user_id )
                , CEREAL_NVP( expires )
+               , CEREAL_OPTIONAL_NVP( sync_options )
         );
     }
 };
@@ -193,6 +210,22 @@ OURO_CONFIG( CollectibleJamManifest )
     }
 };
 
+// a version of the collectible manifest that ships with the build
+struct CollectibleJamManifestSnapshot
+{
+    // data routing
+    static constexpr auto StoragePath       = IPathProvider::PathFor::SharedData;
+    static constexpr auto StorageFilename   = "endlesss.collectibles-snapshot.json";
+
+    std::vector< CollectibleJamManifest::Jam >  jams;
+
+    template<class Archive>
+    void serialize( Archive& archive )
+    {
+        archive( CEREAL_NVP( jams )
+        );
+    }
+};
 
 
 

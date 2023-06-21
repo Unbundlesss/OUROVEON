@@ -949,6 +949,9 @@ IMPLOT_API void TagY(double y, const ImVec4& col, bool round = false);
 IMPLOT_API void TagY(double y, const ImVec4& col, const char* fmt, ...)           IM_FMTARGS(3);
 IMPLOT_API void TagYV(double y, const ImVec4& col, const char* fmt, va_list args) IM_FMTLIST(3);
 
+// #HDD OUROVEON
+IMPLOT_API void OverlayLineX(  const float value, const ImVec4& col = IMPLOT_AUTO_COL, float thickness = 1 );
+
 //-----------------------------------------------------------------------------
 // [SECTION] Plot Utils
 //-----------------------------------------------------------------------------

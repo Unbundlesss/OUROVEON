@@ -10,6 +10,7 @@
 #pragma once
 
 #include "dsp/fft.util.h"
+#include "dsp/octave.h"
 #include "config/spectrum.h"
 
 #include <q/synth/hann_gen.hpp>
@@ -51,7 +52,7 @@ struct Scope8
 
 private:
 
-    using CountPerBucket = std::array< uint32_t, FrequencyBucketCount >;
+    using FFTOctaves     = dsp::FFTOctaveBuckets< 8 >;
     using ResultBuffers  = std::array< Result, 2 >;
     using ResultIndex    = std::atomic< std::size_t >;
     using HannGen        = cycfi::q::hann_gen;
@@ -71,13 +72,12 @@ private:
     complexf*           m_outputL           = nullptr;  // FFT output stages
     complexf*           m_outputR           = nullptr;
 
-    CountPerBucket      m_countPerBucket;               // how many entries from the FFT block are funneled into each frequency bucket
-    uint8_t*            m_bucketIndices     = nullptr;  // per entry in the FFT block, which frequency bucket should it
-                                                        // be shunted into; precalculated during init
 
     // double-buffered outputs to help avoid other bits of the tool fetching buffers while they are being modified
     ResultIndex         m_outputBucketsIndex;
     ResultBuffers       m_outputBuckets;
+
+    FFTOctaves          m_octaves;
 
     HannGen             m_hannGenerator;
 };

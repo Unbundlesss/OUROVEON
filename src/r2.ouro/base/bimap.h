@@ -4,8 +4,6 @@
 //  |_______|_______|___|__|_______|\_____/|_______|_______|__|____|
 //  ishani.org 2022              e.t.c.                  MIT License
 //
-//  event bus is a simple, multithread-friendly way for app systems to exchange generic messages
-//
 
 #pragma once
 
