@@ -116,7 +116,7 @@ inline ImVec4 GetWarningTextColour() { return ImVec4( 0.981f, 0.874f, 0.378f, 0.
 inline ImVec4 GetErrorTextColour() { return ImVec4(0.981f, 0.074f, 0.178f, 0.985f); }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void CompactTooltip( const std::string_view& tip );
+void CompactTooltip( const std::string_view tip );
 
 // ---------------------------------------------------------------------------------------------------------------------
 bool KnobFloat(
@@ -338,5 +338,34 @@ bool ValueArrayComboBox(
 
     return changed;
 }
+
+
+namespace Scoped {
+
+// ImGui::Scoped::Disabled sd( <condition> )
+// if <condition>, disable all defined controls in the following scope; if <condition> is false, leave them enabled
+struct Disabled
+{
+    Disabled() = delete;
+    Disabled( const bool bIsDisabled = true );
+    ~Disabled();
+
+private:
+    bool m_isDisabled;
+};
+
+// ImGui::Scoped::Enabled sd( <condition> )
+// if <condition>, enable all defined controls in the following scope; if <condition> is false, disable them
+struct Enabled
+{
+    Enabled() = delete;
+    Enabled( const bool bIsEnabled = true );
+    ~Enabled();
+
+private:
+    bool m_isEnabled;
+};
+
+} // namespace Scoped
 
 } // namespace ImGui

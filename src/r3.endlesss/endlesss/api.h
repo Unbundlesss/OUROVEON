@@ -9,6 +9,8 @@
 
 #pragma once
 
+#include "base/construction.h"
+
 #include "net/uriparse.h"
 
 #include "endlesss/config.h"
@@ -20,6 +22,8 @@ namespace api {
 // binding of config data into the state required to make API calls to various bits of Endlesss backend
 struct NetConfiguration
 {
+    DECLARE_NO_COPY( NetConfiguration );
+
     NetConfiguration() = delete;
 
     // initialise without Endlesss auth for a network layer that can't talk to Couch, etc (but can grab stuff from CDN)
@@ -68,7 +72,8 @@ enum class UserAgent
 {
     ClientService,
     Couchbase,
-    WebAPI
+    WebWithoutAuth,         // plain external web APIs without any credentials
+    WebWithAuth,            // as above but with the user authentication included
 };
 
 
@@ -88,12 +93,12 @@ inline static bool deserializeJson( const NetConfiguration& ncfg, const httplib:
 {
     if ( res == nullptr )
     {
-        blog::error::api( "HTTP | connection failure\n" );
+        blog::error::api( "HTTP | connection failure | <context> {}\n", functionContext.c_str() );
         return false;
     }
     if ( res->status != 200 )
     {
-        blog::error::api( "HTTP | request status {} | {}\n", res->status, res->body );
+        blog::error::api( "HTTP | request status {} | {} | <context> {}\n", res->status, res->body, functionContext.c_str() );
         return false;
     }
 
@@ -104,6 +109,16 @@ inline static bool deserializeJson( const NetConfiguration& ncfg, const httplib:
     // writing out "length" keys as strings rather than numbers :O *shakes fist*
     //
     bodyText = std::regex_replace( bodyText, ncfg.getDataFixRegex_lengthTypeMismatch(), "\"length\":$1" );
+
+#if 0 // very verbose data capture of every request
+    const auto exportFilename = ncfg.getVerboseCaptureFilename( "verbose_debug" );
+    {
+        FILE* fExport = fopen( exportFilename.c_str(), "wt" );
+        fprintf( fExport, "%s\n\n", functionContext.c_str() );
+        fprintf( fExport, "%s\n", bodyText.c_str() );
+        fclose( fExport );
+    }
+#endif 
 
     try
     {
@@ -733,24 +748,31 @@ struct SharedRiffsByUser
     struct Data
     {
         std::string             doc_id;
+        std::string             band;
         uint64_t                action_timestamp;
         std::string             title;
+        std::vector< std::string >  
+                                creators;
         Riff                    rifff;
         std::vector< ResultStemDocument >
                                 loops;
         std::string             image_url;
         bool                    image;
+        bool                    is_private;
 
         template<class Archive>
         inline void serialize( Archive& archive )
         {
             archive( CEREAL_NVP( doc_id )
+                   , CEREAL_OPTIONAL_NVP( band )
                    , CEREAL_NVP( action_timestamp )
                    , CEREAL_NVP( title )
+                   , CEREAL_OPTIONAL_NVP( creators )
                    , CEREAL_NVP( rifff )
                    , CEREAL_NVP( loops )
-                   , CEREAL_NVP( image_url )
+                   , CEREAL_OPTIONAL_NVP( image_url )
                    , CEREAL_NVP( image )
+                   , cereal::make_nvp( "private", is_private )
             );
         }
     };

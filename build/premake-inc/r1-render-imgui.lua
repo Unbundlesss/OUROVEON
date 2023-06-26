@@ -4,6 +4,10 @@ LibRoot.Imgui = SrcDir() .. "r1.render/imgui"
 -- ==============================================================================
 ModuleRefInclude["imgui"] = function()
 
+    defines
+    {
+        "IMGUI_USE_WCHAR32"
+    }
     includedirs
     {
         LibRoot.Imgui .. "/",

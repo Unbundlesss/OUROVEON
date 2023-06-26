@@ -7,7 +7,7 @@
 //  
 //
 
-#define OURO_FRAMEWORK_VERSION    "0.7.4"
+#define OURO_FRAMEWORK_VERSION    "0.7.5"
 #define OURO_FRAMEWORK_CREDIT     "ishani.org 2023"
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -150,7 +150,7 @@ namespace blog {
 namespace detail {
 
     template < const fmt::color _fg1, const fmt::color _fg2, typename S, typename... Args, fmt::FMT_ENABLE_IF( fmt::detail::is_string<S>::value )>
-    void _printer( const std::string_view& prefix, const S& format_str, const Args&... args ) noexcept
+    void _printer( const std::string_view prefix, const S& format_str, const Args&... args ) noexcept
     {
         const auto& vargs = fmt::make_format_args( args... );
 
@@ -304,6 +304,10 @@ namespace mcc = moodycamel;
 // lua via sol
 #define SOL_ALL_SAFETIES_ON     1
 #include <sol/sol.hpp>
+
+// htrie
+#include <tsl/htrie_set.h>
+
 
 
 // https://keisan.casio.com/calculator

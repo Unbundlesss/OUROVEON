@@ -132,9 +132,10 @@ enum FontSlots
 {
     FsFixed_EN,
     FsFixed_JP,
+    FsFixed_KR,
     FsFontAwesome,
     FsFontAwesomeBrands,
-    FsFontAudio,
+    FsFontEmoji,
     FsTitle,
     FsMedium,
     FsCount
@@ -154,9 +155,10 @@ absl::Status Frontend::create( const app::Core* appCore )
     {
         fontFilesSlots[ FsFixed_EN ]            = fontLoadpath / "FiraCode-Regular.ttf";
         fontFilesSlots[ FsFixed_JP ]            = fontLoadpath / "jp" / "migu-1m-regular.ttf";
+        fontFilesSlots[ FsFixed_KR ]            = fontLoadpath / "kr" / "D2Coding-subset.ttf";
         fontFilesSlots[ FsFontAwesome ]         = fontLoadpath / "icons" / FONT_ICON_FILE_NAME_FAS;
         fontFilesSlots[ FsFontAwesomeBrands ]   = fontLoadpath / "icons" / FONT_ICON_FILE_NAME_FAB;
-        fontFilesSlots[ FsFontAudio ]           = fontLoadpath / "audio" / "fontaudio.ttf";
+        fontFilesSlots[ FsFontEmoji ]           = fontLoadpath / "emoji" / "NotoEmoji-B&W.ttf";
         fontFilesSlots[ FsTitle ]               = fontLoadpath / "Warheed.otf";
         fontFilesSlots[ FsMedium ]              = fontLoadpath / "Oswald-Light.ttf";
     }
@@ -283,6 +285,8 @@ absl::Status Frontend::create( const app::Core* appCore )
     }
 
     {
+        spacetime::ScopedTimer imguiTiming( "ImGui startup" );
+
         blog::core( "initialising ImGui {}", IMGUI_VERSION );
 
         IMGUI_CHECKVERSION();
@@ -390,7 +394,52 @@ absl::Status Frontend::create( const app::Core* appCore )
                     fontRangeJP );
             }
 
-            // embed FontAwesome glyphs into default font so we can use them without switching
+            // embed KR font choice
+            {
+                ImFontConfig iconConfigKR;
+                iconConfigKR.RasterizerMultiply = 1.05f;
+                iconConfigKR.MergeMode          = true;
+                iconConfigKR.PixelSnapH         = true;
+
+                static constexpr ImWchar fontRangeKR[] =
+                {
+                    // courtesy ChatGPT
+                    0xAC00, 0xD7A3, // Hangul syllabary
+                    0x1100, 0x1FF2, // Hangul Jamo
+                    0,
+                };
+
+                io.Fonts->AddFontFromFileTTF(
+                    FONT_AT( FsFixed_KR ),
+                    18.0f,
+                    &iconConfigKR,
+                    fontRangeKR );
+            }
+
+            // embed emoji
+            {
+                ImFontConfig iconConfigEm;
+                iconConfigEm.RasterizerMultiply = 1.1f;
+                iconConfigEm.MergeMode          = true;
+                iconConfigEm.PixelSnapH         = true;
+
+                static constexpr ImWchar fontRangeEm[] =
+                {
+                    // a selection of common/popular emoji, not complete coverage
+                    0x1F601, 0x1F64F,
+                    0x1F300, 0x1F550,
+                    0x1F910, 0x1F9FF,
+                    0,
+                };
+
+                io.Fonts->AddFontFromFileTTF(
+                    FONT_AT( FsFontEmoji ),
+                    18.0f,
+                    &iconConfigEm,
+                    fontRangeEm );
+            }
+
+            // embed FontAwesome glyphs
             {
                 ImFontConfig iconConfigFA;
                 iconConfigFA.MergeMode          = true;

@@ -42,12 +42,15 @@ struct Delta
 // https://stackoverflow.com/questions/34916758/human-readable-duration-between-two-unix-timestamps
 Delta calculateDelta( InSeconds t1, InSeconds t0 );
 
+inline std::chrono::seconds getUnixTimeNow()
+{
+    return std::chrono::seconds{ std::time( nullptr ) };
+}
+
 inline Delta calculateDeltaFromNow( InSeconds t0 )
 {
-    return spacetime::calculateDelta(
-        spacetime::InSeconds{ std::chrono::seconds{ std::time( nullptr ) } },
-        t0 );
-}
+    return spacetime::calculateDelta( InSeconds{ getUnixTimeNow() }, t0 );
+} 
 
 
 // ---------------------------------------------------------------------------------------------------------------------

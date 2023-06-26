@@ -1019,18 +1019,19 @@ bool ImGui::ScrollbarEx(const ImRect& bb_frame, ImGuiID id, ImGuiAxis axis, ImS6
     return held;
 }
 
-void ImGui::Image(ImTextureID user_texture_id, const ImVec2& size, const ImVec2& uv0, const ImVec2& uv1, const ImVec4& tint_col, const ImVec4& border_col)
+// #HDD added bool return if the control got clipped out early
+bool ImGui::Image(ImTextureID user_texture_id, const ImVec2& size, const ImVec2& uv0, const ImVec2& uv1, const ImVec4& tint_col, const ImVec4& border_col)
 {
     ImGuiWindow* window = GetCurrentWindow();
     if (window->SkipItems)
-        return;
+        return false;
 
     ImRect bb(window->DC.CursorPos, window->DC.CursorPos + size);
     if (border_col.w > 0.0f)
         bb.Max += ImVec2(2, 2);
     ItemSize(bb);
     if (!ItemAdd(bb, 0))
-        return;
+        return false;
 
     if (border_col.w > 0.0f)
     {
@@ -1041,6 +1042,8 @@ void ImGui::Image(ImTextureID user_texture_id, const ImVec2& size, const ImVec2&
     {
         window->DrawList->AddImage(user_texture_id, bb.Min, bb.Max, uv0, uv1, GetColorU32(tint_col));
     }
+
+    return true;
 }
 
 // ImageButton() is flawed as 'id' is always derived from 'texture_id' (see #2464 #1390)

@@ -10,6 +10,8 @@
 #pragma once
 
 #include "config/base.h"
+#include "endlesss/ids.h"
+#include "spacetime/chronicle.h"
 
 namespace config {
 namespace endlesss {
@@ -56,6 +58,7 @@ OURO_CONFIG( Auth )
         );
     }
 };
+
 
 // ---------------------------------------------------------------------------------------------------------------------
 // config required for all the remote calls to pull data from endlesss backend
@@ -114,6 +117,7 @@ OURO_CONFIG( rAPI )
         );
     }
 };
+
 
 // ---------------------------------------------------------------------------------------------------------------------
 // a captured bank of public jam metadata we siphon via a lengthy automated offline process
@@ -228,7 +232,6 @@ struct CollectibleJamManifestSnapshot
 };
 
 
-
 // ---------------------------------------------------------------------------------------------------------------------
 // detailed data capture from public jams regarding user involvement
 OURO_CONFIG( PopulationPublics )
@@ -269,6 +272,7 @@ OURO_CONFIG( PopulationPublics )
     }
 };
 
+
 // ---------------------------------------------------------------------------------------------------------------------
 // list of all the users we know about
 OURO_CONFIG( PopulationGlobalUsers )
@@ -286,9 +290,51 @@ OURO_CONFIG( PopulationGlobalUsers )
     }
 };
 
-} // namespace endlesss
+
+// ---------------------------------------------------------------------------------------------------------------------
+OURO_CONFIG( SharedRiffsCache )
+{
+    // data routing
+    static constexpr auto StoragePath       = IPathProvider::PathFor::SharedConfig;
+    static constexpr auto StorageFilename   = "endlesss.shared-riffs.json";
+
+    using RiffID = ::endlesss::types::RiffCouchID;
+    using JamID  = ::endlesss::types::JamCouchID;
+
+    uint32_t                            m_version = 1;
+    std::string                         m_username;
+    std::size_t                         m_count = 0;        // number of retrieved shares
+    uint64_t                            m_lastSyncTime = 0;
+
+    // flat storage of m_count shared riff details
+    std::vector< std::string >          m_names;
+    std::vector< std::string >          m_images;
+    std::vector< RiffID >               m_riffIDs;
+    std::vector< JamID >                m_jamIDs;
+    std::vector< uint64_t >             m_timestamps;
+    std::vector< bool >                 m_private;
+
+    template<class Archive>
+    inline void serialize( Archive& archive )
+    {
+        archive( CEREAL_NVP( m_version )
+               , CEREAL_NVP( m_username )
+               , CEREAL_NVP( m_count )
+               , CEREAL_NVP( m_lastSyncTime )
+               , CEREAL_NVP( m_names )
+               , CEREAL_NVP( m_images )
+               , CEREAL_NVP( m_riffIDs )
+               , CEREAL_NVP( m_jamIDs )
+               , CEREAL_NVP( m_timestamps )
+               , CEREAL_NVP( m_private )
+        );
+    }
+};
+
+
 } // namespace config
-    
+} // namespace endlesss
+
 
 namespace cereal
 {

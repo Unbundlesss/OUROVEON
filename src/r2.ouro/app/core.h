@@ -24,6 +24,8 @@
 #include "endlesss/cache.stems.h"
 #include "endlesss/toolkit.exchange.h"
 #include "endlesss/toolkit.riff.export.h"
+#include "endlesss/toolkit.population.h"
+
 
 // ---------------------------------------------------------------------------------------------------------------------
 // on Windows, declare and enable use of the global memory IPC object for pushing Exchange data out to external apps
@@ -48,7 +50,7 @@ concept ReturnsAbslStatus = requires (T t) {
 };
 
 template< ReturnsAbslStatus _ccall >
-bool checkedCoreCall( const std::string_view& context, const _ccall& cb )
+bool checkedCoreCall( const std::string_view context, const _ccall& cb )
 {
     if ( const auto callStatus = cb(); !callStatus.ok() )
     {
@@ -98,13 +100,17 @@ struct CoreStart
 // some access to Core app instances without having to hand over everything
 struct ICoreServices
 {
+    using NetConfigurationOptional = std::optional< endlesss::api::NetConfiguration >;
+
     virtual ~ICoreServices() {}
 
-    virtual app::AudioModule&                   getAudioModule() = 0;
-    virtual app::MidiModule&                    getMidiModule() = 0;
-    virtual const endlesss::toolkit::Exchange&  getEndlesssExchange() = 0;
-    virtual tf::Executor&                       getTaskExecutor() = 0;
-    virtual sol::state_view&                    getLuaState() = 0;
+    virtual app::AudioModule&                       getAudioModule() = 0;
+    virtual app::MidiModule&                        getMidiModule() = 0;
+    virtual const endlesss::toolkit::Exchange&      getEndlesssExchange() = 0;
+    virtual const NetConfigurationOptional&         getEndlesssNetConfig() = 0;
+    virtual endlesss::toolkit::PopulationQuery&     getEndlesssPopulation() = 0;
+    virtual tf::Executor&                           getTaskExecutor() = 0;
+    virtual sol::state_view&                        getLuaState() = 0;
 };
 
 // exposure of custom render injection callbacks as interface
@@ -188,8 +194,7 @@ protected:
 
     // mash of Endlesss access configuration and authentication credentials, required for all our API calls
     // <optional> as this may require a login process during boot sequence and user may choose to work offline
-    std::optional< endlesss::api::NetConfiguration >
-                                            m_apiNetworkConfiguration = std::nullopt;
+    NetConfigurationOptional                m_apiNetworkConfiguration = std::nullopt;
 
     // multithreading bro ever heard of it
     tf::Executor                            m_taskExecutor;
@@ -205,6 +210,9 @@ protected:
 
     // the cached jam metadata - public names et al
     endlesss::cache::Jams                   m_jamLibrary;
+
+
+    endlesss::toolkit::PopulationQuery      m_endlesssPopulation;
 
 
     // standard state exchange data, filled when possible with the current playback state
@@ -244,11 +252,13 @@ public:
     }
 
     // ICoreServices
-    app::AudioModule&                   getAudioModule() override       { return m_mdAudio; }
-    app::MidiModule&                    getMidiModule() override        { return m_mdMidi; }
-    const endlesss::toolkit::Exchange&  getEndlesssExchange() override  { return m_endlesssExchange; }
-    tf::Executor&                       getTaskExecutor() override      { return m_taskExecutor; }
-    sol::state_view&                    getLuaState() override          { return m_lua; }
+    app::AudioModule&                       getAudioModule() override           { return m_mdAudio; }
+    app::MidiModule&                        getMidiModule() override            { return m_mdMidi; }
+    const endlesss::toolkit::Exchange&      getEndlesssExchange() override      { return m_endlesssExchange; }
+    const NetConfigurationOptional&         getEndlesssNetConfig() override     { return m_apiNetworkConfiguration; }
+    endlesss::toolkit::PopulationQuery&     getEndlesssPopulation() override    { return m_endlesssPopulation;}
+    tf::Executor&                           getTaskExecutor() override          { return m_taskExecutor; }
+    sol::state_view&                        getLuaState() override              { return m_lua; }
 };
 
 

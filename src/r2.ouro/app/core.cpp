@@ -359,6 +359,7 @@ int Core::Run()
     // load the jam cache data (or try to)
     m_jamLibrary.load( *this );
 
+    m_endlesssPopulation.buildLookupAsync( *this );
 
 
 #if OURO_PLATFORM_WIN

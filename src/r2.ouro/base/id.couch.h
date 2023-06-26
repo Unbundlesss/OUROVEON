@@ -20,7 +20,7 @@ struct StringWrapper
 {
     explicit inline StringWrapper( const char* rhs ) : _value( rhs ) {}
     explicit inline StringWrapper( std::string rhs ) : _value( std::move(rhs) ) {}
-    explicit inline StringWrapper( const std::string_view& rhs ) : _value( rhs ) {}
+    explicit inline StringWrapper( const std::string_view rhs ) : _value( rhs ) {}
     inline StringWrapper() : _value() {}
 
     ouro_nodiscard constexpr const std::string& value() const { return _value; }

@@ -546,7 +546,7 @@ int OuroApp::EntrypointGUI()
                             // for all other endlesss network queries; create one if required
                             if ( !m_apiNetworkConfiguration.has_value() )
                             {
-                                m_apiNetworkConfiguration = endlesss::api::NetConfiguration( m_configEndlesssAPI, endlesssAuth, m_sharedDataPath );
+                                m_apiNetworkConfiguration.emplace( m_configEndlesssAPI, endlesssAuth, m_sharedDataPath );
                             }
 
                             // stop closing the boot window if we're running background threads or we have no jam data
@@ -839,7 +839,7 @@ int OuroApp::EntrypointGUI()
     // stuff (so we can still pull stems from the CDN on demand, for example)
     if ( !m_apiNetworkConfiguration.has_value() )
     {
-        m_apiNetworkConfiguration = endlesss::api::NetConfiguration( m_configEndlesssAPI, m_sharedDataPath );
+        m_apiNetworkConfiguration.emplace( m_configEndlesssAPI, m_sharedDataPath );
     }
 
     // save any config data blocks

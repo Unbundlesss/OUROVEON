@@ -18,7 +18,7 @@ namespace colour {
 struct Preset
 {
     constexpr Preset() = delete;
-    constexpr Preset( const std::string_view& light, const std::string_view& neutral, const std::string_view& dark )
+    constexpr Preset( const std::string_view light, const std::string_view& neutral, const std::string_view& dark )
         : m_light( fromHex( light ) )
         , m_neutral( fromHex( neutral ) )
         , m_dark( fromHex( dark ) )
@@ -64,7 +64,7 @@ private:
         return (fromHexDigit( a ) << 4) + fromHexDigit( b );
     }
 
-    ouro_nodiscard static constexpr ImVec4 fromHex( const std::string_view& hex )
+    ouro_nodiscard static constexpr ImVec4 fromHex( const std::string_view hex )
     {
         ABSL_ASSERT( hex.size() == 6 );
         return ImVec4(

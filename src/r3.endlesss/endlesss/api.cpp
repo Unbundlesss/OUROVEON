@@ -72,12 +72,19 @@ std::string NetConfiguration::getVerboseCaptureFilename( const char* context ) c
 // ---------------------------------------------------------------------------------------------------------------------
 std::unique_ptr<httplib::SSLClient> createEndlesssHttpClient( const NetConfiguration& ncfg, const UserAgent ua )
 {
+    enum class AuthType
+    {
+        None,
+        Basic,
+        Bearer
+    };
+
     using namespace std::literals::chrono_literals;
 
     const std::string loadBalance = ncfg.generateRandomLoadBalancerCookie();
 
     std::string requestDomain = cEndlesssDataDomain;
-    bool addAuthentication = true;
+    AuthType addAuthentication = AuthType::Basic;
     const char* userAgent = "";
     switch ( ua )
     {
@@ -87,11 +94,16 @@ std::unique_ptr<httplib::SSLClient> createEndlesssHttpClient( const NetConfigura
         case UserAgent::Couchbase:      userAgent = ncfg.api().userAgentDb.c_str();
             break;
 
-        // the web api domain does not need our user creds
-        case UserAgent::WebAPI:
+        case UserAgent::WebWithoutAuth:
+            addAuthentication = AuthType::None;
             userAgent = ncfg.api().userAgentWeb.c_str();
             requestDomain = cEndlesssAPIDomain;
-            addAuthentication = false;
+            break;
+
+        case UserAgent::WebWithAuth:
+            addAuthentication = AuthType::Bearer;
+            userAgent = ncfg.api().userAgentWeb.c_str();
+            requestDomain = cEndlesssAPIDomain;
             break;
     }
 
@@ -104,10 +116,17 @@ std::unique_ptr<httplib::SSLClient> createEndlesssHttpClient( const NetConfigura
     dataClient->set_connection_timeout( 8s );
     dataClient->set_read_timeout( 8s );
 
-    if ( addAuthentication )
+    // most of the API calls expect Basic auth credentials
+    if ( addAuthentication == AuthType::Basic )
     {
         dataClient->set_basic_auth( ncfg.auth().token.c_str(), ncfg.auth().password.c_str() );
     }
+    // some of the web APIs can accept Bearer to access per-user private data (eg. private shared riffs)
+    else if ( addAuthentication == AuthType::Bearer )
+    {
+        dataClient->set_bearer_token_auth( fmt::format( FMTX("{}:{}"), ncfg.auth().token.c_str(), ncfg.auth().password.c_str() ) );
+    }
+
     dataClient->set_compress( true );
 
     if ( ncfg.api().debugVerboseNetLog )
@@ -277,7 +296,7 @@ bool CurrentCollectibleJams::fetch( const NetConfiguration& ncfg, int32_t pageNo
     // pageSize 4 matches what the web site currently uses
     const auto requestUrl = fmt::format( FMTX( "/marketplace/collectible-jams?pageSize=4&pageNo={}" ), pageNo );
 
-    auto client = createEndlesssHttpClient( ncfg, UserAgent::WebAPI );
+    auto client = createEndlesssHttpClient( ncfg, UserAgent::WebWithoutAuth );
 
     // this endpoint is slow and prone to failure. give it a second try if it fails immediately.
     auto res = client->Get( requestUrl);
@@ -306,7 +325,7 @@ bool SharedRiffsByUser::fetch( const NetConfiguration& ncfg, const std::string& 
 {
     const auto requestUrl = fmt::format( FMTX( "/api/v3/feed/shared_by/{}?size={}&from={}" ), userName, count, offset );
 
-    auto res = createEndlesssHttpClient( ncfg, UserAgent::WebAPI )->Get( requestUrl );
+    auto res = createEndlesssHttpClient( ncfg, UserAgent::WebWithAuth )->Get( requestUrl );
 
     return deserializeJson< SharedRiffsByUser >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, userName ) );
 }

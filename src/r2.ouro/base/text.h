@@ -36,7 +36,7 @@ inline void trim( std::string& str, const std::string& trimChars )
 } 
 
 // ---------------------------------------------------------------------------------------------------------------------
-inline void asciifyString( const std::string_view& source, std::string& dest, const char compressionChar = '\0' )
+inline void asciifyString( const std::string_view source, std::string& dest, const char compressionChar = '\0' )
 {
     dest.clear();
     dest.reserve( source.size() );

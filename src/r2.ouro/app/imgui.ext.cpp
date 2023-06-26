@@ -221,7 +221,7 @@ ImU32 GetPulseColour()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void CompactTooltip( const std::string_view& tip )
+void CompactTooltip( const std::string_view tip )
 {
     if ( ImGui::IsItemHovered( ImGuiHoveredFlags_DelayNormal ) )
     {
@@ -761,4 +761,47 @@ FloatTextRight::~FloatTextRight()
 }
 
 } // namespace Scoped
+
+
+namespace Scoped {
+
+Disabled::Disabled( const bool bIsDisabled /* = true */ )
+    : m_isDisabled( bIsDisabled )
+{
+    if ( m_isDisabled )
+    {
+        PushItemFlag( ImGuiItemFlags_Disabled, true );
+        PushStyleVar( ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.25f );
+    }
+}
+
+Disabled::~Disabled()
+{
+    if ( m_isDisabled )
+    {
+        PopItemFlag();
+        PopStyleVar();
+    }
+}
+
+Enabled::Enabled( const bool bIsEnabled /* = true */ )
+    : m_isEnabled( bIsEnabled )
+{
+    if ( !m_isEnabled )
+    {
+        PushItemFlag( ImGuiItemFlags_Disabled, true );
+        PushStyleVar( ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.25f );
+    }
+}
+Enabled::~Enabled()
+{
+    if ( !m_isEnabled )
+    {
+        PopItemFlag();
+        PopStyleVar();
+    }
+}
+
+} // namespace Scoped
+
 } // namespace ImGui

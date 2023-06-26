@@ -248,6 +248,7 @@ void BotWithUI::imgui( app::CoreGUI& coreGUI )
             }
         }
         // -------------------------------------------------------------------------------------------------------------
+        // unconnected state, offer configuration & connection
         else
         {
             if ( m_services.getAudioModule()->getSampleRate() != 48000 )
