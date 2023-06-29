@@ -8,6 +8,8 @@
 #include "pch.h"
 
 #include "mix/preview.h"
+
+#include "base/paging.h"
 #include "math/rng.h"
 
 #include "app/core.h"
@@ -25,26 +27,14 @@
 #include "endlesss/toolkit.riff.export.h"
 
 
-
-#define _PV_VIEW(_action)           \
+// ---------------------------------------------------------------------------------------------------------------------
+#define _PV_VIEW_STATES(_action)    \
       _action(Default)              \
       _action(Tuning)
-REFLECT_ENUM( PreviewView, uint32_t, _PV_VIEW );
 
-std::string generatePreviewViewTitle( const PreviewView::Enum _vwv )
-{
-#define _ACTIVE_ICON(_ty)             _vwv == PreviewView::_ty ? ICON_FC_FILLED_SQUARE : ICON_FC_HOLLOW_SQUARE,
-#define _ICON_PRINT(_ty)             "{}"
+DEFINE_PAGE_MANAGER( PreviewView, ICON_FA_WAVE_SQUARE " Playback Engine", "preview_mix_playback", _PV_VIEW_STATES );
 
-    return fmt::format( FMTX( ICON_FA_WAVE_SQUARE " Playback Engine [" _PV_VIEW( _ICON_PRINT ) "]###preview_mix_playback" ),
-        _PV_VIEW( _ACTIVE_ICON )
-        "" );
-
-#undef _ICON_PRINT
-#undef _ACTIVE_ICON
-}
-
-#undef _PV_VIEW
+#undef _PV_VIEW_STATES
 
 
 
@@ -621,22 +611,16 @@ ImVec4 GetTransitionColourVec4( const float lerpT )
 // ---------------------------------------------------------------------------------------------------------------------
 void Preview::imgui()
 {
-    static PreviewView::Enum previewView = PreviewView::Default;
-    const auto viewTitle = generatePreviewViewTitle( previewView );
+    static PreviewView previewView = PreviewView::Default;
 
-    if ( ImGui::Begin( viewTitle.c_str(), nullptr, ImGuiWindowFlags_Ouro_MultiDimensional ) )
+    if ( ImGui::Begin( previewView.generateTitle().c_str(), nullptr, ImGuiWindowFlags_Ouro_MultiDimensional) )
     {
-        if ( ImGui::IsWindowHovered( ImGuiHoveredFlags_RootAndChildWindows ) && 
-             ImGui::IsKeyPressedMap( ImGuiKey_Tab, false ) )
-        {
-            previewView = PreviewView::getNextWrapped( previewView );
-        }
+        previewView.checkForImGuiTabSwitch();
 
-        switch ( previewView )
-        {
-            case PreviewView::Default:  imguiDefault(); break;
-            case PreviewView::Tuning:   imguiTuning();  break;
-        }
+        if ( previewView == PreviewView::Default )
+            imguiDefault();
+        if ( previewView == PreviewView::Tuning )
+            imguiTuning();
     }
 
     ImGui::End();

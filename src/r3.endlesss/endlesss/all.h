@@ -22,6 +22,7 @@
 #include "endlesss/toolkit.jam.meta.h"
 #include "endlesss/toolkit.jam.sentinel.h"
 #include "endlesss/toolkit.population.h"
-#include "endlesss/toolkit.riff.pipeline.h"
 #include "endlesss/toolkit.riff.export.h"
+#include "endlesss/toolkit.riff.pipeline.h"
+#include "endlesss/toolkit.shares.h"
 #include "endlesss/toolkit.warehouse.h"

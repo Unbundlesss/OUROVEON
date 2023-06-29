@@ -7,13 +7,13 @@
 
 #include "pch.h"
 
-#include "ux/userbox.h"
+#include "ux/user.selector.h"
 #include "endlesss/toolkit.exchange.h"
 
 namespace ImGui {
 namespace ux {
 
-void UserBox::imgui( const endlesss::toolkit::PopulationQuery& population, float itemWidth )
+void UserSelector::imgui( const endlesss::toolkit::PopulationQuery& population, float itemWidth )
 {
     if ( itemWidth > 0 )
         ImGui::SetNextItemWidth( itemWidth );
@@ -55,16 +55,16 @@ void UserBox::imgui( const endlesss::toolkit::PopulationQuery& population, float
     }
 
     {
-        // configure the pop-up location and shape
-        ImGui::SetNextWindowPos( { ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y } );
-        ImGui::SetNextWindowSize( { ImGui::GetItemRectSize().x, 0 } );
-
         // has user typed anything?
         if ( !m_username.empty() )
         {
             // go see if we can offer name suggestions
             if ( population.prefixQuery( m_username, m_autocompletion ) )
             {
+                // configure the pop-up location and shape
+                ImGui::SetNextWindowPos( { ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y } );
+                ImGui::SetNextWindowSize( { ImGui::GetItemRectSize().x, 0 } );
+
                 if ( ImGui::BeginPopup( "##username_autocomplete", popupWindowFlags ) )
                 {
                     // loop the suggestion index

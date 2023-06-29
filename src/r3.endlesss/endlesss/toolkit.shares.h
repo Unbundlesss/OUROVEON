@@ -16,10 +16,10 @@ namespace endlesss {
 
 namespace api { struct NetConfiguration; }
 
-namespace cache {
+namespace toolkit {
 
 // ---------------------------------------------------------------------------------------------------------------------
-// a tool for downloading and processing the shared riffs data for any Endlesss user
+// a tool for asynchronously downloading and processing the shared riffs data for any Endlesss user
 //
 struct Shares
 {
@@ -28,20 +28,17 @@ struct Shares
 
     Shares();
 
-    // request a download of new shared riff data for the given Endlesss username;
+    // produce Tf graph to execute; requests a download of new shared riff data for the given Endlesss username;
     // pulls all the pages of data, crunches them down and calls completionFunc() with the result 
-    bool fetchAsync(
+    tf::Taskflow taskFetchLatest(
         const endlesss::api::NetConfiguration& apiCfg,
-        const std::string_view username,
-        tf::Executor& taskExecutor,
-        const std::function< void( StatusOrData ) > completionFunc );
+        std::string username,
+        std::function< void( StatusOrData ) > completionFunc );
 
 protected:
 
     std::regex          m_regexExtractBandName;
-
-    tf::Taskflow        m_taskFlow;
 };
 
-} // namespace cache
+} // namespace toolkit
 } // namespace endlesss

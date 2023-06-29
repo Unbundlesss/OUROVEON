@@ -17,14 +17,7 @@
 #include "config/performance.h"
 #include "config/frontend.h"
 
-#include "endlesss/config.h"
-#include "endlesss/api.h"
-#include "endlesss/cache.jams.h"
-#include "endlesss/cache.shares.h"
-#include "endlesss/cache.stems.h"
-#include "endlesss/toolkit.exchange.h"
-#include "endlesss/toolkit.riff.export.h"
-#include "endlesss/toolkit.population.h"
+#include "endlesss/all.h"
 
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -54,9 +47,7 @@ bool checkedCoreCall( const std::string_view context, const _ccall& cb )
 {
     if ( const auto callStatus = cb(); !callStatus.ok() )
     {
-        blog::error::core( FMTX( "{} failed; {}" ),
-            context,
-            callStatus.ToString() );
+        blog::error::core( FMTX( "{} failed; {}" ), context, callStatus.ToString() );
 
         return false;
     }
@@ -100,17 +91,15 @@ struct CoreStart
 // some access to Core app instances without having to hand over everything
 struct ICoreServices
 {
-    using NetConfigurationOptional = std::optional< endlesss::api::NetConfiguration >;
-
     virtual ~ICoreServices() {}
 
-    virtual app::AudioModule&                       getAudioModule() = 0;
-    virtual app::MidiModule&                        getMidiModule() = 0;
-    virtual const endlesss::toolkit::Exchange&      getEndlesssExchange() = 0;
-    virtual const NetConfigurationOptional&         getEndlesssNetConfig() = 0;
-    virtual endlesss::toolkit::PopulationQuery&     getEndlesssPopulation() = 0;
-    virtual tf::Executor&                           getTaskExecutor() = 0;
-    virtual sol::state_view&                        getLuaState() = 0;
+    virtual app::AudioModule&                           getAudioModule() = 0;
+    virtual app::MidiModule&                            getMidiModule() = 0;
+    virtual endlesss::api::NetConfiguration::Shared&    getNetworkConfiguration() = 0;
+    virtual const endlesss::toolkit::Exchange&          getEndlesssExchange() const = 0;
+    virtual const endlesss::toolkit::PopulationQuery&   getEndlesssPopulation() const = 0;
+    virtual tf::Executor&                               getTaskExecutor() = 0;
+    virtual sol::state_view&                            getLuaState() = 0;
 };
 
 // exposure of custom render injection callbacks as interface
@@ -193,8 +182,7 @@ protected:
                                                                             // an auth block to initialise NetConfiguration
 
     // mash of Endlesss access configuration and authentication credentials, required for all our API calls
-    // <optional> as this may require a login process during boot sequence and user may choose to work offline
-    NetConfigurationOptional                m_apiNetworkConfiguration = std::nullopt;
+    endlesss::api::NetConfiguration::Shared m_networkConfiguration;
 
     // multithreading bro ever heard of it
     tf::Executor                            m_taskExecutor;
@@ -232,7 +220,7 @@ protected:
 
 public:
 
-    inline const base::EventBusClient& getEventBusClient() const
+    inline base::EventBusClient getEventBusClient() const
     { 
         ABSL_ASSERT( m_appEventBusClient.has_value() );
         return m_appEventBusClient.value();
@@ -251,14 +239,15 @@ public:
         return { "" };
     }
 
+
     // ICoreServices
-    app::AudioModule&                       getAudioModule() override           { return m_mdAudio; }
-    app::MidiModule&                        getMidiModule() override            { return m_mdMidi; }
-    const endlesss::toolkit::Exchange&      getEndlesssExchange() override      { return m_endlesssExchange; }
-    const NetConfigurationOptional&         getEndlesssNetConfig() override     { return m_apiNetworkConfiguration; }
-    endlesss::toolkit::PopulationQuery&     getEndlesssPopulation() override    { return m_endlesssPopulation;}
-    tf::Executor&                           getTaskExecutor() override          { return m_taskExecutor; }
-    sol::state_view&                        getLuaState() override              { return m_lua; }
+    app::AudioModule&                           getAudioModule() override               { return m_mdAudio; }
+    app::MidiModule&                            getMidiModule() override                { return m_mdMidi; }
+    endlesss::api::NetConfiguration::Shared&    getNetworkConfiguration() override      { return m_networkConfiguration; }
+    const endlesss::toolkit::Exchange&          getEndlesssExchange() const override    { return m_endlesssExchange; }
+    const endlesss::toolkit::PopulationQuery&   getEndlesssPopulation() const override  { return m_endlesssPopulation;}
+    tf::Executor&                               getTaskExecutor() override              { return m_taskExecutor; }
+    sol::state_view&                            getLuaState() override                  { return m_lua; }
 };
 
 

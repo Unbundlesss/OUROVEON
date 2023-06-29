@@ -146,12 +146,12 @@ bool Jams::save( const config::IPathProvider& pathProvider )
 
 // ---------------------------------------------------------------------------------------------------------------------
 void Jams::asyncCacheRebuild(
-    const endlesss::api::NetConfiguration& ncfg,
+    const endlesss::api::NetConfiguration& netConfig,
     const config::endlesss::SyncOptions& syncOptions,
     tf::Taskflow& taskFlow,
     const AsyncCallback& asyncCallback )
 {
-    taskFlow.emplace( [&, syncOptions, asyncCallback]()
+    taskFlow.emplace( [this, &netConfig, syncOptions, asyncCallback]()
     {
         static constexpr std::array< char, 4> busyAscii = { '\\', '|', '/', '-' };
         int32_t busyCounter = 0;
@@ -159,7 +159,7 @@ void Jams::asyncCacheRebuild(
         asyncCallback( AsyncFetchState::Working, "Fetching subscribed jams ..." );
 
         api::SubscribedJams jamSubscribed;
-        if ( !jamSubscribed.fetch( ncfg, ncfg.auth().user_id ) )
+        if ( !jamSubscribed.fetch( netConfig, netConfig.auth().user_id ) )
         {
             asyncCallback( AsyncFetchState::Failed, "Failed to get subscribed jam data" );
             return;
@@ -168,7 +168,7 @@ void Jams::asyncCacheRebuild(
         asyncCallback( AsyncFetchState::Working, "Fetching current public jams ..." );
 
         api::CurrentJoinInJams jamJoinIn;
-        if ( !jamJoinIn.fetch( ncfg ) )
+        if ( !jamJoinIn.fetch( netConfig ) )
         {
             asyncCallback( AsyncFetchState::Failed, "Failed to get public jam data" );
             return;
@@ -184,7 +184,7 @@ void Jams::asyncCacheRebuild(
 
                 // if the fetch works, bolt the new list onto the existing pile
                 api::CurrentCollectibleJams collectibles;
-                bool fetchOk = collectibles.fetch( ncfg, page );
+                bool fetchOk = collectibles.fetch( netConfig, page );
                 if ( fetchOk && collectibles.ok && !collectibles.data.empty() )
                 {
                     collectedCollectibles.insert( collectedCollectibles.end(), collectibles.data.begin(), collectibles.data.end() );
@@ -218,7 +218,7 @@ void Jams::asyncCacheRebuild(
                     if ( syncOptions.sync_state )
                     {
                         api::JamRiffCount riffCount;
-                        if ( riffCount.fetch( ncfg, endlesss::types::JamCouchID{ cjam.bandId } ) )
+                        if ( riffCount.fetch( netConfig, endlesss::types::JamCouchID{ cjam.bandId } ) )
                         {
                             cjam.riffCount = riffCount.total_rows;
                         }
@@ -239,7 +239,7 @@ void Jams::asyncCacheRebuild(
         for ( const auto& jdb : jamJoinIn.band_ids )
         {
             api::JamProfile jamProfile;
-            if ( !jamProfile.fetch( ncfg, endlesss::types::JamCouchID{ jdb } ) )
+            if ( !jamProfile.fetch( netConfig, endlesss::types::JamCouchID{ jdb } ) )
             {
                 blog::error::cache( "jam profile failed on {}", jdb );
                 continue;
@@ -256,7 +256,7 @@ void Jams::asyncCacheRebuild(
             if ( syncOptions.sync_state )
             {
                 api::JamRiffCount riffCount;
-                if ( riffCount.fetch( ncfg, endlesss::types::JamCouchID{ jdb } ) )
+                if ( riffCount.fetch( netConfig, endlesss::types::JamCouchID{ jdb } ) )
                 {
                     newJamData.m_riffCount = riffCount.total_rows;
                 }
@@ -268,7 +268,7 @@ void Jams::asyncCacheRebuild(
         for ( const auto& jdb : jamSubscribed.rows )
         {
             api::JamProfile jamProfile;
-            if ( !jamProfile.fetch( ncfg, endlesss::types::JamCouchID{ jdb.id }  ) )
+            if ( !jamProfile.fetch( netConfig, endlesss::types::JamCouchID{ jdb.id }  ) )
             {
                 blog::error::cache( "jam profile failed on {}", jdb.id );
                 continue;
@@ -287,7 +287,7 @@ void Jams::asyncCacheRebuild(
             if ( syncOptions.sync_state )
             {
                 api::JamRiffCount riffCount;
-                if ( riffCount.fetch( ncfg, endlesss::types::JamCouchID{ jdb.id } ) )
+                if ( riffCount.fetch( netConfig, endlesss::types::JamCouchID{ jdb.id } ) )
                 {
                     newJamData.m_riffCount = riffCount.total_rows;
                 }

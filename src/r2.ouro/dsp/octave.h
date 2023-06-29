@@ -97,7 +97,7 @@ namespace dsp {
                 m_countPerBucket[bucket] = endSample - previousSample;
                 m_countPerBucketRecpF[bucket] = 1.0f / static_cast<float>( m_countPerBucket[bucket] );
 
-                blog::core( "bin {} |  {} Hz |  {} -> {}  ", octave, cycfi::q::as_float( OctaveBands[octave].m_high ), previousSample, endSample );
+                // blog::core( "bin {} |  {} Hz |  {} -> {}  ", octave, cycfi::q::as_float( OctaveBands[octave].m_high ), previousSample, endSample );
 
                 previousSample = endSample;
 

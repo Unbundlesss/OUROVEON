@@ -69,6 +69,23 @@ struct Pipeline
 
 private:
 
+    // resolution code called by defaultNetworkResolver() to produce the metadata for a 'standard' riff - one that
+    // exists in the general jam storage system
+    static bool resolveStandardRiff(
+        const endlesss::api::NetConfiguration& ncfg,
+        const endlesss::types::RiffIdentity& request,
+        endlesss::types::RiffComplete& result );
+
+    // resolution code called by defaultNetworkResolver() when encountering a shared riff - these require special
+    // processing to acquire their loop data as we often don't have workable or accessible band##### jam IDs to pull
+    // stem data out of, we have to use a specific API call to fetch and extract from
+    static bool resolveSharedRiff(
+        const endlesss::api::NetConfiguration& ncfg,
+        const endlesss::types::RiffIdentity& request,
+        endlesss::types::RiffComplete& result );
+
+
+
     void pipelineThread();
 
     using RiffIDQueue = mcc::ReaderWriterQueue< Request >;

@@ -22,46 +22,87 @@ namespace api {
 // binding of config data into the state required to make API calls to various bits of Endlesss backend
 struct NetConfiguration
 {
+    using Shared = std::shared_ptr< NetConfiguration >;
+    using Weak = std::weak_ptr< NetConfiguration >;
+
+private:
+    
+    // regex capture for "length":"13", used to replace with "length":13 (see comments below)
+    static constexpr auto cRegexLengthTypeMismatch = "\"length\":\"([0-9]+)\"";
+
+public:
+
+    enum class Access
+    {
+        None,               // no network configuration has been set
+        Public,             // configuration set for public / web requests
+        Authenticated       // full login provided for access to restricted user data
+    };
+
     DECLARE_NO_COPY( NetConfiguration );
 
-    NetConfiguration() = delete;
+    NetConfiguration()
+        : m_access( Access::None )
+        , m_dataFixRegex_lengthTypeMismatch( cRegexLengthTypeMismatch )
+    {}
 
     // initialise without Endlesss auth for a network layer that can't talk to Couch, etc (but can grab stuff from CDN)
-    NetConfiguration(
-        const config::endlesss::rAPI& api,
-        const fs::path& tempDir );                  // writable temp location for verbose/debug logging if enabled
+    void initWithoutAuthentication(
+        const config::endlesss::rAPI& api );
 
     // initialise with validated Endlesss auth for full access
-    NetConfiguration(
+    void initWithAuthentication(
         const config::endlesss::rAPI& api,
-        const config::endlesss::Auth& auth,
-        const fs::path& tempDir );                  // writable temp location for verbose/debug logging if enabled
+        const config::endlesss::Auth& auth );
 
-    ouro_nodiscard constexpr const config::endlesss::rAPI& api()  const { return m_api; }
-    ouro_nodiscard constexpr const config::endlesss::Auth& auth() const { return m_auth; }
-    ouro_nodiscard constexpr const bool hasValidEndlesssAuth()    const { return m_hasValidEndlesssAuth; }
+    // writable temp location for verbose/debug logging if enabled
+    void setVerboseCaptureOutputPath( const fs::path& captureDir ) { m_verboseOutputDir = captureDir; }
+
+    ouro_nodiscard constexpr const config::endlesss::rAPI& api()  const { ABSL_ASSERT( hasAccess( Access::Public ) );        return m_api;  }
+    ouro_nodiscard constexpr const config::endlesss::Auth& auth() const { ABSL_ASSERT( hasAccess( Access::Authenticated ) ); return m_auth; }
+
+    // check what level of network access we have configured at this point
+    ouro_nodiscard constexpr const bool hasAccess( Access access ) const
+    { 
+        switch ( access )
+        {
+            case Access::None:          return m_access == Access::None;
+            case Access::Public:        return m_access == Access::Public ||
+                                               m_access == Access::Authenticated;
+            case Access::Authenticated: return m_access == Access::Authenticated;
+        }
+        ABSL_ASSERT( 0 );
+        return false;
+    }
+
+    // shorthand for not having been configured with anything yet
+    ouro_nodiscard constexpr const bool hasNoAccessSet() const
+    {
+        return m_access == Access::None;
+    }
 
     // spin an RNG to produce a new LB=live## cookie value
     ouro_nodiscard std::string generateRandomLoadBalancerCookie() const;
 
     // when doing comprehensive traffic capture, ask for a full path to a file to write to; this will include
-    // some kind of timestamp or order differentiator
-    ouro_nodiscard std::string getVerboseCaptureFilename( const char* context ) const;
+    // some kind of timestamp or order differentiator. returns empty string if the output directory hasn't been set.
+    ouro_nodiscard std::string getVerboseCaptureFilename( std::string_view context ) const;
 
 
     ouro_nodiscard constexpr const std::regex& getDataFixRegex_lengthTypeMismatch() const { return m_dataFixRegex_lengthTypeMismatch; }
 
 private:
 
+    // counter used for debug verbose captures to avoid duplication
     inline static std::atomic_uint32_t  m_writeIndex = 0;
+
+    Access                      m_access;
 
     config::endlesss::rAPI      m_api;
     config::endlesss::Auth      m_auth;
 
-    bool                        m_hasValidEndlesssAuth = false;
-
     // for capture/debug output
-    fs::path                    m_tempDir;
+    fs::path                    m_verboseOutputDir;
 
     // used to precondition incoming data against the version of endless that decided to start writing "Length" values
     // as strings instead of numbers - this regex patches those back to numbers
@@ -89,7 +130,13 @@ const char* getHttpLibErrorString( const httplib::Error err );
 // general boilerplate that takes a httplib response and tries to deserialize it from JSON to
 // the given type, returning false and logging the error if parsing bails
 template< typename _Type >
-inline static bool deserializeJson( const NetConfiguration& ncfg, const httplib::Result& res, _Type& instance, const std::string& functionContext )
+inline static bool deserializeJson(
+    const NetConfiguration& netConfig,
+    const httplib::Result& res,
+    _Type& instance,
+    const std::string& functionContext,
+    std::string_view traceContext,
+    const std::function< void( std::string& ) > bodyTextProcessor = nullptr )
 {
     if ( res == nullptr )
     {
@@ -102,24 +149,32 @@ inline static bool deserializeJson( const NetConfiguration& ncfg, const httplib:
         return false;
     }
 
-    auto bodyText = res->body;
-
     //
     // apply horribly inefficient kludge to work around one particular version of Endlesss that decided to start
     // writing out "length" keys as strings rather than numbers :O *shakes fist*
     //
-    bodyText = std::regex_replace( bodyText, ncfg.getDataFixRegex_lengthTypeMismatch(), "\"length\":$1" );
+    std::string bodyText = std::regex_replace( res->body, netConfig.getDataFixRegex_lengthTypeMismatch(), "\"length\":$1" );
 
-#if 0 // very verbose data capture of every request
-    const auto exportFilename = ncfg.getVerboseCaptureFilename( "verbose_debug" );
+    // allow custom body modifications pre-parse in case there are any other hilarious json tripmines to work around
+    if ( bodyTextProcessor != nullptr )
     {
-        FILE* fExport = fopen( exportFilename.c_str(), "wt" );
-        fprintf( fExport, "%s\n\n", functionContext.c_str() );
-        fprintf( fExport, "%s\n", bodyText.c_str() );
-        fclose( fExport );
+        bodyTextProcessor( bodyText );
     }
-#endif 
 
+    // optional heavy debug verbose output option
+    if ( netConfig.api().debugVerboseNetDataCapture )
+    {
+        const auto verboseFilename = netConfig.getVerboseCaptureFilename( traceContext );
+        if ( !verboseFilename.empty() )
+        {
+            FILE* fExport = fopen( verboseFilename.c_str(), "wt" );
+            fprintf( fExport, "%s\n\n", functionContext.c_str() );
+            fprintf( fExport, "%s\n", bodyText.c_str() );
+            fclose( fExport );
+        }
+    }
+
+    // attempt the parse
     try
     {
         std::istringstream is( bodyText );
@@ -132,10 +187,11 @@ inline static bool deserializeJson( const NetConfiguration& ncfg, const httplib:
         // cereal is not very good for actually backtracking to where/what failed in JSON parsing
         // in the case we hit more malformed data, burn it out to disk so someone can send it to me for analysis
 
-        const auto exportFilename = ncfg.getVerboseCaptureFilename( "json_parse_error" );
+        const auto exportFilename = netConfig.getVerboseCaptureFilename( "json_parse_error" );
+        if ( !exportFilename.empty() )
         {
             FILE* fExport = fopen( exportFilename.c_str(), "wt" );
-            fprintf( fExport, "%s\n\n", cEx.what() );
+            fprintf( fExport, "%s\n", cEx.what() );
             fprintf( fExport, "%s\n\n", functionContext.c_str() );
             fprintf( fExport, "%s\n", bodyText.c_str() );
             fclose( fExport );
@@ -586,7 +642,7 @@ struct JamLatestState : public ResultRowHeader<ResultRiffAndStemIDs>
         auto res = createEndlesssHttpClient( ncfg, UserAgent::Couchbase )->Get(
             fmt::format( "/user_appdata${}/_design/types/_view/rifffLoopsByCreateTime?descending=true&limit=1", jamDatabaseID ).c_str() );
 
-        return deserializeJson< JamLatestState >( ncfg, res, *this, __FUNCTION__ );
+        return deserializeJson< JamLatestState >( ncfg, res, *this, __FUNCTION__, "jam_latest_state" );
     }
 };
 
@@ -598,7 +654,7 @@ struct JamFullSnapshot : public ResultRowHeader<ResultRiffAndStemIDs>
         auto res = createEndlesssHttpClient( ncfg, UserAgent::Couchbase )->Get(
             fmt::format( "/user_appdata${}/_design/types/_view/rifffLoopsByCreateTime?descending=true", jamDatabaseID ).c_str() );
 
-        return deserializeJson< JamFullSnapshot >( ncfg, res, *this, __FUNCTION__ );
+        return deserializeJson< JamFullSnapshot >( ncfg, res, *this, __FUNCTION__, "jam_full_snapshot" );
     }
 };
 
@@ -610,7 +666,7 @@ struct JamRiffCount : public TotalRowsOnly
         auto res = createEndlesssHttpClient( ncfg, UserAgent::Couchbase )->Get(
             fmt::format( "/user_appdata${}/_design/types/_view/rifffsByCreateTime", jamDatabaseID ).c_str() );
 
-        return deserializeJson< JamRiffCount >( ncfg, res, *this, __FUNCTION__ );
+        return deserializeJson< JamRiffCount >( ncfg, res, *this, __FUNCTION__, "jam_riff_count" );
     }
 };
 
@@ -728,32 +784,61 @@ struct SubscribedJams : public ResultRowHeader<ResultJamMembership>
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
+// fetching some basic jam data via the couch database band ID by 'borrowing' the permalink/join-url generator which seems
+// to largely not need authentication to retrieve stuff (unlike listenlink)
 //
-struct SharedRiffsByUser
+struct BandPermalinkMeta
 {
-    struct Riff
+    struct Data
     {
-        std::string             jamId;
-        std::string             image;
+        std::string                 url;        // full spec /join URL for this jam
+        endlesss::types::JamCouchID band_id;    // repeated couch ID
+        std::string                 band_name;  // public display name
 
         template<class Archive>
         inline void serialize( Archive& archive )
         {
-            archive( CEREAL_OPTIONAL_NVP( jamId )   // these don't always seem to be present
-                   , CEREAL_OPTIONAL_NVP( image )   //  ^ ^
+            archive( CEREAL_NVP( url )
+                   , CEREAL_NVP( band_id )
+                   , CEREAL_NVP( band_name )
             );
         }
     };
 
+    std::string result;
+    Data        data;
+
+    std::vector< std::string > errors;
+
+    template<class Archive>
+    inline void serialize( Archive& archive )
+    {
+        archive( CEREAL_NVP( result )
+               , CEREAL_NVP( data )
+               , CEREAL_NVP( errors )
+        );
+    }
+
+    bool fetch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID );
+};
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+//
+struct SharedRiffsByUser
+{
     struct Data
     {
+        std::string             _id;        // shared-riff ID, not the same as the riff ID
         std::string             doc_id;
-        std::string             band;
+
+        endlesss::types::JamCouchID
+                                band;
         uint64_t                action_timestamp;
         std::string             title;
         std::vector< std::string >  
                                 creators;
-        Riff                    rifff;
+        ResultRiffDocument      rifff;
         std::vector< ResultStemDocument >
                                 loops;
         std::string             image_url;
@@ -763,7 +848,8 @@ struct SharedRiffsByUser
         template<class Archive>
         inline void serialize( Archive& archive )
         {
-            archive( CEREAL_NVP( doc_id )
+            archive( CEREAL_NVP( _id )
+                   , CEREAL_NVP( doc_id )
                    , CEREAL_OPTIONAL_NVP( band )
                    , CEREAL_NVP( action_timestamp )
                    , CEREAL_NVP( title )
@@ -787,6 +873,14 @@ struct SharedRiffsByUser
     }
 
     bool fetch( const NetConfiguration& ncfg, const std::string& userName, int32_t count, int32_t offset );
+
+    // load a specific shared-riff by specific ID rather than a batch
+    bool fetchSpecific( const NetConfiguration& ncfg, const endlesss::types::SharedRiffCouchID& sharedRiffID );
+
+private:
+
+    // both fetch/fetchSpecific use the same basic processing, just a different initial call
+    bool commonRequest( const NetConfiguration& ncfg, const std::string& requestUrl, const std::string& requestContext );
 };
 
 namespace pull {

@@ -12,13 +12,13 @@
 #include "spacetime/moment.h"
 
 #include "endlesss/api.h"
-#include "endlesss/cache.shares.h"
+#include "endlesss/toolkit.shares.h"
 #include "endlesss/config.h"
 
 using namespace std::chrono_literals;
 
 namespace endlesss {
-namespace cache {
+namespace toolkit {
 
 static constexpr auto cRegexBandNameExtract = "/(band[a-f0-9]+)/";
 
@@ -29,17 +29,13 @@ Shares::Shares()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-bool Shares::fetchAsync(
+tf::Taskflow Shares::taskFetchLatest(
     const endlesss::api::NetConfiguration& apiCfg,
-    const std::string_view username,
-    tf::Executor& taskExecutor,
-    const std::function< void( StatusOrData ) > completionFunc )
+    std::string username,
+    std::function< void( StatusOrData ) > completionFunc )
 {
-    // create a copy to hand to the task
-    std::string usernameCopy( username );
-
-    m_taskFlow.clear();
-    m_taskFlow.emplace( [&apiCfg, usernameToFetch = std::move( usernameCopy ), this, completionFunc]()
+    tf::Taskflow taskResult;
+    taskResult.emplace( [&apiCfg, usernameToFetch = std::move( username ), this, onCompletion = std::move( completionFunc )]()
     {
         const int32_t count = 5;    // how many shared riffs to pull each time (5 is what the website uses at time of writing)
         int32_t offset = 0;
@@ -57,9 +53,9 @@ bool Shares::fetchAsync(
                 for ( const auto& riffData : sharedRiffs.data )
                 {
                     std::string jamCID = riffData.band;
-
+                    
                     // sometimes there's no top-level "bandXXXX" identifier in shared riffs, so we go look through the loops'
-                    // audio URLs to find it via regex
+                    // audio URLs to find it via regex & consensus
                     if ( jamCID.empty() )
                     {
                         for ( const auto& riffLoop : riffData.loops )
@@ -88,20 +84,24 @@ bool Shares::fetchAsync(
                         if ( jamCID.empty() )
                             continue;
                     }
-
+                    
                     // remove any invalid UTF8 characters from the title string before storage
                     std::string sanitisedTitle;
                     utf8::replace_invalid( riffData.title.begin(), riffData.title.end(), back_inserter( sanitisedTitle ) );
 
                     newData->m_names.emplace_back( sanitisedTitle );
                     newData->m_images.emplace_back( riffData.image_url );
+                    newData->m_sharedRiffIDs.emplace_back( riffData._id );
                     newData->m_riffIDs.emplace_back( riffData.doc_id );
                     newData->m_jamIDs.emplace_back( jamCID );
                     newData->m_private.emplace_back( riffData.is_private );
 
-                    const uint64_t timestampUnix = riffData.action_timestamp / 1000; // from unix nano
-                    // const auto deltaTime = spacetime::calculateDeltaFromNow( spacetime::InSeconds( std::chrono::seconds{timestampUnix} ) );
+                    // public jams are all prefixed 'band'; personal ones are just the usename
+                    const bool bFromPersonalJam = ( jamCID == usernameToFetch || jamCID.rfind( "band", 0 ) != 0 );
+                    newData->m_personal.emplace_back( bFromPersonalJam );
 
+                    const uint64_t timestampUnix = riffData.action_timestamp / 1000; // from unix nano
+                    
                     newData->m_timestamps.emplace_back( timestampUnix );
 
                     newData->m_count++;
@@ -112,8 +112,8 @@ bool Shares::fetchAsync(
                 // abort on a net failure
                 blog::api( "shared riff fetch() failure, aborting" );
 
-                if ( completionFunc != nullptr )
-                    completionFunc( absl::AbortedError( "network fetch failure, aborted" ) );
+                if ( onCompletion != nullptr )
+                    onCompletion( absl::AbortedError( "network fetch failure, aborted" ) );
                 
                 return;
             }
@@ -128,19 +128,18 @@ bool Shares::fetchAsync(
         // successfully got some data
         if ( offset > 0 )
         {
-            if ( completionFunc != nullptr )
-                completionFunc( newData );
+            if ( onCompletion != nullptr )
+                onCompletion( newData );
         }
         else
         {
-            if ( completionFunc != nullptr )
-                completionFunc( absl::NotFoundError( "no shared riffs found" ) );
+            if ( onCompletion != nullptr )
+                onCompletion( absl::NotFoundError( "no shared riffs found" ) );
         }
     });
 
-    taskExecutor.run( m_taskFlow );
-    return true;
+    return taskResult;
 }
 
-} // namespace cache
+} // namespace toolkit
 } // namespace endlesss

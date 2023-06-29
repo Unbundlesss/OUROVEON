@@ -28,7 +28,7 @@ namespace stdp = std::placeholders;
 #include "ux/cache.jams.browser.h"
 #include "ux/stem.beats.h"
 #include "ux/stem.analysis.h"
-#include "ux/cache.shares.view.h"
+#include "ux/shared.riffs.view.h"
 
 #include "vx/vibes.h"
 
@@ -532,6 +532,20 @@ protected:
     endlesss::live::RiffPtr         m_nowPlayingRiff;
     std::atomic_bool                m_riffPipelineClearInProgress = false;
 
+    base::EventListenerID           m_eventListenerRiffEnqueue;
+
+    
+
+    // ---------------------------------------------------------------------------------------------------------------------
+    void onEvent_EnqueueRiffPlayback( const base::IEvent& eventRef )
+    {
+        ABSL_ASSERT( eventRef.getID() == events::EnqueueRiffPlayback::ID );
+
+        const events::EnqueueRiffPlayback* enqueueRiffPlaybackEvent = dynamic_cast<const events::EnqueueRiffPlayback*>(&eventRef);
+        ABSL_ASSERT( enqueueRiffPlaybackEvent != nullptr );
+
+        requestRiffPlayback( enqueueRiffPlaybackEvent->m_identity, m_riffPlaybackAbstraction.asPermutation() );
+    }
 
     void requestRiffPlayback( const endlesss::types::RiffIdentity& riffIdent, const endlesss::types::RiffPlaybackPermutation& playback )
     {
@@ -1331,7 +1345,7 @@ int LoreApp::EntrypointOuro()
     // create warehouse instance to manage ambient downloading
     endlesss::toolkit::Warehouse warehouse(
         m_storagePaths.value(),
-        m_apiNetworkConfiguration.value() );
+        m_networkConfiguration );
 
     warehouse.upsertJamDictionaryFromCache( m_jamLibrary );             // update warehouse list of jam IDs -> names from the current cache
     warehouse.extractJamDictionary( m_jamHistoricalFromWarehouse );     // pull full list of jam IDs -> names from warehouse as "historical" list
@@ -1370,12 +1384,12 @@ int LoreApp::EntrypointOuro()
     });
 
 
-    const bool bHasValidEndlesssAuth = m_apiNetworkConfiguration->hasValidEndlesssAuth();
+    const bool bHasValidEndlesssAuth = m_networkConfiguration->hasAccess( endlesss::api::NetConfiguration::Access::Authenticated );
 
     // default to viewing logged-in user in the jam view highlight
     if ( bHasValidEndlesssAuth )
     {
-        m_jamVisualisation.m_nameHighlighting[0].m_name     = m_apiNetworkConfiguration->auth().user_id;
+        m_jamVisualisation.m_nameHighlighting[0].m_name     = m_networkConfiguration->auth().user_id;
         m_jamVisualisation.m_nameHighlighting[0].m_colour   = ImVec4( 1.0f, 0.95f, 0.8f, 1.0f );
     }
 
@@ -1385,7 +1399,7 @@ int LoreApp::EntrypointOuro()
         blog::error::app( FMTX( "Bad vibes : {}" ), vibeStatus.ToString() );
     }
 
-    m_sharedRiffView = std::make_unique<ux::SharedRiffView>( bHasValidEndlesssAuth ? m_apiNetworkConfiguration->auth().user_id : "" );
+    m_sharedRiffView = std::make_unique<ux::SharedRiffView>( m_networkConfiguration, std::move( getEventBusClient() ) );
 
 
     // examine our midi state, extract port names
@@ -1424,8 +1438,8 @@ int LoreApp::EntrypointOuro()
                 return true;
 
             // assuming we have Endlesss auth, go hunting
-            if ( m_apiNetworkConfiguration->hasValidEndlesssAuth() )
-                return endlesss::toolkit::Pipeline::defaultNetworkResolver( m_apiNetworkConfiguration.value(), request, result );
+            if ( m_networkConfiguration->hasAccess( endlesss::api::NetConfiguration::Access::Authenticated ) )
+                return endlesss::toolkit::Pipeline::defaultNetworkResolver( *m_networkConfiguration, request, result );
 
             return false;
         },
@@ -1466,8 +1480,8 @@ int LoreApp::EntrypointOuro()
                 return true;
 
             // assuming we have Endlesss auth, go hunting
-            if ( m_apiNetworkConfiguration->hasValidEndlesssAuth() )
-                return endlesss::toolkit::Pipeline::defaultNetworkResolver( m_apiNetworkConfiguration.value(), request, result );
+            if ( m_networkConfiguration->hasAccess( endlesss::api::NetConfiguration::Access::Authenticated ) )
+                return endlesss::toolkit::Pipeline::defaultNetworkResolver( *m_networkConfiguration, request, result );
 
             return false;
         },
@@ -1479,6 +1493,8 @@ int LoreApp::EntrypointOuro()
         []()
         {
         });
+
+    m_eventListenerRiffEnqueue = m_appEventBus->addListener( events::EnqueueRiffPlayback::ID, [this]( const base::IEvent& evt ) { onEvent_EnqueueRiffPlayback( evt ); } );
 
 
     // UI core loop begins
@@ -1514,7 +1530,7 @@ int LoreApp::EntrypointOuro()
                         1.0f,
                         2000.0f,
                         0.75f,
-                        // custom tooltip
+                        // custom tooltip showing dB instead of 0..1
                         []( const float percentage01, const float value ) -> std::string
                         {
                             if ( percentage01 <= std::numeric_limits<float>::min() )
@@ -2176,7 +2192,7 @@ int LoreApp::EntrypointOuro()
                 ImGui::SeparatorBreak();
 
 
-                static ImVec2 buttonSizeMidTable( 33.0f, 24.0f );
+                static ImVec2 buttonSizeMidTable( 29.0f, 21.0f );
 
                 if ( ImGui::BeginChild( "##data_child" ) )
                 {
@@ -2203,7 +2219,7 @@ int LoreApp::EntrypointOuro()
                         }
                         else
                         {
-                            ImGui::TableSetupColumn( "Jam Name",    ImGuiTableColumnFlags_WidthFixed, 390.0f );
+                            ImGui::TableSetupColumn( "Jam Name",    ImGuiTableColumnFlags_WidthFixed, 360.0f );
                             ImGui::TableSetupColumn( "Riffs",       ImGuiTableColumnFlags_WidthFixed, 120.0f );
                             ImGui::TableSetupColumn( "Stems",       ImGuiTableColumnFlags_WidthFixed, 120.0f );
                             ImGui::TableSetupColumn( "Wipe",        ImGuiTableColumnFlags_WidthFixed, 32.0f  );
@@ -2341,6 +2357,11 @@ int LoreApp::EntrypointOuro()
         maintainStemCacheAsync();
 
         finishInterfaceLayoutAndRender();
+    }
+
+    // unhook events
+    {
+        checkedCoreCall( "remove listener", [this] { return m_appEventBus->removeListener( m_eventListenerRiffEnqueue ); } );
     }
 
     unregisterStatusBarBlock( sbbWarehouseID );

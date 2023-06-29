@@ -722,13 +722,13 @@ namespace ledger {
 
 
 // ---------------------------------------------------------------------------------------------------------------------
-Warehouse::Warehouse( const app::StoragePaths& storagePaths, const api::NetConfiguration& ncfg )
-    : m_netConfig( ncfg )
+Warehouse::Warehouse( const app::StoragePaths& storagePaths, api::NetConfiguration::Shared& networkConfig )
+    : m_networkConfiguration( networkConfig )
     , m_workerThreadPaused( false )
 {
     m_taskSchedule = std::make_unique<TaskSchedule>();
 
-    m_databaseFile = ( fs::path( storagePaths.cacheCommon ) / "warehouse.db3" ).string();
+    m_databaseFile = ( storagePaths.cacheCommon / "warehouse.db3" ).string();
     SqlDB::post_connection_hook = []( sqlite3* db_handle )
     {
     };
@@ -818,7 +818,7 @@ void Warehouse::addOrUpdateJamSnapshot( const types::JamCouchID& jamCouchID )
         return;
     }
 
-    m_taskSchedule->m_taskQueue.enqueue( std::make_unique<JamSnapshotTask>( m_netConfig, jamCouchID ) );
+    m_taskSchedule->m_taskQueue.enqueue( std::make_unique<JamSnapshotTask>( *m_networkConfiguration, jamCouchID ) );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -974,7 +974,7 @@ void Warehouse::threadWorker()
                     if ( sql::riffs::findUnpopulatedBatch( owningJamCID, 40, emptyRiffs ) )
                     {
                         // off to riff town
-                        m_taskSchedule->m_taskQueue.enqueue( std::make_unique<GetRiffDataTask>( m_netConfig, owningJamCID, emptyRiffs ) );
+                        m_taskSchedule->m_taskQueue.enqueue( std::make_unique<GetRiffDataTask>( *m_networkConfiguration, owningJamCID, emptyRiffs ) );
                         tryEnqueueReport( false );
 
                         scrapingIsRunning = true;
@@ -1003,7 +1003,7 @@ void Warehouse::threadWorker()
                     if ( sql::stems::findUnpopulatedBatch( owningJamCID, 40, emptyStems ) )
                     {
                         // stem me up
-                        m_taskSchedule->m_taskQueue.enqueue( std::make_unique<GetStemData>( m_netConfig, owningJamCID, emptyStems ) );
+                        m_taskSchedule->m_taskQueue.enqueue( std::make_unique<GetStemData>( *m_networkConfiguration, owningJamCID, emptyStems ) );
                         tryEnqueueReport( false );
 
                         scrapingIsRunning = true;

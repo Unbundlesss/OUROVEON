@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include "base/eventbus.h"
 #include "endlesss/ids.h"
 
 
@@ -252,8 +253,8 @@ struct RiffIdentity
     RiffIdentity(
         endlesss::types::JamCouchID jam,
         endlesss::types::RiffCouchID riff )
-        : m_jam( jam )
-        , m_riff( riff )
+        : m_jam( std::move( jam ) )
+        , m_riff( std::move( riff ) )
     {}
 
     constexpr bool hasData() const
@@ -453,3 +454,24 @@ private:
 
 } // namespace types
 } // namespace endlesss
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+CREATE_EVENT_BEGIN( EnqueueRiffPlayback )
+
+EnqueueRiffPlayback( const endlesss::types::RiffIdentity& identity )
+    : m_identity( identity )
+{
+    ABSL_ASSERT( m_identity.hasData() );
+}
+
+EnqueueRiffPlayback( const endlesss::types::JamCouchID& jam, const endlesss::types::RiffCouchID& riff )
+    : m_identity( jam, riff )
+{
+    ABSL_ASSERT( m_identity.hasData() );
+}
+
+endlesss::types::RiffIdentity     m_identity;
+
+CREATE_EVENT_END()
+

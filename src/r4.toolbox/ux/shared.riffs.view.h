@@ -18,7 +18,7 @@ namespace ux {
 
 struct SharedRiffView
 {
-    SharedRiffView( const std::string_view defaultUser );
+    SharedRiffView( endlesss::api::NetConfiguration::Shared& networkConfig, base::EventBusClient eventBus );
     ~SharedRiffView();
 
     void imgui( app::CoreGUI& coreGUI );

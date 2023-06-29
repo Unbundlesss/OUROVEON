@@ -146,6 +146,8 @@ EventBus::EventPipe::EventPipe( const EventID& id, std::size_t eventSize, std::s
         m_eventMemoryQueue.enqueue( blockAddress );
         blockAddress += eventSize;
     }
+
+    blog::core( FMTX( "allocated event pipe [{}] {} Kb" ), id.name(), ( maxEvents * eventSize ) / 1024 );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

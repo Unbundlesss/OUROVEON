@@ -79,6 +79,9 @@ OURO_CONFIG( rAPI )
     // seconds between polls when using a sentinel to track jam changes
     int32_t                 jamSentinelPollRateInSeconds = 5;
 
+    // connection and read timeouts for all network requests
+    int32_t                 networkTimeoutInSeconds = 5;
+
 
     // BEHAVIOURAL HACKS
     // tweaks to how things should be when harsh reality shows up
@@ -111,6 +114,7 @@ OURO_CONFIG( rAPI )
                , CEREAL_NVP( userAgentWeb )
                , CEREAL_NVP( certBundleRelative )
                , CEREAL_OPTIONAL_NVP( jamSentinelPollRateInSeconds )
+               , CEREAL_OPTIONAL_NVP( networkTimeoutInSeconds )
                , CEREAL_OPTIONAL_NVP( hackAllowStemSizeMismatch )
                , CEREAL_OPTIONAL_NVP( debugVerboseNetLog )
                , CEREAL_OPTIONAL_NVP( debugVerboseNetDataCapture )
@@ -298,21 +302,24 @@ OURO_CONFIG( SharedRiffsCache )
     static constexpr auto StoragePath       = IPathProvider::PathFor::SharedConfig;
     static constexpr auto StorageFilename   = "endlesss.shared-riffs.json";
 
-    using RiffID = ::endlesss::types::RiffCouchID;
-    using JamID  = ::endlesss::types::JamCouchID;
+    using SharedRiffID  = ::endlesss::types::SharedRiffCouchID;
+    using RiffID        = ::endlesss::types::RiffCouchID;
+    using JamID         = ::endlesss::types::JamCouchID;
 
-    uint32_t                            m_version = 1;
-    std::string                         m_username;
-    std::size_t                         m_count = 0;        // number of retrieved shares
-    uint64_t                            m_lastSyncTime = 0;
+    uint32_t                        m_version = 1;
+    std::string                     m_username;
+    std::size_t                     m_count = 0;        // number of retrieved shares
+    uint64_t                        m_lastSyncTime = 0;
 
     // flat storage of m_count shared riff details
-    std::vector< std::string >          m_names;
-    std::vector< std::string >          m_images;
-    std::vector< RiffID >               m_riffIDs;
-    std::vector< JamID >                m_jamIDs;
-    std::vector< uint64_t >             m_timestamps;
-    std::vector< bool >                 m_private;
+    std::vector< std::string >      m_names;
+    std::vector< std::string >      m_images;
+    std::vector< SharedRiffID >     m_sharedRiffIDs;    // unique ID for the shared-riff object, distinct from the riff couch ID
+    std::vector< RiffID >           m_riffIDs;
+    std::vector< JamID >            m_jamIDs;
+    std::vector< uint64_t >         m_timestamps;
+    std::vector< bool >             m_private;          // will only turn up when browsing your own shares, true if this was something not shared to the public feed
+    std::vector< bool >             m_personal;         // riff shared from personal (non-band#####) jam space
 
     template<class Archive>
     inline void serialize( Archive& archive )
@@ -323,10 +330,12 @@ OURO_CONFIG( SharedRiffsCache )
                , CEREAL_NVP( m_lastSyncTime )
                , CEREAL_NVP( m_names )
                , CEREAL_NVP( m_images )
+               , CEREAL_NVP( m_sharedRiffIDs )
                , CEREAL_NVP( m_riffIDs )
                , CEREAL_NVP( m_jamIDs )
                , CEREAL_NVP( m_timestamps )
                , CEREAL_NVP( m_private )
+               , CEREAL_NVP( m_personal )
         );
     }
 };

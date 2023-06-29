@@ -131,7 +131,7 @@ struct Jams
 
     // fetch the users' latest jam membership state + list of active publics from the servers
     void asyncCacheRebuild(
-        const endlesss::api::NetConfiguration& apiCfg,
+        const endlesss::api::NetConfiguration& netConfig,
         const config::endlesss::SyncOptions& syncOptions,
         tf::Taskflow& taskFlow,
         const AsyncCallback& asyncCallback );

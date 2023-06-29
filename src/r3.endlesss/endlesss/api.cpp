@@ -22,24 +22,32 @@ static constexpr auto cEndlesssDataDomain       = "data.endlesss.fm";
 static constexpr auto cEndlesssAPIDomain        = "api.endlesss.fm";
 static constexpr auto cMimeApplicationJson      = "application/json";
 
-static constexpr auto cRegexLengthTypeMismatch  = "\"length\":\"([0-9]+)\"";
 
 // ---------------------------------------------------------------------------------------------------------------------
-NetConfiguration::NetConfiguration( const config::endlesss::rAPI& api, const fs::path& tempDir )
-    : m_api( api )
-    , m_tempDir( tempDir )
-    , m_dataFixRegex_lengthTypeMismatch( cRegexLengthTypeMismatch )
+void NetConfiguration::initWithoutAuthentication( const config::endlesss::rAPI& api )
 {
+    // downgrade would be unusual
+    if ( m_access == Access::Authenticated )
+    {
+        blog::error::api( "downgrading network configuration from authenticated -> public" );    // technically just a warning
+        m_auth = {};
+    }
+
+    m_access = Access::Public;
+    m_api = api;
+
+    ABSL_ASSERT( !m_api.certBundleRelative.empty() );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-NetConfiguration::NetConfiguration( const config::endlesss::rAPI& api, const config::endlesss::Auth& auth, const fs::path& tempDir )
-    : m_api( api )
-    , m_auth( auth )
-    , m_hasValidEndlesssAuth( true )
-    , m_tempDir( tempDir )
-    , m_dataFixRegex_lengthTypeMismatch( cRegexLengthTypeMismatch )
+void NetConfiguration::initWithAuthentication( const config::endlesss::rAPI& api, const config::endlesss::Auth& auth )
 {
+    m_access = Access::Authenticated;
+    m_api = api;
+    m_auth = auth;
+
+    ABSL_ASSERT( !m_api.certBundleRelative.empty() );
+    ABSL_ASSERT( !m_auth.token.empty() );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -59,12 +67,18 @@ std::string NetConfiguration::generateRandomLoadBalancerCookie() const
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-std::string NetConfiguration::getVerboseCaptureFilename( const char* context ) const
+std::string NetConfiguration::getVerboseCaptureFilename( std::string_view context ) const
 {
+    // shouldn't be called before setting up a debug output path
+    const bool bNoOutputDirSet = m_verboseOutputDir.empty();
+    ABSL_ASSERT( bNoOutputDirSet == false );
+    if ( bNoOutputDirSet )
+        return "";
+
     const auto newIndex     = m_writeIndex++;
     const auto timestamp    = spacetime::createPrefixTimestampForFile();
 
-    const auto resultPath   = m_tempDir / fmt::format( "{}.{}.{}.json", timestamp, newIndex, context );
+    const auto resultPath   = m_verboseOutputDir / fmt::format( "debug.{}.{}.{}.json", timestamp, newIndex, context );
 
     return resultPath.string();
 }
@@ -72,36 +86,39 @@ std::string NetConfiguration::getVerboseCaptureFilename( const char* context ) c
 // ---------------------------------------------------------------------------------------------------------------------
 std::unique_ptr<httplib::SSLClient> createEndlesssHttpClient( const NetConfiguration& ncfg, const UserAgent ua )
 {
-    enum class AuthType
+    using namespace std::literals::chrono_literals;
+
+    enum class AuthHeaders
     {
         None,
         Basic,
         Bearer
     };
 
-    using namespace std::literals::chrono_literals;
-
     const std::string loadBalance = ncfg.generateRandomLoadBalancerCookie();
 
     std::string requestDomain = cEndlesssDataDomain;
-    AuthType addAuthentication = AuthType::Basic;
+    AuthHeaders authHeaders = AuthHeaders::Basic;
     const char* userAgent = "";
     switch ( ua )
     {
-        case UserAgent::ClientService:  userAgent = ncfg.api().userAgentApp.c_str();
+        case UserAgent::ClientService:
+            userAgent = ncfg.api().userAgentApp.c_str();
             break;
+
         default:
-        case UserAgent::Couchbase:      userAgent = ncfg.api().userAgentDb.c_str();
+        case UserAgent::Couchbase:
+            userAgent = ncfg.api().userAgentDb.c_str();
             break;
 
         case UserAgent::WebWithoutAuth:
-            addAuthentication = AuthType::None;
+            authHeaders = AuthHeaders::None;
             userAgent = ncfg.api().userAgentWeb.c_str();
             requestDomain = cEndlesssAPIDomain;
             break;
 
         case UserAgent::WebWithAuth:
-            addAuthentication = AuthType::Bearer;
+            authHeaders = AuthHeaders::Bearer;
             userAgent = ncfg.api().userAgentWeb.c_str();
             requestDomain = cEndlesssAPIDomain;
             break;
@@ -113,18 +130,19 @@ std::unique_ptr<httplib::SSLClient> createEndlesssHttpClient( const NetConfigura
     dataClient->enable_server_certificate_verification( true );
 
     // some of endlesss' servers are slow to respond
-    dataClient->set_connection_timeout( 8s );
-    dataClient->set_read_timeout( 8s );
+    const auto timeoutSec = 1s * ncfg.api().networkTimeoutInSeconds;
+    dataClient->set_connection_timeout( timeoutSec );
+    dataClient->set_read_timeout( timeoutSec );
 
     // most of the API calls expect Basic auth credentials
-    if ( addAuthentication == AuthType::Basic )
+    if ( authHeaders == AuthHeaders::Basic )
     {
         dataClient->set_basic_auth( ncfg.auth().token.c_str(), ncfg.auth().password.c_str() );
     }
-    // some of the web APIs can accept Bearer to access per-user private data (eg. private shared riffs)
-    else if ( addAuthentication == AuthType::Bearer )
+    // some of the web APIs can accept Bearer to access per-user private data (eg. private shared riffs), formed out of token:password
+    else if ( authHeaders == AuthHeaders::Bearer )
     {
-        dataClient->set_bearer_token_auth( fmt::format( FMTX("{}:{}"), ncfg.auth().token.c_str(), ncfg.auth().password.c_str() ) );
+        dataClient->set_bearer_token_auth( fmt::format( FMTX("{}:{}"), ncfg.auth().token, ncfg.auth().password ) );
     }
 
     dataClient->set_compress( true );
@@ -137,6 +155,7 @@ std::unique_ptr<httplib::SSLClient> createEndlesssHttpClient( const NetConfigura
             blog::api( "VERBOSE | RSP | {} {}", rsp.status, rsp.reason );
         });
     }
+
     dataClient->set_default_headers(
     {
         { "Host",               requestDomain          },
@@ -181,7 +200,7 @@ bool JamProfile::fetch( const NetConfiguration& ncfg, const endlesss::types::Jam
     auto res = createEndlesssHttpClient( ncfg, UserAgent::Couchbase )->Get(
         fmt::format( "/user_appdata${}/Profile", jamDatabaseID ).c_str() );
 
-    return deserializeJson< JamProfile >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ) );
+    return deserializeJson< JamProfile >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ), "jam_profile" );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -192,7 +211,7 @@ bool JamChanges::fetch( const NetConfiguration& ncfg, const endlesss::types::Jam
         keyBody,
         cMimeApplicationJson );
 
-    return deserializeJson< JamChanges >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ) );
+    return deserializeJson< JamChanges >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ), "jam_changes" );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -203,7 +222,7 @@ bool JamChanges::fetchSince( const NetConfiguration& ncfg, const endlesss::types
         keyBody,
         cMimeApplicationJson );
 
-    return deserializeJson< JamChanges >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ) );
+    return deserializeJson< JamChanges >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ), "jam_changes_since" );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -218,15 +237,7 @@ bool RiffDetails::fetch( const NetConfiguration& ncfg, const endlesss::types::Ja
         keyBody,
         cMimeApplicationJson );
 
-    // #HDD TODO replace with new NetConfiguration stuff
-#if 0
-    FILE* f;
-    fopen_s(&f, "E:\\Audio\\Ouroveon\\riff.json", "wt");
-    fprintf(f, "%s\n", res->body.c_str());
-    fclose(f);
-#endif
-
-    return deserializeJson< RiffDetails >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ) );
+    return deserializeJson< RiffDetails >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ), "riff_details" );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -241,7 +252,7 @@ bool RiffDetails::fetchBatch( const NetConfiguration& ncfg, const endlesss::type
         keyBody,
         cMimeApplicationJson );
 
-    return deserializeJson< RiffDetails >( ncfg, res, *this, fmt::format("{}( {} )", __FUNCTION__, jamDatabaseID ) );
+    return deserializeJson< RiffDetails >( ncfg, res, *this, fmt::format("{}( {} )", __FUNCTION__, jamDatabaseID ), "riff_details_batch" );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -256,7 +267,7 @@ bool StemTypeCheck::fetchBatch( const NetConfiguration& ncfg, const endlesss::ty
         keyBody,
         cMimeApplicationJson );
 
-    return deserializeJson< StemTypeCheck >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ) );
+    return deserializeJson< StemTypeCheck >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ), "stem_type_check_batch" );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -271,15 +282,7 @@ bool StemDetails::fetchBatch( const NetConfiguration& ncfg, const endlesss::type
         keyBody,
         cMimeApplicationJson );
 
-    // #HDD TODO replace with new NetConfiguration stuff
-#if 0
-    FILE* f;
-    fopen_s(&f, "F:\\stems.json", "wt");
-    fprintf(f, "%s\n", res->body.c_str());
-    fclose(f);
-#endif
-
-    return deserializeJson< StemDetails >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ) );
+    return deserializeJson< StemDetails >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ), "stem_details_batch" );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -287,13 +290,14 @@ bool CurrentJoinInJams::fetch( const NetConfiguration& ncfg )
 {
     auto res = createEndlesssHttpClient( ncfg, UserAgent::ClientService )->Get( "/app_client_config/bands:joinable" );
 
-    return deserializeJson< CurrentJoinInJams >( ncfg, res, *this, __FUNCTION__ );
+    return deserializeJson< CurrentJoinInJams >( ncfg, res, *this, __FUNCTION__, "current_join_in_jams" );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 bool CurrentCollectibleJams::fetch( const NetConfiguration& ncfg, int32_t pageNo )
 {
-    // pageSize 4 matches what the web site currently uses
+    // pageSize 4 matches what the web site currently uses; this endpoint is notoriously slow and unreasonable at anything higher
+    // .. which is pretty annoying, given there are like 40+ pages of these now at this pagination size
     const auto requestUrl = fmt::format( FMTX( "/marketplace/collectible-jams?pageSize=4&pageNo={}" ), pageNo );
 
     auto client = createEndlesssHttpClient( ncfg, UserAgent::WebWithoutAuth );
@@ -305,9 +309,8 @@ bool CurrentCollectibleJams::fetch( const NetConfiguration& ncfg, int32_t pageNo
         res = client->Get( requestUrl );
     }
 
-    return deserializeJson< CurrentCollectibleJams >( ncfg, res, *this, __FUNCTION__ );
+    return deserializeJson< CurrentCollectibleJams >( ncfg, res, *this, __FUNCTION__, "current_collectible_jams" );
 }
-
 
 // ---------------------------------------------------------------------------------------------------------------------
 // NB: could change this to data.endlesss.fm/user_appdata${user}/_find
@@ -317,17 +320,137 @@ bool SubscribedJams::fetch( const NetConfiguration& ncfg, const std::string& use
     auto res = createEndlesssHttpClient( ncfg, UserAgent::ClientService )->Get(
         fmt::format( "/user_appdata${}/_design/membership/_view/getMembership", userName ).c_str() );
 
-    return deserializeJson< SubscribedJams >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, userName ) );
+    return deserializeJson< SubscribedJams >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, userName ), "subscribed_jams" );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+bool BandPermalinkMeta::fetch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID )
+{
+    auto res = createEndlesssHttpClient( ncfg, UserAgent::WebWithoutAuth )->Get(
+        fmt::format( "/api/band/{}/permalink", jamDatabaseID ).c_str() );
+
+    return deserializeJson< BandPermalinkMeta >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ), "band_permalink_meta" );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 bool SharedRiffsByUser::fetch( const NetConfiguration& ncfg, const std::string& userName, int32_t count, int32_t offset )
 {
-    const auto requestUrl = fmt::format( FMTX( "/api/v3/feed/shared_by/{}?size={}&from={}" ), userName, count, offset );
+    return commonRequest( ncfg, fmt::format( FMTX( "/api/v3/feed/shared_by/{}?size={}&from={}" ), userName, count, offset ), fmt::format( "{}( {} )", __FUNCTION__, userName ) );
+}
 
+// ---------------------------------------------------------------------------------------------------------------------
+bool SharedRiffsByUser::fetchSpecific( const NetConfiguration& ncfg, const endlesss::types::SharedRiffCouchID& sharedRiffID )
+{
+    return commonRequest( ncfg, fmt::format( FMTX( "/api/v3/feed/shared_rifff/{}" ), sharedRiffID ), fmt::format( "{}( {} )", __FUNCTION__, sharedRiffID ) );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+bool SharedRiffsByUser::commonRequest( const NetConfiguration& ncfg, const std::string& requestUrl, const std::string& requestContext )
+{
     auto res = createEndlesssHttpClient( ncfg, UserAgent::WebWithAuth )->Get( requestUrl );
 
-    return deserializeJson< SharedRiffsByUser >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, userName ) );
+    #define CHECK_CHAR( _idx, _chr ) if ( bodyStream[i + _idx] == _chr )
+
+    /* this body processor is a grotty but quick hack to deal with outlier results from Endlesss where we get
+       a loops array with null elements in it, eg
+
+       "loops":
+            [
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                {
+                    "_id": "1641d000ef9911ed9000d1062b20bdd7",
+                    "_rev": "1-d61e44c90da6ca1ef97bdc242c589f0a",
+                    "cdn_attachments":
+                    {
+
+        .. which Cereal does not like. this processor looks for the start of "loops", switches to a replacement mode that should
+        cancel when it hits the loops array's terminating ']' - this replacement mode looks for the phrase "null," and replaces it with whitespace
+        meaning that the parser can just get to the actual meat of the array and ignore the gaps
+     */
+
+    return deserializeJson< SharedRiffsByUser >( ncfg, res, *this, requestContext, "shared_riffs_by_user", []( std::string& bodyText )
+        {
+            const std::size_t bodySize = bodyText.size();
+            if ( bodySize <= 16 )
+                return;
+
+            bool bReplacementMode = false;
+            int32_t replacementScope = 0;
+
+            char* bodyStream = &bodyText[0];
+            for ( auto i = 0; i < bodySize - 16; i++ )
+            {
+                CHECK_CHAR( 0, '\"')
+                CHECK_CHAR( 1, 'l')
+                CHECK_CHAR( 2, 'o')
+                CHECK_CHAR( 3, 'o')
+                CHECK_CHAR( 4, 'p')
+                CHECK_CHAR( 5, 's')
+                CHECK_CHAR( 6, '\"' )
+                {
+                    bReplacementMode = true;
+                    replacementScope = 0;
+                    
+                    // eat until the opening '[', treat this as scope level 0
+                    while ( bodyStream[i] != '[' )
+                    {
+                        i++;
+                    }
+
+                    continue;
+                }
+
+                if ( bReplacementMode )
+                {
+                    // support things like nested
+                    // "colourHistory":
+                    // [
+                    //     "ff1de3c0",
+                    //     "fff07b39"
+                    // ] ,
+                    // by tracking in/out of [ ] scopes
+                    CHECK_CHAR( 0, '[' )
+                    {
+                        replacementScope++;
+                    }
+                    CHECK_CHAR( 0, ']' )
+                    {
+                        replacementScope--;
+                        // if we go under 0 that means we're leaving the "loops" [ scope
+                        if ( replacementScope < 0 )
+                        {
+                            bReplacementMode = false;
+                        }
+                    }
+                }
+
+                // remove "null," if we're inside "loops" [ ]
+                if ( bReplacementMode )
+                {
+                    CHECK_CHAR( 0, 'n' )
+                    CHECK_CHAR( 1, 'u' )
+                    CHECK_CHAR( 2, 'l' )
+                    CHECK_CHAR( 3, 'l' )
+                    CHECK_CHAR( 4, ',' )
+                    {
+                        bodyStream[i + 0] = ' ';
+                        bodyStream[i + 1] = ' ';
+                        bodyStream[i + 2] = ' ';
+                        bodyStream[i + 3] = ' ';
+                        bodyStream[i + 4] = ' ';
+                        i += 4;
+                        continue;
+                    }
+                }
+            }
+        });
+
+    #undef CHECK_CHAR
 }
 
 } // namespace remote

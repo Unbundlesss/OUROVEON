@@ -22,8 +22,8 @@ struct Midi::State : public Midi::InputControl
     using MidiMessageQueue = mcc::ReaderWriterQueue< app::midi::Message >;
 
 
-    State( const base::EventBusClient& eventBusClient )
-        : m_eventBusClient( eventBusClient )
+    State( base::EventBusClient&& eventBusClient )
+        : m_eventBusClient( std::move(eventBusClient) )
     {
         m_midiIn          = std::make_unique<RtMidiIn>();
 

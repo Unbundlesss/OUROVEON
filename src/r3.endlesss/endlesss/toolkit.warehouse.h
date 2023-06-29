@@ -84,11 +84,13 @@ struct Warehouse
 
     using WorkUpdateCallback = std::function<void( const bool tasksRunning, const std::string& currentTask ) >;
 
-    Warehouse( const app::StoragePaths& storagePaths, const api::NetConfiguration& ncfg );
+    Warehouse( const app::StoragePaths& storagePaths, api::NetConfiguration::Shared& networkConfig );
     ~Warehouse();
 
     static std::string  m_databaseFile;
     using SqlDB = sqlite::Database<m_databaseFile>;
+
+    void setNetworkConfiguration( const api::NetConfiguration& ncfg );
 
     void setCallbackWorkReport( const WorkUpdateCallback& cb );
     void setCallbackContentsReport( const ContentsReportCallback& cb );
@@ -104,21 +106,23 @@ struct Warehouse
 
     // control background task processing; pausing will stop any new work from being generated
     void workerTogglePause();
-    inline bool workerIsPaused() const { return m_workerThreadPaused; }
+    ouro_nodiscard bool workerIsPaused() const { return m_workerThreadPaused; }
 
+    // erase the given jam from the warehouse database entirely
     void requestJamPurge( const types::JamCouchID& jamCouchID );
 
     // passing in the NetConfiguration for API access to Endlesss is optional; users should not enqueue tasks
     // that require it if it isn't present (and tasks will check and bail in error)
-    constexpr bool hasFullEndlesssNetworkAccess() const { return m_netConfig.hasValidEndlesssAuth(); }
+    constexpr bool hasFullEndlesssNetworkAccess() const { return m_networkConfiguration->hasAccess( api::NetConfiguration::Access::Authenticated ); }
 
 protected:
+
     friend ITask;
     struct TaskSchedule;
 
     void threadWorker();
 
-    const api::NetConfiguration&            m_netConfig;
+    api::NetConfiguration::Shared           m_networkConfiguration;
 
     std::unique_ptr<TaskSchedule>           m_taskSchedule;
 

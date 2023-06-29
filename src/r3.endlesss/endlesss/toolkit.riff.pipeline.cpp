@@ -58,11 +58,12 @@ void Pipeline::requestClear()
     m_pipelineRequestSema.signal();
 }
 
+
 // ---------------------------------------------------------------------------------------------------------------------
-bool Pipeline::defaultNetworkResolver(
+bool Pipeline::resolveStandardRiff(
     const endlesss::api::NetConfiguration& ncfg,
     const endlesss::types::RiffIdentity& request,
-    endlesss::types::RiffComplete& result)
+          endlesss::types::RiffComplete& result )
 {
     result.jam.couchID = request.getJamID();
 
@@ -111,8 +112,52 @@ bool Pipeline::defaultNetworkResolver(
             result.stems[stemI] = {};
         }
     }
+    return true;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+bool Pipeline::resolveSharedRiff(
+    const endlesss::api::NetConfiguration& ncfg,
+    const endlesss::types::RiffIdentity& request,
+          endlesss::types::RiffComplete& result )
+{
+    // use the single-shared-riff-by-id endpoint to grab everything we need about playing back this thing
+    api::SharedRiffsByUser sharedRiffData;
+    sharedRiffData.fetchSpecific( ncfg, endlesss::types::SharedRiffCouchID{ request.getRiffID().c_str() } );
+
+    api::SharedRiffsByUser::Data riffData = sharedRiffData.data[0];
+
+    result.jam.couchID = riffData.band;
+    result.jam.displayName = "shared riff";
+
+    result.riff = endlesss::types::Riff( result.jam.couchID, riffData.rifff );
+
+    std::size_t stemIndex = 0;
+    for ( const auto& loop : riffData.loops )
+    {
+        result.stems[stemIndex] = endlesss::types::Stem( result.jam.couchID, loop );
+        stemIndex++;
+    }
 
     return true;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+bool Pipeline::defaultNetworkResolver(
+    const endlesss::api::NetConfiguration& ncfg,
+    const endlesss::types::RiffIdentity& request,
+          endlesss::types::RiffComplete& result )
+{
+    // branch to resolve shared riffs with special handling
+    if ( request.getJamID() == endlesss::types::Constants::SharedRiffJam() )
+    {
+        return resolveSharedRiff( ncfg, request, result );
+    }
+    // otherwise its business as usual
+    else
+    {
+        return resolveStandardRiff( ncfg, request, result );
+    }
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

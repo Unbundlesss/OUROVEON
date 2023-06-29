@@ -17,7 +17,7 @@ namespace toolkit {
 
 
 // ---------------------------------------------------------------------------------------------------------------------
-void PopulationQuery::buildLookupAsync( const config::IPathProvider& pathProvider )
+void PopulationQuery::loadPopulationData( const config::IPathProvider& pathProvider )
 {
     m_nameTrieValid = false;
     m_nameTrie.clear();

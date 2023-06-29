@@ -50,10 +50,15 @@ struct PopulationQuery
         std::array< std::string, MaximumQueryResults >    m_values;
     };
 
+    // fetch all usernames we know about into acceleration structures suitable for fast partial lookup
+    // ideally do this on a thread
+    void loadPopulationData( const config::IPathProvider& pathProvider );
 
-    void buildLookupAsync( const config::IPathProvider& pathProvider );
-
+    // run a prefix query on the loaded data, returning up to MaximumQueryResults matching results;
+    // this finds all usernames that begin with the string fragment provided.
+    // returns false if the lookup isn't built or there was no results found
     bool prefixQuery( const std::string_view prefix, Result& result ) const;
+
 
     ouro_nodiscard inline bool isValid() const { return m_nameTrieValid; }
 

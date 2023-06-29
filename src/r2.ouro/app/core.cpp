@@ -97,10 +97,12 @@ struct TaskFlowWorkerHook : public tf::WorkerInterface
     }
 };
 
+// ---------------------------------------------------------------------------------------------------------------------
 void _discord_dpp_thread_init( const char* name )
 {
     ouroveonThreadEntry( fmt::format( FMTX( OURO_THREAD_PREFIX "DPP:{}" ), name ).c_str() );
 }
+
 void _discord_dpp_thread_exit()
 {
     ouroveonThreadExit();
@@ -167,6 +169,7 @@ CoreStart::~CoreStart()
 // ---------------------------------------------------------------------------------------------------------------------
 Core::Core()
     : CoreStart()
+    , m_networkConfiguration( std::make_shared<endlesss::api::NetConfiguration>() )
     , m_taskExecutor( std::clamp( std::thread::hardware_concurrency(), 2U, 8U ), std::make_shared<TaskFlowWorkerHook>() )
 {
 }
@@ -234,11 +237,14 @@ int Core::Run()
         m_appEventBusClient = base::EventBusClient( m_appEventBus );
 
         // register basic event IDs
-        APP_EVENT_REGISTER( OperationComplete );
+        APP_EVENT_REGISTER_SPECIFIC( OperationComplete, 16 * 1024 );
         APP_EVENT_REGISTER( PanicStop );
 
         // MIDI event bus
         APP_EVENT_REGISTER( MidiEvent );
+
+        // Endlesssian
+        APP_EVENT_REGISTER( EnqueueRiffPlayback );
     }
 
 
@@ -303,6 +309,9 @@ int Core::Run()
         }
     }
 
+    // set network debugging capture output to be per-app into the writable config area
+    m_networkConfiguration->setVerboseCaptureOutputPath( m_appConfigPath );
+
     // try and load the data storage configuration; may be unavailable on a fresh boot
     config::Data configData;
     const auto dataLoad = config::load( *this, configData );
@@ -355,11 +364,22 @@ int Core::Run()
     m_configEndlesssAPI.userAgentApp += fmt::format( FMTX( "{} ({})" ), GetAppNameWithVersion(), getOuroveonPlatform() );
     m_configEndlesssAPI.userAgentDb  += fmt::format( FMTX( " ({})"   ), GetAppNameWithVersion(), getOuroveonPlatform() );
 
+    tf::Taskflow asyncDataLoadFlow;
 
-    // load the jam cache data (or try to)
-    m_jamLibrary.load( *this );
+    asyncDataLoadFlow.emplace(
+        [this]()
+        {
+            // load the jam cache data (or try to)
+            m_jamLibrary.load( *this );
+        },
+        [this]()
+        {
+            // load and analyse population list for user autocomplete
+            m_endlesssPopulation.loadPopulationData( *this );
+        }
+    );
 
-    m_endlesssPopulation.buildLookupAsync( *this );
+    m_taskExecutor.run( asyncDataLoadFlow );
 
 
 #if OURO_PLATFORM_WIN
@@ -408,6 +428,9 @@ int Core::Run()
             return -2;
         }
     }
+
+    // finish up any async tasks run during startup
+    m_taskExecutor.wait_for_all();
 
     // run the app main loop
     int appResult = Entrypoint();

@@ -1044,7 +1044,7 @@ int BeamApp::EntrypointOuro()
         32,
         [this]( const endlesss::types::RiffIdentity& request, endlesss::types::RiffComplete& result) -> bool
         {
-            return endlesss::toolkit::Pipeline::defaultNetworkResolver( m_apiNetworkConfiguration.value(), request, result );
+            return endlesss::toolkit::Pipeline::defaultNetworkResolver( *m_networkConfiguration, request, result );
         },
         [&mixEngine]( const endlesss::types::RiffIdentity& request, endlesss::live::RiffPtr& loadedRiff, const endlesss::types::RiffPlaybackPermutationOpt& playbackPermutationOpt )
         {

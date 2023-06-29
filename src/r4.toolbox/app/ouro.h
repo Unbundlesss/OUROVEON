@@ -41,7 +41,7 @@ protected:
 
     // endlesss::services::RiffFetch
     virtual int32_t                                 getSampleRate() const override;
-    virtual const endlesss::api::NetConfiguration&  getNetConfiguration() const override { return m_apiNetworkConfiguration.value();}
+    virtual const endlesss::api::NetConfiguration&  getNetConfiguration() const override { return *m_networkConfiguration; }
     virtual endlesss::cache::Stems&                 getStemCache() override { return m_stemCache; }
     virtual tf::Executor&                           getTaskExecutor() override { return m_taskExecutor; }
 

@@ -542,11 +542,10 @@ int OuroApp::EntrypointGUI()
                         }
                         else
                         {
-                            // at this point in the flow, check if we have a NetConfiguration block - the data used
-                            // for all other endlesss network queries; create one if required
-                            if ( !m_apiNetworkConfiguration.has_value() )
+                            // if not yet setup, configure the network for full authenticated access
+                            if ( m_networkConfiguration->hasNoAccessSet() )
                             {
-                                m_apiNetworkConfiguration.emplace( m_configEndlesssAPI, endlesssAuth, m_sharedDataPath );
+                                m_networkConfiguration->initWithAuthentication( m_configEndlesssAPI, endlesssAuth );
                             }
 
                             // stop closing the boot window if we're running background threads or we have no jam data
@@ -558,7 +557,7 @@ int OuroApp::EntrypointGUI()
                                 if ( ImGui::IconButton( ICON_FA_ARROWS_ROTATE ) )
                                 {
                                     m_jamLibrary.asyncCacheRebuild(
-                                        m_apiNetworkConfiguration.value(),
+                                        *m_networkConfiguration,
                                         endlesssAuth.sync_options,
                                         taskFlow,
                                         [&]( const endlesss::cache::Jams::AsyncFetchState state, const std::string& status )
@@ -837,9 +836,9 @@ int OuroApp::EntrypointGUI()
 
     // if we passed over Endlesss authentication, create a net config structure that only knows how to talk to public
     // stuff (so we can still pull stems from the CDN on demand, for example)
-    if ( !m_apiNetworkConfiguration.has_value() )
+    if ( m_networkConfiguration->hasNoAccessSet() )
     {
-        m_apiNetworkConfiguration.emplace( m_configEndlesssAPI, m_sharedDataPath );
+        m_networkConfiguration->initWithoutAuthentication( m_configEndlesssAPI );
     }
 
     // save any config data blocks
@@ -856,6 +855,8 @@ int OuroApp::EntrypointGUI()
             blog::error::cfg( "Unable to save performance configuration" );
         }
     }
+
+    m_taskExecutor.wait_for_all();
 
     if ( m_mdFrontEnd->wasQuitRequested() )
         return 0;
@@ -879,7 +880,7 @@ int OuroApp::EntrypointGUI()
     {
         APP_EVENT_REGISTER( ExportRiff );
         APP_EVENT_REGISTER( StemDataAmalgamGenerated );
-        APP_EVENT_REGISTER( MixerRiffChange );
+        APP_EVENT_REGISTER_SPECIFIC( MixerRiffChange, 16 * 4096 );
 
         m_eventListenerRiffExport = m_appEventBus->addListener( events::ExportRiff::ID, [this]( const base::IEvent& evt ) { onEvent_ExportRiff( evt ); } );
     }

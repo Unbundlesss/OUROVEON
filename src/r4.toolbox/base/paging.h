@@ -71,7 +71,8 @@ private:
             LocalStateID Value;                                                                                     \
             _statesFunc( _PAGING_PAGE_DEF )                                                                         \
                                                                                                                     \
-            constexpr bool operator == ( const LocalStateID& rhs ) const { return Value == rhs; }                   \
+            ouro_nodiscard constexpr bool operator == ( const LocalStateID& rhs ) const { return Value == rhs; }    \
+            ouro_nodiscard constexpr operator const LocalStateID& () const { return Value; }                        \
                                                                                                                     \
             std::string generateTitle() const                                                                       \
             {                                                                                                       \

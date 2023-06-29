@@ -12,16 +12,16 @@
 namespace ImGui {
 namespace ux {
 
-struct UserBox
+struct UserSelector
 {
-    UserBox() = default;
-    UserBox( const std::string_view defaultUsername )
+    UserSelector() = default;
+    UserSelector( const std::string_view defaultUsername )
         : m_username( defaultUsername )
     {}
 
     void imgui( const endlesss::toolkit::PopulationQuery& population, float itemWidth = -1.0f );
 
-    std::string_view getUsername() const { return m_username; }
+    ouro_nodiscard const std::string& getUsername() const { return m_username; }
     void setUsername( const std::string_view username ) { m_username = username; }
 
 
