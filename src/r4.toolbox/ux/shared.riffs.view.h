@@ -21,7 +21,7 @@ struct SharedRiffView
     SharedRiffView( endlesss::api::NetConfiguration::Shared& networkConfig, base::EventBusClient eventBus );
     ~SharedRiffView();
 
-    void imgui( app::CoreGUI& coreGUI );
+    void imgui( app::CoreGUI& coreGUI, endlesss::services::IJamNameCacheServices& jamNameCacheServices );
 
 private:
 

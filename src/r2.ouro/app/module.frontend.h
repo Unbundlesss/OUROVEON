@@ -78,10 +78,16 @@ struct Frontend ouro_final : public Module
         return nullptr;
     }
 
+    void imguiRenderMarkdown( std::string_view markdownText ) const;
+
     void reloadImguiLayoutFromDefault() const;
     void resetWindowPositionAndSizeToDefault();
 
 private:
+
+    // for ImGui::Markdown
+    static void MarkdownLinkHandler( const ImGui::MarkdownLinkCallbackData& data );
+    static void MarkdownFormalCallback( const ImGui::MarkdownFormatInfo& markdownFormatInfo_, bool start_ );
 
     struct WindowGeometry
     {
@@ -103,28 +109,30 @@ private:
     // push actual window attributes for borderless mode
     void applyBorderless() const;
 
-    config::Frontend    m_feConfigCopy;
-    std::string         m_appName;
+    config::Frontend        m_feConfigCopy;
+    std::string             m_appName;
 
-    fs::path            m_imguiLayoutDefaultPath;
-    char*               m_imguiLayoutIni;
+    fs::path                m_imguiLayoutDefaultPath;
+    char*                   m_imguiLayoutIni;
 
-    GLFWwindow*         m_glfwWindow;
-    DisplayScale        m_displayScale;
-    bool                m_isBorderless;
+    GLFWwindow*             m_glfwWindow;
+    DisplayScale            m_displayScale;
+    bool                    m_isBorderless;
 
-    WindowGeometry      m_currentWindowGeometry;
-    int32_t             m_windowGeometryChangedDelay;   // used to delay writing out changes to size/pos to gather up 
-                                                        // sequential changes and avoid hammering the disk
+    WindowGeometry          m_currentWindowGeometry;
+    int32_t                 m_windowGeometryChangedDelay;   // used to delay writing out changes to size/pos to gather up 
+                                                            // sequential changes and avoid hammering the disk
 
-    ImFont*             m_fontFixed;
-    ImFont*             m_fixedSmaller;
-    ImFont*             m_fixedLarger;
-    ImFont*             m_fontMedium;
-    ImFont*             m_fontLogo;
-    ImFont*             m_fontBanner;
+    ImFont*                 m_fontFixed;
+    ImFont*                 m_fixedSmaller;
+    ImFont*                 m_fixedLarger;
+    ImFont*                 m_fontMedium;
+    ImFont*                 m_fontLogo;
+    ImFont*                 m_fontBanner;
 
-    bool                m_quitRequested;
+    ImGui::MarkdownConfig   m_markdownConfig;
+
+    bool                    m_quitRequested;
 };
 
 } // namespace module

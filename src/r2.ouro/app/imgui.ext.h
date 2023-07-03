@@ -109,8 +109,8 @@ void EndDisabledControls( const bool isDisabled );
 ImU32 ParseHexColour( const char* hexColour );
 
 // ---------------------------------------------------------------------------------------------------------------------
-ImVec4 GetPulseColourVec4();
-ImU32 GetPulseColour();
+ImVec4 GetPulseColourVec4( float alpha = 1.0f );
+ImU32 GetPulseColour( float alpha = 1.0f );
 
 inline ImVec4 GetWarningTextColour() { return ImVec4( 0.981f, 0.874f, 0.378f, 0.985f ); }
 inline ImVec4 GetErrorTextColour() { return ImVec4(0.981f, 0.074f, 0.178f, 0.985f); }
@@ -156,6 +156,9 @@ bool ClickableText( const char* label );
 
 void CenteredText( const char* text );
 void CenteredColouredText( const ImVec4& col, const char* text );
+
+
+void RightAlignSameLine( float objectSize );
 
 
 template< typename _T, int32_t _Size >

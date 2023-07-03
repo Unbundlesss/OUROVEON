@@ -208,16 +208,18 @@ ImU32 ParseHexColour( const char* hexColour )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-ImVec4 GetPulseColourVec4()
+ImVec4 GetPulseColourVec4( float alpha )
 {
     const auto colour1 = ImGui::GetStyleColorVec4( ImGuiCol_PlotHistogram );
     const auto colour2 = ImGui::GetStyleColorVec4( ImGuiCol_PlotHistogramHovered );
-    return lerpVec4( colour1, colour2, g_cycleTimerSlow );
+    auto pulse = lerpVec4( colour1, colour2, g_cycleTimerSlow );
+    pulse.w = alpha;
+    return pulse;
 }
 
-ImU32 GetPulseColour()
+ImU32 GetPulseColour( float alpha )
 {
-    return ImGui::GetColorU32( GetPulseColourVec4() );
+    return ImGui::GetColorU32( GetPulseColourVec4( alpha ) );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -344,6 +346,13 @@ void CenteredColouredText( const ImVec4& col, const char* text )
     ImGui::PushStyleColor( ImGuiCol_Text, col );
     ImGui::CenteredText( text );
     ImGui::PopStyleColor();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void RightAlignSameLine( float objectSize )
+{
+    ImGui::Dummy( ImVec2( ImGui::GetContentRegionAvail().x - objectSize, 0.0f ) );
+    ImGui::SameLine( 0, 0 );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

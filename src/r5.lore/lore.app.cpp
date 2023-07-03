@@ -1328,6 +1328,63 @@ protected:
 
     net::bond::RiffPushClient   m_rpClient;
 
+
+// ---------------------------------------------------------------------------------------------------------------------
+protected:
+
+    using JamNameRemoteResolution       = std::pair< endlesss::types::JamCouchID, std::string >;
+    using JamNameRemoteFetchResultQueue = mcc::ConcurrentQueue< JamNameRemoteResolution >;
+
+
+    // endlesss::services::IJamNameCacheServices
+    bool lookupNameForJam( const endlesss::types::JamCouchID& jamID, std::string& result ) const override
+    {
+        // default to original resolve first; if it passes, just return out
+        if ( OuroApp::lookupNameForJam( jamID, result ) )
+            return true;
+
+        // check first fall-back data source, the "historical" list from the Warehouse db
+        const auto historicalIt = m_jamHistoricalFromWarehouse.find( jamID );
+        if ( historicalIt != m_jamHistoricalFromWarehouse.end() )
+        {
+            result = historicalIt->second;
+            return true;
+        }
+
+        return false;
+    }
+
+    void event_RequestJamNameRemoteFetch( const events::RequestJamNameRemoteFetch* eventData )
+    {
+        getTaskExecutor().silent_async( [this, jamID = eventData->m_jamID, netCfg = getNetworkConfiguration()]()
+            {
+                // use the permalink query to fetch the public name
+                endlesss::api::BandPermalinkMeta bandPermalink;
+                if ( bandPermalink.fetch( *netCfg, jamID ) )
+                {
+                    if ( bandPermalink.errors.empty() )
+                    {
+                        // NB this name can actually be different to the current name, we would need to reproduce what the 
+                        // /join page does and do a fetch of a single riff, giving us the current name
+
+                        // .. for now, just log out the name we found, this will be processed on the main thread
+                        m_jamNameRemoteFetchResultQueue.enqueue(
+                            {
+                                std::move( jamID ),
+                                std::move( bandPermalink.data.band_name )
+                            });
+                    }
+                    else
+                    {
+                        blog::error::api( FMTX( "band name resolution failure, {}" ), bandPermalink.errors.front() );
+                    }
+                }
+            });
+    }
+
+    base::EventListenerID           m_eventLID_RequestJamNameRemoteFetch = base::EventListenerID::invalid();
+    JamNameRemoteFetchResultQueue   m_jamNameRemoteFetchResultQueue;
+    float                           m_jamNameRemoteFetchUpdateBroadcastTimer = 0;
 };
 
 
@@ -1414,8 +1471,14 @@ int LoreApp::EntrypointOuro()
     m_mdAudio->blockUntil( m_mdAudio->installMixer( &mixPreview ) );
 
 
-    m_eventListenerRiffChange       = m_appEventBus->addListener( events::MixerRiffChange::ID, std::bind( &LoreApp::handleNewRiffPlaying, this, stdp::_1 ) );
-    m_eventListenerOpComplete       = m_appEventBus->addListener( events::OperationComplete::ID, std::bind( &LoreApp::handleOperationComplete, this, stdp::_1 ) );
+    {
+        base::EventBusClient m_eventBusClient( m_appEventBus );
+
+        m_eventListenerRiffChange = m_appEventBus->addListener( events::MixerRiffChange::ID, std::bind( &LoreApp::handleNewRiffPlaying, this, stdp::_1 ) );
+        m_eventListenerOpComplete = m_appEventBus->addListener( events::OperationComplete::ID, std::bind( &LoreApp::handleOperationComplete, this, stdp::_1 ) );
+
+        APP_EVENT_BIND_TO( RequestJamNameRemoteFetch );
+    }
 
 
     checkedCoreCall( "add stem listener", [this] { return m_stemDataProcessor.connect( m_appEventBus ); } );
@@ -1514,6 +1577,28 @@ int LoreApp::EntrypointOuro()
 
         // tidy up any messages from our riff-sync background thread
         synchroniseRiffWork();
+
+        {
+            // see if we have any outstanding new jam name resolution results
+            JamNameRemoteResolution jamNameRemoteResolution;
+            if ( m_jamNameRemoteFetchResultQueue.try_dequeue( jamNameRemoteResolution ) )
+            {
+                m_jamHistoricalFromWarehouse.emplace( jamNameRemoteResolution.first, std::move( jamNameRemoteResolution.second ) );
+                m_jamNameRemoteFetchUpdateBroadcastTimer = 1.0f;
+            }
+
+            // we add a degree of delay to sending update messages to try and cluster cache name updates
+            if ( m_jamNameRemoteFetchUpdateBroadcastTimer > 0 )
+            {
+                // only send when we cross or hit the 0 boundary this frame
+                m_jamNameRemoteFetchUpdateBroadcastTimer -= GImGui->IO.DeltaTime;
+                if ( m_jamNameRemoteFetchUpdateBroadcastTimer <= 0 )
+                {
+                    getEventBusClient().Send< ::events::NotifyJamNameCacheUpdated >( 0 );
+                    m_jamNameRemoteFetchUpdateBroadcastTimer = 0;
+                }
+            }
+        }
 
 
         {
@@ -2352,7 +2437,7 @@ int LoreApp::EntrypointOuro()
 
         } // warehouse imgui 
 
-        m_sharedRiffView->imgui( *this );
+        m_sharedRiffView->imgui( *this, *this );
 
         maintainStemCacheAsync();
 

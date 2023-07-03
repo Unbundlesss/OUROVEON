@@ -22,7 +22,8 @@ namespace app {
 // "login" screen that offers audio/services configuration and validating a connection to the Endlesss backend
 //
 struct OuroApp : public CoreGUI,
-                 public endlesss::services::RiffFetch   // natively support using the built-in member services to load riffs
+                 public endlesss::services::RiffFetch,              // natively support using the built-in member services to load riffs
+                 public endlesss::services::IJamNameCacheServices   // assume base level support for abstract jam name resolution
 {
     OuroApp()
         : CoreGUI()
@@ -40,10 +41,13 @@ protected:
 protected:
 
     // endlesss::services::RiffFetch
-    virtual int32_t                                 getSampleRate() const override;
-    virtual const endlesss::api::NetConfiguration&  getNetConfiguration() const override { return *m_networkConfiguration; }
-    virtual endlesss::cache::Stems&                 getStemCache() override { return m_stemCache; }
-    virtual tf::Executor&                           getTaskExecutor() override { return m_taskExecutor; }
+    int32_t                                 getSampleRate() const override;
+    const endlesss::api::NetConfiguration&  getNetConfiguration() const override { return *m_networkConfiguration; }
+    endlesss::cache::Stems&                 getStemCache() override { return m_stemCache; }
+    tf::Executor&                           getTaskExecutor() override { return m_taskExecutor; }
+
+    // endlesss::services::IJamNameCacheServices
+    bool lookupNameForJam( const endlesss::types::JamCouchID& jamID, std::string& result ) const override;
 
 
     // validated storage locations for the app

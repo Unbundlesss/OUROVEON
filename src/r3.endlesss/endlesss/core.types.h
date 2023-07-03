@@ -453,11 +453,26 @@ private:
 };
 
 } // namespace types
+
+namespace services {
+
+// ---------------------------------------------------------------------------------------------------------------------
+struct IJamNameCacheServices
+{
+    // ask to lookup a public name for a given couch ID, returning true if it was found, false if not
+    virtual bool lookupNameForJam( const endlesss::types::JamCouchID& jamID, std::string& result ) const = 0;
+
+    virtual ~IJamNameCacheServices() {}
+};
+
+} // namespace services
 } // namespace endlesss
 
 
 // ---------------------------------------------------------------------------------------------------------------------
 CREATE_EVENT_BEGIN( EnqueueRiffPlayback )
+
+EnqueueRiffPlayback() = delete;
 
 EnqueueRiffPlayback( const endlesss::types::RiffIdentity& identity )
     : m_identity( identity )
@@ -471,7 +486,37 @@ EnqueueRiffPlayback( const endlesss::types::JamCouchID& jam, const endlesss::typ
     ABSL_ASSERT( m_identity.hasData() );
 }
 
-endlesss::types::RiffIdentity     m_identity;
+endlesss::types::RiffIdentity   m_identity;
 
 CREATE_EVENT_END()
 
+
+// ---------------------------------------------------------------------------------------------------------------------
+
+CREATE_EVENT_BEGIN( RequestJamNameRemoteFetch )
+
+RequestJamNameRemoteFetch() = delete;
+
+RequestJamNameRemoteFetch( const endlesss::types::JamCouchID& jamID )
+    : m_jamID( jamID )
+{
+}
+
+endlesss::types::JamCouchID     m_jamID;
+
+CREATE_EVENT_END()
+
+// ---------------------------------------------------------------------------------------------------------------------
+
+CREATE_EVENT_BEGIN( NotifyJamNameCacheUpdated )
+
+NotifyJamNameCacheUpdated() = delete;
+
+NotifyJamNameCacheUpdated( uint64_t changeIndex )
+    : m_changeIndex( changeIndex )
+{
+}
+
+uint64_t    m_changeIndex;
+
+CREATE_EVENT_END()

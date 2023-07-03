@@ -80,6 +80,20 @@ enum class LoadResult
     FailedPostLoad
 };
 
+inline const char* LoadResultToString( LoadResult lr )
+{
+    switch ( lr )
+    {
+    case LoadResult::Success:               return "Success";
+    case LoadResult::CannotFindConfigFile:  return "Cannot Find File";
+    case LoadResult::ErrorDuringLoad:       return "Error During Load";
+    case LoadResult::FailedPostLoad:        return "Failed Post Load";
+    default:
+        break;
+    }
+    return "Unknown";
+}
+
 enum class SaveResult
 {
     Success,

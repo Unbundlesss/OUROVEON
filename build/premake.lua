@@ -289,6 +289,7 @@ function SetupOuroveonLayer( isFinalRing, layerName )
         SrcDir() .. "r0.platform",
 
         SrcDir() .. "r2.ouro",
+        SrcDir() .. "r2.ouro.xp",
         SrcDir() .. "r3.endlesss",
         SrcDir() .. "r4.toolbox",
     }
@@ -307,6 +308,24 @@ function SetupOuroveonLayer( isFinalRing, layerName )
 
         SrcDir() .. "r4.toolbox/**.cpp",
     }
+    
+    filter "system:Windows"
+    files 
+    {
+        SrcDir() .. "r2.ouro.xp/xp/windows/*.*",
+    }
+    filter "system:linux"
+    files 
+    {
+        SrcDir() .. "r2.ouro.xp/xp/linux/*.*",
+    }
+    filter "system:macosx"
+    files 
+    {
+        SrcDir() .. "r2.ouro.xp/xp/macosx/*.*",
+    }
+    filter {}
+
     end
 
     -- headers
@@ -316,6 +335,7 @@ function SetupOuroveonLayer( isFinalRing, layerName )
 
         SrcDir() .. "r2.ouro/**.h",
         SrcDir() .. "r2.ouro/**.inl",
+        SrcDir() .. "r2.ouro.xp/**.h",
 
         SrcDir() .. "r0.platform/win32/**.h",
 
@@ -328,6 +348,10 @@ function SetupOuroveonLayer( isFinalRing, layerName )
         libFn()
     end
 
+    filter "files:**.c"
+        flags {"NoPCH"}
+    filter {}
+    
 end
 
 -- ------------------------------------------------------------------------------

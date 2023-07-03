@@ -907,6 +907,19 @@ void OuroApp::ensureStemCacheChecksComplete()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+bool OuroApp::lookupNameForJam( const endlesss::types::JamCouchID& jamID, std::string& result ) const
+{
+    endlesss::cache::Jams::Data jamData;
+    if ( m_jamLibrary.loadDataForDatabaseID( jamID, jamData ) )
+    {
+        result = jamData.m_displayName;
+        return true;
+    }
+
+    return false;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 void OuroApp::maintainStemCacheAsync()
 {
     static constexpr auto memoryReclaimPeriod = 30 * 1000;

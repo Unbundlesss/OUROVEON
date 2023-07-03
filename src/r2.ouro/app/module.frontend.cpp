@@ -12,8 +12,11 @@
 #include "app/core.h"
 #include "app/module.frontend.h"
 #include "app/module.frontend.fonts.h"
+#include "colour/preset.h"
 
 #include "gfx/gl/enumstring.h"
+
+#include "xp/open.url.h"
 
 #include "config/frontend.h"
 #include "config/display.h"
@@ -468,6 +471,15 @@ absl::Status Frontend::create( const app::Core* appCore )
 
             ImGuiFreeType::BuildFontAtlas( io.Fonts, ImGuiFreeTypeBuilderFlags_LightHinting );
         }
+        {
+            m_markdownConfig.linkIcon = ICON_FA_LINK;
+            m_markdownConfig.headingFormats[0].font = m_fontLogo;
+            m_markdownConfig.headingFormats[0].separator = false;
+            m_markdownConfig.headingFormats[1].font = m_fontMedium;
+            m_markdownConfig.linkCallback = &Frontend::MarkdownLinkHandler;
+            m_markdownConfig.userData = this;
+            m_markdownConfig.formatCallback = &Frontend::MarkdownFormalCallback;
+        }
     }
 
     #undef FONT_AT
@@ -623,6 +635,65 @@ void Frontend::resetWindowPositionAndSizeToDefault()
 
     m_currentWindowGeometry = getWindowGeometry();
     updateAndSaveFrontendConfig();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void Frontend::MarkdownLinkHandler( const ImGui::MarkdownLinkCallbackData& data )
+{
+    std::string linkText( data.link, data.linkLength ); // copy out exact text into temporary buffer
+    blog::core( "markdown link launching [{}]", linkText );
+    xpOpenURL( linkText.c_str() );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void Frontend::MarkdownFormalCallback( const ImGui::MarkdownFormatInfo& markdownFormatInfo_, bool start_ )
+{
+    ImGui::defaultMarkdownFormatCallback( markdownFormatInfo_, start_ );
+
+    switch ( markdownFormatInfo_.type )
+    {
+        case ImGui::MarkdownFormatType::HEADING:
+        {
+            if ( markdownFormatInfo_.level == 1 )
+            {
+                if ( start_ )
+                {
+                    ImGui::PushStyleColor( ImGuiCol_Text, ImGui::GetColorU32( ImGuiCol_NavHighlight ) );
+                }
+                else
+                {
+                    ImGui::PopStyleColor();
+                }
+            }
+            break;
+        }
+        case ImGui::MarkdownFormatType::LINK:
+        {
+            if ( start_ )
+            {
+                ImGui::PushStyleColor( ImGuiCol_Text, colour::shades::pink.dark() );
+            }
+            else
+            {
+                ImGui::PopStyleColor();
+                if ( markdownFormatInfo_.itemHovered )
+                {
+                    ImGui::UnderLine( colour::shades::pink.light() );
+                }
+                else
+                {
+                    ImGui::UnderLine( colour::shades::pink.dark() );
+                }
+            }
+            break;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void Frontend::imguiRenderMarkdown( std::string_view markdownText ) const
+{
+    ImGui::Markdown( markdownText.data(), markdownText.size(), m_markdownConfig );
 }
 
 } // namespace module

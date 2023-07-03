@@ -431,11 +431,13 @@ private:
 
     using DeveloperFlagRegistry = absl::flat_hash_map< std::string, bool* >;
 
+    void imguiModalAboutBox( const char* title );
 
     void checkLayoutConfig();
 
     DeveloperFlagRegistry   m_developerMenuRegistry;
 
+    bool                    m_showAboutBox              = false;
 #if OURO_DEBUG
     bool                    m_showImGuiDebugWindow      = false;
 #endif // OURO_DEBUG

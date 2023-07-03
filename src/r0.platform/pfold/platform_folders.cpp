@@ -218,15 +218,6 @@ void appendExtraFoldersTokenizer(const char* envName, const char* envValue, std:
 }
 #endif
 
-// #HDD added a function that sort of belongs here, opens a new Explorer / Finder window at a path
-void openExplorerWindowAtPath( const std::string& pathToOpen )
-{
-#ifdef _WIN32
-    ::ShellExecuteA( NULL, "open", pathToOpen.c_str(), NULL, NULL, SW_SHOWDEFAULT);
-#endif
-
-}
-
 
 std::string getDataHome() {
 #ifdef _WIN32

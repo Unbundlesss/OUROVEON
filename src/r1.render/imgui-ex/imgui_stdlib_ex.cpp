@@ -3,7 +3,10 @@
 
 void ImGui::TextUnformatted( const std::string_view str )
 {
-    ImGui::TextUnformatted( str.data(), &str.back() + 1 );
+    if ( str.empty() )
+        ImGui::TextUnformatted( "" );
+    else
+        ImGui::TextUnformatted( str.data(), &str.back() + 1 );
 }
 
 ImVec2 ImGui::CalcTextSize( const std::string_view str )

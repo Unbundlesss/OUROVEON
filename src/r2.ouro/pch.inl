@@ -265,6 +265,7 @@ ADD_BLOG( stem,     0xe65ea9,    "STEM" )
 #include "imgui.h"
 #include "imgui_stdlib.h"
 #include "imgui_stdlib_ex.h"
+#include "imgui_markdown.h"
 #include "implot.h"
 #include "imbezier.h"
 #include "imnodes.h"

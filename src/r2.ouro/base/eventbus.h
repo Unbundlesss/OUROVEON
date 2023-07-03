@@ -76,6 +76,22 @@ struct IEvent
 
 #define APP_EVENT_REGISTER( _evtname )  APP_EVENT_REGISTER_SPECIFIC( _evtname, 512 )
 
+#define APP_EVENT_BIND_TO( _eventType )                                                                             \
+    m_eventLID_##_eventType = m_eventBusClient.addListener(                                                         \
+        events::_eventType::ID,                                                                                     \
+        [this]( const base::IEvent& eventPtr )                                                                      \
+        {                                                                                                           \
+            ABSL_ASSERT( eventPtr.getID() == events::_eventType::ID );                                              \
+            const events::_eventType* riffChangeEvent = dynamic_cast<const events::_eventType*>(&eventPtr);         \
+            ABSL_ASSERT( riffChangeEvent != nullptr );                                                              \
+            event_##_eventType( riffChangeEvent );                                                                  \
+        })
+
+#define APP_EVENT_UNBIND( _eventType )                                                                              \
+    checkedCoreCall( __FUNCTION__ "|" #_eventType, [this] {                                                         \
+        return m_eventBusClient.removeListener( m_eventLID_##_eventType );                                          \
+        });
+
 
 // ---------------------------------------------------------------------------------------------------------------------
 // the controlling class for marshalling events

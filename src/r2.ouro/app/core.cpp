@@ -245,6 +245,8 @@ int Core::Run()
 
         // Endlesssian
         APP_EVENT_REGISTER( EnqueueRiffPlayback );
+        APP_EVENT_REGISTER( RequestJamNameRemoteFetch );
+        APP_EVENT_REGISTER( NotifyJamNameCacheUpdated );
     }
 
 
@@ -618,8 +620,19 @@ bool CoreGUI::beginInterfaceLayout( const ViewportFlags viewportFlags )
                 ImGui::MenuItem( OURO_FRAMEWORK_CREDIT, nullptr, nullptr, false );
 
                 ImGui::Separator();
+                if ( ImGui::MenuItem( "About" ) )
+                {
+                    activateModalPopup( "About", [&]( const char* title )
+                    {
+                        imguiModalAboutBox( title );
+                    });
+                }
+
+                ImGui::Separator();
                 if ( ImGui::MenuItem( "Quit" ) )
+                {
                     m_mdFrontEnd->requestQuit();
+                }
 
                 ImGui::EndMenu();
             }
@@ -1040,6 +1053,58 @@ void CoreGUI::registerRenderCallback( const RenderPoint rp, const RenderInjectio
     default:
         ABSL_ASSERT( 0 );
     }
+}
+
+void CoreGUI::imguiModalAboutBox( const char* title )
+{
+    const ImVec2 configWindowSize = ImVec2( 720.0f, 670.0f );
+    ImGui::SetNextWindowContentSize( configWindowSize );
+
+    ImGui::PushStyleColor( ImGuiCol_PopupBg, ImGui::GetStyleColorVec4( ImGuiCol_ChildBg ) );
+    ImGui::PushStyleVar( ImGuiStyleVar_WindowPadding, ImVec2( 18.0f, 18.0f ) );
+
+    if ( ImGui::BeginPopupModal( title, nullptr, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize ) )
+    {
+        static constexpr auto markdownText = R"(# OUROVEON
+
+Developed by Harry Denholm / ishani
+[https://github.com/Unbundlesss/OUROVEON/](https://github.com/Unbundlesss/OUROVEON/)
+
+___
+
+Built with many wonderful [3rd party components](https://github.com/Unbundlesss/OUROVEON/blob/main/LIBS.md)
+
+___
+ 
+**Thanks fly out to ...**
+
+  * [von](https://soundcloud.com/audubonswampgarden) for support, ideas, testing and being my partner in experimental audio crime
+
+  * [firephly](https://endlesss.fm/firephly) and [oddSTAR](https://endlesss.fm/oddstar) for going so far as to make entire tracks using early versions
+
+  * For taking time to test, use and feedback on the tools ...
+    * [afta8](https://endlesss.fm/afta8)
+    * [dsorce](https://endlesss.fm/dsorce)
+    * [loop](https://endlesss.fm/loop)
+    * [ludi](https://endlesss.fm/ludi)
+    * [lwlkc](https://endlesss.fm/lwlkc)
+    * [njlang](https://endlesss.fm/njlang)
+    * [slowgaffle](https://endlesss.fm/slowgaffle)
+
+  * The folks of [Track Club](https://trackclub.live) for early encouragement and a million hours of source music to be inspired and distracted by
+
+)";
+        {
+            getFrontend()->imguiRenderMarkdown( markdownText );
+
+            if ( ImGui::Button( "   Close   " ) )
+                ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor();
 }
 
 } // namespace app

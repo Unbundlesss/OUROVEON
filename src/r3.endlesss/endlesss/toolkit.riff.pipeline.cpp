@@ -132,11 +132,16 @@ bool Pipeline::resolveSharedRiff(
 
     result.riff = endlesss::types::Riff( result.jam.couchID, riffData.rifff );
 
-    std::size_t stemIndex = 0;
     for ( const auto& loop : riffData.loops )
     {
-        result.stems[stemIndex] = endlesss::types::Stem( result.jam.couchID, loop );
-        stemIndex++;
+        for ( std::size_t stemIndex = 0; stemIndex < 8; stemIndex++ )
+        {
+            if ( result.riff.stems[stemIndex] == loop._id )
+            {
+                result.stems[stemIndex] = endlesss::types::Stem( result.jam.couchID, loop );
+                break;
+            }
+        }
     }
 
     return true;

@@ -10,7 +10,7 @@
 #include "spacetime/chronicle.h"
 #include "base/text.h"
 
-#include "pfold/platform_folders.h"
+#include "xp/open.url.h"
 
 namespace ux {
 namespace widget {
@@ -57,7 +57,7 @@ void DiskRecorder( rec::IRecordable& recordable, const fs::path& recordingRootPa
 
             if ( ImGui::Button( ICON_FA_UP_RIGHT_FROM_SQUARE, commonButtonSize ) )
             {
-                sago::openExplorerWindowAtPath( pathToOpen.data() );
+                xpOpenURL( pathToOpen.data() );
             }
 
             ImGui::SameLine( 0.0f, 4.0f );
