@@ -201,8 +201,6 @@ struct VibePlan
             const int32_t targetHeight )
         {
             const float timeValue = (float)ImGui::GetTime();
-            const std::size_t currentBufferIdx  = bufferFlip ? 1 : 0;
-            const std::size_t previousBufferIdx = bufferFlip ? 0 : 1;
 
             for ( auto& op : m_operations )
             {
@@ -360,7 +358,7 @@ struct Vibes::State
         {
             bool bufferSetupFailed = false;
 
-            glCheckedCall( bufferSetupFailed, glGenBuffers( 2, m_glArrayBufferHandles.data() ) );
+            glChecked( glGenBuffers( 2, m_glArrayBufferHandles.data() ) );
 
             constexpr static auto vertexDataSize = (
                 VibeShader::cRenderTriangleCount *
@@ -481,7 +479,7 @@ struct Vibes::State
                 planOp->m_arrayBufferHandles = m_glArrayBufferHandles;
 
                 // transfer toggles
-                for ( const auto toggle : op.toggles )
+                for ( const auto& toggle : op.toggles )
                 {
                     auto& newToggle = planOp->m_toggles.emplace_back();
                     newToggle.m_name = toggle.name;
@@ -498,7 +496,7 @@ struct Vibes::State
                     }
                 }
                 // transfer dials
-                for ( const auto dial : op.dials )
+                for ( const auto& dial : op.dials )
                 {
                     auto& newDial = planOp->m_dials.emplace_back();
                     newDial.m_name = dial.name;
