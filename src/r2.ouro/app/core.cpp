@@ -478,6 +478,8 @@ config::Frontend CoreGUI::createDefaultFrontendConfig() const
 void CoreGUI::checkLayoutConfig()
 {
     config::Layout configLayout;
+    
+    blog::core( FMTX("loading layout config ...") );
 
     const auto feLoad = config::load( *this, configLayout );
     if ( feLoad == config::LoadResult::Success )

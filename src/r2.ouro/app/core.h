@@ -377,7 +377,7 @@ protected:
     bool beginInterfaceLayout( const ViewportFlags viewportFlags );
     void finishInterfaceLayoutAndRender();
 
-    static ouro_nodiscard constexpr bool hasViewportFlag( const ViewportFlags viewportFlags, ViewportFlags vFlag )
+    ouro_nodiscard constexpr bool hasViewportFlag( const ViewportFlags viewportFlags, ViewportFlags vFlag )
     {
         return ( viewportFlags & vFlag ) == vFlag;
     }

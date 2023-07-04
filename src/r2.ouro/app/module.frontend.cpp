@@ -127,7 +127,7 @@ Frontend::~Frontend()
 
 static void glfwErrorCallback( int error, const char* description )
 {
-    blog::error::core( "[glfw] error %i : %s", error, description );
+    blog::error::core( FMTX( "[glfw] error {} : {}" ), error, description );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -620,6 +620,8 @@ void Frontend::titleText( const char* label ) const
 // ---------------------------------------------------------------------------------------------------------------------
 void Frontend::reloadImguiLayoutFromDefault() const
 {
+    blog::core( FMTX("imgui loading layout [{}] ..."), m_imguiLayoutDefaultPath.string() );
+    
     ImGui::LoadIniSettingsFromDisk( m_imguiLayoutDefaultPath.string().c_str() );
     ImGui::MarkIniSettingsDirty();
 }
