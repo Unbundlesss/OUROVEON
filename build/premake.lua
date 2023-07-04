@@ -302,8 +302,6 @@ function SetupOuroveonLayer( isFinalRing, layerName )
         SrcDir() .. "r2.ouro/**.ispc",
         SrcDir() .. "r2.ouro/**.isph",
 
-        SrcDir() .. "r0.platform/win32/**.cpp",
-
         SrcDir() .. "r3.endlesss/**.cpp",
 
         SrcDir() .. "r4.toolbox/**.cpp",
@@ -313,6 +311,9 @@ function SetupOuroveonLayer( isFinalRing, layerName )
     files 
     {
         SrcDir() .. "r2.ouro.xp/xp/windows/*.*",
+        
+        SrcDir() .. "r0.platform/win32/**.h",
+        SrcDir() .. "r0.platform/win32/**.cpp",
     }
     filter "system:linux"
     files 
@@ -337,8 +338,6 @@ function SetupOuroveonLayer( isFinalRing, layerName )
         SrcDir() .. "r2.ouro/**.inl",
         SrcDir() .. "r2.ouro.xp/**.h",
 
-        SrcDir() .. "r0.platform/win32/**.h",
-
         SrcDir() .. "r3.endlesss/**.h",
 
         SrcDir() .. "r4.toolbox/**.h",
@@ -351,7 +350,7 @@ function SetupOuroveonLayer( isFinalRing, layerName )
     filter "files:**.c"
         flags {"NoPCH"}
     filter {}
-    
+
 end
 
 -- ------------------------------------------------------------------------------
@@ -421,11 +420,13 @@ function CommonAppLink()
         "Cocoa.framework",
         "IOKit.framework",
         "OpenGL.framework",
+        "CoreFoundation.framework",
         "CoreVideo.framework",
         "CoreAudio.framework",
         "CoreMIDI.framework",
         "AudioToolBox.framework",
         "AudioUnit.framework",
+        "Security.framework"   -- httplib requires
     }
     filter {}
 
