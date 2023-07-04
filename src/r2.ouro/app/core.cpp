@@ -253,18 +253,19 @@ int Core::Run()
     // we load configuration data from the known system config directory
     m_sharedConfigPath  = fs::path( sago::getConfigHome() ) / cOuroveonRootName;
     m_appConfigPath     = m_sharedConfigPath / GetAppCacheName();
-
+    
+    static const fs::path sharedPathRoot( "shared" );
 #if OURO_PLATFORM_OSX
     // on MacOS we may be running as a THING.app bundle with our own copy of the 
     // shared resources files in a local /Contents/Resources tree - check for this first
     const auto osxBundlePath = osxGetBundlePath();
-    auto sharedResRoot = ( fs::path( osxBundlePath ).parent_path().parent_path() ) / "Resources";
+    auto sharedPathRootTest = ( fs::path( osxBundlePath ).parent_path().parent_path() ) / "Resources";
 
     // if running outside of a distribution bundle, assume the unpacked file structure
-    if ( !fs::exists(sharedResRoot) )
+    if ( !fs::exists(sharedPathRootTest) )
     {
         blog::core( "osx launched unpacked" );
-        sharedResRoot = fs::current_path().parent_path().parent_path();
+        sharedPathRootTest = fs::current_path().parent_path().parent_path();
     }
     else
     {
@@ -273,8 +274,6 @@ int Core::Run()
 #else
     // on non-MacOS, running APP.EXE will launch with the working path set to wherever APP.EXE is
     // first, we check if we're right next to shared (to support a more comfortable distributed build layout)
-    static const fs::path sharedPathRoot( "shared" );
-
     fs::path sharedPathRootTest = fs::current_path();
     if ( fs::exists( sharedPathRootTest / sharedPathRoot ) )
     {
