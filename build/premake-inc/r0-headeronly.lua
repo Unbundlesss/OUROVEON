@@ -115,14 +115,14 @@ function addSimpleHeaderOnly( isExternal, moduleName, pathTo )
 
     if ( isExternal ) then
         ModuleRefInclude[moduleName] = function()
-            includedirs
+            externalincludedirs
             {
                 SrcDir() .. pathTo,
             }
         end
     else
         ModuleRefInclude[moduleName] = function()
-            externalincludedirs
+            includedirs
             {
                 SrcDir() .. pathTo,
             }

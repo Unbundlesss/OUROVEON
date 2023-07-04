@@ -5,7 +5,7 @@ end
 
 -- ==============================================================================
 ModuleRefInclude["lua"] = function()
-    includedirs
+    externalincludedirs
     {
         Root_LUA(),
     }
