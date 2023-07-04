@@ -24,6 +24,7 @@ struct UserSelector
     ouro_nodiscard const std::string& getUsername() const { return m_username; }
     void setUsername( const std::string_view username ) { m_username = username; }
 
+    ouro_nodiscard bool isEmpty() const { return m_username.empty(); }
 
 private:
 

@@ -1,5 +1,5 @@
+#include "pch.h"
 
-#include <windows.h>
 #include <shellapi.h>
 
 int xpOpenURL( const char* url )

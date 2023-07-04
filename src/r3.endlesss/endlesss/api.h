@@ -535,7 +535,10 @@ struct ResultStemDocument
         template<class Archive>
         inline void serialize( Archive& archive )
         {
-            archive( CEREAL_NVP( oggAudio ) );
+            // marked as OPTIONAL as there are very rare times where there seems to just be no ogg data at all
+            // .. and in those times, we can leave the ogg structure above barren, the riff resolover can deal with that, 
+            // it's braver than cereal's very picky json parsing
+            archive( CEREAL_OPTIONAL_NVP( oggAudio ) );
         }
     } cdn_attachments;
 

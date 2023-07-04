@@ -54,7 +54,7 @@ std::vector<fs::path> exportRiff(
     // jam level tokens
     {
         std::string jamNameSanitised;
-        base::asciifyString( currentRiff->m_riffData.jam.displayName, jamNameSanitised );
+        base::asciifyString( currentRiff->m_riffData.jam.displayName, jamNameSanitised, '_' );
         const std::string jamUID = currentRiff->m_riffData.jam.couchID.substr( destination.m_spec.custom.uniqueIDLength );
 
         tokenReplacements.emplace( OutputTokens::toString( OutputTokens::Enum::Jam_Name ),     jamNameSanitised );

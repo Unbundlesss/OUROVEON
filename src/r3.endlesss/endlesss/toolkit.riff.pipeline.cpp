@@ -128,7 +128,7 @@ bool Pipeline::resolveSharedRiff(
     api::SharedRiffsByUser::Data riffData = sharedRiffData.data[0];
 
     result.jam.couchID = riffData.band;
-    result.jam.displayName = "shared riff";
+    result.jam.displayName = fmt::format( FMTX( "shared riff {}" ), riffData.rifff.userName ); // encode the username in for export delineation
 
     result.riff = endlesss::types::Riff( result.jam.couchID, riffData.rifff );
 

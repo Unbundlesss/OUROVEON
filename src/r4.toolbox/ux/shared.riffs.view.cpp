@@ -16,6 +16,8 @@
 #include "app/module.frontend.fonts.h"
 #include "colour/preset.h"
 
+#include "xp/open.url.h"
+
 #include "endlesss/core.types.h"
 #include "endlesss/toolkit.shares.h"
 
@@ -65,7 +67,7 @@ struct SharedRiffView::State
     void restartJamNameCacheResolution()
     {
         m_jamNameCacheSyncIndex = 0;
-        m_jamNameCacheUpdate = true;
+        m_jamNameCacheUpdate = !m_jamNameResolvedArray.empty();
     }
 
 
@@ -195,27 +197,29 @@ void SharedRiffView::State::imgui(
 
         // choose a user and fetch latest data on request
         {
-            ImGui::Scoped::Enabled se( bCanSyncNewData && !bIsFetchingData );
-            if ( ImGui::Button( " " ICON_FA_ARROWS_ROTATE " Fetch Latest " ) )
-            {
-                m_fetchInProgress = true;
-
-                coreGUI.getTaskExecutor().run( std::move(
-                    m_sharesCache.taskFetchLatest(
-                        *m_networkConfiguration,
-                        m_user.getUsername(),
-                        [this]( toolkit::Shares::StatusOrData newData )
-                        {
-                            onNewDataFetched( newData );
-                            m_fetchInProgress = false;
-                        } ) 
-                ));
-            }
-            ImGui::SameLine();
-
-            ImGui::TextUnformatted( ICON_FA_USER_LARGE );
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted( ICON_FA_USER );
             ImGui::SameLine();
             m_user.imgui( coreGUI.getEndlesssPopulation(), 240.0f );
+            ImGui::SameLine();
+            {
+                ImGui::Scoped::Enabled se( bCanSyncNewData && !bIsFetchingData && !m_user.isEmpty() );
+                if ( ImGui::Button( " " ICON_FA_ARROWS_ROTATE " Fetch Latest " ) )
+                {
+                    m_fetchInProgress = true;
+
+                    coreGUI.getTaskExecutor().run( 
+                        m_sharesCache.taskFetchLatest(
+                            *m_networkConfiguration,
+                            m_user.getUsername(),
+                            [this]( toolkit::Shares::StatusOrData newData )
+                            {
+                                onNewDataFetched( newData );
+                                m_fetchInProgress = false;
+                            } )
+                    );
+                }
+            }
             ImGui::SameLine();
         }
 
@@ -233,115 +237,138 @@ void SharedRiffView::State::imgui(
 
                 const auto dataPtr = *m_sharesData;
 
-                ImGui::Text( "%i riffs, synced %s", dataPtr->m_count, m_lastSyncTimestampString.c_str() );
-                ImGui::SameLine( 0, 0 );
-                ImGui::RightAlignSameLine( 28.0f );
+                if ( dataPtr->m_count == 0 )
                 {
-                    ImGui::Scoped::Enabled scrollButtonAvailable( m_currentlyPlayingSharedRiff );
-                    bScrollToPlaying = ImGui::IconButton( ICON_FA_ARROWS_DOWN_TO_LINE );
+                    ImGui::TextDisabled( "no data; select user and sync" );
                 }
-
-                ImGui::Spacing();
-
-                static ImVec2 buttonSizeMidTable( 29.0f, 21.0f );
-
-                if ( ImGui::BeginChild( "##data_child" ) )
+                else
                 {
-                    ImGui::PushStyleVar( ImGuiStyleVar_ItemSpacing, { 4.0f, 2.0f } );
+                    ImGui::Text( "%i riffs, synced %s", dataPtr->m_count, m_lastSyncTimestampString.c_str() );
 
-                    if ( ImGui::BeginTable( "##shared_riff_table", 3,
-                        ImGuiTableFlags_ScrollY |
-                        ImGuiTableFlags_Borders |
-                        ImGuiTableFlags_RowBg |
-                        ImGuiTableFlags_NoSavedSettings ) )
+                    // add button that brings any currently playing riff into view inside the table
+                    ImGui::SameLine( 0, 0 );
+                    ImGui::RightAlignSameLine( 28.0f );
                     {
-                        ImGui::TableSetupScrollFreeze( 0, 1 );  // top row always visible
-
-                        ImGui::TableSetupColumn( "Play", ImGuiTableColumnFlags_WidthFixed, 32.0f );
-                        ImGui::TableSetupColumn( "Name", ImGuiTableColumnFlags_WidthStretch, 0.5f );
-                        ImGui::TableSetupColumn( "Jam", ImGuiTableColumnFlags_WidthStretch, 0.5f );
-                        ImGui::TableHeadersRow();
-
-                        for ( std::size_t entry = 0; entry < dataPtr->m_count; entry++ )
-                        {
-                            const bool bIsPrivate       = dataPtr->m_private[entry];
-                            const bool bIsPersonal      = dataPtr->m_personal[entry];
-                            const bool bIsPlaying       = dataPtr->m_riffIDs[entry] == m_currentlyPlayingRiffID;
-                            const bool bRiffWasEnqueued = m_enqueuedRiffIDs.contains( dataPtr->m_riffIDs[entry] );
-
-                            // keep track of if any of the shared riffs are considered active
-                            bFoundAPlayingRiffInTable |= bIsPlaying;
-
-                            ImGui::PushID( (int32_t)entry );
-                            ImGui::TableNextColumn();
-
-                            // show some indication that work is in progress for this entry if it's been asked to play
-                            if ( bRiffWasEnqueued )
-                            {
-                                ImGui::TableSetBgColor( ImGuiTableBgTarget_RowBg1, ImGui::GetPulseColour( 0.25f ) );
-                            }
-
-                            {
-                                // riff enqueue-to-play button, disabled when in-flight
-                                ImGui::Scoped::Disabled disabledButton( bRiffWasEnqueued );
-                                ImGui::Scoped::ToggleButton highlightButton( bIsPlaying, true );
-                                if ( ImGui::PrecisionButton( bRiffWasEnqueued ? ICON_FA_CIRCLE_CHEVRON_DOWN : ICON_FA_PLAY, buttonSizeMidTable, 1.0f ) )
-                                {
-                                    const endlesss::types::RiffCouchID sharedRiffToEnqueue( dataPtr->m_sharedRiffIDs[entry].c_str() );
-
-                                    coreGUI.getEventBusClient().Send< ::events::EnqueueRiffPlayback >(
-                                        endlesss::types::Constants::SharedRiffJam(),
-                                        sharedRiffToEnqueue );
-
-                                    // enqueue the riff ID, not the *shared* riff ID as the default riff ID is what will
-                                    // be flowing back through "riff now being played" messages
-                                    m_enqueuedRiffIDs.emplace( dataPtr->m_riffIDs[entry] );
-                                }
-
-                                if ( bIsPlaying && bScrollToPlaying )
-                                    ImGui::ScrollToItem( ImGuiScrollFlags_KeepVisibleCenterY );
-                            }
-                            ImGui::TableNextColumn();
-
-                            // draw the riff name
-                            ImGui::Dummy( ImVec2( 0.0f, 1.0f ) );
-                            if ( bIsPrivate )
-                            {
-                                ImGui::TextUnformatted( ICON_FA_LOCK );
-                                ImGui::SameLine();
-                            }
-                            ImGui::TextUnformatted( dataPtr->m_names[entry] );
-                            
-                            ImGui::TableNextColumn();
-
-                            // draw the jam name, if we have one
-                            ImGui::Dummy( ImVec2( 0.0f, 1.0f ) );
-                            {
-                                const auto jamID = dataPtr->m_jamIDs[entry];
-
-                                ImGui::TextDisabled( "ID" );
-                                if ( ImGui::IsItemClicked() )
-                                {
-                                    ImGui::SetClipboardText( jamID.c_str() );
-                                }
-                                ImGui::CompactTooltip( jamID.c_str() );
-                                ImGui::SameLine(0, 12.0f);
-
-                                if ( bIsPrivate || bIsPersonal )
-                                    ImGui::TextColored( colour::shades::callout.neutral(), m_jamNameResolvedArray[entry].c_str() );
-                                else
-                                    ImGui::TextUnformatted( m_jamNameResolvedArray[entry] );
-                            }
-
-                            ImGui::PopID();
-                        }
-
-                        ImGui::EndTable();
+                        ImGui::Scoped::Enabled scrollButtonAvailable( m_currentlyPlayingSharedRiff );
+                        bScrollToPlaying = ImGui::IconButton( ICON_FA_ARROWS_DOWN_TO_LINE );
+                        ImGui::CompactTooltip( "Scroll to currently playing riff" );
                     }
 
-                    ImGui::PopStyleVar();
+                    ImGui::Spacing();
+
+                    static ImVec2 buttonSizeMidTable( 31.0f, 22.0f );
+
+                    if ( ImGui::BeginChild( "##data_child" ) )
+                    {
+                        ImGui::PushStyleVar( ImGuiStyleVar_ItemSpacing, { 4.0f, 0.0f } );
+
+                        if ( ImGui::BeginTable( "##shared_riff_table", 4,
+                            ImGuiTableFlags_ScrollY |
+                            ImGuiTableFlags_Borders |
+                            ImGuiTableFlags_RowBg   |
+                            ImGuiTableFlags_NoSavedSettings ) )
+                        {
+                            ImGui::TableSetupScrollFreeze( 0, 1 );  // top row always visible
+
+                            ImGui::TableSetupColumn( "Play", ImGuiTableColumnFlags_WidthFixed, 32.0f );
+                            ImGui::TableSetupColumn( "Name", ImGuiTableColumnFlags_WidthStretch, 0.5f );
+                            ImGui::TableSetupColumn( "Link", ImGuiTableColumnFlags_WidthFixed, 32.0f );
+                            ImGui::TableSetupColumn( "Jam",  ImGuiTableColumnFlags_WidthStretch, 0.5f );
+                            ImGui::TableHeadersRow();
+
+                            for ( std::size_t entry = 0; entry < dataPtr->m_count; entry++ )
+                            {
+                                const bool bIsPrivate       = dataPtr->m_private[entry];
+                                const bool bIsPersonal      = dataPtr->m_personal[entry];
+                                const bool bIsPlaying       = dataPtr->m_riffIDs[entry] == m_currentlyPlayingRiffID;
+                                const bool bRiffWasEnqueued = m_enqueuedRiffIDs.contains( dataPtr->m_riffIDs[entry] );
+
+                                // keep track of if any of the shared riffs are considered active, used to enable scroll-to-playing button above
+                                // (done backwards due to nature of imguis)
+                                bFoundAPlayingRiffInTable |= bIsPlaying;
+
+                                ImGui::PushID( (int32_t)entry );
+
+                                ImGui::TableNextColumn();
+                                {
+                                    // show some indication that work is in progress for this entry if it's been asked to play
+                                    if ( bRiffWasEnqueued )
+                                    {
+                                        ImGui::TableSetBgColor( ImGuiTableBgTarget_RowBg1, ImGui::GetPulseColour( 0.25f ) );
+                                    }
+                                    ImGui::Dummy( { 0, 0 } );
+                                    {
+                                        // riff enqueue-to-play button, disabled when in-flight
+                                        ImGui::Scoped::Disabled disabledButton( bRiffWasEnqueued );
+                                        ImGui::Scoped::ToggleButton highlightButton( bIsPlaying, true );
+                                        if ( ImGui::PrecisionButton( bRiffWasEnqueued ? ICON_FA_CIRCLE_CHEVRON_DOWN : ICON_FA_PLAY, buttonSizeMidTable, 1.0f ) )
+                                        {
+                                            const endlesss::types::RiffCouchID sharedRiffToEnqueue( dataPtr->m_sharedRiffIDs[entry].c_str() );
+
+                                            coreGUI.getEventBusClient().Send< ::events::EnqueueRiffPlayback >(
+                                                endlesss::types::Constants::SharedRiffJam(),
+                                                sharedRiffToEnqueue );
+
+                                            // enqueue the riff ID, not the *shared* riff ID as the default riff ID is what will
+                                            // be flowing back through "riff now being played" messages
+                                            m_enqueuedRiffIDs.emplace( dataPtr->m_riffIDs[entry] );
+                                        }
+
+                                        if ( bIsPlaying && bScrollToPlaying )
+                                            ImGui::ScrollToItem( ImGuiScrollFlags_KeepVisibleCenterY );
+                                    }
+                                }
+                                ImGui::TableNextColumn();
+                                ImGui::AlignTextToFramePadding();
+                                {
+                                    // draw the riff name
+                                    if ( bIsPrivate )
+                                    {
+                                        ImGui::TextUnformatted( ICON_FA_LOCK );
+                                        ImGui::SameLine();
+                                    }
+                                    ImGui::TextUnformatted( dataPtr->m_names[entry] );
+                                }
+                                ImGui::TableNextColumn();
+                                {
+                                    ImGui::Dummy( { 0, 0 } );
+                                    if ( ImGui::PrecisionButton( ICON_FA_LINK, buttonSizeMidTable, 1.0f ) )
+                                    {
+                                        const auto webPlayerURL = fmt::format( FMTX( "https://endlesss.fm/{}/?rifffId={}" ), m_user.getUsername(), dataPtr->m_sharedRiffIDs[entry] );
+                                        xpOpenURL( webPlayerURL.c_str() );
+                                    }
+                                }
+                                ImGui::TableNextColumn();
+                                ImGui::AlignTextToFramePadding();
+                                {
+                                    // draw the jam name, if we have one
+                                    {
+                                        const auto jamID = dataPtr->m_jamIDs[entry];
+
+                                        ImGui::TextDisabled( "ID" );
+                                        if ( ImGui::IsItemClicked() )
+                                        {
+                                            ImGui::SetClipboardText( jamID.c_str() );
+                                        }
+                                        ImGui::CompactTooltip( jamID.c_str() );
+                                        ImGui::SameLine(0, 12.0f);
+
+                                        if ( bIsPrivate || bIsPersonal )
+                                            ImGui::TextColored( colour::shades::callout.neutral(), m_jamNameResolvedArray[entry].c_str() );
+                                        else
+                                            ImGui::TextUnformatted( m_jamNameResolvedArray[entry] );
+                                    }
+                                }
+                                ImGui::PopID();
+                            }
+
+                            ImGui::EndTable();
+                        }
+
+                        ImGui::PopStyleVar();
+                    }
+                    ImGui::EndChild();
                 }
-                ImGui::EndChild();
 
                 // if set in onNewDataFetched(), page any new data out to disk to cache the results across sessions
                 if ( m_trySaveToCache )
