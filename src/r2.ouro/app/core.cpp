@@ -271,12 +271,25 @@ int Core::Run()
         blog::core( FMTX( "osx bundle path : {}" ), osxBundlePath );
     }
 #else
-    // on non-MacOS, running APP.EXE will launch with the working path set to wherever APP.EXE is 
-    // .. in that case, we step back twice (ie from `\bin\lore\windows_release_x86_64` back to `\bin`)
-    const auto sharedResRoot = fs::current_path().parent_path().parent_path();
+    // on non-MacOS, running APP.EXE will launch with the working path set to wherever APP.EXE is
+    // first, we check if we're right next to shared (to support a more comfortable distributed build layout)
+    static const fs::path sharedPathRoot( "shared" );
+
+    fs::path sharedPathRootTest = fs::current_path();
+    if ( fs::exists( sharedPathRootTest / sharedPathRoot ) )
+    {
+        blog::core( FMTX( "running next to root shared path" ) );
+    }
+    else
+    {
+        blog::core( FMTX( "running from inside /bin distribution, stepping back to find /shared" ) );
+
+        // otherwise, we step back twice (ie from `\bin\lore\windows_release_x86_64` back to `\bin`)
+        sharedPathRootTest = fs::current_path().parent_path().parent_path();
+    }
 #endif 
 
-    m_sharedDataPath    = sharedResRoot / "shared";
+    m_sharedDataPath    = sharedPathRootTest / sharedPathRoot;
 
     blog::core( FMTX( "core filesystem :" ) );
     blog::core( FMTX( "  shared config : {}" ), m_sharedConfigPath.string() );
