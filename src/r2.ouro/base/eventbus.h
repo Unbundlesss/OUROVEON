@@ -88,7 +88,7 @@ struct IEvent
         })
 
 #define APP_EVENT_UNBIND( _eventType )                                                                              \
-    checkedCoreCall( __FUNCTION__ "|" #_eventType, [this] {                                                         \
+    checkedCoreCall( fmt::format( FMTX("{{{}}} : [{}]"), source_location::current().function_name(), #_eventType ), [this] {  \
         return m_eventBusClient.removeListener( m_eventLID_##_eventType );                                          \
         });
 
