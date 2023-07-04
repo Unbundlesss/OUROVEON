@@ -9,12 +9,4 @@
 
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 extern int xpOpenURL(const char *url);
-
-#ifdef __cplusplus
-}
-#endif
