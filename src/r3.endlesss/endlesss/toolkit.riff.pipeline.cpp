@@ -132,6 +132,8 @@ bool Pipeline::resolveSharedRiff(
 
     result.riff = endlesss::types::Riff( result.jam.couchID, riffData.rifff );
 
+    // standard stem resolve, just match up couch IDs with slots and convert over (resolveStandardRiff does something similar)
+    // NB we don't track or care about any stems that don't match IDs .. we could?
     for ( const auto& loop : riffData.loops )
     {
         for ( std::size_t stemIndex = 0; stemIndex < 8; stemIndex++ )
@@ -156,12 +158,23 @@ bool Pipeline::defaultNetworkResolver(
     // branch to resolve shared riffs with special handling
     if ( request.getJamID() == endlesss::types::Constants::SharedRiffJam() )
     {
+        // we take a chance on not having full network auth here, the shared riff API doesn't seem to need any
+        // as it's all servicing the bare website most of the time where strangers can browse stuff
+
         return resolveSharedRiff( ncfg, request, result );
     }
     // otherwise its business as usual
     else
     {
-        return resolveStandardRiff( ncfg, request, result );
+        // assuming we have Endlesss auth, go hunting; the UI should try and make sure we don't get in here
+        // without authentication
+        if ( ncfg.hasAccess( endlesss::api::NetConfiguration::Access::Authenticated ) )
+        {
+            return resolveStandardRiff( ncfg, request, result );
+        }
+
+        blog::error::api( FMTX( "defaultNetworkResolver dispatch for riff but without net authentication" ) );
+        return false;
     }
 }
 

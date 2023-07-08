@@ -59,6 +59,19 @@ OURO_CONFIG( Auth )
     }
 };
 
+// response when auth bails on us
+struct AuthFailure
+{
+    std::string     message;
+
+    template<class Archive>
+    void serialize( Archive & archive )
+    {
+        archive( CEREAL_NVP( message )
+        );
+    }
+};
+
 
 // ---------------------------------------------------------------------------------------------------------------------
 // config required for all the remote calls to pull data from endlesss backend

@@ -139,7 +139,8 @@ struct Core : CoreStart,
     virtual const char* GetAppCacheName() const = 0;        // 'foo' - must be filename/path friendly
 
     // optional toggle for supporting login-less boot up where the app can run without needing full auth data
-    virtual bool supportsOfflineEndlesssMode() const { return false; }
+    // restricting network traffic to public-only endpoints
+    virtual bool supportsUnauthorisedEndlesssMode() const { return false; }
 
     ouro_nodiscard constexpr const fs::path& getSharedConfigPath() const { return m_sharedConfigPath; }
     ouro_nodiscard constexpr const fs::path& getSharedDataPath() const   { return m_sharedDataPath;   }

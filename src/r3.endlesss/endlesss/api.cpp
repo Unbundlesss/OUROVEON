@@ -347,7 +347,11 @@ bool SharedRiffsByUser::fetchSpecific( const NetConfiguration& ncfg, const endle
 // ---------------------------------------------------------------------------------------------------------------------
 bool SharedRiffsByUser::commonRequest( const NetConfiguration& ncfg, const std::string& requestUrl, const std::string& requestContext )
 {
-    auto res = createEndlesssHttpClient( ncfg, UserAgent::WebWithAuth )->Get( requestUrl );
+    // can use either auth or not, depending on what we have in the configuration; no-auth just means you won't see your own private stuff
+    // as everything else is available via public calls
+    const UserAgent srUA = ncfg.hasAccess( NetConfiguration::Access::Authenticated ) ? UserAgent::WebWithAuth : UserAgent::WebWithoutAuth;
+
+    auto res = createEndlesssHttpClient( ncfg, srUA )->Get( requestUrl );
 
     #define CHECK_CHAR( _idx, _chr ) if ( bodyStream[i + _idx] == _chr )
 
