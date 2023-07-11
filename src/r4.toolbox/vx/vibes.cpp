@@ -616,7 +616,7 @@ void Vibes::State::doImGuiDisplay( const endlesss::toolkit::Exchange& data, app:
             if ( !m_autoOversample )
                 resolutionScale = 1.0f;
             else
-                resolutionScale = std::floorf( resolutionScale );
+                resolutionScale = std::floor( resolutionScale );
         }
 
         const ImVec2 renderViewScaled = ImVec2(
