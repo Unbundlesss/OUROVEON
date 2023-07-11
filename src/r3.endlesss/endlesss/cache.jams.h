@@ -109,7 +109,7 @@ struct Jams
     bool load( const config::IPathProvider& pathProvider );
     bool save( const config::IPathProvider& pathProvider );
 
-    ouro_nodiscard xconstexpr bool hasJamData() const
+    ouro_nodiscard bool hasJamData() const
     { 
         // overbearing but ensures on the ouro boot page we aren't talking to vectors that are being
         // heavily modified during a postProcessNewData() call (leading to very rare crash)

@@ -15,7 +15,7 @@
 
 namespace math {
 
-#if OURO_PLATFORM_NIX
+#if OURO_PLATFORM_LINUX
 static uint64_t GetTickCountMs()
 {
     struct timespec ts;
@@ -31,7 +31,7 @@ void RNG32::reseed()
     reseed((uint32_t)(
 #if OURO_PLATFORM_WIN
         ::GetTickCount64()
-#elif OURO_PLATFORM_NIX
+#elif OURO_PLATFORM_LINUX
         GetTickCountMs()
 #elif OURO_PLATFORM_OSX
         mach_absolute_time()

@@ -24,7 +24,7 @@ namespace mix {
 // a mostly simple mixer but with some tricks up its sleeve; can sequence riff changes on particular beats, does some
 // sample averaging while blending to reduce clicks and pops on harsh riff state changes
 //
-struct Preview ouro_final : public app::module::MixerInterface,
+struct Preview final : public app::module::MixerInterface,
                             public rec::IRecordable,
                             public RiffMixerBase
 {

@@ -60,7 +60,7 @@ struct IEvent
 };
 
 #define CREATE_EVENT_BEGIN(_evtname)    namespace events {                                                          \
-                                        struct _evtname ouro_final : public base::IEvent                            \
+                                        struct _evtname final : public base::IEvent                            \
                                         {                                                                           \
                                             constexpr static base::EventID ID = base::EventID( #_evtname );         \
                                             const base::EventID& getID() const override { return ID; }

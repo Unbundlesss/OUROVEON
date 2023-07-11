@@ -11,7 +11,7 @@ function SetDefaultBuildConfiguration()
 
     filter "system:Windows"
         flags {
-            "MultiProcessorCompile"     -- /MP on MSVC to locally distribute compile
+            "MultiProcessorCompile"         -- /MP on MSVC to locally distribute compile
         }
         externalwarnings "Off"
         buildoptions {
@@ -67,9 +67,12 @@ end
 -- ------------------------------------------------------------------------------
 function AddPCH( sourceFile, headerFilePath, headerFile )
     pchsource ( sourceFile )
-    if ( os.host() == "windows" ) then
+
+    filter "action:vs*"  -- for Visual Studio actions
         pchheader ( headerFile )
-    else
-        pchheader ( headerFilePath .. headerFile )
-    end
+    filter{}
+
+    filter "action:not vs*"  -- for everything else
+        pchheader ( path.join( headerFilePath, headerFile ) )
+    filter{}
 end

@@ -94,7 +94,7 @@ workspace ("ouroveon_" .. _ACTION)
 
             "OURO_PLATFORM_WIN=1",
             "OURO_PLATFORM_OSX=0",
-            "OURO_PLATFORM_NIX=0",
+            "OURO_PLATFORM_LINUX=0",
 
             "OURO_HAS_ISPC=1",
 
@@ -123,7 +123,7 @@ workspace ("ouroveon_" .. _ACTION)
         {
             "OURO_PLATFORM_WIN=0",
             "OURO_PLATFORM_OSX=0",
-            "OURO_PLATFORM_NIX=1",
+            "OURO_PLATFORM_LINUX=1",
 
             "OURO_HAS_ISPC=0",
 
@@ -131,7 +131,7 @@ workspace ("ouroveon_" .. _ACTION)
         }
         buildoptions
         {
-            "-ffast-math"
+            
         }
     filter {}
 
@@ -145,7 +145,7 @@ workspace ("ouroveon_" .. _ACTION)
         {
             "OURO_PLATFORM_WIN=0",
             "OURO_PLATFORM_OSX=1",
-            "OURO_PLATFORM_NIX=0",
+            "OURO_PLATFORM_LINUX=0",
 
             "OURO_HAS_ISPC=0",
 
@@ -349,10 +349,6 @@ function SetupOuroveonLayer( isFinalRing, layerName )
         libFn()
     end
 
-    filter "files:**.c"
-        flags {"NoPCH"}
-    filter {}
-
 end
 
 -- ------------------------------------------------------------------------------
@@ -445,8 +441,8 @@ project "sdk"
     SetupOuroveonLayer( false, "sdk" )
 
     AddPCH( 
-        "../src/r2.ouro/pch.cpp",
-        SrcDir() .. "r2.ouro/",
+        path.join( "..", "..", "r2.ouro", "pch.cpp" ),
+        path.join( SrcDir(), "r2.ouro" ),
         "pch.h" )
 
 group ""

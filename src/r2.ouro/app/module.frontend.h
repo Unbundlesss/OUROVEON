@@ -20,7 +20,7 @@ namespace app {
 namespace module {
 
 // ---------------------------------------------------------------------------------------------------------------------
-struct Frontend ouro_final : public Module
+struct Frontend final : public Module
 {
     DECLARE_NO_COPY_NO_MOVE( Frontend );
 

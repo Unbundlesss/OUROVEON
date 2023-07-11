@@ -51,17 +51,17 @@ struct StemAnalysisData
     }
 
 
-    ouro_nodiscard constexpr uint8_t getWaveU8( const int64_t sampleIndex ) const { return m_psaWave[sampleIndex]; }
-    ouro_nodiscard constexpr float   getWaveF(  const int64_t sampleIndex ) const { return base::LUT::u8_to_float[ getWaveU8(sampleIndex) ]; }
+    ouro_nodiscard inline uint8_t getWaveU8( const int64_t sampleIndex ) const { return m_psaWave[sampleIndex]; }
+    ouro_nodiscard inline float   getWaveF(  const int64_t sampleIndex ) const { return base::LUT::u8_to_float[ getWaveU8(sampleIndex) ]; }
 
-    ouro_nodiscard constexpr uint8_t getBeatU8( const int64_t sampleIndex ) const { return m_psaBeat[sampleIndex]; }
-    ouro_nodiscard constexpr float   getBeatF(  const int64_t sampleIndex ) const { return base::LUT::u8_to_float[ getBeatU8(sampleIndex) ]; }
+    ouro_nodiscard inline uint8_t getBeatU8( const int64_t sampleIndex ) const { return m_psaBeat[sampleIndex]; }
+    ouro_nodiscard inline float   getBeatF(  const int64_t sampleIndex ) const { return base::LUT::u8_to_float[ getBeatU8(sampleIndex) ]; }
 
-    ouro_nodiscard constexpr uint8_t getLowFreqU8( const int64_t sampleIndex ) const { return m_psaLowFreq[sampleIndex]; }
-    ouro_nodiscard constexpr float   getLowFreqF(  const int64_t sampleIndex ) const { return base::LUT::u8_to_float[ getLowFreqU8(sampleIndex) ]; }
+    ouro_nodiscard inline uint8_t getLowFreqU8( const int64_t sampleIndex ) const { return m_psaLowFreq[sampleIndex]; }
+    ouro_nodiscard inline float   getLowFreqF(  const int64_t sampleIndex ) const { return base::LUT::u8_to_float[ getLowFreqU8(sampleIndex) ]; }
 
-    ouro_nodiscard constexpr uint8_t getHighFreqU8( const int64_t sampleIndex ) const { return m_psaHighFreq[sampleIndex]; }
-    ouro_nodiscard constexpr float   getHighFreqF(  const int64_t sampleIndex ) const { return base::LUT::u8_to_float[ getHighFreqU8(sampleIndex) ]; }
+    ouro_nodiscard inline uint8_t getHighFreqU8( const int64_t sampleIndex ) const { return m_psaHighFreq[sampleIndex]; }
+    ouro_nodiscard inline float   getHighFreqF(  const int64_t sampleIndex ) const { return base::LUT::u8_to_float[ getHighFreqU8(sampleIndex) ]; }
 
 
     // all the per-sample 0..1 analysis data is stored quantised as mostly we're using it for visualisation
