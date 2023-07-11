@@ -80,7 +80,7 @@ end
 -- ==============================================================================
 function _FLAC_LinkPrebuilt()
 
-    links       { "flac", "flac++", "ogg" }
+    links       { "FLAC", "FLAC++", "ogg" }
 
     filter "system:macosx"
     libdirs     ( GetPrebuiltLibs_MacUniversal() )

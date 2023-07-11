@@ -113,7 +113,7 @@ struct Warehouse
 
     // passing in the NetConfiguration for API access to Endlesss is optional; users should not enqueue tasks
     // that require it if it isn't present (and tasks will check and bail in error)
-    constexpr bool hasFullEndlesssNetworkAccess() const { return m_networkConfiguration->hasAccess( api::NetConfiguration::Access::Authenticated ); }
+    ouro_nodiscard bool hasFullEndlesssNetworkAccess() const { return m_networkConfiguration->hasAccess( api::NetConfiguration::Access::Authenticated ); }
 
 protected:
 

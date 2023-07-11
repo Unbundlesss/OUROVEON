@@ -40,7 +40,7 @@ namespace module {
 
 struct MixerInterface;
 
-struct Audio ouro_final 
+struct Audio final 
              : public Module
              , public rec::IRecordable
              , public effect::IContainer

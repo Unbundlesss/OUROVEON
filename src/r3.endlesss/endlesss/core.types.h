@@ -187,7 +187,7 @@ struct Riff
     // commonly used when fetching stem data in batches; note this doesn't leave
     // gaps in the resulting vector for any 'off' stems, you will need to remap to the
     // appropriate slot by examining IDs (see Pipeline for example)
-    ouro_nodiscard constexpr endlesss::types::StemCouchIDs getActiveStemIDs() const
+    ouro_nodiscard inline endlesss::types::StemCouchIDs getActiveStemIDs() const
     {
         endlesss::types::StemCouchIDs result;
         for ( std::size_t stemI = 0; stemI < 8; stemI++ )

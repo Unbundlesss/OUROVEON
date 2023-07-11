@@ -49,15 +49,6 @@
 #define ouro_nodiscard  
 #endif
 
-#define ouro_final  final
-
-// crap patch for the fact Apple Clang cannot handle a chunk of constexpr use at the moment, to the point where
-// it crashes the compiler
-#if OURO_PLATFORM_WIN
-#define xconstexpr  constexpr
-#else
-#define xconstexpr  inline
-#endif 
 
 // ---------------------------------------------------------------------------------------------------------------------
 

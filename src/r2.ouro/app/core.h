@@ -160,7 +160,7 @@ protected:
         return "Windows";
 #elif OURO_PLATFORM_OSX
         return "MacOS";
-#elif OURO_PLATFORM_NIX
+#elif OURO_PLATFORM_LINUX
         return "Linux";
 #else
         return "Unknown";
@@ -221,14 +221,14 @@ protected:
 
 public:
 
-    inline base::EventBusClient getEventBusClient() const
+    ouro_nodiscard base::EventBusClient getEventBusClient() const
     { 
         ABSL_ASSERT( m_appEventBusClient.has_value() );
         return m_appEventBusClient.value();
     }
 
     // config::IPathProvider
-    ouro_nodiscard xconstexpr fs::path getPath( const PathFor p ) const override
+    ouro_nodiscard fs::path getPath( const PathFor p ) const override
     { 
         switch ( p )
         {
@@ -237,7 +237,7 @@ public:
             case config::IPathProvider::PathFor::PerAppConfig:  return m_appConfigPath;
         }
         ABSL_ASSERT( 0 );
-        return { "" };
+        return {};
     }
 
 
@@ -293,7 +293,7 @@ struct CoreGUI : Core,
         Right
     };
 
-    UIInjectionHandle registerStatusBarBlock( const StatusBarAlignment alignment, const float size, const UIInjectionCallback& callback );
+    ouro_nodiscard UIInjectionHandle registerStatusBarBlock( const StatusBarAlignment alignment, const float size, const UIInjectionCallback& callback );
     bool unregisterStatusBarBlock( const UIInjectionHandle handle );
 
     UIInjectionHandle registerMainMenuEntry( const int32_t ordering, const std::string& menuName, const UIInjectionCallback& callback );
@@ -309,7 +309,7 @@ struct CoreGUI : Core,
     void activateModalPopup( const char* label, const ModalPopupExecutor& executor );
 
     // submit an ImGui file dialog instance for display as part of the main loop; we can only have one live at once
-    inline bool activateFileDialog( FileDialogInst&& dialogInstance, const FileDialogCallback& onOK )
+    ouro_nodiscard bool activateFileDialog( FileDialogInst&& dialogInstance, const FileDialogCallback& onOK )
     {
         if ( m_activeFileDialog == nullptr )
         {
@@ -384,7 +384,7 @@ protected:
     }
 
     // register a developer menu entry by name, will toggle the bool pointer on menu selection
-    inline void addDeveloperMenuFlag( std::string menuName, bool* boolFlagAddress )
+    void addDeveloperMenuFlag( std::string menuName, bool* boolFlagAddress )
     {
         ABSL_ASSERT( boolFlagAddress != nullptr );
         *boolFlagAddress = false;

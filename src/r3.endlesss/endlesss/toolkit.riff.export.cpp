@@ -28,7 +28,7 @@ namespace xp {
 
 using TokenReplacements = absl::flat_hash_map< std::string, std::string >;
 
-constexpr void tokenReplacement( std::string& source, const std::string& find, const std::string& replace )
+inline void tokenReplacement( std::string& source, const std::string& find, const std::string& replace )
 {
     for ( std::string::size_type i = 0; (i = source.find( find, i )) != std::string::npos; )
     {
