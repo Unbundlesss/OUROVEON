@@ -426,7 +426,7 @@ int OuroApp::EntrypointGUI()
                     // ---------------------------------------------------------------------------------------------------------
                     // check in on our configured access to Endlesss' services
 
-                    static bool endlesssWorkOffline = false;
+                    static bool endlesssWorkUnauthorised = false;
                     bool endlesssAuthExpired = false;
                     {
                         m_mdFrontEnd->titleText( "Endlesss Accesss" );
@@ -442,18 +442,18 @@ int OuroApp::EntrypointGUI()
                         endlesssAuthExpired = !spacetime::datestampUnixExpiryFromNow( authExpiryUnixTime, expireDays, expireHours, expireMins, expireSecs );
 
                         {
-                            const bool offerOfflineMode = ( supportsOfflineEndlesssMode() && endlesssAuthExpired );
-                            ImGui::BeginDisabledControls( !offerOfflineMode );
-                            ImGui::Checkbox( " Enable Offline Mode", &endlesssWorkOffline );
-                            ImGui::EndDisabledControls( !offerOfflineMode );
+                            const bool offerNoAuthMode = ( supportsUnauthorisedEndlesssMode() && endlesssAuthExpired );
+                            ImGui::BeginDisabledControls( !offerNoAuthMode );
+                            ImGui::Checkbox( " Enable Unauthorised Mode", &endlesssWorkUnauthorised );
+                            ImGui::EndDisabledControls( !offerNoAuthMode );
 
                             // give context-aware tooltip help
-                            if ( !supportsOfflineEndlesssMode() )
-                                ImGui::CompactTooltip( "This app does not support Offline Mode" );
+                            if ( !supportsUnauthorisedEndlesssMode() )
+                                ImGui::CompactTooltip( "This app does not support Unauthorised Mode" );
                             else if ( endlesssAuthExpired )
                                 ImGui::CompactTooltip( "Enable to allow booting without valid Endlesss\nauthentication, which may limit some features" );
                             else 
-                                ImGui::CompactTooltip( "Offline mode only available when signed-out of Endlesss" );
+                                ImGui::CompactTooltip( "Unauthorised mode only available when signed-out of Endlesss" );
 
                             ImGui::Spacing();
                         }
@@ -473,6 +473,10 @@ int OuroApp::EntrypointGUI()
                                 config::endlesss::Auth emptyAuth;
                                 config::save( *this, emptyAuth );
                                 config::load( *this, endlesssAuth );
+
+                                // wipe out any existing auth details in the network config
+                                if ( !m_networkConfiguration->hasNoAccessSet() )
+                                    m_networkConfiguration->initWithoutAuthentication( m_configEndlesssAPI );
                             }
                             ImGui::CompactTooltip( "Log out" );
                             ImGui::EndDisabledControls( jamsAreUpdating );
@@ -487,7 +491,7 @@ int OuroApp::EntrypointGUI()
                         
                         if ( endlesssAuthExpired )
                         {
-                            if ( !endlesssWorkOffline )
+                            if ( !endlesssWorkUnauthorised )
                                 progressionInhibitionReason = "Endlesss log-in has expired";
                         }
 
@@ -527,7 +531,22 @@ int OuroApp::EntrypointGUI()
                                 if ( memoryLoadResult != config::LoadResult::Success )
                                 {
                                     blog::error::cfg( "Unable to parse Endlesss credentials from json" );
-                                    blog::error::cfg( res->body );
+
+                                    // try and present the user some info about why we failed to login
+                                    config::endlesss::AuthFailure authFailureDetails;
+                                    try
+                                    {
+                                        std::istringstream is( res->body );
+                                        cereal::JSONInputArchive archive( is );
+
+                                        authFailureDetails.serialize( archive );
+                                    }
+                                    catch ( cereal::Exception& cEx )
+                                    {
+                                        authFailureDetails.message = fmt::format( "Authentication failed with unknown error\n{}", cEx.what() );
+                                    }
+                                    if ( !authFailureDetails.message.empty() )
+                                        popupErrorMessageToDisplay = authFailureDetails.message;
                                 }
                                 else
                                 {

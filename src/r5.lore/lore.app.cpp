@@ -263,7 +263,7 @@ struct LoreApp : public app::OuroApp
     const char* GetAppNameWithVersion() const override { return (OUROVEON_LORE " " OUROVEON_LORE_VERSION); }
     const char* GetAppCacheName() const override { return "lore"; }
 
-    bool supportsOfflineEndlesssMode() const override { return true; }
+    bool supportsUnauthorisedEndlesssMode() const override { return true; }
 
     int EntrypointOuro() override;
 
@@ -1500,11 +1500,7 @@ int LoreApp::EntrypointOuro()
             if ( warehouse.fetchSingleRiffByID( request.getRiffID(), result ) )
                 return true;
 
-            // assuming we have Endlesss auth, go hunting
-            if ( m_networkConfiguration->hasAccess( endlesss::api::NetConfiguration::Access::Authenticated ) )
-                return endlesss::toolkit::Pipeline::defaultNetworkResolver( *m_networkConfiguration, request, result );
-
-            return false;
+            return endlesss::toolkit::Pipeline::defaultNetworkResolver( *m_networkConfiguration, request, result );
         },
         [&mixPreview, this]( const endlesss::types::RiffIdentity& request, endlesss::live::RiffPtr& loadedRiff, const endlesss::types::RiffPlaybackPermutationOpt& playbackPermutationOpt )
         {
@@ -1542,11 +1538,7 @@ int LoreApp::EntrypointOuro()
             if ( warehouse.fetchSingleRiffByID( request.getRiffID(), result ) )
                 return true;
 
-            // assuming we have Endlesss auth, go hunting
-            if ( m_networkConfiguration->hasAccess( endlesss::api::NetConfiguration::Access::Authenticated ) )
-                return endlesss::toolkit::Pipeline::defaultNetworkResolver( *m_networkConfiguration, request, result );
-
-            return false;
+            return endlesss::toolkit::Pipeline::defaultNetworkResolver( *m_networkConfiguration, request, result );
         },
         [this]( const endlesss::types::RiffIdentity& request, endlesss::live::RiffPtr& loadedRiff, const endlesss::types::RiffPlaybackPermutationOpt& )
         {

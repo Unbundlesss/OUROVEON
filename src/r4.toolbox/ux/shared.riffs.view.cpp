@@ -191,8 +191,9 @@ void SharedRiffView::State::imgui(
     // management window
     if ( ImGui::Begin( ICON_FA_SHARE_FROM_SQUARE " Shared Riffs###shared_riffs" ) )
     {
-        // check we have suitable network access to fetch fresh data
-        const bool bCanSyncNewData = m_networkConfiguration->hasAccess( api::NetConfiguration::Access::Authenticated );
+        // check we have suitable network access to fetch fresh data; doesn't have to be fully authenticated, you'll just
+        // miss out on your own private shares in that case, the API fetch code will choose what to do
+        const bool bCanSyncNewData = m_networkConfiguration->hasAccess( api::NetConfiguration::Access::Public );
         const bool bIsFetchingData = m_fetchInProgress;
 
         // choose a user and fetch latest data on request
