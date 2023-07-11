@@ -39,6 +39,15 @@ public:
         other.m_buffer = nullptr;
     }
 
+    Buffer2D& operator=( Buffer2D&& other )
+    {
+        m_width = other.getWidth();
+        m_height = other.getHeight();
+        m_buffer = other.m_buffer;
+        other.m_buffer = nullptr;
+    }
+
+
     ~Buffer2D()
     {
         mem::free16( m_buffer );

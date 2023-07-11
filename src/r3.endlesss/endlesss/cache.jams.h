@@ -65,7 +65,7 @@ struct Jams
     };
 
 
-    enum class JamType
+    enum class JamType : uint8_t
     {
         PublicArchive   = 0,          // static snapshot of all known public jams, scraped from Discord/etc
         PublicJoinIn    = 1,          // dynamic list of currently active "join in" public jams
@@ -88,19 +88,20 @@ struct Jams
             : m_valid(false)
         {}
         CacheIndex( const JamType type, const size_t index )
-            : m_type(type)
-            , m_index(index)
+            : m_index( index )
+            , m_type( type )
             , m_valid(true)
         {}
         CacheIndex& operator=( const CacheIndex& ) = default;
         CacheIndex( const CacheIndex& ) = default;
 
-        ouro_nodiscard constexpr JamType type() const { return m_type;  }
         ouro_nodiscard constexpr size_t index() const { return m_index; }
+        ouro_nodiscard constexpr JamType type() const { return m_type;  }
         ouro_nodiscard constexpr bool valid()   const { return m_valid; }
+
     private:
-        JamType m_type;
         size_t  m_index;
+        JamType m_type;
         bool    m_valid;
     };
 

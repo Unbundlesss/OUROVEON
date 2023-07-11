@@ -61,6 +61,9 @@ struct Bot::State
     {
         m_commandHandler.add_prefix( "." )
                         .add_prefix( "/" );
+
+        m_workingMemory.opusData = nullptr;
+        m_workingMemory.opusLength = 0;
     }
 
     ~State()

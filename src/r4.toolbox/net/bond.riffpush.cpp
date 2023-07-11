@@ -372,7 +372,7 @@ struct RiffPushClient::State
         };
         if ( permutationOpt.has_value() )
         {
-            msg.emplace( "gains", permutationOpt.value().m_layerGainMultiplier );
+            msg.emplace( "gains", permutationOpt->m_layerGainMultiplier );
         }
 
         const std::string riffPushJson = "V2RP" + msg.dump();

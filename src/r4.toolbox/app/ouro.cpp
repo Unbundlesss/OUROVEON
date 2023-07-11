@@ -373,7 +373,7 @@ int OuroApp::EntrypointGUI()
 
                     if ( m_configData != std::nullopt )
                     {
-                        m_storagePaths = StoragePaths( m_configData.value(), GetAppCacheName() );
+                        m_storagePaths = StoragePaths( m_configData, GetAppCacheName() );
 
                         bool cacheAppValid      = fs::exists( m_storagePaths->cacheApp );
                         bool cacheCommonValid   = fs::exists( m_storagePaths->cacheCommon );
@@ -841,7 +841,7 @@ int OuroApp::EntrypointGUI()
         // must be done here, after ImGui::End for annoying Imgui ordering / hierarchy reasons
         if ( !popupErrorMessageToDisplay.empty() )
         {
-            popupErrorMessage = popupErrorMessageToDisplay;
+            popupErrorMessage = std::move(popupErrorMessageToDisplay);
             ImGui::OpenPopup( popupErrorModalName );
             popupErrorMessageToDisplay.clear();
         }

@@ -1512,7 +1512,7 @@ int LoreApp::EntrypointOuro()
                 // TODO should we actually bind this in with enqueueRiff ?
                 if ( playbackPermutationOpt.has_value() )
                 {
-                    mixPreview.enqueuePermutation( playbackPermutationOpt.value() );
+                    mixPreview.enqueuePermutation( playbackPermutationOpt );
                 }
             }
             // if null, this may be either a failure to resolve or part of a request cancellation
@@ -1914,7 +1914,10 @@ int LoreApp::EntrypointOuro()
                         if ( stem == nullptr )
                         {
                             for ( std::size_t cI = 3; cI < visibleColumns; cI++ )
-                                ImGui::TableNextColumn(); ImGui::TextUnformatted( "" );
+                            {
+                                ImGui::TableNextColumn(); 
+                                ImGui::TextUnformatted( "" );
+                            }
                         }
                         else
                         {

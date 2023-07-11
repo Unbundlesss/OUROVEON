@@ -242,7 +242,7 @@ void BotWithUI::imgui( app::CoreGUI& coreGUI )
                 // remove status bar chunk when not live
                 if ( m_trafficOutBytesStatusHandle.has_value() )
                 {
-                    coreGUI.unregisterStatusBarBlock( m_trafficOutBytesStatusHandle.value() );
+                    coreGUI.unregisterStatusBarBlock( m_trafficOutBytesStatusHandle );
                     m_trafficOutBytesStatusHandle.reset();
                 }
             }

@@ -351,7 +351,7 @@ struct Vibes::State
 
         m_shaderLoadRootPath = pathProvider.getPath( config::IPathProvider::PathFor::SharedData );
 
-        m_preprocessingState.state().includePaths.push_back( m_shaderLoadRootPath.string() );
+        m_preprocessingState.state().includePaths.emplace_back( m_shaderLoadRootPath.string() );
 
 
         // create the shared vertex positions/uvs used for all shader renders
@@ -448,7 +448,7 @@ struct Vibes::State
         return absl::OkStatus();
     }
 
-    absl::Status createPlan( const fs::path shaderRootPath, const VibeBlueprint& blueprint )
+    absl::Status createPlan( const fs::path& shaderRootPath, const VibeBlueprint& blueprint )
     {
         m_plan = std::make_unique< VibePlan >();
 

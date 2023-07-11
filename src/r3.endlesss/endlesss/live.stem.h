@@ -26,6 +26,12 @@ namespace live {
 //
 struct StemAnalysisData
 {
+    // avoid accidental copying of this data, it's bulky
+    DECLARE_NO_COPY_NO_MOVE( StemAnalysisData );
+
+    StemAnalysisData() = default;
+
+
     static constexpr std::size_t    BeatBitsShift = 6;      // shift left/right by 64
 
     ouro_nodiscard inline std::size_t estimateMemoryUsageBytes() const

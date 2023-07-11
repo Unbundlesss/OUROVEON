@@ -136,7 +136,7 @@ inline static bool deserializeJson(
     _Type& instance,
     const std::string& functionContext,
     std::string_view traceContext,
-    const std::function< void( std::string& ) > bodyTextProcessor = nullptr )
+    const std::function< void( std::string& ) >& bodyTextProcessor = nullptr )
 {
     if ( res == nullptr )
     {
@@ -156,7 +156,7 @@ inline static bool deserializeJson(
     std::string bodyText = std::regex_replace( res->body, netConfig.getDataFixRegex_lengthTypeMismatch(), "\"length\":$1" );
 
     // allow custom body modifications pre-parse in case there are any other hilarious json tripmines to work around
-    if ( bodyTextProcessor != nullptr )
+    if ( bodyTextProcessor )
     {
         bodyTextProcessor( bodyText );
     }
@@ -385,9 +385,9 @@ struct ResultRiffDocument
                         , gain( 0 )
                     {}
 
-                    bool            on;
+                    bool            on = false;
                     std::string     currentLoop;    // stem document ID
-                    float           gain;
+                    float           gain = 0;
 
                     template<class Archive>
                     inline void serialize( Archive& archive )
@@ -419,8 +419,8 @@ struct ResultRiffDocument
             }
         };
 
-        float                   bps;
-        float                   barLength;
+        float                   bps = 0;
+        float                   barLength = 0;
         std::vector< Playback > playback;
 
         template<class Archive>
@@ -510,7 +510,7 @@ struct ResultStemDocument
                 // some weird batch of data encoded https://<bucket> as a prefix into the endpoint; remove it
                 if ( endpoint.rfind( "http", 0 ) == 0 )
                 {
-                    std::size_t found = endpoint.find_last_of( "/" );
+                    const std::size_t found = endpoint.find_last_of( '/' );
                     if ( found == 0 || found == std::string::npos )
                     {
                         blog::error::api( "Endpoint fix : {}", endpoint );

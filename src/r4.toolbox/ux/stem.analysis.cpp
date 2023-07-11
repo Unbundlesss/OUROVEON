@@ -67,6 +67,7 @@ void StemAnalysis( endlesss::live::RiffPtr& liveRiff, const int32_t audioSampleR
         if ( liveStem == nullptr || 
              liveStem->isAnalysisComplete() == false )
         {
+            ImGui::TextUnformatted( "Stem empty or analysis incomplete" );
             ImGui::End();
             return;
         }
@@ -90,16 +91,11 @@ void StemAnalysis( endlesss::live::RiffPtr& liveRiff, const int32_t audioSampleR
             state.m_runAnalysis = false;
         }
 
-
-        if ( ImPlot::BeginPlot(
-            "##StemDataPlot_0",
-            nullptr,
-            nullptr,
-            ImVec2( -1, 200 ),
-            0,
-            ImPlotAxisFlags_NoDecorations,
-            ImPlotAxisFlags_NoDecorations | ImPlotAxisFlags_LockMin ) )
+        if ( ImPlot::BeginPlot( "##StemDataPlot_0", ImVec2( -1, 200 ), ImPlotFlags_None ) )
         {
+            ImPlot::SetupAxis( ImAxis_X1, nullptr, ImPlotAxisFlags_NoDecorations );
+            ImPlot::SetupAxis( ImAxis_Y1, nullptr, ImPlotAxisFlags_NoDecorations | ImPlotAxisFlags_LockMin );
+
             ImPlot::SetNextFillStyle( colour::shades::blue_gray.dark(), 0.8f );
             ImPlot::PlotBars( "##waveform", liveStem->m_channel[0], steppedSampleCount, 0.67, 0, 0, 0, sizeof(float) * sampleStep );
 
@@ -115,15 +111,11 @@ void StemAnalysis( endlesss::live::RiffPtr& liveRiff, const int32_t audioSampleR
 
         ImGui::SliderInt( "View", &state.m_dataView, 0, 3 );
 
-        if ( ImPlot::BeginPlot(
-            "##StemDataPlot_1",
-            nullptr,
-            nullptr,
-            ImVec2( -1, 200 ),
-            0,
-            ImPlotAxisFlags_NoDecorations,
-            ImPlotAxisFlags_NoDecorations | ImPlotAxisFlags_LockMin ) )
+        if ( ImPlot::BeginPlot( "##StemDataPlot_1", ImVec2( -1, 200 ), ImPlotFlags_None ) )
         {
+            ImPlot::SetupAxis( ImAxis_X1, nullptr, ImPlotAxisFlags_NoDecorations );
+            ImPlot::SetupAxis( ImAxis_Y1, nullptr, ImPlotAxisFlags_NoDecorations | ImPlotAxisFlags_LockMin );
+
             ImPlot::SetNextFillStyle( colour::shades::toast.neutral() );
 
             switch ( state.m_dataView )

@@ -834,7 +834,7 @@ void MixEngine::update(
             // #TODO replace with new system
             if ( stemInst->isAnalysisComplete() )
             {
-                const auto stemAnalysis = stemInst->getAnalysisData();
+                const auto& stemAnalysis = stemInst->getAnalysisData();
 
                 stemHasBeat[stemI] |= stemAnalysis.queryBeatAtSample( finalSampleIdx );
                 //stemEnergy[stemI] = std::max( stemEnergy[stemI], stemAnalysis.m_peak[finalSampleIdx] );
