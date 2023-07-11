@@ -315,11 +315,13 @@ function SetupOuroveonLayer( isFinalRing, layerName )
         SrcDir() .. "r0.platform/win32/**.h",
         SrcDir() .. "r0.platform/win32/**.cpp",
     }
+    filter {}
     filter "system:linux"
     files 
     {
         SrcDir() .. "r2.ouro.xp/xp/linux/*.*",
     }
+    filter {}
     filter "system:macosx"
     files 
     {
