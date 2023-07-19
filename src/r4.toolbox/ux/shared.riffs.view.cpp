@@ -75,6 +75,7 @@ struct SharedRiffView::State
     base::EventBusClient            m_eventBusClient;
 
     std::atomic_bool                m_fetchInProgress = false;
+    int8_t                          m_busySpinnerIndex = 0;
 
     endlesss::types::RiffCouchID    m_currentlyPlayingRiffID;
     endlesss::types::RiffCouchIDSet m_enqueuedRiffIDs;
@@ -166,13 +167,13 @@ void SharedRiffView::State::imgui(
         else
         {
             // ask jame name services for data
-            const bool bJamNameFound = jamNameCacheServices.lookupNameForJam(
+            const auto bJamNameFound = jamNameCacheServices.lookupNameForJam(
                 dataPtr->m_jamIDs[m_jamNameCacheSyncIndex],
                 m_jamNameResolvedArray[m_jamNameCacheSyncIndex]
             );
 
             // if we get a cache miss, issue a fetch request to go plumb the servers for answers
-            if ( !bJamNameFound )
+            if ( bJamNameFound == endlesss::services::IJamNameCacheServices::LookupResult::NotFound )
             {
                 coreGUI.getEventBusClient().Send< ::events::RequestJamNameRemoteFetch >(
                     dataPtr->m_jamIDs[m_jamNameCacheSyncIndex] );
@@ -234,6 +235,20 @@ void SharedRiffView::State::imgui(
         {
             if ( m_sharesData.ok() )
             {
+                // indicate we're doing name resolution by showing busy spinner in the table header
+                static constexpr std::array cJamNameWorkerTitles =
+                {
+                    "Jam###Jam",
+                    "Jam (\\)###Jam",
+                    "Jam (|)###Jam",
+                    "Jam (/)###Jam",
+                    "Jam (-)###Jam",
+                };
+
+                // use simple increment, mask out some higher bits and loop to keep it 0..3
+                m_busySpinnerIndex++;
+                const uint8_t loopedSpinnerIndex = 1 + ( ( ( m_busySpinnerIndex & 0b11000 ) >> 3 ) & 0b0011 );
+
                 bool bScrollToPlaying = false;
 
                 const auto dataPtr = *m_sharesData;
@@ -271,10 +286,11 @@ void SharedRiffView::State::imgui(
                         {
                             ImGui::TableSetupScrollFreeze( 0, 1 );  // top row always visible
 
-                            ImGui::TableSetupColumn( "Play", ImGuiTableColumnFlags_WidthFixed, 32.0f );
+                            ImGui::TableSetupColumn( "Play", ImGuiTableColumnFlags_WidthFixed,  32.0f );
                             ImGui::TableSetupColumn( "Name", ImGuiTableColumnFlags_WidthStretch, 0.5f );
-                            ImGui::TableSetupColumn( "Link", ImGuiTableColumnFlags_WidthFixed, 32.0f );
-                            ImGui::TableSetupColumn( "Jam",  ImGuiTableColumnFlags_WidthStretch, 0.5f );
+                            ImGui::TableSetupColumn( "Link", ImGuiTableColumnFlags_WidthFixed,  32.0f );
+                            ImGui::TableSetupColumn( m_jamNameCacheUpdate ? cJamNameWorkerTitles[loopedSpinnerIndex] : cJamNameWorkerTitles[0],
+                                                             ImGuiTableColumnFlags_WidthStretch, 0.5f);
                             ImGui::TableHeadersRow();
 
                             for ( std::size_t entry = 0; entry < dataPtr->m_count; entry++ )

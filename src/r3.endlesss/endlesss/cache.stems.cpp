@@ -164,7 +164,7 @@ void Stems::lockAndPrune( const bool verbose, const uint32_t generationsToKeep )
         if ( verbose )
             blog::stem( "stem cache prune : ... now has {}", afterSize );
 
-        blog::stem( "stem cache prune trimmed {} entries, took {}", (beforeSize - afterSize), pruneTimer.deltaMs() );
+        blog::stem( "stem cache prune trimmed {} entries, took {}", (beforeSize - afterSize), pruneTimer.delta< std::chrono::milliseconds >() );
     }
 }
 

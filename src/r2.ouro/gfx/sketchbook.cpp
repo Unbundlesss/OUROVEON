@@ -158,13 +158,13 @@ base::U32Buffer* Sketchbook::borrow( const DimensionsPow2& dimensions )
 {
     std::scoped_lock<std::mutex> bufferLock( m_bufferPoolMutex );
 
-    // find a suitable existing buffer; allow re-use of a larger buffer (?)
+    // find a suitable existing buffer
     auto bufIt = std::find_if( 
         m_bufferPool.begin(), 
         m_bufferPool.end(), [&]( base::U32Buffer*& obj )
         {
-            return obj->getWidth()  >= dimensions.width() &&
-                   obj->getHeight() >= dimensions.height();
+            return obj->getWidth()  == dimensions.width() &&
+                   obj->getHeight() == dimensions.height();
         });
 
     if ( bufIt != m_bufferPool.end() )

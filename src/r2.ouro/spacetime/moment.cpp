@@ -23,7 +23,7 @@ ScopedTimer::~ScopedTimer()
 
 void ScopedTimer::stage( const char* name )
 {
-    const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>( now() - m_initialTime );
+    const auto duration = delta<std::chrono::milliseconds>();
     blog::instr( "{} [{}] took {}", m_context, name, duration );
 }
 

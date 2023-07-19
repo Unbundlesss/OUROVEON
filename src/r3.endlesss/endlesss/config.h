@@ -354,6 +354,41 @@ OURO_CONFIG( SharedRiffsCache )
 };
 
 
+// ---------------------------------------------------------------------------------------------------------------------
+// BNS, just a long list of band IDs we've dug up and pre-resolved to some kind of name to save some traffic to 
+// the endlesss APIs when we solve lists of shared riff jam names (for example)
+OURO_CONFIG( BandNameService )
+{
+    // data routing
+    static constexpr auto StoragePath       = IPathProvider::PathFor::SharedData;
+    static constexpr auto StorageFilename   = "endlesss.bns.json";
+
+    struct Entry
+    {
+        std::string                 link_name;      // from original permalink, contains the initial name set
+        std::string                 sync_name;      // from riff page 0 request, tracks any subsequent renames
+                                                    // if this is empty, the link/sync names were the same (or we couldn't get a sync name due to permission failure)
+
+        template<class Archive>
+        void serialize( Archive& archive )
+        {
+            archive( CEREAL_NVP( link_name )
+                   , CEREAL_NVP( sync_name )
+            );
+        }
+    };
+    using NameLookup = absl::flat_hash_map< ::endlesss::types::JamCouchID, Entry >;
+
+    NameLookup  entries;
+
+    template<class Archive>
+    void serialize( Archive& archive )
+    {
+        archive( CEREAL_NVP( entries ) );
+    }
+};
+
+
 } // namespace config
 } // namespace endlesss
 
@@ -361,42 +396,27 @@ OURO_CONFIG( SharedRiffsCache )
 namespace cereal
 {
     // specialisation for loading direct map of string:jamscan rather than cereal's default bloated way
-    template <class Archive, class C, class A> inline
-        void load( Archive& ar, absl::flat_hash_map<std::string, config::endlesss::PopulationPublics::JamScan, C, A>& map )
-    {
-        map.clear();
-
-        auto hint = map.begin();
-        while ( true )
-        {
-            const auto namePtr = ar.getNodeName();
-
-            if ( !namePtr )
-                break;
-
-            std::string key = namePtr;
-            config::endlesss::PopulationPublics::JamScan value; ar( value );
-            hint = map.emplace_hint( hint, std::move( key ), std::move( value ) );
+    #define SPECIALISE_FLAT_HASH_MAP_LOAD( _keyType, _valueType )                               \
+        template <class Archive, class C, class A> inline                                       \
+            void load( Archive& ar, absl::flat_hash_map<_keyType, _valueType, C, A>& map )      \
+        {                                                                                       \
+            map.clear();                                                                        \
+                                                                                                \
+            auto hint = map.begin();                                                            \
+            while ( true )                                                                      \
+            {                                                                                   \
+                const auto namePtr = ar.getNodeName();                                          \
+                                                                                                \
+                if ( !namePtr )                                                                 \
+                    break;                                                                      \
+                                                                                                \
+                _keyType key = _keyType( namePtr );                                             \
+                _valueType value; ar( value );                                                  \
+                hint = map.emplace_hint( hint, std::move( key ), std::move( value ) );          \
+            }                                                                                   \
         }
-    }
 
-    // ditto user:count
-    template <class Archive, class C, class A> inline
-        void load( Archive& ar, absl::flat_hash_map<std::string, uint32_t, C, A>& map )
-    {
-        map.clear();
-
-        auto hint = map.begin();
-        while ( true )
-        {
-            const auto namePtr = ar.getNodeName();
-
-            if ( !namePtr )
-                break;
-
-            std::string key = namePtr;
-            uint32_t value; ar( value );
-            hint = map.emplace_hint( hint, std::move( key ), value );
-        }
-    }
+    SPECIALISE_FLAT_HASH_MAP_LOAD( std::string, config::endlesss::PopulationPublics::JamScan );
+    SPECIALISE_FLAT_HASH_MAP_LOAD( ::endlesss::types::JamCouchID, config::endlesss::BandNameService::Entry );
+    SPECIALISE_FLAT_HASH_MAP_LOAD( std::string, uint32_t );
 } // namespace cereal

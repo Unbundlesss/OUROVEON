@@ -179,8 +179,8 @@ struct Audio final
             if ( stageIndex > 0 )
                 base::instr::eventEnd();
 
-            m_perfCounters[stageIndex].update( (double)m_timingMoment.deltaUs().count() );
-            m_timingMoment.restart();
+            m_perfCounters[stageIndex].update( (double)m_timingMoment.delta< std::chrono::microseconds >().count() );
+            m_timingMoment.setToNow();
 
             // on everything but the final stage, kick an instrumentation event out
             if ( stageIndex != cNumExecutionStages - 1 )

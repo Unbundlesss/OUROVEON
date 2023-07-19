@@ -88,19 +88,19 @@ struct SketchBuffer
     ~SketchBuffer();
 
 
-    inline void setExtents( const Dimensions& usage )
+    constexpr void setExtents( const Dimensions& usage )
     {
-        assert( usage.width()  <= m_dimensions.width()  );
-        assert( usage.height() <= m_dimensions.height() );
+        ABSL_ASSERT( usage.width()  <= m_dimensions.width()  );
+        ABSL_ASSERT( usage.height() <= m_dimensions.height() );
         m_usageExtents = usage;
     }
 
-    inline const DimensionsPow2&  dim()     const { return m_dimensions;   }
-    inline const Dimensions&      extents() const { return m_usageExtents; }
+    constexpr const DimensionsPow2&  dim()     const { return m_dimensions;   }
+    constexpr const Dimensions&      extents() const { return m_usageExtents; }
 
-    inline             bool hasBuffer() const { return m_buffer != nullptr; }
-    inline const base::U32Buffer& get() const { return *m_buffer; }
-    inline       base::U32Buffer& get()       { return *m_buffer; }
+    constexpr             bool hasBuffer() const { return m_buffer != nullptr; }
+    constexpr const base::U32Buffer& get() const { return *m_buffer; }
+    constexpr       base::U32Buffer& get()       { return *m_buffer; }
 
 private:
     DimensionsPow2              m_dimensions;       // full size of the underlying buffer
@@ -165,11 +165,11 @@ struct SketchUpload
         const Dimensions&   bounds );           // w x h of original buffer, can be used as stand-in/dummy while gpu task running
     ~SketchUpload();
 
-    inline const Dimensions& bounds() const { return m_bounds; }
-    inline uint32_t uploadID() const { return m_uploadID; }
+    constexpr const Dimensions& bounds() const { return m_bounds; }
+    constexpr uint32_t uploadID() const { return m_uploadID; }
 
     // pass-through to GPUTask call of the same name
-    inline bool getStateIfValid( GPUTask::ValidState& result ) const
+    bool getStateIfValid( GPUTask::ValidState& result ) const
     {
         return m_gpuTask->getStateIfValid( result );
     }

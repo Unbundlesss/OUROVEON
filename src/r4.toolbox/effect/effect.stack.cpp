@@ -187,7 +187,7 @@ void EffectStack::chooseNewVST( app::CoreGUI& coreGUI )
         nullptr,
         ImGuiFileDialogFlags_Modal );
 
-    coreGUI.activateFileDialog( std::move(fileDialog), [this]( ImGuiFileDialog& dlg )
+    std::ignore = coreGUI.activateFileDialog( std::move(fileDialog), [this]( ImGuiFileDialog& dlg )
     {
         addVST( dlg.GetFilePathName().c_str(), m_incrementalLoadId++ );
 

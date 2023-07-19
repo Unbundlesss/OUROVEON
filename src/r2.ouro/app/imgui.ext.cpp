@@ -9,11 +9,23 @@
 
 #include "pch.h"
 #include "app/imgui.ext.h"
+#include "app/module.frontend.fonts.h"
 
 static float g_cycleTimerSlow;
 static float g_cycleTimerFast;
 
 namespace ImGui {
+
+void StandardFilterBox( ImGuiTextFilter& hostFilter, const char* label, const float width )
+{
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted( ICON_FA_MAGNIFYING_GLASS );
+    ImGui::SameLine();
+    hostFilter.Draw( label, width );
+    ImGui::SameLine( 0, 2.0f );
+    if ( ImGui::Button( ICON_FA_CIRCLE_XMARK ) )
+        hostFilter.Clear();
+}
 
 bool BeginStatusBar()
 {
@@ -809,6 +821,19 @@ Enabled::~Enabled()
         PopItemFlag();
         PopStyleVar();
     }
+}
+
+ColourButton::ColourButton( const colour::Preset& preset )
+{
+    ImGui::PushStyleColor( ImGuiCol_Button,         preset.neutral() );
+    ImGui::PushStyleColor( ImGuiCol_ButtonHovered,  preset.light() );
+    ImGui::PushStyleColor( ImGuiCol_ButtonActive,   preset.dark() );
+    ImGui::PushStyleColor( ImGuiCol_Text, IM_COL32_BLACK );
+}
+
+ColourButton::~ColourButton()
+{
+    ImGui::PopStyleColor( 4 );
 }
 
 } // namespace Scoped

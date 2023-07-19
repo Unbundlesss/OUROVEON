@@ -441,7 +441,7 @@ project "sdk"
     SetupOuroveonLayer( false, "sdk" )
 
     AddPCH( 
-        path.join( "..", "..", "r2.ouro", "pch.cpp" ),
+        path.join( "..", "src", "r2.ouro", "pch.cpp" ),
         path.join( SrcDir(), "r2.ouro" ),
         "pch.h" )
 

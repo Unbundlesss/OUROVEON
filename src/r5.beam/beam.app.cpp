@@ -1083,7 +1083,7 @@ int BeamApp::EntrypointOuro()
         // run modal jam browser window if it's open
         bool modalDisplayJamBrowser = false;
         const char* modalJamBrowserTitle = "Jam Browser";
-        ux::modalUniversalJamBrowser( modalJamBrowserTitle, m_jamLibrary, jamBrowserBehaviour );
+        ux::modalUniversalJamBrowser( modalJamBrowserTitle, m_jamLibrary, jamBrowserBehaviour, m_networkConfiguration );
 
 
         // #HDD just do this on tracked choice change, doesn't need to be every frame

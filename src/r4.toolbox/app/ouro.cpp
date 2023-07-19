@@ -373,7 +373,7 @@ int OuroApp::EntrypointGUI()
 
                     if ( m_configData != std::nullopt )
                     {
-                        m_storagePaths = StoragePaths( m_configData, GetAppCacheName() );
+                        m_storagePaths = StoragePaths( m_configData.value(), GetAppCacheName());
 
                         bool cacheAppValid      = fs::exists( m_storagePaths->cacheApp );
                         bool cacheCommonValid   = fs::exists( m_storagePaths->cacheCommon );
@@ -887,7 +887,7 @@ int OuroApp::EntrypointGUI()
         blog::error::cfg( "Unable to initialise stem cache; {}", stemCacheStatus.ToString() );
         return -1;
     }
-    m_stemCacheLastPruneCheck.restart();
+    m_stemCacheLastPruneCheck.setToFuture( c_stemCachePruneCheckDuration );
     m_stemCachePruneTask.emplace( [this]() { m_stemCache.lockAndPrune( false ); } );
 
 
@@ -926,24 +926,41 @@ void OuroApp::ensureStemCacheChecksComplete()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-bool OuroApp::lookupNameForJam( const endlesss::types::JamCouchID& jamID, std::string& result ) const
+endlesss::services::IJamNameCacheServices::LookupResult OuroApp::lookupNameForJam(
+    const endlesss::types::JamCouchID& jamID,
+    std::string& result ) const
 {
+    if ( !endlesss::types::Constants::isStandardJamID( jamID ) )
+    {
+        result = jamID.value();
+        return LookupResult::PresumedPersonal;
+    }
+
     endlesss::cache::Jams::Data jamData;
     if ( m_jamLibrary.loadDataForDatabaseID( jamID, jamData ) )
     {
         result = jamData.m_displayName;
-        return true;
+        return LookupResult::FoundInPrimarySource;
     }
 
-    return false;
+    // check our prefetched band/name LUT
+    const auto nsIt = m_jamNameService.entries.find( jamID );
+    if ( nsIt != m_jamNameService.entries.end() )
+    {
+        if ( nsIt->second.sync_name.empty() )
+            result = nsIt->second.link_name;
+        else
+            result = nsIt->second.sync_name;
+        return LookupResult::FoundInArchives;
+    }
+
+    return LookupResult::NotFound;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 void OuroApp::maintainStemCacheAsync()
 {
-    static constexpr auto memoryReclaimPeriod = 30 * 1000;
-
-    if ( m_stemCacheLastPruneCheck.deltaMs().count() > memoryReclaimPeriod )
+    if ( m_stemCacheLastPruneCheck.hasPassed() )
     {
         const auto stemMemory          = m_stemCache.estimateMemoryUsageBytes();
         const auto stemMemoryTriggerMb = (std::size_t)m_configPerf.stemCacheAutoPruneAtMemoryUsageMb;
@@ -957,7 +974,7 @@ void OuroApp::maintainStemCacheAsync()
             // async background loading
             m_stemCachePruneFuture = m_taskExecutor.run( m_stemCachePruneTask );
         }
-        m_stemCacheLastPruneCheck.restart();
+        m_stemCacheLastPruneCheck.setToFuture( c_stemCachePruneCheckDuration );
     }
 }
 

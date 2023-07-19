@@ -36,6 +36,24 @@ using JamIDToNameMap = absl::flat_hash_map< types::JamCouchID, std::string >;
 struct Constants
 {
     static inline JamCouchID SharedRiffJam() { return JamCouchID{ "shared_riff" }; }
+
+    // dumb check to see if a given ID begins with 'band', marking it as the usual kind of ID we deal with
+    // alternatives would be a username, or .. i dunno
+    static inline bool isStandardJamID( const JamCouchID& jamID )
+    {
+        if ( jamID.size() > 4 )
+        {
+            const char* jamChars = jamID.c_str();
+            if ( jamChars[0] == 'b' &&
+                 jamChars[1] == 'a' &&
+                 jamChars[2] == 'n' &&
+                 jamChars[3] == 'd' )
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 };
 
 } // namespace types

@@ -9,6 +9,7 @@
 
 #pragma once
 #include "base/mathematics.h"
+#include "colour/preset.h"
 
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -41,6 +42,8 @@ inline ImU32 ColorConvertFloat4ToU32_BGRA_Flip( const ImVec4& in )
     out |= ((ImU32)IM_F32_TO_INT8_SAT( in.w )) << IM_COL32_A_SHIFT;
     return out;
 }
+
+void StandardFilterBox( ImGuiTextFilter& hostFilter, const char* label, const float width = 200.0f );
 
 inline ImVec2 MeasureSpace( const ImVec2& size )
 {
@@ -368,6 +371,14 @@ struct Enabled
 private:
     bool m_isEnabled;
 };
+
+struct ColourButton
+{
+    ColourButton() = delete;
+    ColourButton( const colour::Preset& preset );
+    ~ColourButton();
+};
+
 
 } // namespace Scoped
 

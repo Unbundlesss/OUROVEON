@@ -10,43 +10,63 @@
 
 namespace spacetime {
 
-struct Moment
+// eg. delta<std::chrono::seconds>()
+template< typename T >
+concept TDurationType = requires(T x)
 {
-    using HighResTimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
-
-    Moment()
-        : m_initialTime( now() )
-    {
-    }
-
-    void restart()
-    {
-        m_initialTime = now();
-    }
-
-    ouro_nodiscard inline static HighResTimePoint now()
-    {
-        return std::chrono::high_resolution_clock::now();
-    }
-
-    ouro_nodiscard std::chrono::seconds deltaSec()
-    {
-        return std::chrono::duration_cast<std::chrono::seconds>(now() - m_initialTime);
-    }
-
-    ouro_nodiscard std::chrono::milliseconds deltaMs()
-    {
-        return std::chrono::duration_cast<std::chrono::milliseconds>(now() - m_initialTime);
-    }
-
-    ouro_nodiscard std::chrono::microseconds deltaUs()
-    {
-        return std::chrono::duration_cast<std::chrono::microseconds>(now() - m_initialTime);
-    }
-
-protected:
-    HighResTimePoint    m_initialTime;
+    { std::chrono::duration{ std::move( x ) } } -> std::same_as<T>;
 };
+
+// represents a stored moment in time
+class Moment
+{
+public:
+    Moment()
+    {
+        setToNow();
+    }
+
+    // set the moment to be the current instant
+    void setToNow()
+    {
+        m_instant = now();
+    }
+
+    // set the moment to be a point in the future, offset from the current instant
+    template< TDurationType TDuration >
+    void setToFuture( const TDuration& timeOffset )
+    {
+        m_instant = now() + timeOffset;
+    }
+
+    // has the moment passed? if setToFuture() was used, this checks if that moment has gone by
+    ouro_nodiscard constexpr bool hasPassed() const
+    {
+        return ( m_instant < now() );
+    }
+
+    // return the difference between this moment and the current instant in a chosen temporal format, eg
+    // std::chrono::seconds
+    // std::chrono::milliseconds
+    // std::chrono::microseconds
+    template< TDurationType TDuration >
+    ouro_nodiscard constexpr auto delta() const
+    {
+        return std::chrono::duration_cast< TDuration >( now() - m_instant );
+    }
+
+private:
+    using TTimeClock = std::chrono::high_resolution_clock;
+    using TTimePoint = std::chrono::time_point< TTimeClock >;
+
+    static TTimePoint now()
+    {
+        return TTimeClock::now();
+    }
+
+    TTimePoint m_instant;
+};
+
 
 struct ScopedTimer : public Moment
 {
@@ -61,9 +81,9 @@ struct ScopedTimer : public Moment
 
     std::chrono::milliseconds stop()
     {
-        const auto delta = deltaMs();
+        const auto deltaMs = delta< std::chrono::milliseconds >();
         m_running = false;
-        return delta;
+        return deltaMs;
     }
 
     void stage( const char* name );

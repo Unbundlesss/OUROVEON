@@ -21,7 +21,8 @@ namespace ux {
 void modalUniversalJamBrowser( 
     const char* title,
     const endlesss::cache::Jams& jamCache,
-    const UniversalJamBrowserBehaviour& behaviour )
+    const UniversalJamBrowserBehaviour& behaviour,
+    endlesss::api::NetConfiguration::Shared netConfig )
 {
     using namespace endlesss::cache;
 
@@ -44,7 +45,7 @@ void modalUniversalJamBrowser(
         "Latest Riff",
     };
 
-    const ImVec2 configWindowSize = ImVec2( 800.0f, 460.0f );
+    const ImVec2 configWindowSize = ImVec2( 820.0f, 460.0f );
     ImGui::SetNextWindowContentSize( configWindowSize );
 
     const ImVec4 colourJamDisabled = GImGui->Style.Colors[ImGuiCol_TextDisabled];
@@ -130,6 +131,7 @@ void modalUniversalJamBrowser(
         ImGui::Spacing();
         
         Jams::JamType activeType = Jams::JamType::UserSubscribed;
+        bool bShowCustomPanel = false;
 
         if ( ImGui::BeginTabBar( "##jamTypeTab", ImGuiTabBarFlags_None ) )
         {
@@ -141,29 +143,135 @@ void modalUniversalJamBrowser(
                     ImGui::EndTabItem();
                 }
             }
+            if ( ImGui::BeginTabItem( " Custom ") )
+            {
+                bShowCustomPanel = true;
+                ImGui::EndTabItem();
+            }
 
             ImGui::EndTabBar();
         }
 
-        const auto panelRegionAvailable = ImGui::GetContentRegionAvail();
-        if ( ImGui::BeginTable( 
-            "##jamTable",
-            3,
-            ImGuiTableFlags_ScrollY             |
-                ImGuiTableFlags_Borders         |
-                ImGuiTableFlags_RowBg           |
-                ImGuiTableFlags_NoSavedSettings,
-            ImVec2( panelRegionAvailable.x, panelRegionAvailable.y - 35.0f ) ) )
+        const ImVec2 panelRegionAvailable = ImGui::GetContentRegionAvail();
+        const ImVec2 panelRegionFill( panelRegionAvailable.x, panelRegionAvailable.y - 35.0f );
+
+        if ( !bShowCustomPanel )
         {
-            ImGui::TableSetupScrollFreeze( 0, 1 );  // top row always visible
-            ImGui::TableSetupColumn( "Name" );
-            ImGui::TableSetupColumn( "Riffs", ImGuiTableColumnFlags_WidthFixed, 80.0f );
-            ImGui::TableSetupColumn( jamTimeDesc[(size_t)activeType], ImGuiTableColumnFlags_WidthFixed, 200.0f );
-            ImGui::TableHeadersRow();
+            if ( ImGui::BeginTable(
+                "##jamTable",
+                3,
+                ImGuiTableFlags_ScrollY |
+                ImGuiTableFlags_Borders |
+                ImGuiTableFlags_RowBg |
+                ImGuiTableFlags_NoSavedSettings,
+                panelRegionFill ) )
+            {
+                ImGui::TableSetupScrollFreeze( 0, 1 );  // top row always visible
+                ImGui::TableSetupColumn( "Name" );
+                ImGui::TableSetupColumn( "Riffs", ImGuiTableColumnFlags_WidthFixed, 80.0f );
+                ImGui::TableSetupColumn( jamTimeDesc[(size_t)activeType], ImGuiTableColumnFlags_WidthFixed, 200.0f );
+                ImGui::TableHeadersRow();
 
-            jamCache.iterateJams( iterationFn, activeType, jamSortOption );
+                jamCache.iterateJams( iterationFn, activeType, jamSortOption );
 
-            ImGui::EndTable();
+                ImGui::EndTable();
+            }
+        }
+        else
+        {
+            if ( ImGui::BeginChild( "###customPanel", panelRegionFill ) )
+            {
+                static constexpr auto c_validationRequiredMessage = "validate access before adding";
+                enum
+                {
+                    PersonalJam,
+                    CustomID
+                };
+                static std::string customJamName;
+                static std::string customJamValidation = c_validationRequiredMessage;
+                static int32_t customOption = 0;
+
+                const bool bHasFullAccess = netConfig->hasAccess( endlesss::api::NetConfiguration::Access::Authenticated );
+
+                ImGui::Spacing();
+                ImGui::Spacing();
+
+                if ( !bHasFullAccess )
+                {
+                    ImGui::TextUnformatted( "Adding custom jams requires full Endlesss authentication" );
+                }
+                else
+                {
+                    const ImVec2 buttonSize( 200.0f, 32.0f );
+
+                    ImGui::RadioButton( "Personal Jam", &customOption, PersonalJam );
+                    ImGui::RadioButton( "Custom Jam ID", &customOption, CustomID );
+                    ImGui::SeparatorBreak();
+
+                    switch ( customOption )
+                    {
+                        case PersonalJam:
+                        {
+                            if ( bHasFullAccess )
+                            {
+                                ImGui::Text( "Jam ID '%s'", netConfig->auth().user_id.c_str() );
+                                ImGui::Spacing();
+
+                                if ( ImGui::Button( "Add", buttonSize ) )
+                                {
+                                    if ( behaviour.fnOnSelected )
+                                        behaviour.fnOnSelected( endlesss::types::JamCouchID( netConfig->auth().user_id ) );
+
+                                    shouldClosePopup = true;
+                                }
+                            }
+                        }
+                        break;
+
+                        case CustomID:
+                        {
+                            ImGui::SetNextItemWidth( buttonSize.x );
+                            if ( ImGui::InputText( "Jam ID", &customJamName ) )
+                            {
+                                customJamValidation = c_validationRequiredMessage;
+                            }
+                            if ( !customJamValidation.empty() )
+                            {
+                                ImGui::SameLine( 0, 16.0f );
+                                ImGui::TextColored( ImGui::GetErrorTextColour(), ICON_FA_TRIANGLE_EXCLAMATION " %s", customJamValidation.c_str() );
+                            }
+                            ImGui::Spacing();
+
+                            ImGui::Scoped::Disabled sd( customJamName.empty() );
+                            if ( ImGui::Button( "Validate", buttonSize ) )
+                            {
+                                // test-run access to whatever they're asking for to avoid adding garbage to the warehouse
+                                endlesss::api::JamLatestState testPermissions;
+                                if ( testPermissions.fetch( *netConfig, endlesss::types::JamCouchID( customJamName ) ) )
+                                {
+                                    customJamValidation.clear();
+                                }
+                                else
+                                {
+                                    customJamValidation = "failed to validate jam access";
+                                }
+                            }
+
+                            // if validation has no error message, continue
+                            ImGui::Scoped::Enabled se( customJamValidation.empty() );
+                            if ( ImGui::Button( "Add", buttonSize ) )
+                            {
+                                if ( behaviour.fnOnSelected )
+                                    behaviour.fnOnSelected( endlesss::types::JamCouchID( customJamName ) );
+
+                                shouldClosePopup = true;
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+            ImGui::EndChild();
         }
 
         ImGui::Spacing();

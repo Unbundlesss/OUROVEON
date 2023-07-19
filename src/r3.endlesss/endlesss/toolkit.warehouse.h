@@ -42,19 +42,18 @@ struct Warehouse
 
         JamSlice() = delete;
         JamSlice( const types::JamCouchID& jamID, const size_t elementsToReserve )
-            : m_jamID( jamID )
         {
             reserve( elementsToReserve );
         }
 
-        types::JamCouchID                           m_jamID;
+
 
         // per-riff information
         std::vector< types::RiffCouchID >           m_ids;
         std::vector< spacetime::InSeconds >         m_timestamps;
         std::vector< uint64_t >                     m_userhash;
-        std::vector< uint32_t >                     m_roots;
-        std::vector< uint32_t >                     m_scales;
+        std::vector< uint8_t >                      m_roots;
+        std::vector< uint8_t >                      m_scales;
         std::vector< float >                        m_bpms;
 
         // riff-adjacency information

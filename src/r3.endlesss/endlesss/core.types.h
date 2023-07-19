@@ -459,8 +459,16 @@ namespace services {
 // ---------------------------------------------------------------------------------------------------------------------
 struct IJamNameCacheServices
 {
+    enum class LookupResult
+    {
+        NotFound,                   // no clue :'(
+        FoundInPrimarySource,       // subscribed stuff, public jams
+        FoundInArchives,            // historical data, scraped names, misc junk
+        PresumedPersonal            // everything not band#######, presumed to be personal jams
+    };
+
     // ask to lookup a public name for a given couch ID, returning true if it was found, false if not
-    virtual bool lookupNameForJam( const endlesss::types::JamCouchID& jamID, std::string& result ) const = 0;
+    virtual LookupResult lookupNameForJam( const endlesss::types::JamCouchID& jamID, std::string& result ) const = 0;
 
     virtual ~IJamNameCacheServices() {}
 };

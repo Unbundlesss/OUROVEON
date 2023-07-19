@@ -10,6 +10,7 @@
 #pragma once
 
 #include "endlesss/core.types.h"
+#include "endlesss/api.h"
 
 namespace endlesss { namespace cache { struct Jams; } }
 
@@ -25,7 +26,8 @@ struct UniversalJamBrowserBehaviour
 void modalUniversalJamBrowser(
     const char* title,                                  // a imgui label to use with ImGui::OpenPopup
     const endlesss::cache::Jams& jamCache,
-    const UniversalJamBrowserBehaviour& behaviour );
+    const UniversalJamBrowserBehaviour& behaviour,
+    endlesss::api::NetConfiguration::Shared netConfig );
 
 
 } // namespace ux

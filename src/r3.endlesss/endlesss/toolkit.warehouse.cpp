@@ -731,6 +731,8 @@ Warehouse::Warehouse( const app::StoragePaths& storagePaths, api::NetConfigurati
     m_databaseFile = ( storagePaths.cacheCommon / "warehouse.db3" ).string();
     SqlDB::post_connection_hook = []( sqlite3* db_handle )
     {
+        // https://www.sqlite.org/pragma.html#pragma_temp_store
+        sqlite3_exec( db_handle, "pragma temp_store = memory", nullptr, nullptr, nullptr );
     };
 
     sql::jams::runInit();
@@ -1365,7 +1367,7 @@ bool JamSliceTask::Work( TaskQueue& currentTasks )
     auto resultSlice = std::make_unique<Warehouse::JamSlice>( m_jamCID, riffCount );
 
     static constexpr char _sqlExtractRiffBits[] = R"(
-            select RiffCID,CreationTime,UserName,Root,Scale,BPMrnd,StemCID_1,StemCID_2,StemCID_3,StemCID_4,StemCID_5,StemCID_6,StemCID_7,StemCID_8 
+            select OwnerJamCID,RiffCID,CreationTime,UserName,Root,Scale,BPMrnd,StemCID_1,StemCID_2,StemCID_3,StemCID_4,StemCID_5,StemCID_6,StemCID_7,StemCID_8 
             from riffs 
             where OwnerJamCID is ?1 and CreationTime is not null 
             order by CreationTime;
@@ -1373,11 +1375,12 @@ bool JamSliceTask::Work( TaskQueue& currentTasks )
 
     auto query = Warehouse::SqlDB::query<_sqlExtractRiffBits>( m_jamCID.value() );
 
-    std::string_view riffCID,
+    std::string_view jamCID,
+                     riffCID,
                      username;
     int64_t          timestamp;
-    uint32_t         root;
-    uint32_t         scale;
+    uint8_t          root;
+    uint8_t          scale;
     float            bpmrnd;
     std::array< std::string_view, 8 > stemCIDs;
 
@@ -1386,10 +1389,12 @@ bool JamSliceTask::Work( TaskQueue& currentTasks )
     previousStemIDs.reserve( 8 );
 
     spacetime::InSeconds previousRiffTimestamp;
-    int8_t               previousActiveStems = 0;
+    int8_t               previousNumberOfActiveStems = 0;
+    int8_t               previousnumberOfUnseenStems = 0;
     bool                 firstRiffInSequence = true;
 
-    while ( query( riffCID,
+    while ( query( jamCID,
+                   riffCID,
                    timestamp,
                    username,
                    root,
@@ -1415,14 +1420,14 @@ bool JamSliceTask::Work( TaskQueue& currentTasks )
         resultSlice->m_scales.emplace_back( scale );
         resultSlice->m_bpms.emplace_back( bpmrnd );
 
-        int8_t liveStems = 0;
-        int32_t newStems = 0;
+        int8_t numberOfActiveStems = 0;
+        int8_t numberOfUnseenStems = 0;
         for ( const auto& stemCID : stemCIDs )
         {
             if ( !stemCID.empty() )
-                liveStems++;
+                numberOfActiveStems++;
             if ( !previousStemIDs.contains( stemCID ) )
-                newStems++;
+                numberOfUnseenStems++;
         }
 
         // first riff reports no deltas
@@ -1434,14 +1439,17 @@ bool JamSliceTask::Work( TaskQueue& currentTasks )
         // compute deltas from last riff
         else
         {
-            resultSlice->m_deltaSeconds.push_back( (int32_t) (contextTimestamp - previousRiffTimestamp).count() );
-            resultSlice->m_deltaStem.push_back( std::max( newStems, std::abs(liveStems - previousActiveStems) ) );
+            const int8_t changeInActiveStems = numberOfActiveStems - previousNumberOfActiveStems;
+
+            resultSlice->m_deltaSeconds.push_back( static_cast<int32_t>( (contextTimestamp - previousRiffTimestamp).count() ) );
+            resultSlice->m_deltaStem.push_back( std::max( numberOfUnseenStems, (int8_t)std::abs(changeInActiveStems) ) );
         }
         firstRiffInSequence = false;
 
         // stash our current state for deltas
         previousRiffTimestamp = contextTimestamp;
-        previousActiveStems = liveStems;
+        previousNumberOfActiveStems = numberOfActiveStems;
+        previousnumberOfUnseenStems = numberOfUnseenStems;
 
         // keep unordered set of stem IDs
         previousStemIDs.clear();

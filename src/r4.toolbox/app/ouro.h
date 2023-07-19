@@ -47,7 +47,7 @@ protected:
     tf::Executor&                           getTaskExecutor() override { return m_taskExecutor; }
 
     // endlesss::services::IJamNameCacheServices
-    bool lookupNameForJam( const endlesss::types::JamCouchID& jamID, std::string& result ) const override;
+    LookupResult lookupNameForJam( const endlesss::types::JamCouchID& jamID, std::string& result ) const override;
 
 
     // validated storage locations for the app
@@ -64,8 +64,11 @@ protected:
 
     // the global live-instance stem cache, used to populate riffs when preparing for playback
     endlesss::cache::Stems                  m_stemCache;
+    
     // timer used to check in and auto-prune the stem cache if it busts past the set memory usage targets
+    static constexpr auto                   c_stemCachePruneCheckDuration = std::chrono::seconds( 30 );
     spacetime::Moment                       m_stemCacheLastPruneCheck;
+
     // async bits to run the prune() fn via TF
     tf::Taskflow                            m_stemCachePruneTask;
     std::optional< tf::Future<void> >       m_stemCachePruneFuture = std::nullopt;

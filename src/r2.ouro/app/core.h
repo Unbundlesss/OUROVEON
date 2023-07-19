@@ -200,7 +200,11 @@ protected:
     // the cached jam metadata - public names et al
     endlesss::cache::Jams                   m_jamLibrary;
 
+    // prefetch data for doing name resolution of random jam band### names
+    config::endlesss::BandNameService       m_jamNameService;
 
+
+    // efficient lookup system for known endlesss usernames
     endlesss::toolkit::PopulationQuery      m_endlesssPopulation;
 
 

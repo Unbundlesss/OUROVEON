@@ -390,6 +390,19 @@ int Core::Run()
         {
             // load and analyse population list for user autocomplete
             m_endlesssPopulation.loadPopulationData( *this );
+        },
+        [this]()
+        {
+            // load prefetched jam name dictionary
+            const auto bnsLoadResult = config::load( *this, m_jamNameService );
+            if ( bnsLoadResult != config::LoadResult::Success )
+            {
+                blog::error::core( FMTX( "BNS file failed to load" ) );
+            }
+            else
+            {
+                blog::core( FMTX( "BNS loaded {} entries" ), m_jamNameService.entries.size() );
+            }
         }
     );
 
@@ -602,7 +615,7 @@ void CoreGUI::activateModalPopup( const char* label, const ModalPopupExecutor& e
 bool CoreGUI::beginInterfaceLayout( const ViewportFlags viewportFlags )
 {
     // begin tracking perf cost of the imgui 'build' stage
-    m_perfData.m_moment.restart();
+    m_perfData.m_moment.setToNow();
 
     // resetting/loading new layouts has to happen before layout is underway
     if ( m_resetLayoutInNextUpdate )
@@ -812,14 +825,14 @@ void CoreGUI::finishInterfaceLayoutAndRender()
     ImGui::PopFont();
 
     // get perf cost of the UI 'build' code
-    m_perfData.m_uiPreRender = m_perfData.m_moment.deltaMs();
-    m_perfData.m_moment.restart();
+    m_perfData.m_uiPreRender = m_perfData.m_moment.delta< std::chrono::milliseconds >();
+    m_perfData.m_moment.setToNow();
 
     // flush the main thread event bus
     m_appEventBus->mainThreadDispatch();
 
-    m_perfData.m_uiEventBus = m_perfData.m_moment.deltaMs();
-    m_perfData.m_moment.restart();
+    m_perfData.m_uiEventBus = m_perfData.m_moment.delta< std::chrono::milliseconds >();
+    m_perfData.m_moment.setToNow();
 
     m_mdFrontEnd->appRenderBegin();
 
@@ -838,7 +851,7 @@ void CoreGUI::finishInterfaceLayoutAndRender()
     }
 
     // perf cost of UI render dispatch
-    m_perfData.m_uiPostRender = m_perfData.m_moment.deltaMs();
+    m_perfData.m_uiPostRender = m_perfData.m_moment.delta< std::chrono::milliseconds >();
 
     m_mdFrontEnd->appRenderFinalise();
 
