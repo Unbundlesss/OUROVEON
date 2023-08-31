@@ -11,7 +11,7 @@ The purpose of this article is not to offer an introduction to Unicode in genera
 
 ## Examples of use
 
-### Introductionary Sample
+### Introductory Sample
 
 To illustrate the use of the library, let's start with a small but complete program that opens a file containing UTF-8 encoded text, reads it line by line, checks each line for invalid UTF-8 byte sequences, and converts it to UTF-16 encoding and back to UTF-8:
 
@@ -118,7 +118,7 @@ bool valid_utf8_file(const char* file_name)
 }
 ```
 
-Because the function `utf8::is_valid()` works with input iterators, we were able to pass an `istreambuf_iterator` to it and read the content of the file directly without loading it to the memory first.
+Because the function `utf8::is_valid()` works with input iterators, we were able to pass an `istreambuf_iterator` to `it` and read the content of the file directly without loading it to the memory first.
 
 Note that other functions that take input iterator arguments can be used in a similar way. For instance, to read the content of a UTF-8 encoded text file and convert the text to UTF-16, just do something like:
 
@@ -149,7 +149,7 @@ The function will replace any invalid UTF-8 sequence with a Unicode replacement 
 The library was designed to be:
 
 1.  Generic: for better or worse, there are many C++ string classes out there, and the library should work with as many of them as possible.
-2.  Portable: the library should be portable both accross different platforms and compilers. The only non-portable code is a small section that declares unsigned integers of different sizes: three typedefs. They can be changed by the users of the library if they don't match their platform. The default setting should work for Windows (both 32 and 64 bit), and most 32 bit and 64 bit Unix derivatives. Support for post C++03 language features is included for modern compilers at API level only, so the library should work even with pretty old compilers.
+2.  Portable: the library should be portable both across different platforms and compilers. The only non-portable code is a small section that declares unsigned integers of different sizes: three typedefs. They can be changed by the users of the library if they don't match their platform. The default setting should work for Windows (both 32 and 64 bit), and most 32 bit and 64 bit Unix derivatives. Support for post C++03 language features is included for modern compilers at API level only, so the library should work even with pretty old compilers.
 3.  Lightweight: follow the "pay only for what you use" guideline.
 4.  Unintrusive: avoid forcing any particular design or even programming style on the user. This is a library, not a framework.
 
@@ -157,7 +157,7 @@ The library was designed to be:
 
 In case you want to look into other means of working with UTF-8 strings from C++, here is the list of solutions I am aware of:
 
-1.  [ICU Library](http://icu.sourceforge.net/). It is very powerful, complete, feature-rich, mature, and widely used. Also big, intrusive, non-generic, and doesn't play well with the Standard Library. I definitelly recommend looking at ICU even if you don't plan to use it.
+1.  [ICU Library](http://icu.sourceforge.net/). It is very powerful, complete, feature-rich, mature, and widely used. Also big, intrusive, non-generic, and doesn't play well with the Standard Library. I definitely recommend looking at ICU even if you don't plan to use it.
 2.  C++11 language and library features. Still far from complete, and not easy to use.
 3.  [Glib::ustring](http://www.gtkmm.org/gtkmm2/docs/tutorial/html/ch03s04.html). A class specifically made to work with UTF-8 strings, and also feel like `std::string`. If you prefer to have yet another string class in your code, it may be worth a look. Be aware of the licensing issues, though.
 4.  Platform dependent solutions: Windows and POSIX have functions to convert strings from one encoding to another. That is only a subset of what my library offers, but if that is all you need it may be good enough.
@@ -247,7 +247,7 @@ assert (w == twochars + 3);
 
 This function is typically used to iterate through a UTF-8 encoded string.
 
-In case of an invalid UTF-8 seqence, a `utf8::invalid_utf8` exception is thrown.
+In case of an invalid UTF-8 sequence, a `utf8::invalid_utf8` exception is thrown.
 
 #### utf8::peek_next
 
@@ -276,7 +276,7 @@ assert (cp == 0x65e5);
 assert (w == twochars);
 ```
 
-In case of an invalid UTF-8 seqence, a `utf8::invalid_utf8` exception is thrown.
+In case of an invalid UTF-8 sequence, a `utf8::invalid_utf8` exception is thrown.
 
 #### utf8::prior
 
@@ -345,7 +345,7 @@ In case of an invalid code point, a `utf8::invalid_code_point` exception is thro
 
 Available in version 1.0 and later.
 
-Given the iterators to two UTF-8 encoded code points in a seqence, returns the number of code points between them.
+Given the iterators to two UTF-8 encoded code points in a sequence, returns the number of code points between them.
 
 ```cpp
 template <typename octet_iterator> 
@@ -367,7 +367,7 @@ assert (dist == 2);
 
 This function is used to find the length (in code points) of a UTF-8 encoded string. The reason it is called _distance_, rather than, say, _length_ is mainly because developers are used that _length_ is an O(1) function. Computing the length of an UTF-8 string is a linear operation, and it looked better to model it after `std::distance` algorithm.
 
-In case of an invalid UTF-8 seqence, a `utf8::invalid_utf8` exception is thrown. If `last` does not point to the past-of-end of a UTF-8 seqence, a `utf8::not_enough_room` exception is thrown.
+In case of an invalid UTF-8 sequence, a `utf8::invalid_utf8` exception is thrown. If `last` does not point to the past-of-end of a UTF-8 sequence, a `utf8::not_enough_room` exception is thrown.
 
 #### utf8::utf16to8
 
@@ -386,6 +386,30 @@ Example of use:
 
 ```cpp
     u16string utf16string = {0x41, 0x0448, 0x65e5, 0xd834, 0xdd1e};
+    string u = utf16to8(utf16string);
+    assert (u.size() == 10);
+```
+
+In case of invalid UTF-16 sequence, a `utf8::invalid_utf16` exception is thrown.
+
+#### utf8::utf16to8
+
+Available in version 3.2 and later. Requires a C++ 17 compliant compiler.
+
+Converts a UTF-16 encoded string to UTF-8.
+
+```cpp
+std::string utf16to8(std::u16string_view s);
+```
+
+`s`: a UTF-16 encoded string.
+Return value: A UTF-8 encoded string.
+
+Example of use:
+
+```cpp
+    u16string utf16string = {0x41, 0x0448, 0x65e5, 0xd834, 0xdd1e};
+    u16string_view utf16stringview(u16string);
     string u = utf16to8(utf16string);
     assert (u.size() == 10);
 ```
@@ -445,7 +469,33 @@ assert (utf16result[2] == 0xd834);
 assert (utf16result[3] == 0xdd1e);
 ```
 
-In case of an invalid UTF-8 seqence, a `utf8::invalid_utf8` exception is thrown.
+In case of an invalid UTF-8 sequence, a `utf8::invalid_utf8` exception is thrown.
+
+#### utf8::utf8to16
+
+Available in version 3.2 and later. Requires a C++ 17 compliant compiler.
+
+Converts an UTF-8 encoded string to UTF-16.
+
+```cpp
+std::u16string utf8to16(std::string_view s);
+```
+
+`s`: an UTF-8 encoded string to convert.  
+Return value: A UTF-16 encoded string
+
+Example of use:
+
+```cpp
+string_view utf8_with_surrogates = "\xe6\x97\xa5\xd1\x88\xf0\x9d\x84\x9e";
+u16string utf16result = utf8to16(utf8_with_surrogates);
+assert (utf16result.length() == 4);
+assert (utf16result[2] == 0xd834);
+assert (utf16result[3] == 0xdd1e);
+```
+
+In case of an invalid UTF-8 sequence, a `utf8::invalid_utf8` exception is thrown.
+
 
 #### utf8::utf8to16
 
@@ -475,7 +525,7 @@ assert (utf16result[2] == 0xd834);
 assert (utf16result[3] == 0xdd1e);
 ```
 
-In case of an invalid UTF-8 seqence, a `utf8::invalid_utf8` exception is thrown. If `end` does not point to the past-of-end of a UTF-8 seqence, a `utf8::not_enough_room` exception is thrown.
+In case of an invalid UTF-8 sequence, a `utf8::invalid_utf8` exception is thrown. If `end` does not point to the past-of-end of a UTF-8 sequence, a `utf8::not_enough_room` exception is thrown.
 
 #### utf8::utf32to8
 
@@ -499,6 +549,31 @@ assert (utf8result.size() == 9);
 ```
 
 In case of invalid UTF-32 string, a `utf8::invalid_code_point` exception is thrown.
+
+#### utf8::utf32to8
+
+Available in version 3.2 and later. Requires a C++ 17 compliant compiler.
+
+Converts a UTF-32 encoded string to UTF-8.
+
+```cpp
+std::string utf32to8(std::u32string_view s);
+```
+
+`s`: a UTF-32 encoded string.  
+Return value: a UTF-8 encoded string.
+
+Example of use:
+
+```cpp
+u32string utf32string = {0x448, 0x65E5, 0x10346};
+u32string_view utf32stringview(utf32string);
+string utf8result = utf32to8(utf32stringview);
+assert (utf8result.size() == 9);
+```
+
+In case of invalid UTF-32 string, a `utf8::invalid_code_point` exception is thrown.
+
 
 #### utf8::utf32to8
 
@@ -550,7 +625,30 @@ u32string utf32result = utf8to32(twochars);
 assert (utf32result.size() == 2);
 ```
 
-In case of an invalid UTF-8 seqence, a `utf8::invalid_utf8` exception is thrown.
+In case of an invalid UTF-8 sequence, a `utf8::invalid_utf8` exception is thrown.
+
+#### utf8::utf8to32
+
+Available in version 3.2 and later. Requires a C++ 17 compliant compiler.
+
+Converts a UTF-8 encoded string to UTF-32.
+
+```cpp
+std::u32string utf8to32(std::string_view s);
+```
+
+`s`: a UTF-8 encoded string.
+Return value: a UTF-32 encoded string.
+
+Example of use:
+
+```cpp
+string_view twochars = "\xe6\x97\xa5\xd1\x88";
+u32string utf32result = utf8to32(twochars);
+assert (utf32result.size() == 2);
+```
+
+In case of an invalid UTF-8 sequence, a `utf8::invalid_utf8` exception is thrown.
 
 
 #### utf8::utf8to32
@@ -580,7 +678,7 @@ utf8to32(twochars, twochars + 5, back_inserter(utf32result));
 assert (utf32result.size() == 2);
 ```
 
-In case of an invalid UTF-8 seqence, a `utf8::invalid_utf8` exception is thrown. If `end` does not point to the past-of-end of a UTF-8 seqence, a `utf8::not_enough_room` exception is thrown.
+In case of an invalid UTF-8 sequence, a `utf8::invalid_utf8` exception is thrown. If `end` does not point to the past-of-end of a UTF-8 sequence, a `utf8::not_enough_room` exception is thrown.
 
 #### utf8::find_invalid
 
@@ -604,6 +702,30 @@ assert (invalid == 5);
 ```
 
 This function is typically used to make sure a UTF-8 string is valid before processing it with other functions. It is especially important to call it if before doing any of the _unchecked_ operations on it.
+
+#### utf8::find_invalid
+
+Available in version 3.2 and later. Requires a C++ 17 compliant compiler.
+
+Detects an invalid sequence within a UTF-8 string.
+
+```cpp
+std::size_t find_invalid(std::string_view s);
+```
+
+`s`: a UTF-8 encoded string.
+Return value: the index of the first invalid octet in the UTF-8 string. In case none were found, equals `std::string_view::npos`.
+
+Example of use:
+
+```cpp
+string_view utf_invalid = "\xe6\x97\xa5\xd1\x88\xfa";
+auto invalid = find_invalid(utf_invalid);
+assert (invalid == 5);
+```
+
+This function is typically used to make sure a UTF-8 string is valid before processing it with other functions. It is especially important to call it if before doing any of the _unchecked_ operations on it.
+
 
 #### utf8::find_invalid
 
@@ -656,6 +778,30 @@ You may want to use `is_valid` to make sure that a string contains valid UTF-8 t
 
 #### utf8::is_valid
 
+Available in version 3.2 and later. Requires a C++ 17 compliant compiler.
+
+Checks whether a string object contains valid UTF-8 encoded text.
+
+```cpp
+bool is_valid(std::string_view s);
+```
+
+`s`: a UTF-8 encoded string.  
+Return value: `true` if the string contains valid UTF-8 encoded text; `false` if not.
+
+Example of use:
+
+```cpp
+string_view utf_invalid = "\xe6\x97\xa5\xd1\x88\xfa";
+bool bvalid = is_valid(utf_invalid);
+assert (bvalid == false);
+```
+
+You may want to use `is_valid` to make sure that a string contains valid UTF-8 text without the need to know where it fails if it is not valid.
+
+
+#### utf8::is_valid
+
 Available in version 1.0 and later.
 
 Checks whether a sequence of octets is a valid UTF-8 string.
@@ -678,7 +824,7 @@ bool bvalid = is_valid(utf_invalid, utf_invalid + 6);
 assert (bvalid == false);
 ```
 
-`is_valid` is a shorthand for `find_invalid(start, end) == end;`. You may want to use it to make sure that a byte seqence is a valid UTF-8 string without the need to know where it fails if it is not valid.
+`is_valid` is a shorthand for `find_invalid(start, end) == end;`. You may want to use it to make sure that a byte sequence is a valid UTF-8 string without the need to know where it fails if it is not valid.
 
 #### utf8::replace_invalid
 
@@ -705,6 +851,33 @@ assert (bvalid);
 const string fixed_invalid_sequence = "a????z";
 assert (fixed_invalid_sequence == replace_invalid_result);
 ```
+
+#### utf8::replace_invalid
+
+Available in version 3.2 and later. Requires a C++ 17 compliant compiler.
+
+Replaces all invalid UTF-8 sequences within a string with a replacement marker.
+
+```cpp
+std::string replace_invalid(std::string_view s, char32_t replacement);
+std::string replace_invalid(std::string_view s);
+```
+
+`s`: a UTF-8 encoded string.  
+`replacement`: A Unicode code point for the replacement marker. The version without this parameter assumes the value `0xfffd`  
+Return value: A UTF-8 encoded string with replaced invalid sequences.
+
+Example of use:
+
+```cpp
+string_view invalid_sequence = "a\x80\xe0\xa0\xc0\xaf\xed\xa0\x80z";
+string replace_invalid_result = replace_invalid(invalid_sequence, '?');
+bool bvalid = is_valid(replace_invalid_result);
+assert (bvalid);
+const string fixed_invalid_sequence = "a????z";
+assert(fixed_invalid_sequence, replace_invalid_result);
+```
+
 
 #### utf8::replace_invalid
 
@@ -763,6 +936,34 @@ assert (bbom == true);
 string threechars = "\xf0\x90\x8d\x86\xe6\x97\xa5\xd1\x88";
 bool no_bbom = starts_with_bom(threechars);
 assert (no_bbom == false);
+ ```
+
+The typical use of this function is to check the first three bytes of a file. If they form the UTF-8 BOM, we want to skip them before processing the actual UTF-8 encoded text.
+
+
+#### utf8::starts_with_bom
+
+Available in version 3.2 and later. Requires a C++ 17 compliant compiler.
+
+Checks whether a string starts with a UTF-8 byte order mark (BOM)
+
+```cpp
+bool starts_with_bom(std::string_view s);
+```
+
+`s`: a UTF-8 encoded string.
+Return value: `true` if the string starts with a UTF-8 byte order mark; `false` if not.
+
+Example of use:
+
+```cpp
+string byte_order_mark = {char(0xef), char(0xbb), char(0xbf)};
+string_view byte_order_mark_view(byte_order_mark);
+bool bbom = starts_with_bom(byte_order_mark_view);
+assert (bbom);
+string_view threechars = "\xf0\x90\x8d\x86\xe6\x97\xa5\xd1\x88";
+bool no_bbom = starts_with_bom(threechars);
+assert (!no_bbom);
  ```
 
 The typical use of this function is to check the first three bytes of a file. If they form the UTF-8 BOM, we want to skip them before processing the actual UTF-8 encoded text.
@@ -893,9 +1094,9 @@ class iterator;
 
 `uint32_t operator * () const;` decodes the utf-8 sequence the underlying octet_iterator is pointing to and returns the code point.
 
-`bool operator == (const iterator& rhs) const;` returns `true` if the two underlaying iterators are equal.
+`bool operator == (const iterator& rhs) const;` returns `true` if the two underlying iterators are equal.
 
-`bool operator != (const iterator& rhs) const;` returns `true` if the two underlaying iterators are not equal.
+`bool operator != (const iterator& rhs) const;` returns `true` if the two underlying iterators are not equal.
 
 `iterator& operator ++ ();` the prefix increment - moves the iterator to the next UTF-8 encoded code point.
 
@@ -1018,7 +1219,7 @@ This is a faster but less safe version of `utf8::peek_next`. It does not check f
 
 Available in version 1.02 and later.
 
-Given a reference to an iterator pointing to an octet in a UTF-8 seqence, it decreases the iterator until it hits the beginning of the previous UTF-8 encoded code point and returns the 32 bits representation of the code point.
+Given a reference to an iterator pointing to an octet in a UTF-8 sequence, it decreases the iterator until it hits the beginning of the previous UTF-8 encoded code point and returns the 32 bits representation of the code point.
 
 ```cpp
 template <typename octet_iterator>
@@ -1069,7 +1270,7 @@ This is a faster but less safe version of `utf8::advance`. It does not check for
 
 Available in version 1.0 and later.
 
-Given the iterators to two UTF-8 encoded code points in a seqence, returns the number of code points between them.
+Given the iterators to two UTF-8 encoded code points in a sequence, returns the number of code points between them.
 
 ```cpp
 template <typename octet_iterator>
@@ -1259,9 +1460,9 @@ class iterator;
 
 `uint32_t operator * () const;` decodes the utf-8 sequence the underlying octet_iterator is pointing to and returns the code point.
 
-`bool operator == (const iterator& rhs) const;` returns `true` if the two underlaying iterators are equal.
+`bool operator == (const iterator& rhs) const;` returns `true` if the two underlying iterators are equal.
 
-`bool operator != (const iterator& rhs) const;` returns `true` if the two underlaying iterators are not equal.
+`bool operator != (const iterator& rhs) const;` returns `true` if the two underlying iterators are not equal.
 
 `iterator& operator ++ ();` the prefix increment - moves the iterator to the next UTF-8 encoded code point.
 
