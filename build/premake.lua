@@ -202,6 +202,7 @@ group "r0-codec"
 
 include "premake-inc/r0-codec-brotli.lua"
 include "premake-inc/r0-codec-flac.lua"
+include "premake-inc/r0-codec-foxen.lua"
 include "premake-inc/r0-codec-libaiff.lua"
 include "premake-inc/r0-codec-opus.lua"
 include "premake-inc/r0-codec-zlib.lua"
