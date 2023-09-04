@@ -443,7 +443,7 @@ class Database {
             sqlite3_bind_double(stmt, idx, arg);
         } else if constexpr (std::is_same_v<const char *, arg_t> ||
                              std::is_same_v<char *, arg_t>) {
-          sqlite3_bind_text(stmt, idx, arg, strlen(arg), SQLITE_STATIC);
+          sqlite3_bind_text(stmt, idx, arg, (int)strlen(arg), SQLITE_STATIC);
         } else if constexpr (std::is_same_v<std::string, arg_t>) {
           sqlite3_bind_text(stmt, idx, &arg[0], (int)arg.size(), SQLITE_STATIC);
         } else if constexpr (std::is_same_v<blob, arg_t> ||

@@ -359,7 +359,7 @@ void Preview::update(
     const AudioBuffer&  outputBuffer,
     const AudioSignal&  outputSignal,
     const uint32_t      samplesToWrite,
-    const uint64_t      samplePosition )
+    const uint64_t      /* samplePosition */ )
 {
     processCommandQueue();
 

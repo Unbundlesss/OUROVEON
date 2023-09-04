@@ -102,17 +102,26 @@ struct StemAnalysisData
 // ---------------------------------------------------------------------------------------------------------------------
 struct Stem
 {
+    // compression format decoded on load
+    enum class Compression
+    {
+        Unknown,                    // should only be in this state if State != Complete
+        OggVorbis,
+        FLAC
+    };
+
     enum class State
     {
-        Empty,
-        WorkEnqueued,
-        Complete,
+        Empty,                      // nothing scheduled
+        WorkEnqueued,               // background work happening to load/download/decompress/etc
+        Complete,                   // audio ready to go
 
-        Failed_Http,
-        Failed_DataUnderflow,
-        Failed_DataOverflow,
-        Failed_Vorbis,
-        Failed_CacheDirectory,
+        // failure states:
+        Failed_Http,                // network issues
+        Failed_DataUnderflow,       // not enough data, compared to what the servers promised us
+        Failed_DataOverflow,        // too much data
+        Failed_Decompression,       // failed to decompress what we got
+        Failed_CacheDirectory,      // failed to create or interact with the stem cache
     };
 
     // data used during stem processing; we keep a single one of these as a const singleton, shared between
@@ -174,8 +183,13 @@ struct Stem
         return ( m_state == State::Failed_Http           ||
                  m_state == State::Failed_DataUnderflow  ||
                  m_state == State::Failed_DataOverflow   ||
-                 m_state == State::Failed_Vorbis         ||
+                 m_state == State::Failed_Decompression  ||
                  m_state == State::Failed_CacheDirectory );
+    }
+
+    ouro_nodiscard constexpr Compression getCompressionFormat() const
+    {
+        return m_compressionFormat;
     }
 
     ouro_nodiscard inline std::size_t estimateMemoryUsageBytes() const
@@ -233,6 +247,7 @@ private:
     std::shared_future<void>        m_analysisFuture;
     std::atomic_bool                m_hasValidAnalysis; // set in async analysis if analysis data is to be trusted
 
+    Compression                     m_compressionFormat = Compression::Unknown;
 
     // #TODO move into accessors
 public:

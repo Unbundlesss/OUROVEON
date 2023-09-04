@@ -223,6 +223,28 @@ protected:
     // interface to MIDI capture/production
     app::MidiModule                         m_mdMidi;
 
+
+protected:
+    // network activity tracing
+
+    base::EventListenerID                   m_eventLID_NetworkActivity = base::EventListenerID::invalid();
+
+    double                                  m_avgNetActivityLag = 0;
+    double                                  m_avgNetPayloadValue = 0;
+    base::RollingAverage< 2 >               m_avgNetPayloadPerSec;
+    base::RollingAverage< 30 >              m_avgNetActivity;
+    std::array< uint8_t, 20 >               m_avgNetPulseHistory;
+    float                                   m_avgNetPayloadPerSecTimer = 0;
+    float                                   m_avgNetPulseUpdateTimer = 0;
+
+    void event_NetworkActivity( const events::NetworkActivity* eventData )
+    {
+        m_avgNetActivity.m_average = 1.0;
+        m_avgNetPayloadValue += eventData->m_bytes;
+    }
+
+    void networkActivityUpdate();
+
 public:
 
     ouro_nodiscard base::EventBusClient getEventBusClient() const

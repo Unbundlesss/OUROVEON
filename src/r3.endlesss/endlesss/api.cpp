@@ -24,8 +24,10 @@ static constexpr auto cMimeApplicationJson      = "application/json";
 
 
 // ---------------------------------------------------------------------------------------------------------------------
-void NetConfiguration::initWithoutAuthentication( const config::endlesss::rAPI& api )
+void NetConfiguration::initWithoutAuthentication( base::EventBusClient eventBusClient, const config::endlesss::rAPI& api )
 {
+    m_eventBusClient = std::move( eventBusClient );
+
     // downgrade would be unusual
     if ( m_access == Access::Authenticated )
     {
@@ -40,8 +42,10 @@ void NetConfiguration::initWithoutAuthentication( const config::endlesss::rAPI& 
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void NetConfiguration::initWithAuthentication( const config::endlesss::rAPI& api, const config::endlesss::Auth& auth )
+void NetConfiguration::initWithAuthentication( base::EventBusClient eventBusClient, const config::endlesss::rAPI& api, const config::endlesss::Auth& auth )
 {
+    m_eventBusClient = std::move( eventBusClient );
+
     m_access = Access::Authenticated;
     m_api = api;
     m_auth = auth;
@@ -165,6 +169,9 @@ std::unique_ptr<httplib::SSLClient> createEndlesssHttpClient( const NetConfigura
         { "Accept-Encoding",    "gzip, deflate, br"    },
         { "Accept-Language",    "en-gb"                },
     });
+
+    // log network traffic
+    ncfg.metricsActivitySend();
 
     return dataClient;
 }
@@ -330,6 +337,15 @@ bool BandPermalinkMeta::fetch( const NetConfiguration& ncfg, const endlesss::typ
         fmt::format( "/api/band/{}/permalink", jamDatabaseID ).c_str() );
 
     return deserializeJson< BandPermalinkMeta >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ), "band_permalink_meta" );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+bool BandNameFromExtendedID::fetch( const NetConfiguration& ncfg, const std::string& jamLongID )
+{
+    auto res = createEndlesssHttpClient( ncfg, UserAgent::WebWithoutAuth )->Get(
+        fmt::format( "/jam/{}/rifffs?pageNo=0&pageSize=1", jamLongID ).c_str() );
+
+    return deserializeJson< BandNameFromExtendedID >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamLongID ), "band_name_from_extid" );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

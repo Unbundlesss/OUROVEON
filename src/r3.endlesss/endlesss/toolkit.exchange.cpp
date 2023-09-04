@@ -51,8 +51,9 @@ void Exchange::copyDetailsFromRiff( Exchange& data, const live::RiffPtr& riff, c
         const endlesss::live::Stem* stem = currentRiff->m_stemPtrs[sI];
         if ( stem != nullptr )
         {
-            data.m_stemColour[sI] = stem->m_colourU32;
-            data.m_stemGain[sI]   = currentRiff->m_stemGains[sI];
+            data.m_stemColour[sI]   = stem->m_colourU32;
+            data.m_stemGain[sI]     = currentRiff->m_stemGains[sI];
+            data.m_stemAnalysed[sI] = stem->isAnalysisComplete();
 
             data.setJammerName( sI, stem->m_data.user.c_str() );
         }

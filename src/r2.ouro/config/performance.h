@@ -26,10 +26,13 @@ OURO_CONFIG( Performance )
 
 
     // approximate size (in Mb) of live stem cache before we run some garbage collection to trim it down
-    int32_t        stemCacheAutoPruneAtMemoryUsageMb = 2048;
+    int32_t         stemCacheAutoPruneAtMemoryUsageMb = 2048;
 
     // when possible viable, keep this number of live full riff instances alive once they are fully loaded
-    int32_t        liveRiffInstancePoolSize = 64;
+    int32_t         liveRiffInstancePoolSize = 64;
+
+    // optionally enable/disable the Vibes rendering system at the root to avoid burning any memory or GPU if desired
+    bool            enableVibesRenderer = true;
 
 
     template<class Archive>
@@ -37,6 +40,7 @@ OURO_CONFIG( Performance )
     {
         archive( CEREAL_NVP( stemCacheAutoPruneAtMemoryUsageMb )
                , CEREAL_NVP( liveRiffInstancePoolSize )
+               , CEREAL_OPTIONAL_NVP( enableVibesRenderer )
         );
     }
 

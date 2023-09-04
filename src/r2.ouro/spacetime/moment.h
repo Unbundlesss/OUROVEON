@@ -17,6 +17,7 @@ concept TDurationType = requires(T x)
     { std::chrono::duration{ std::move( x ) } } -> std::same_as<T>;
 };
 
+// ---------------------------------------------------------------------------------------------------------------------
 // represents a stored moment in time
 class Moment
 {
@@ -67,7 +68,7 @@ private:
     TTimePoint m_instant;
 };
 
-
+// ---------------------------------------------------------------------------------------------------------------------
 struct ScopedTimer : public Moment
 {
     ScopedTimer( const char* context )

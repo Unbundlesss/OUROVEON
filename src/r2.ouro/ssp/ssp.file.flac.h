@@ -23,7 +23,7 @@ public:
     ~FLACWriter();
 
     static std::shared_ptr<FLACWriter> Create(
-        const std::string&  outputFile,
+        const fs::path&     outputFile,
         const uint32_t      sampleRate,
         const float         writeBufferInSeconds );
 

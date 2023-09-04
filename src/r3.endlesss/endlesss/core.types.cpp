@@ -19,11 +19,6 @@ namespace types {
 Stem::Stem( const JamCouchID& jamCouchID, const endlesss::api::ResultStemDocument& stemFromNetwork )
     : couchID( stemFromNetwork._id )
     , jamCouchID( jamCouchID )
-    , fileEndpoint( stemFromNetwork.cdn_attachments.oggAudio.endpoint )
-    , fileBucket( stemFromNetwork.cdn_attachments.oggAudio.bucket )
-    , fileKey( stemFromNetwork.cdn_attachments.oggAudio.key )
-    , fileMIME( stemFromNetwork.cdn_attachments.oggAudio.mime )
-    , fileLengthBytes( stemFromNetwork.cdn_attachments.oggAudio.length )
     , sampleRate( (int32_t)stemFromNetwork.sampleRate )
     , creationTimeUnix( stemFromNetwork.created / 1000 ) // from unix nano
     , preset( stemFromNetwork.presetName )
@@ -39,6 +34,13 @@ Stem::Stem( const JamCouchID& jamCouchID, const endlesss::api::ResultStemDocumen
     , isBass( stemFromNetwork.isBass )
     , isMic( stemFromNetwork.isMic )
 {
+    const endlesss::api::IStemAudioFormat& audioFormat = stemFromNetwork.cdn_attachments.getAudioFormat();
+
+    fileEndpoint    = audioFormat.getEndpoint();
+    fileBucket      = audioFormat.getBucket();
+    fileKey         = audioFormat.getKey();
+    fileMIME        = audioFormat.getMIME();
+    fileLengthBytes = audioFormat.getLength();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

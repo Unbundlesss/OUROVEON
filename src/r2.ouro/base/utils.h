@@ -91,9 +91,9 @@ struct RollingAverage
     double  m_average       = 0.0;
     bool    m_initialSample = true;
 
-    constexpr inline void reset()
+    constexpr inline void reset( double toDefault = 0.0 )
     {
-        m_average       = 0.0;
+        m_average       = toDefault;
         m_initialSample = true;
     }
 

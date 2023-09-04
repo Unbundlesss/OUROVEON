@@ -36,6 +36,10 @@ struct Jam
     JamCouchID                couchID;
     std::string               displayName;
 
+    // this is ouroveon-specific metadata; extra descriptors that can be embedded for use by
+    // search / sort / export / etc as required. Example: name of a shared riff
+    std::string               description;
+
     template<class Archive>
     inline void serialize( Archive& archive )
     {
@@ -257,6 +261,19 @@ struct RiffIdentity
         , m_riff( std::move( riff ) )
     {}
 
+    // option for passing in additional naming data; used by shared_riff resolver to encode the 
+    // original username that shared the riff, as this is not accessible during network resolve and its something
+    // we want to encode for later export purposes
+    RiffIdentity(
+        endlesss::types::JamCouchID jam,
+        endlesss::types::RiffCouchID riff,
+        std::string_view customName )
+        : m_jam( std::move( jam ) )
+        , m_riff( std::move( riff ) )
+        , m_customName( customName )
+    {}
+
+
     constexpr bool hasData() const
     {
         return !m_jam.empty() &&
@@ -266,9 +283,14 @@ struct RiffIdentity
     constexpr const endlesss::types::JamCouchID&  getJamID()  const { return m_jam; }
     constexpr const endlesss::types::RiffCouchID& getRiffID() const { return m_riff; }
 
+    // check & access custom name data
+    bool hasCustomName() const { return !m_customName.empty(); }
+    const std::string_view getCustomName() const { return m_customName; }
+
 private:
     endlesss::types::JamCouchID     m_jam;
     endlesss::types::RiffCouchID    m_riff;
+    std::string                     m_customName;
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -452,6 +474,47 @@ private:
     int32_t                 m_layerSoloIndex    = -1;
 };
 
+// ---------------------------------------------------------------------------------------------------------------------
+// a riff tagged by the user, usually via the warehouse system / LORE
+//
+struct RiffTag
+{
+    RiffTag() = default;
+
+    RiffTag(
+        const endlesss::types::JamCouchID& jam,
+        const endlesss::types::RiffCouchID& riff,
+        int32_t order,
+        uint64_t timestamp,
+        int32_t favour,
+        std::string_view note )
+        : m_jam(jam)
+        , m_riff(riff)
+        , m_order(order)
+        , m_timestamp(timestamp)
+        , m_favour(favour)
+        , m_note(note)
+    {}
+    
+    endlesss::types::JamCouchID     m_jam;
+    endlesss::types::RiffCouchID    m_riff;
+    int32_t                         m_order = -1;       // <0 means "append; find the highest current order value and set this to that + N"
+    uint64_t                        m_timestamp;        // original timestamp of riff in jam
+    int32_t                         m_favour;
+    std::string                     m_note;
+
+
+    template<class Archive>
+    inline void serialize( Archive& archive )
+    {
+        archive( CEREAL_NVP( m_jam )
+               , CEREAL_NVP( m_riff )
+               , CEREAL_NVP( m_order )
+               , CEREAL_NVP( m_note )
+        );
+    }
+};
+
 } // namespace types
 
 namespace services {
@@ -478,6 +541,8 @@ struct IJamNameCacheServices
 
 
 // ---------------------------------------------------------------------------------------------------------------------
+// ask for the given riff to be enqueued for playback as and when possible
+
 CREATE_EVENT_BEGIN( EnqueueRiffPlayback )
 
 EnqueueRiffPlayback() = delete;
@@ -494,12 +559,61 @@ EnqueueRiffPlayback( const endlesss::types::JamCouchID& jam, const endlesss::typ
     ABSL_ASSERT( m_identity.hasData() );
 }
 
+EnqueueRiffPlayback( const endlesss::types::JamCouchID& jam, const endlesss::types::RiffCouchID& riff, std::string_view customName )
+    : m_identity( jam, riff, customName )
+{
+    ABSL_ASSERT( m_identity.hasData() );
+}
+
 endlesss::types::RiffIdentity   m_identity;
 
 CREATE_EVENT_END()
 
+// ---------------------------------------------------------------------------------------------------------------------
+// request to add/update or delete the given tag data to data storage / custom user views / etc
+
+CREATE_EVENT_BEGIN( RiffTagAction )
+
+enum class Action
+{
+    Upsert,
+    Remove
+};
+
+RiffTagAction() = delete;
+
+RiffTagAction( endlesss::types::RiffTag&& tag, const Action act )
+    : m_tag( std::move( tag ) )
+    , m_action( act )
+{
+}
+
+endlesss::types::RiffTag    m_tag;
+Action                      m_action;
+
+CREATE_EVENT_END()
 
 // ---------------------------------------------------------------------------------------------------------------------
+// "navigate" to the given riff; ideally load and identiy it in a jam view, for example
+
+CREATE_EVENT_BEGIN( RequestNavigationToRiff )
+
+RequestNavigationToRiff() = delete;
+
+RequestNavigationToRiff( const endlesss::types::RiffIdentity& identity )
+    : m_identity( identity )
+{
+    ABSL_ASSERT( m_identity.hasData() );
+}
+
+endlesss::types::RiffIdentity   m_identity;
+
+CREATE_EVENT_END()
+
+// ---------------------------------------------------------------------------------------------------------------------
+// in the instance where we find a jam that we cannot display a name for, request a network fetch of metadata to name it;
+// this will later cause a NotifyJamNameCacheUpdated event to be sent if/when the app was able to pull new details.
+// these can get grouped together so many requests may eventually only cause a single NotifyJamNameCacheUpdated
 
 CREATE_EVENT_BEGIN( RequestJamNameRemoteFetch )
 
@@ -515,6 +629,7 @@ endlesss::types::JamCouchID     m_jamID;
 CREATE_EVENT_END()
 
 // ---------------------------------------------------------------------------------------------------------------------
+// new jam name data is available to anyone that cares about such things
 
 CREATE_EVENT_BEGIN( NotifyJamNameCacheUpdated )
 
@@ -526,5 +641,22 @@ NotifyJamNameCacheUpdated( uint64_t changeIndex )
 }
 
 uint64_t    m_changeIndex;
+
+CREATE_EVENT_END()
+
+// ---------------------------------------------------------------------------------------------------------------------
+// some kind of network activity is happening; 0-bytes passed means we're just notifying of some kind of outbound event
+// otherwise bytes should contain the amount of data parsed (not including any compression, wire-side)
+
+CREATE_EVENT_BEGIN( NetworkActivity )
+
+NetworkActivity() = delete;
+
+NetworkActivity( std::size_t bytes )
+    : m_bytes( bytes )
+{
+}
+
+std::size_t    m_bytes;
 
 CREATE_EVENT_END()

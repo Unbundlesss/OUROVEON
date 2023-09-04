@@ -200,7 +200,7 @@ namespace jams {
     static constexpr char deprecated_0[] = { DEPRECATE_INDEX "IndexJam" };
 
     // -----------------------------------------------------------------------------------------------------------------
-    void runInit()
+    static void runInit()
     {
         Warehouse::SqlDB::query<createTable>();
 
@@ -287,6 +287,8 @@ namespace riffs {
         CREATE INDEX        IF NOT EXISTS "Riff_IndexBPM"        ON "Riffs" ( "BPMrnd" );)";
     static constexpr char createIndex_5[] = R"(
         CREATE INDEX        IF NOT EXISTS "Riff_IndexStems"      ON "Riffs" ( "StemCID_1", "StemCID_2", "StemCID_3", "StemCID_4", "StemCID_5", "StemCID_6", "StemCID_7", "StemCID_8" );)";
+    static constexpr char createIndex_6[] = R"(
+        CREATE INDEX        IF NOT EXISTS "Riff_IndexOwner2Time" ON "Riffs" ( "OwnerJamCID", "CreationTime" );)";  // w. stem index, accelerates contents report a bunch (300 -> 70ms)
 
     static constexpr char deprecated_0[] = { DEPRECATE_INDEX "IndexRiff" };
     static constexpr char deprecated_1[] = { DEPRECATE_INDEX "IndexOwner" };
@@ -296,7 +298,7 @@ namespace riffs {
     static constexpr char deprecated_5[] = { DEPRECATE_INDEX "IndexStems" };
 
     // -----------------------------------------------------------------------------------------------------------------
-    void runInit()
+    static void runInit()
     {
         Warehouse::SqlDB::query<createTable>();
 
@@ -306,6 +308,7 @@ namespace riffs {
         Warehouse::SqlDB::query<createIndex_3>();
         Warehouse::SqlDB::query<createIndex_4>();
         Warehouse::SqlDB::query<createIndex_5>();
+        Warehouse::SqlDB::query<createIndex_6>();
 
         // deprecate
         Warehouse::SqlDB::query<deprecated_0>();
@@ -358,7 +361,7 @@ namespace riffs {
 
     // -----------------------------------------------------------------------------------------------------------------
     // find a single empty riff in a jam; from there we can maybe find many more to batch up
-    bool findUnpopulated( types::JamCouchID& jamCID, types::RiffCouchID& riffCID )
+    static bool findUnpopulated( types::JamCouchID& jamCID, types::RiffCouchID& riffCID )
     {
         static constexpr char findEmptyRiff[] = R"(
             select OwnerJamCID, riffCID from riffs where CreationTime is null limit 1 )";
@@ -375,7 +378,7 @@ namespace riffs {
     }
 
     // -----------------------------------------------------------------------------------------------------------------
-    bool findUnpopulatedBatch( const types::JamCouchID& jamCID, const int32_t maximumRiffsToFind, std::vector<types::RiffCouchID>& riffCIDs )
+    static bool findUnpopulatedBatch( const types::JamCouchID& jamCID, const int32_t maximumRiffsToFind, std::vector<types::RiffCouchID>& riffCIDs )
     {
         static constexpr char findEmptyRiffsInJam[] = R"(
             select riffCID from riffs where OwnerJamCID is ?1 and CreationTime is null limit ?2 )";
@@ -395,7 +398,7 @@ namespace riffs {
     }
 
     // -----------------------------------------------------------------------------------------------------------------
-    void findUniqueJamIDs( std::vector<types::JamCouchID>& jamCIDs )
+    static void findUniqueJamIDs( std::vector<types::JamCouchID>& jamCIDs )
     {
         static constexpr char findDistinctJamCIDs[] = R"(
             select distinct OwnerJamCID from riffs )";
@@ -412,7 +415,7 @@ namespace riffs {
     }
 
     // -----------------------------------------------------------------------------------------------------------------
-    bool getSingleByID( const types::RiffCouchID& riffCID, endlesss::types::Riff& outRiff )
+    static bool getSingleByID( const types::RiffCouchID& riffCID, endlesss::types::Riff& outRiff )
     {
         auto query = Warehouse::SqlDB::query<unpackSingleRiff>( riffCID.value() );
 
@@ -482,6 +485,187 @@ namespace riffs {
 } // namespace riffs
 
 // ---------------------------------------------------------------------------------------------------------------------
+namespace tags {
+
+    static constexpr bool bVerboseLog = true;
+
+    static constexpr char createTable[] = R"(
+        CREATE TABLE IF NOT EXISTS "Tags" (
+            "RiffCID"       TEXT NOT NULL UNIQUE,
+            "OwnerJamCID"   TEXT NOT NULL,
+            "Ordering"      INTEGER,
+            "Timestamp"     INTEGER,
+            "Favour"        INTEGER,
+            "Note"          TEXT,
+            PRIMARY KEY("RiffCID")
+        );)";
+    static constexpr char createIndex_0[] = R"(
+        CREATE UNIQUE INDEX IF NOT EXISTS "Riff_IndexRiff"       ON "Tags" ( "RiffCID" );)";
+    static constexpr char createIndex_1[] = R"(
+        CREATE INDEX        IF NOT EXISTS "Riff_IndexOwner"      ON "Tags" ( "OwnerJamCID" );)";
+    static constexpr char createIndex_2[] = R"(
+        CREATE INDEX        IF NOT EXISTS "Riff_IndexOrdering"   ON "Tags" ( "Ordering" );)";
+    static constexpr char createIndex_3[] = R"(
+        CREATE INDEX        IF NOT EXISTS "Riff_IndexTimestamp"  ON "Tags" ( "Timestamp" );)";
+
+
+    // -----------------------------------------------------------------------------------------------------------------
+    static void runInit()
+    {
+        Warehouse::SqlDB::query<createTable>();
+
+        Warehouse::SqlDB::query<createIndex_0>();
+        Warehouse::SqlDB::query<createIndex_1>();
+        Warehouse::SqlDB::query<createIndex_2>();
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // version of upsert without inline transaction guard - so other functions can choose how to wrap or batch
+    namespace details
+    {
+        static void upsert_unguarded( const endlesss::types::RiffTag& tag )
+        {
+            int32_t orderingValue = tag.m_order;
+
+            // append ordering requested
+            if ( orderingValue < 0 )
+            {
+                int32_t newHighestOrderingValue = 0;
+
+                static constexpr char _findHighestCurrentOrdering[] = R"(
+                select Ordering from Tags where OwnerJamCID = ?1 order by Ordering desc limit 1;
+                )";
+
+                auto findHighestOrdering = Warehouse::SqlDB::query<_findHighestCurrentOrdering>( tag.m_jam.value() );
+                findHighestOrdering( newHighestOrderingValue );
+
+                orderingValue = newHighestOrderingValue + 1;
+
+                if ( bVerboseLog )
+                {
+                    blog::api( FMTX( "tag upsert [{}] with append-ordering value [{}]" ), tag.m_riff, orderingValue );
+                }
+            }
+            else
+            {
+                if ( bVerboseLog )
+                {
+                    blog::api( FMTX( "tag upsert [{}] with specific ordering value [{}]" ), tag.m_riff, orderingValue );
+                }
+            }
+
+            static constexpr char _insertOrUpdateTagData[] = R"(
+            INSERT OR IGNORE INTO Tags( OwnerJamCID, riffCID, Ordering, Timestamp, Favour, Note ) VALUES( ?1, ?2, ?3, ?4, ?5, ?6 );
+            )";
+
+            Warehouse::SqlDB::query<_insertOrUpdateTagData>(
+                tag.m_jam.value(),
+                tag.m_riff.value(),
+                orderingValue,
+                tag.m_timestamp,
+                tag.m_favour,
+                tag.m_note
+            );
+        }
+    }
+
+    static void upsert( const endlesss::types::RiffTag& tag )
+    {
+        Warehouse::SqlDB::TransactionGuard txn;
+        details::upsert_unguarded( tag );
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    static void remove( const endlesss::types::RiffTag& tag )
+    {
+        if ( bVerboseLog )
+        {
+            blog::api( FMTX( "tag deletion [{}]" ), tag.m_riff );
+        }
+
+        static constexpr char _deleteTagData[] = R"(
+            delete from Tags where riffCID = ?1;
+            )";
+
+        Warehouse::SqlDB::query<_deleteTagData>( tag.m_riff.value() );
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    static bool isRiffTagged( const endlesss::types::RiffCouchID& riffID, endlesss::types::RiffTag* tagOutput /*= nullptr */ )
+    {
+        static constexpr char findSingleTagForRiffID[] = R"(
+            select OwnerJamCID, riffCID, Ordering, Timestamp, Favour, Note from Tags where riffCID is ?1 
+            )";
+
+        auto query = Warehouse::SqlDB::query<findSingleTagForRiffID>( riffID.value() );
+
+        std::string_view outJamCID;
+        std::string_view outRiffCID;
+        int32_t          outOrdering;
+        uint64_t         outTimestamp;
+        int32_t          outFavour;
+        std::string_view outNote;
+
+        if ( query( outJamCID, outRiffCID, outOrdering, outTimestamp, outFavour, outNote ) )
+        {
+            if ( tagOutput != nullptr )
+            {
+                *tagOutput = endlesss::types::RiffTag(
+                    types::JamCouchID( outJamCID ),
+                    types::RiffCouchID( outRiffCID ),
+                    outOrdering,
+                    outTimestamp,
+                    outFavour,
+                    outNote );
+            }
+            return true;
+        }
+        return false;
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    static std::size_t forJam( const types::JamCouchID& jamCID, std::vector<types::RiffTag>& outputTags )
+    {
+        static constexpr char findAllTagsForJam[] = R"(
+            select OwnerJamCID, riffCID, Ordering, Timestamp, Favour, Note from Tags where OwnerJamCID is ?1 order by Ordering desc
+            )";
+
+        auto query = Warehouse::SqlDB::query<findAllTagsForJam>( jamCID.value() );
+
+        outputTags.clear();
+
+        std::string_view outJamCID;
+        std::string_view outRiffCID;
+        int32_t          outOrdering;
+        uint64_t         outTimestamp;
+        int32_t          outFavour;
+        std::string_view outNote;
+
+        while ( query( outJamCID, outRiffCID, outOrdering, outTimestamp, outFavour, outNote ) )
+        {
+            outputTags.emplace_back(
+                types::JamCouchID( outJamCID ),
+                types::RiffCouchID( outRiffCID ),
+                outOrdering,
+                outTimestamp,
+                outFavour,
+                outNote );
+        }
+        return outputTags.size();
+    }
+
+    void batchUpdate( const std::vector<endlesss::types::RiffTag>& inputTags )
+    {
+        Warehouse::SqlDB::TransactionGuard txn;
+        for ( const auto& tag : inputTags )
+        {
+            details::upsert_unguarded( tag );
+        }
+    }
+
+} // namespace tags
+
+// ---------------------------------------------------------------------------------------------------------------------
 namespace stems {
 
     static constexpr char createTable[] = R"(
@@ -540,6 +724,10 @@ namespace stems {
         CREATE INDEX        IF NOT EXISTS "Stems_IndexBPM"        ON "Stems" ( "BPMrnd" );)";
     static constexpr char createIndex_5[] = R"(
         CREATE INDEX        IF NOT EXISTS "Stems_IndexOwner"      ON "Stems" ( "OwnerJamCID" );)";
+    static constexpr char createIndex_6[] = R"(
+        CREATE INDEX        IF NOT EXISTS "Stems_IndexOwner2Time" ON "Stems" ( "OwnerJamCID", "CreationTime" );)";  // w. riff index, accelerates contents report a bunch (300 -> 70ms)
+    static constexpr char createIndex_7[] = R"(
+        CREATE INDEX        IF NOT EXISTS "Stems_IndexOwnerSlice" ON "Stems" ( "OwnerJamCID", "CreationTime" is not null );)";  // accelerates jam slice task filtering considerably
 
     static constexpr char deprecated_0[] = { DEPRECATE_INDEX "IndexStem" };
     static constexpr char deprecated_1[] = { DEPRECATE_INDEX "IndexPreset" };
@@ -548,7 +736,7 @@ namespace stems {
     static constexpr char deprecated_4[] = { DEPRECATE_INDEX "IndexBPM" };
 
     // -----------------------------------------------------------------------------------------------------------------
-    void runInit()
+    static void runInit()
     {
         Warehouse::SqlDB::query<createTable>();
 
@@ -558,6 +746,8 @@ namespace stems {
         Warehouse::SqlDB::query<createIndex_3>();
         Warehouse::SqlDB::query<createIndex_4>();
         Warehouse::SqlDB::query<createIndex_5>();
+        Warehouse::SqlDB::query<createIndex_6>();
+        Warehouse::SqlDB::query<createIndex_7>();
 
         // deprecate
         Warehouse::SqlDB::query<deprecated_0>();
@@ -595,7 +785,7 @@ namespace stems {
 
     // -----------------------------------------------------------------------------------------------------------------
     // find a single empty stem in a jam; from there we can maybe find many more to batch up
-    bool findUnpopulated( types::JamCouchID& jamCID, types::StemCouchID& stemCID )
+    static bool findUnpopulated( types::JamCouchID& jamCID, types::StemCouchID& stemCID )
     {
         static constexpr char findEmptyStem[] = R"(
             select OwnerJamCID, StemCID from stems where CreationTime is null limit 1 )";
@@ -613,7 +803,7 @@ namespace stems {
 
     // -----------------------------------------------------------------------------------------------------------------
     // find a single stem that needs filling
-    bool findUnpopulatedBatch( const types::JamCouchID& jamCID, const int32_t maximumStemsToFind, std::vector<types::StemCouchID>& stemCIDs )
+    static bool findUnpopulatedBatch( const types::JamCouchID& jamCID, const int32_t maximumStemsToFind, std::vector<types::StemCouchID>& stemCIDs )
     {
         static constexpr char findEmptyStems[] = R"(
             select StemCID from stems where OwnerJamCID is ?1 and CreationTime is null limit ?2 )";
@@ -633,7 +823,7 @@ namespace stems {
     }
 
     // -----------------------------------------------------------------------------------------------------------------
-    bool getSingleStemByID( const types::StemCouchID& stemCID, endlesss::types::Stem& outStem )
+    static bool getSingleStemByID( const types::StemCouchID& stemCID, endlesss::types::Stem& outStem )
     {
         auto query = Warehouse::SqlDB::query<unpackSingleStem>( stemCID.value() );
 
@@ -696,7 +886,7 @@ namespace ledger {
     static constexpr char deprecated_0[] = { DEPRECATE_INDEX "IndexStem" };
 
     // -----------------------------------------------------------------------------------------------------------------
-    void runInit()
+    static void runInit()
     {
         Warehouse::SqlDB::query<createStemTable>();
 
@@ -722,8 +912,9 @@ namespace ledger {
 
 
 // ---------------------------------------------------------------------------------------------------------------------
-Warehouse::Warehouse( const app::StoragePaths& storagePaths, api::NetConfiguration::Shared& networkConfig )
+Warehouse::Warehouse( const app::StoragePaths& storagePaths, api::NetConfiguration::Shared& networkConfig, base::EventBusClient eventBus )
     : m_networkConfiguration( networkConfig )
+    , m_eventBusClient( eventBus )
     , m_workerThreadPaused( false )
 {
     m_taskSchedule = std::make_unique<TaskSchedule>();
@@ -735,13 +926,17 @@ Warehouse::Warehouse( const app::StoragePaths& storagePaths, api::NetConfigurati
         sqlite3_exec( db_handle, "pragma temp_store = memory", nullptr, nullptr, nullptr );
     };
 
+    // set the database up; creating tables & indices if we're starting fresh
     sql::jams::runInit();
     sql::riffs::runInit();
+    sql::tags::runInit();
     sql::stems::runInit();
     sql::ledger::runInit();
 
     m_workerThreadAlive = true;
     m_workerThread      = std::make_unique<std::thread>( &Warehouse::threadWorker, this );
+
+    APP_EVENT_BIND_TO( RiffTagAction );
 
 #if OURO_PLATFORM_WIN
     ::SetThreadPriority( m_workerThread->native_handle(), THREAD_PRIORITY_BELOW_NORMAL );
@@ -751,6 +946,8 @@ Warehouse::Warehouse( const app::StoragePaths& storagePaths, api::NetConfigurati
 // ---------------------------------------------------------------------------------------------------------------------
 Warehouse::~Warehouse()
 {
+    APP_EVENT_UNBIND( RiffTagAction );
+
     m_workerThreadAlive = false;
 
     {
@@ -778,15 +975,21 @@ void Warehouse::setCallbackContentsReport( const ContentsReportCallback& cb )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+void Warehouse::upsertSingleJamIDToName( const endlesss::types::JamCouchID& jamCID, const std::string& displayName )
+{
+    static constexpr char _insertOrUpdateJamData[] = R"(
+        INSERT OR IGNORE INTO jams( JamCID, PublicName ) VALUES( ?1, ?2 );
+    )";
+
+    Warehouse::SqlDB::query<_insertOrUpdateJamData>( jamCID.value(), displayName );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::upsertJamDictionaryFromCache( const cache::Jams& jamCache )
 {
-    jamCache.iterateAllJams( []( const cache::Jams::Data& jamData )
+    jamCache.iterateAllJams( [this]( const cache::Jams::Data& jamData )
         {
-            static constexpr char _insertOrUpdateJamData[] = R"(
-                INSERT OR IGNORE INTO jams( JamCID, PublicName ) VALUES( ?1, ?2 );
-            )";
-
-            Warehouse::SqlDB::query<_insertOrUpdateJamData>( jamData.m_jamCID.value(), jamData.m_displayName );
+            upsertSingleJamIDToName( jamData.m_jamCID, jamData.m_displayName );
         });
 }
 
@@ -814,6 +1017,11 @@ void Warehouse::extractJamDictionary( types::JamIDToNameMap& jamDictionary ) con
 // ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::addOrUpdateJamSnapshot( const types::JamCouchID& jamCouchID )
 {
+    if ( jamCouchID.empty() )
+    {
+        blog::error::api( "cannot add empty jam ID to warehouse" );
+        return;
+    }
     if ( !hasFullEndlesssNetworkAccess() )
     {
         blog::error::api( "cannot call Warehouse::addOrUpdateJamSnapshot() with no active Endlesss network" );
@@ -826,7 +1034,25 @@ void Warehouse::addOrUpdateJamSnapshot( const types::JamCouchID& jamCouchID )
 // ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::addJamSliceRequest( const types::JamCouchID& jamCouchID, const JamSliceCallback& callbackOnCompletion )
 {
+    if ( jamCouchID.empty() )
+    {
+        blog::error::api( "empty Jam ID passed to warehouse for slice request" );
+        return;
+    }
+
     m_taskSchedule->m_taskQueue.enqueue( std::make_unique<JamSliceTask>( jamCouchID, callbackOnCompletion ) );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void Warehouse::requestJamPurge( const types::JamCouchID& jamCouchID )
+{
+    if ( jamCouchID.empty() )
+    {
+        blog::error::api( "empty Jam ID passed to warehouse for purge" );
+        return;
+    }
+
+    m_taskSchedule->m_taskQueue.enqueue( std::make_unique<JamPurgeTask>( jamCouchID ) );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -852,11 +1078,34 @@ bool Warehouse::fetchSingleRiffByID( const endlesss::types::RiffCouchID& riffID,
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void Warehouse::requestJamPurge( const types::JamCouchID& jamCouchID )
+void Warehouse::upsertTag( const endlesss::types::RiffTag& tag )
 {
-    m_taskSchedule->m_taskQueue.enqueue( std::make_unique<JamPurgeTask>( jamCouchID ) );
+    sql::tags::upsert( tag );
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+void Warehouse::removeTag( const endlesss::types::RiffTag& tag )
+{
+    sql::tags::remove( tag );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+bool Warehouse::isRiffTagged( const endlesss::types::RiffCouchID& riffID, endlesss::types::RiffTag* tagOutput /*= nullptr */ )
+{
+    return sql::tags::isRiffTagged( riffID, tagOutput );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+std::size_t Warehouse::fetchTagsForJam( const endlesss::types::JamCouchID& jamCID, std::vector<endlesss::types::RiffTag>& outputTags )
+{
+    return sql::tags::forJam( jamCID, outputTags );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void Warehouse::batchUpdateTags( const std::vector<endlesss::types::RiffTag>& inputTags )
+{
+    sql::tags::batchUpdate( inputTags );
+}
 
 // ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::workerTogglePause()
@@ -1031,6 +1280,29 @@ void Warehouse::threadWorker()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+void Warehouse::event_RiffTagAction( const events::RiffTagAction* eventData )
+{
+    switch ( eventData->m_action )
+    {
+        case events::RiffTagAction::Action::Upsert:
+        {
+            sql::tags::upsert( eventData->m_tag );
+        }
+        break;
+
+        case events::RiffTagAction::Action::Remove:
+        {
+            sql::tags::remove( eventData->m_tag );
+        }
+        break;
+
+        default:
+            ABSL_ASSERT( 0 );
+            break;
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 bool JamSnapshotTask::Work( TaskQueue& currentTasks )
 {
     blog::api( "[{}] requesting full riff manifest", Tag );
@@ -1188,14 +1460,15 @@ bool GetRiffDataTask::Work( TaskQueue& currentTasks )
             continue;
         }
         // this stem was damaged and has no audio data
-        if ( stemCheck.doc.cdn_attachments.oggAudio.endpoint.empty() )
+        if ( stemCheck.doc.cdn_attachments.oggAudio.endpoint.empty() &&
+             stemCheck.doc.cdn_attachments.flacAudio.endpoint.empty() )
         {
             uniqueStemCIDs.emplace( stemCheck.doc._id );
             blog::api( "[{}] Found stem that is damaged, ignoring ID [{}]", Tag, stemCheck.doc._id );
 
             sql::ledger::storeStemNote(
                 stemCheck.doc._id,
-                sql::ledger::StemLedgerType::MISSING_OGG,
+                sql::ledger::StemLedgerType::MISSING_OGG,   // previously this only happened with OGG sources.. potentially we could have missing FLAC here too
                 fmt::format( "[Ver:{}]", stemCheck.doc.app_version ) );
 
             continue;
@@ -1334,14 +1607,16 @@ bool GetStemData::Work( TaskQueue& currentTasks )
         if ( stemData.doc.isMic )
             instrumentMask |= 1 << 4;
 
+        const endlesss::api::IStemAudioFormat& audioFormat = stemData.doc.cdn_attachments.getAudioFormat();
+
         Warehouse::SqlDB::query<updateStemDetails>(
             stemData.id.value(),
             unixTime,
-            stemData.doc.cdn_attachments.oggAudio.endpoint,
-            stemData.doc.cdn_attachments.oggAudio.bucket,
-            stemData.doc.cdn_attachments.oggAudio.key,
-            stemData.doc.cdn_attachments.oggAudio.mime,
-            stemData.doc.cdn_attachments.oggAudio.length,
+            audioFormat.getEndpoint().data(),
+            audioFormat.getBucket().data(),
+            audioFormat.getKey().data(),
+            audioFormat.getMIME().data(),
+            audioFormat.getLength(),
             stemData.doc.bps,
             types::BPStoRoundedBPM( stemData.doc.bps ),
             instrumentMask,

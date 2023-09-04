@@ -41,8 +41,8 @@ struct Stems
     // synchronously lock & garbage collect the cache
     void lockAndPrune( const bool verbose, const uint32_t generationsToKeep = 64 );
 
-    // given a stem ID, return a suitable path to write the cached data to
-    ouro_nodiscard fs::path getCachePathForStem( const endlesss::types::StemCouchID& stemDocumentID ) const;
+    // given stem data, return a suitable path to write the cached data to
+    ouro_nodiscard fs::path getCachePathForStem( const endlesss::types::Stem& stemData ) const;
 
     // return the single shared instance of read-only stem processing state
     // used by riff resolving code after fetching audio data in

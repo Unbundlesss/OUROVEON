@@ -32,7 +32,7 @@ Stems::Stems()
 // ---------------------------------------------------------------------------------------------------------------------
 absl::Status Stems::initialise( const fs::path& cachePath, const uint32_t targetSampleRate )
 {
-    static const fs::path stemSubdir( "stem" );
+    static const fs::path stemSubdir( "stem_v2" );
 
     m_cacheStemRoot     = cachePath / stemSubdir;
     m_targetSampleRate  = targetSampleRate;
@@ -173,13 +173,18 @@ void Stems::lockAndPrune( const bool verbose, const uint32_t generationsToKeep )
 // 
 // NB changing this may invalidate existing stem caches
 //
-fs::path Stems::getCachePathForStem( const endlesss::types::StemCouchID& stemDocumentID ) const
+fs::path Stems::getCachePathForStem( const endlesss::types::Stem& stemData ) const
 {
-    // pluck the first character from the couch ID to partition the cache folder
-    const std::string stemRoot = stemDocumentID.value().substr(0, 1);
+    // pluck the first hex character from the couch ID 
+    const fs::path stemRoot( stemData.couchID.value().substr( 0, 1 ) );
 
-    // append to the base cache directory
-    return (m_cacheStemRoot / stemRoot);
+    if ( stemData.jamCouchID.empty() )
+        // support fallback where we just have no parent Jam ID at all, lump them together
+        return (m_cacheStemRoot / "_orphans" / stemRoot);
+    else
+        // partition by jam ID, each folder then using the initial character from the stem couch ID to avoid having 
+        // one directory with potentially thousands of stems in
+        return (m_cacheStemRoot / stemData.jamCouchID.value() / stemRoot);
 }
 
 } // namespace cache

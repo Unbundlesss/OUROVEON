@@ -36,21 +36,46 @@ inline void trim( std::string& str, const std::string& trimChars )
 } 
 
 // ---------------------------------------------------------------------------------------------------------------------
-inline void asciifyString( const std::string_view source, std::string& dest, const char compressionChar = '\0' )
+inline void sanitiseNameForPath( const std::string_view source, std::string& dest, const char32_t replacementChar = '_' )
 {
     dest.clear();
-    dest.reserve( source.size() );
-    for ( const auto ch : source )
+    dest.reserve( source.length() );
+
+    const char* w = source.data();
+    const char* sourceEnd = w + source.length();
+
+    // decode the source as a UTF8 stream to preserve any interesting, valid characters
+    while ( w != sourceEnd )
     {
-        if ( !isalnum( static_cast<unsigned int>(ch) ) )
+        char32_t cp = utf8::next( w, sourceEnd );
+
+        // blitz control characters
+        if ( cp >= 0x00 && cp <= 0x1f )
+            cp = replacementChar;
+        if ( cp >= 0x80 && cp <= 0x9f )
+            cp = replacementChar;
+
+        // strip out problematic pathname characters
+        switch ( cp )
         {
-            if ( compressionChar != '\0' )
-                dest.push_back( compressionChar );
+        case '/':
+        case '?':
+        case '<':
+        case '>':
+        case '\\':
+        case ':':
+        case '*':
+        case '|':
+        case '\"':
+        case '~':
+        case '.':
+            cp = replacementChar;
+
+        default:
+            break;
         }
-        else
-        {
-            dest.push_back( ch );
-        }
+
+        utf8::append( cp, dest );
     }
 }
 

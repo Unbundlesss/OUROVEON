@@ -71,14 +71,26 @@ struct WavHeader
 
 // ---------------------------------------------------------------------------------------------------------------------
 std::shared_ptr<WAVWriter> WAVWriter::Create(
-    const std::string& outputFile,
+    const fs::path& outputFile,
     const uint32_t sampleRate,
     const uint32_t writeBufferInSeconds /* = 10 */ )
 {
-    FILE* fpWAV =fopen( outputFile.c_str(), "wb" );
+    // produce a 8 and 16-bit encoded version of the filename, supporting utf8 characters in the input
+    const std::u16string outputFileU16 = outputFile.u16string();
+    const std::string outputFileU8 = utf8::utf16to8( outputFileU16 );
+
+#ifdef OURO_PLATFORM_WIN
+    // wchar_t is 2 bytes on Windows and expects utf16, so pass it that
+    FILE* fpWAV = _wfopen( reinterpret_cast<const wchar_t*>( outputFileU16.c_str() ), L"wb" );
+#else
+    // elsewhere ... the OS is hopefully on board by default, just pass the utf8-capable 8-bit string
+    // https://stackoverflow.com/questions/396567/is-there-a-standard-way-to-do-an-fopen-with-a-unicode-string-file-path
+    FILE* fpWAV = fopen( outputFileU8.c_str(), "wb" );
+#endif
+
     if ( fpWAV == nullptr )
     {
-        blog::error::core( "rec::WavFile could not open [{}] for writing ({})", outputFile, strerror(errno) );
+        blog::error::core( "rec::WavFile could not open [{}] for writing ({})", outputFileU8, strerror(errno));
         return nullptr;
     }
 
@@ -86,7 +98,7 @@ std::shared_ptr<WAVWriter> WAVWriter::Create(
     data::WavHeader nullHeader( 0, sampleRate );
     fwrite( &nullHeader, sizeof( data::WavHeader ), 1, fpWAV );
 
-#ifdef WIN32
+#ifdef OURO_PLATFORM_WIN
     SYSTEM_INFO sinf;
     ::GetSystemInfo( &sinf );
     const uint32_t bufferChunkSize = (uint32_t)sinf.dwAllocationGranularity;

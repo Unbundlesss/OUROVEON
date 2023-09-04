@@ -38,6 +38,52 @@ inline void tokenReplacement( std::string& source, const std::string& find, cons
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// given a jam or riff name, try and remove anything too problematic for creating a file/directory using it 
+//
+inline void sanitiseNameForPath( const std::string_view source, std::string& dest, const char32_t replacementChar = '_' )
+{
+    dest.clear();
+    dest.reserve( source.length() );
+
+    const char* w = source.data();
+    const char* sourceEnd = w + source.length();
+
+    // decode the source as a UTF8 stream to preserve any interesting, valid characters
+    while ( w != sourceEnd )
+    {
+        char32_t cp = utf8::next( w, sourceEnd );
+        
+        // blitz control characters
+        if ( cp >= 0x00 && cp <= 0x1f )
+            cp = replacementChar;
+        if ( cp >= 0x80 && cp <= 0x9f )
+            cp = replacementChar;
+
+        // strip out problematic pathname characters
+        switch ( cp )
+        {
+            case '/':
+            case '?':
+            case '<':
+            case '>':
+            case '\\':
+            case ':':
+            case '*':
+            case '|':
+            case '\"':
+            case '~':
+            case '.':
+                cp = replacementChar;
+
+            default:
+                break;
+        }
+
+        utf8::append( cp, dest );
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 std::vector<fs::path> exportRiff(
     const RiffExportMode            exportMode,
     const RiffExportDestination&    destination,
@@ -53,12 +99,19 @@ std::vector<fs::path> exportRiff(
 
     // jam level tokens
     {
-        std::string jamNameSanitised;
-        base::asciifyString( currentRiff->m_riffData.jam.displayName, jamNameSanitised, '_' );
+        std::string jamNameSanitised, jamDescriptionSanitised;
+        sanitiseNameForPath( currentRiff->m_riffData.jam.displayName, jamNameSanitised );
+        sanitiseNameForPath( currentRiff->m_riffData.jam.description, jamDescriptionSanitised );
+        
+        // bolt on some kind of separator if we have a description
+        if ( !jamDescriptionSanitised.empty() )
+            jamDescriptionSanitised += destination.m_spec.custom.jamDescriptionSeparator;
+
         const std::string jamUID = currentRiff->m_riffData.jam.couchID.substr( destination.m_spec.custom.uniqueIDLength );
 
-        tokenReplacements.emplace( OutputTokens::toString( OutputTokens::Enum::Jam_Name ),     jamNameSanitised );
-        tokenReplacements.emplace( OutputTokens::toString( OutputTokens::Enum::Jam_UniqueID ), jamUID );
+        tokenReplacements.emplace( OutputTokens::toString( OutputTokens::Enum::Jam_Name ),          jamNameSanitised );
+        tokenReplacements.emplace( OutputTokens::toString( OutputTokens::Enum::Jam_UniqueID ),      jamUID );
+        tokenReplacements.emplace( OutputTokens::toString( OutputTokens::Enum::Jam_Description ),   jamDescriptionSanitised );
     }
     // riff level
     {
@@ -82,31 +135,40 @@ std::vector<fs::path> exportRiff(
             endlesss::constants::cScaleNamesFilenameSanitize[currentRiff->m_riffData.riff.scale] );
     }
 
-    std::string rootPathString = destination.m_spec.riff;
-    rootPathString.reserve( rootPathString.size() * 2 );
-    for ( const auto& pair : tokenReplacements )
+    std::string rootPathStringU8;
     {
-        tokenReplacement( rootPathString, pair.first, pair.second );
-    }
-    rootPathString += "/";
+        std::string rootPathString = destination.m_spec.riff;
+        rootPathString.reserve( rootPathString.size() * 2 );
+        for ( const auto& pair : tokenReplacements )
+        {
+            tokenReplacement( rootPathString, pair.first, pair.second );
+        }
+        rootPathString += "/";
 
-    const auto rootPath = fs::absolute( fs::path{ destination.m_paths.outputApp } /
-                                        fs::path{ rootPathString } );
+        // utf8 pre-sanitize
+        utf8::replace_invalid( rootPathString.begin(), rootPathString.end(), back_inserter( rootPathStringU8 ) );
+    }
+    // ensure any utf-8 data is preseved as we construct an fs::path (this is so dumb)
+    const char8_t* rootPathAsChar8 = reinterpret_cast< const char8_t* >( rootPathStringU8.c_str() );
+
+    // forge the basic path to export to 
+    const auto rootPathU8 = fs::absolute( fs::path{ destination.m_paths.outputApp } /
+                                          fs::path{ rootPathAsChar8 } );
 
     if ( exportMode != RiffExportMode::DryRun )
     {
-        const auto rootPathStatus = filesys::ensureDirectoryExists( rootPath );
+        const auto rootPathStatus = filesys::ensureDirectoryExists( rootPathU8 );
         if ( !rootPathStatus.ok() )
         {
-            blog::error::core( "unable to create output path [{}], {}", rootPath.string(), rootPathStatus.ToString() );
+            blog::error::core( "unable to create output path [{}], {}", rootPathU8.string(), rootPathStatus.ToString() );
             return outputFiles;
         }
 
         // export the raw metadata out along with the stem data
-        const auto riffMetadataPath = rootPath / "metadata.json";
+        const auto riffMetadataPath = rootPathU8 / "metadata.json";
         try
         {
-            std::ofstream is( riffMetadataPath.string() );
+            std::ofstream is( riffMetadataPath );
             cereal::JSONOutputArchive archive( is );
 
             archive( currentRiff->m_riffData );
@@ -137,26 +199,33 @@ std::vector<fs::path> exportRiff(
             tokenReplacements.insert_or_assign( OutputTokens::toString( OutputTokens::Enum::Stem_Preset ), stemData.m_data.preset );
 
 
-            std::string stemPathString = destination.m_spec.stem;
-            stemPathString.reserve( stemPathString.size() * 2 );
-            for ( const auto& pair : tokenReplacements )
+            std::string stemPathStringU8;
             {
-                tokenReplacement( stemPathString, pair.first, pair.second );
+                std::string stemPathString = destination.m_spec.stem;
+                stemPathString.reserve( stemPathString.size() * 2 );
+                for ( const auto& pair : tokenReplacements )
+                {
+                    tokenReplacement( stemPathString, pair.first, pair.second );
+                }
+
+                // utf8 pre-sanitize
+                utf8::replace_invalid( stemPathString.begin(), stemPathString.end(), back_inserter( stemPathStringU8 ) );
             }
 
             switch ( destination.m_spec.format )
             {
-                case AudioFormat::FLAC: stemPathString += ".flac"; break;
-                case AudioFormat::WAV:  stemPathString += ".wav"; break;
+                case AudioFormat::FLAC: stemPathStringU8 += ".flac"; break;
+                case AudioFormat::WAV:  stemPathStringU8 += ".wav"; break;
                 default:
                     break;
             }
 
-            const auto stemPath = fs::absolute( fs::path{ rootPath } /
-                                                fs::path{ stemPathString } );
+            // ensure any utf-8 data is preseved as we construct an fs::path (this is so dumb)
+            const char8_t* stemPathStringAsChar8 = reinterpret_cast<const char8_t*>(stemPathStringU8.c_str());
+            const auto stemPath = fs::absolute( rootPathU8 /
+                                                fs::path{ stemPathStringAsChar8 } );
 
-            const auto finalFilename = stemPath.string();
-            outputFiles.emplace_back( finalFilename );
+            outputFiles.emplace_back( stemPath );
 
             if ( exportMode != RiffExportMode::DryRun )
             {
@@ -171,8 +240,8 @@ std::vector<fs::path> exportRiff(
 
                 switch ( destination.m_spec.format )
                 {
-                    case AudioFormat::FLAC: return ssp::FLACWriter::Create( finalFilename, exportSampleRate, 60.0f );
-                    case AudioFormat::WAV:  return ssp::WAVWriter::Create( finalFilename, exportSampleRate, 60 );
+                    case AudioFormat::FLAC: return ssp::FLACWriter::Create( stemPath, exportSampleRate, 60.0f );
+                    case AudioFormat::WAV:  return ssp::WAVWriter::Create( stemPath, exportSampleRate, 60 );
                     default:
                         ABSL_ASSERT( 0 );
                         break;

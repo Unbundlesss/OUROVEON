@@ -51,16 +51,17 @@ Riff::Riff( const endlesss::types::RiffComplete& riffData )
 
     m_computedRiffCouchHash = computeHashForRiffCID( m_riffData.riff.couchID );
 
-    blog::riff( "allocated C:{} | H:{:#x}", m_riffData.riff.couchID, m_computedRiffCouchHash.getID() );
+    blog::riff( FMTX( "[R:{}] allocated | H:{:#x}" ), m_riffData.riff.couchID, m_computedRiffCouchHash.getID() );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 Riff::~Riff()
 {
-    blog::riff( "releasing C:{} | H:{:#x}", m_riffData.riff.couchID, m_computedRiffCouchHash.getID() );
+    blog::riff( FMTX( "[R:{}] released | H:{:#x}" ), m_riffData.riff.couchID, m_computedRiffCouchHash.getID() );
 
     for ( auto& sP : m_stemOwnership )
         sP.reset();
+
     m_stemPtrs.fill( nullptr );
 }
 
@@ -68,6 +69,9 @@ Riff::~Riff()
 void Riff::fetch( services::RiffFetchProvider& services )
 {
     m_syncState = SyncState::Working;
+    
+    // take a short ID snippet to use as a more readable tag in the log in front of everything related to this riff
+    const std::string riffCouchSnip = m_riffData.riff.couchID.substr( 8 );
 
     const auto& stemProcessing = services->getStemCache().getStemProcessing();
 
@@ -114,8 +118,8 @@ void Riff::fetch( services::RiffFetchProvider& services )
 // 
 //             auto samplesPer32nd = m_timingDetails.m_lengthInSamples / (int32_t)total32nds;
 
-
-            blog::riff( "Riff is {:.2f} BPM, {:.2f} BPS, {} / 4, probably {:2.05f}s long, {} samples, {} bars",
+            blog::riff( FMTX( "[R:{}..] {:.2f} BPM, {:.2f} BPS, {} / 4, probably {:2.05f}s long, {} samples, {} bars" ),
+                riffCouchSnip,
                 m_timingDetails.m_bpm,
                 m_timingDetails.m_bps,
                 m_timingDetails.m_quarterBeats,
@@ -124,7 +128,7 @@ void Riff::fetch( services::RiffFetchProvider& services )
                 m_timingDetails.m_barCount );
         }
 
-        blog::riff( "Fetching stems for riff [{}]", theRiff.couchID );
+        blog::riff( FMTX( "[R:{}..] riff stem resolution ..." ), riffCouchSnip );
 
         tf::Taskflow stemLoadFlow;
         tf::Taskflow stemAnalysisFlow;
@@ -148,7 +152,7 @@ void Riff::fetch( services::RiffFetchProvider& services )
                 {
                     stemLoadFlow.emplace( [&stemData, &services, loopStemRaw]()
                     {
-                        loopStemRaw->fetch( services->getNetConfiguration(), services->getStemCache().getCachePathForStem( stemData.couchID ) );
+                        loopStemRaw->fetch( services->getNetConfiguration(), services->getStemCache().getCachePathForStem( stemData ) );
                     });
                     stemAnalysisFlow.emplace( [&stemProcessing, loopStemRaw]()
                     {
@@ -196,7 +200,8 @@ void Riff::fetch( services::RiffFetchProvider& services )
             m_timingDetails.m_lengthInSec     = std::max( m_timingDetails.m_lengthInSec,     timeScaledStemLength  );
             m_timingDetails.m_lengthInSamples = std::max( m_timingDetails.m_lengthInSamples, timeScaledSampleCount );
 
-            blog::riff( FMTX( "Stem {} [{:.03f} timescale] [{:2.05f} sec] [{} raw samples] [{} samples]" ),
+            blog::riff( FMTX( "[R:{}..] stem {} [{:>6.03f} timescale] [{:>10.05f} sec] [{:>10} raw samples] [{:>10} samples]" ),
+                riffCouchSnip,
                 stemI + 1,
                 stemTimeScale,
                 timeScaledStemLength,
@@ -207,13 +212,15 @@ void Riff::fetch( services::RiffFetchProvider& services )
         m_timingDetails.m_barCount = (int32_t)(m_timingDetails.m_lengthInSec / m_timingDetails.m_lengthInSecPerBar);
         m_timingDetails.m_lengthInSamplesPerBar = m_timingDetails.m_lengthInSamples / m_timingDetails.m_barCount;
 
-        blog::riff( FMTX( ".. adjusted riff lengths post-load; {:2.05f}s long, {} bars, {} samples" ),
+        blog::riff( FMTX( "[R:{}..] adjusted riff lengths post-load; {:2.05f}s long, {} bars, {} samples" ),
+            riffCouchSnip,
             m_timingDetails.m_lengthInSec,
             m_timingDetails.m_barCount,
             m_timingDetails.m_lengthInSamples );
-        blog::riff( "---------------------------------------------------------------------" );
+        blog::riff( "---------------------------------------------------------------------------------" );
 
 
+        // compute the longest stem length
         for ( std::size_t stemI = 0; stemI < m_stemPtrs.size(); stemI++ )
         {
             auto* loopStem = m_stemPtrs[stemI];
@@ -227,7 +234,7 @@ void Riff::fetch( services::RiffFetchProvider& services )
             auto repeats = (int32_t)std::round( (double)m_timingDetails.m_lengthInSamples / (double)m_stemLengthInSamples[stemI] );
             if ( repeats <= 0 )
             {
-                blog::riff( FMTX( ".. stem [{}] calculated {} repeats, invalid?" ), stemI, repeats );
+                blog::riff( FMTX( "[R:{}..] .. stem [{}] calculated {} repeats, invalid?" ), riffCouchSnip, stemI, repeats );
                 repeats = 1;
             }
             m_stemRepetitions[stemI] = repeats;

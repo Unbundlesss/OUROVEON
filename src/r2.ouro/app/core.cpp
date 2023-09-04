@@ -208,6 +208,11 @@ int Core::Run()
 #if OURO_PLATFORM_WIN
     // ansi colouring via fmt{} seems to fail on consoles launched from outside VS without jamming these on
     ::SetConsoleMode( ::GetStdHandle( STD_OUTPUT_HANDLE ), ENABLE_PROCESSED_OUTPUT | ENABLE_VIRTUAL_TERMINAL_PROCESSING );
+    if ( ::IsValidCodePage( CP_UTF8 ) )
+    {
+        ::SetConsoleCP( CP_UTF8 );
+        ::SetConsoleOutputCP( CP_UTF8 );
+    }
 #endif
 
     // http://www.cplusplus.com/reference/ios/ios_base/sync_with_stdio/
@@ -243,10 +248,19 @@ int Core::Run()
         // MIDI event bus
         APP_EVENT_REGISTER( MidiEvent );
 
-        // Endlesssian
+        // events from the endlesss sdk layer
         APP_EVENT_REGISTER( EnqueueRiffPlayback );
         APP_EVENT_REGISTER( RequestJamNameRemoteFetch );
         APP_EVENT_REGISTER( NotifyJamNameCacheUpdated );
+        APP_EVENT_REGISTER( NetworkActivity );
+        APP_EVENT_REGISTER( RiffTagAction );
+        APP_EVENT_REGISTER( RequestNavigationToRiff );
+    }
+    {
+        base::EventBusClient m_eventBusClient( m_appEventBus );
+        APP_EVENT_BIND_TO( NetworkActivity );
+
+        m_avgNetPulseHistory.fill( 0 );
     }
 
 
@@ -466,6 +480,11 @@ int Core::Run()
     m_mdMidi->destroy();
     m_mdAudio->destroy();
 
+    {
+        base::EventBusClient m_eventBusClient( m_appEventBus );
+        APP_EVENT_UNBIND( NetworkActivity );
+    }
+
     m_appEventBusClient = std::nullopt;
 
     return appResult;
@@ -491,6 +510,55 @@ void Core::emitAndClearExchangeData()
 #endif // OURO_EXCHANGE_IPC
 
     m_endlesssExchange.clear();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void Core::networkActivityUpdate()
+{
+    const float deltaTime = ImGui::GetIO().DeltaTime;
+    const float lagRate = deltaTime * 0.5f;
+
+    m_avgNetActivity.update( 0 );
+    if ( m_avgNetActivity.m_average < 0.01 )    // clip at small values
+        m_avgNetActivity.m_average = 0.0;
+
+    // raise up "network is working" value linearly if activity window shows .. activity
+    if ( m_avgNetActivity.m_average > 0 )
+    {
+        m_avgNetActivityLag += lagRate;
+    }
+    else
+    {
+        m_avgNetActivityLag -= lagRate;
+    }
+    m_avgNetActivityLag = std::clamp( m_avgNetActivityLag, 0.0, 1.0 );
+
+    // update the pulse bar every so often
+    m_avgNetPulseUpdateTimer -= deltaTime;
+    if ( m_avgNetPulseUpdateTimer <= 0.0f )
+    {
+        // shunt pulses left
+        const auto pulseCountMinusOne = m_avgNetPulseHistory.size() - 1;
+        for ( std::size_t idx = 0; idx < pulseCountMinusOne; idx++ )
+        {
+            m_avgNetPulseHistory[idx] = m_avgNetPulseHistory[idx + 1];
+        }
+        // write new pulse value at the end
+        const auto pulseSine = (2.0 + std::sin( ImGui::GetTime() * 2.0f )) * 0.333333;
+        m_avgNetPulseHistory[pulseCountMinusOne] = static_cast<uint8_t>(std::round( pulseSine * m_avgNetActivityLag * 7.0 ));
+
+        m_avgNetPulseUpdateTimer = 0.2f;
+    }
+
+    // update the payload average every second
+    m_avgNetPayloadPerSecTimer -= deltaTime;
+    if ( m_avgNetPayloadPerSecTimer <= 0.0f )
+    {
+        m_avgNetPayloadPerSec.update( m_avgNetPayloadValue );
+        m_avgNetPayloadValue = 0;
+
+        m_avgNetPayloadPerSecTimer = 1.0f;
+    }
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -828,8 +896,11 @@ void CoreGUI::finishInterfaceLayoutAndRender()
     m_perfData.m_uiPreRender = m_perfData.m_moment.delta< std::chrono::milliseconds >();
     m_perfData.m_moment.setToNow();
 
-    // flush the main thread event bus
+    // flush the main thread event bus #HDD move to Core:: main tick 
     m_appEventBus->mainThreadDispatch();
+
+    // update networking averages #HDD move to Core:: main tick 
+    networkActivityUpdate();
 
     m_perfData.m_uiEventBus = m_perfData.m_moment.delta< std::chrono::milliseconds >();
     m_perfData.m_moment.setToNow();

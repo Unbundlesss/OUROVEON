@@ -197,16 +197,19 @@ void SharedRiffView::State::imgui(
         const bool bCanSyncNewData = m_networkConfiguration->hasAccess( api::NetConfiguration::Access::Public );
         const bool bIsFetchingData = m_fetchInProgress;
 
+        // is the username on screen the one we have data for? if not, note that somehow so the user knows to Fetch Latest for their choice
+        const bool bCurrentDataSetIsForTheUsernameInThePicker = (m_sharesData.ok() && (*m_sharesData)->m_username == m_user.getUsername());
+
         // choose a user and fetch latest data on request
         {
             ImGui::AlignTextToFramePadding();
             ImGui::TextUnformatted( ICON_FA_USER );
             ImGui::SameLine();
-            m_user.imgui( coreGUI.getEndlesssPopulation(), 240.0f );
+            m_user.imgui( "username", coreGUI.getEndlesssPopulation(), ImGui::ux::UserSelector::cDefaultWidthForUserSize );
             ImGui::SameLine();
             {
                 ImGui::Scoped::Enabled se( bCanSyncNewData && !bIsFetchingData && !m_user.isEmpty() );
-                if ( ImGui::Button( " " ICON_FA_ARROWS_ROTATE " Fetch Latest " ) )
+                if ( ImGui::Button( " " ICON_FA_ARROWS_ROTATE " Sync Latest " ) )
                 {
                     m_fetchInProgress = true;
 
@@ -255,11 +258,14 @@ void SharedRiffView::State::imgui(
 
                 if ( dataPtr->m_count == 0 )
                 {
-                    ImGui::TextDisabled( "no data; select user and sync" );
+                    ImGui::TextDisabled( "no data downloaded; select user and sync" );
                 }
                 else
                 {
-                    ImGui::Text( "%i riffs, synced %s", dataPtr->m_count, m_lastSyncTimestampString.c_str() );
+                    if ( bCurrentDataSetIsForTheUsernameInThePicker )
+                        ImGui::Text( "%i riffs, synced %s", dataPtr->m_count, m_lastSyncTimestampString.c_str() );
+                    else
+                        ImGui::TextColored( colour::shades::callout.neutral(), ICON_FA_CIRCLE_EXCLAMATION " showing data for user '%s', re-sync required", dataPtr->m_username.c_str() );
 
                     // add button that brings any currently playing riff into view inside the table
                     ImGui::SameLine( 0, 0 );
@@ -278,7 +284,7 @@ void SharedRiffView::State::imgui(
                     {
                         ImGui::PushStyleVar( ImGuiStyleVar_ItemSpacing, { 4.0f, 0.0f } );
 
-                        if ( ImGui::BeginTable( "##shared_riff_table", 4,
+                        if ( ImGui::BeginTable( "##shared_riff_table", 5,
                             ImGuiTableFlags_ScrollY |
                             ImGuiTableFlags_Borders |
                             ImGuiTableFlags_RowBg   |
@@ -288,7 +294,8 @@ void SharedRiffView::State::imgui(
 
                             ImGui::TableSetupColumn( "Play", ImGuiTableColumnFlags_WidthFixed,  32.0f );
                             ImGui::TableSetupColumn( "Name", ImGuiTableColumnFlags_WidthStretch, 0.5f );
-                            ImGui::TableSetupColumn( "Link", ImGuiTableColumnFlags_WidthFixed,  32.0f );
+                            ImGui::TableSetupColumn( "Web",  ImGuiTableColumnFlags_WidthFixed,  32.0f );    // launch web player
+                            ImGui::TableSetupColumn( "Find", ImGuiTableColumnFlags_WidthFixed,  32.0f );    // instigate navigation in jam view, if possible
                             ImGui::TableSetupColumn( m_jamNameCacheUpdate ? cJamNameWorkerTitles[loopedSpinnerIndex] : cJamNameWorkerTitles[0],
                                                              ImGuiTableColumnFlags_WidthStretch, 0.5f);
                             ImGui::TableHeadersRow();
@@ -299,6 +306,30 @@ void SharedRiffView::State::imgui(
                                 const bool bIsPersonal      = dataPtr->m_personal[entry];
                                 const bool bIsPlaying       = dataPtr->m_riffIDs[entry] == m_currentlyPlayingRiffID;
                                 const bool bRiffWasEnqueued = m_enqueuedRiffIDs.contains( dataPtr->m_riffIDs[entry] );
+
+                                // assemble an appropriate riff identity for this entry in the table; used when queueing playback etc
+                                // `asSharedRiff` controls which riff/jam identity to use; the 'shared' one is a special handling, the 
+                                // riff ID and jam ID are specific for resolving the shared data and for playback outside of the origin
+                                // jam (which may have been private)
+                                // .. if `asSharedRiff` is false, we use the original riff ID and origin jam ID (for navigation in jam view, for example)
+                                const auto getEntryRiffIdentity = [&](bool asSharedRiff) -> endlesss::types::RiffIdentity
+                                {
+                                    const bool bIsPersonalJam = dataPtr->m_jamIDs[entry].empty();  // no jam name, it's the users'
+                                    const endlesss::types::JamCouchID originJam( bIsPersonalJam ? dataPtr->m_username : dataPtr->m_jamIDs[entry] );
+
+                                    const endlesss::types::RiffCouchID sharedRiffToEnqueue( dataPtr->m_sharedRiffIDs[entry].c_str() );
+                                    const endlesss::types::RiffCouchID originRiffToEnqueue( dataPtr->m_riffIDs[entry] );
+
+                                    // encode an export/display name from the active username that shared the riff
+                                    // .. there is no way to get that info during network resolve, so we have to tag it here
+                                    const auto customSharedName = fmt::format( FMTX( "shared_riff_{}" ), dataPtr->m_username );
+
+                                    return endlesss::types::RiffIdentity(
+                                        asSharedRiff ? endlesss::types::Constants::SharedRiffJam() : originJam,
+                                        asSharedRiff ? sharedRiffToEnqueue : originRiffToEnqueue,
+                                        customSharedName
+                                    );
+                                };
 
                                 // keep track of if any of the shared riffs are considered active, used to enable scroll-to-playing button above
                                 // (done backwards due to nature of imguis)
@@ -320,11 +351,7 @@ void SharedRiffView::State::imgui(
                                         ImGui::Scoped::ToggleButton highlightButton( bIsPlaying, true );
                                         if ( ImGui::PrecisionButton( bRiffWasEnqueued ? ICON_FA_CIRCLE_CHEVRON_DOWN : ICON_FA_PLAY, buttonSizeMidTable, 1.0f ) )
                                         {
-                                            const endlesss::types::RiffCouchID sharedRiffToEnqueue( dataPtr->m_sharedRiffIDs[entry].c_str() );
-
-                                            coreGUI.getEventBusClient().Send< ::events::EnqueueRiffPlayback >(
-                                                endlesss::types::Constants::SharedRiffJam(),
-                                                sharedRiffToEnqueue );
+                                            coreGUI.getEventBusClient().Send< ::events::EnqueueRiffPlayback >( getEntryRiffIdentity( true ) );
 
                                             // enqueue the riff ID, not the *shared* riff ID as the default riff ID is what will
                                             // be flowing back through "riff now being played" messages
@@ -351,25 +378,48 @@ void SharedRiffView::State::imgui(
                                     ImGui::Dummy( { 0, 0 } );
                                     if ( ImGui::PrecisionButton( ICON_FA_LINK, buttonSizeMidTable, 1.0f ) )
                                     {
+                                        // cross-platform launch a browser to navigate to the Endlesss riff web player
                                         const auto webPlayerURL = fmt::format( FMTX( "https://endlesss.fm/{}/?rifffId={}" ), m_user.getUsername(), dataPtr->m_sharedRiffIDs[entry] );
                                         xpOpenURL( webPlayerURL.c_str() );
                                     }
                                 }
                                 ImGui::TableNextColumn();
+                                {
+                                    ImGui::Dummy( { 0, 0 } );
+                                    if ( ImGui::PrecisionButton( ICON_FA_GRIP, buttonSizeMidTable, 1.0f ) )
+                                    {
+                                        // dispatch a request to navigate this this riff, if we can find it
+                                        coreGUI.getEventBusClient().Send< ::events::RequestNavigationToRiff >( getEntryRiffIdentity( false ) );
+                                    }
+                                }
+                                ImGui::TableNextColumn();
                                 ImGui::AlignTextToFramePadding();
                                 {
-                                    // draw the jam name, if we have one
+                                    // render the jam name, if we have one
                                     {
                                         const auto jamID = dataPtr->m_jamIDs[entry];
 
+                                        // double-wrap tooltip so we only do the time conversion / string build on hover
+                                        // shows the share-time using past-tense formatting (personally I find this more useful than the stuff endlesss puts on the website)
+                                        ImGui::TextDisabled( ICON_FA_CLOCK );
+                                        if ( ImGui::IsItemHovered( ImGuiHoveredFlags_DelayNormal ) )
+                                        {
+                                            const auto shareTimeUnix = spacetime::InSeconds( std::chrono::seconds{ dataPtr->m_timestamps[entry] } );
+                                            const auto cacheTimeDelta = spacetime::calculateDeltaFromNow( shareTimeUnix ).asPastTenseString( 2 );
+                                            ImGui::CompactTooltip( cacheTimeDelta );
+                                        }
+                                        ImGui::SameLine();
+
+                                        // click on ID to copy it into the clipboard for debug purposes
                                         ImGui::TextDisabled( "ID" );
                                         if ( ImGui::IsItemClicked() )
                                         {
                                             ImGui::SetClipboardText( jamID.c_str() );
                                         }
                                         ImGui::CompactTooltip( jamID.c_str() );
-                                        ImGui::SameLine(0, 12.0f);
+                                        ImGui::SameLine( 0, 12.0f );
 
+                                        // origin jam, potentially [username] personal / solo jam
                                         if ( bIsPrivate || bIsPersonal )
                                             ImGui::TextColored( colour::shades::callout.neutral(), m_jamNameResolvedArray[entry].c_str() );
                                         else

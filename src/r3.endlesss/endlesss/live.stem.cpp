@@ -23,6 +23,9 @@
 #define STB_VORBIS_HEADER_ONLY
 #include "stb_vorbis.c"
 
+// foxen flac
+#include <foxen/flac.h>
+
 // fft
 #include "pffft.h"
 
@@ -84,7 +87,7 @@ Stem::Stem( const types::Stem& stemData, const uint32_t targetSampleRate )
 
     m_colourU32 = ImGui::ParseHexColour( m_data.colour.c_str() );
 
-    blog::stem( "allocated C:{}", m_data.couchID );
+    blog::stem( FMTX( "[s:{}] allocated" ), m_data.couchID );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -94,7 +97,7 @@ Stem::~Stem()
     if ( m_analysisFuture.valid() )
         m_analysisFuture.wait();
 
-    blog::stem( "releasing C:{}", m_data.couchID );
+    blog::stem( FMTX( "[s:{}] released" ), m_data.couchID );
 
     mem::free16( m_channel[0] );
     mem::free16( m_channel[1] );
@@ -110,12 +113,18 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
     const absl::Status cachePathAvailable = filesys::ensureDirectoryExists( cachePath );
     if ( !cachePathAvailable.ok() )
     {
-        blog::error::stem( "Unable to create sub-directory in stem cache [{}], {}", cachePath.string(), cachePathAvailable.ToString() );
+        blog::error::stem( FMTX( "Unable to create sub-directory in stem cache [{}], {}" ),
+            cachePath.string(),
+            cachePathAvailable.ToString() );
+
         m_state = State::Failed_CacheDirectory;
         return;
     }
 
     m_state = State::WorkEnqueued;
+
+    // take a short ID snippet to use as a more readable tag in the log in front of everything related to this stem
+    const std::string stemCouchSnip = m_data.couchID.substr( 8 );
 
     spacetime::ScopedTimer stemTiming( "stem finalize" );
 
@@ -123,24 +132,31 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
     RawAudioMemory audioMemory( m_data.fileLengthBytes );
 
     // check to see if we already have it downloaded
-    auto cacheFile = cachePath / fmt::format( "stem.{}.ogg", m_data.couchID );
+    auto cacheFile = cachePath / m_data.couchID.value();
     if ( fs::exists( cacheFile ) )
     {
-        blog::cache( "cached [{}]", m_data.couchID );
+        blog::cache( FMTX( "[s:{}..] found in cache" ), stemCouchSnip );
 
-        auto fileSize = fs::file_size( cacheFile );
+        const auto fileSize = fs::file_size( cacheFile );
 
         if ( fileSize != audioMemory.m_rawLength )
         {
             // check if we should just accept discrepancies in the db/CDN size reports
             if ( fileSize > 0 && ncfg.api().hackAllowStemSizeMismatch )
             {
-                blog::cache( "allowed cached file [{}] size mismatch; expected {}, got {}", m_data.couchID, audioMemory.m_rawLength, fileSize );
+                blog::cache( FMTX( "[s:{}..] allowed cached file size mismatch; expected {}, got {}" ),
+                    stemCouchSnip,
+                    audioMemory.m_rawLength,
+                    fileSize );
+
                 audioMemory.allocate( fileSize );
             }
             else
             {
-                blog::error::cache( "cached file [{}] size mismatch! expected {}, got {}", m_data.couchID, audioMemory.m_rawLength, fileSize );
+                blog::error::cache( FMTX( "[s:{}..] cached file size mismatch! expected {}, got {}" ),
+                    stemCouchSnip,
+                    audioMemory.m_rawLength,
+                    fileSize );
 
                 m_state = State::Failed_DataUnderflow;
                 return;
@@ -159,12 +175,13 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
     {
         bool stemFetchSuccess = false;
 
-        blog::stem( "downloading [{}/{}] ...",
+        blog::stem( FMTX( "[s:{}..] downloading [{}/{}] ..." ),
+            stemCouchSnip,
             m_data.fullEndpoint(),
             m_data.fileKey );
 
         // things can take a while to propogate to the CDN; wait longer each cycle and try repeatedly
-        for ( auto remoteFetchAttempst = 0; remoteFetchAttempst < 3; remoteFetchAttempst++ )
+        for ( auto remoteFetchAttempst = 0; remoteFetchAttempst < 2; remoteFetchAttempst++ )
         {
             // extend fetch delay each time we start a full fetch attempt
             const auto fetchDelayMs = lRng.genInt32( 250, 750 ) + ( remoteFetchAttempst * 1500 );
@@ -174,7 +191,10 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
 
             if ( !attemptRemoteFetch( ncfg, lRng.genUInt32(), audioMemory ) )
             {
-                blog::stem( "failed attempt {} for [{}], will retry", remoteFetchAttempst + 1, m_data.fileKey );
+                blog::stem( FMTX( "[s:{}..] failed attempt {} for [{}], will retry" ),
+                    stemCouchSnip,
+                    remoteFetchAttempst + 1,
+                    m_data.fileKey );
             }
             else
             {
@@ -185,114 +205,336 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
 
         if ( !stemFetchSuccess )
         {
-            blog::stem( "unable to acquire [{}]",  m_data.fileKey );
+            blog::stem( FMTX( "[s:{}..] unable to acquire [{}]"),
+                stemCouchSnip,
+                m_data.fileKey );
             return;
         }
     }
 
-    // basic magic header check
-    if ( audioMemory.m_rawAudio[0] != 'O' ||
-         audioMemory.m_rawAudio[1] != 'g' ||
-         audioMemory.m_rawAudio[2] != 'g' ||
-         audioMemory.m_rawAudio[3] != 'S' )
+    // luckily we can tell what compression is in play from the first 4 bytes (so far, at least)
+    const bool stemIsFLAC = (audioMemory.m_rawAudio[0] == 'f' && audioMemory.m_rawAudio[1] == 'L' && audioMemory.m_rawAudio[2] == 'a' && audioMemory.m_rawAudio[3] == 'C');
+    const bool stemIsOGG  = (audioMemory.m_rawAudio[0] == 'O' && audioMemory.m_rawAudio[1] == 'g' && audioMemory.m_rawAudio[2] == 'g' && audioMemory.m_rawAudio[3] == 'S');
+
+    // header check - do we have a file we know how to decompress?
+    if ( !stemIsFLAC && !stemIsOGG )
     {
-        blog::error::stem( "vorbis header broken [{}]", m_data.couchID );
-        m_state = State::Failed_Vorbis;
+        blog::error::stem( FMTX( "[s:{}..] audio compression format not recognised" ), stemCouchSnip );
+        m_state = State::Failed_Decompression;
         return;
     }
 
-    // decode the vorbis stream into interleaved shorts
-    short*  oggData = nullptr;
-    int32_t oggChannels;
-    int32_t oggSampleRate;
-
-    m_sampleCount = stb_vorbis_decode_memory(
-        audioMemory.m_rawAudio,
-        (int32_t)audioMemory.m_rawLength,
-        &oggChannels,
-        &oggSampleRate,
-        &oggData );
-
-    if ( m_sampleCount <= 0 )
+    if ( stemIsOGG )
     {
-        blog::error::stem( "vorbis decode fail [{}] | {}", m_data.couchID, m_sampleCount );
-        m_state = State::Failed_Vorbis;
-        free( oggData );
-        return;
-    }
+        // decode the vorbis stream into interleaved shorts
+        short* oggData = nullptr;
+        int32_t oggChannels;
+        int32_t oggSampleRate;
 
-    if ( oggChannels != 2 )
-    {
-        blog::error::stem( "we only expect stereo [{}] | ch:{}", m_data.couchID, oggChannels );
-        m_state = State::Failed_Vorbis;
-        free( oggData );
-        return;
-    }
+        m_sampleCount = stb_vorbis_decode_memory(
+            audioMemory.m_rawAudio,
+            (int32_t)audioMemory.m_rawLength,
+            &oggChannels,
+            &oggSampleRate,
+            &oggData );
 
-    // emit a successful capture back to the cache
-    {
-        std::basic_ofstream<char> ofs( cacheFile, std::ios::out | std::ios::binary );
-        ofs.write( (char*)audioMemory.m_rawAudio, audioMemory.m_rawReceived );
-    }
-
-    static constexpr double shortToDoubleNormalisedRcp = 1.0 / 32768.0;
-
-    // if the ogg is coming in at a different sample rate, up or downsample it to match our chosen mixer rate
-    if ( oggSampleRate != m_sampleRate )
-    {
-        blog::stem( "resampling [{}] from {}", m_data.couchID, oggSampleRate );
-
-        auto* resampleIn = mem::alloc16<double>( m_sampleCount );
-
-        r8b::CDSPResampler24 resampler24(
-            (double)oggSampleRate,
-            m_sampleRate,
-            m_sampleCount );
-
-        const auto outputSampleLength = resampler24.getMaxOutLen( 0 );
-        double* resampleOut = mem::alloc16<double>( outputSampleLength );
-
-        // resample each channel to the chosen sample rate using r8brain
-        for ( int channel = 0; channel < 2; channel++ )
+        if ( m_sampleCount <= 0 )
         {
-            // convert sint16 to doubles
-            for ( size_t s = 0, readIndex = channel; s < m_sampleCount; s++, readIndex += 2 )
+            blog::error::stem( FMTX( "[s:{}..] vorbis decode failure, sample count <0 ({})" ), stemCouchSnip, m_sampleCount );
+            m_state = State::Failed_Decompression;
+            free( oggData );
+            return;
+        }
+
+        if ( oggChannels != 2 )
+        {
+            blog::error::stem( FMTX( "[s:{}..] invalid vorbis stream, only stereo supported; {} channels found" ), stemCouchSnip, oggChannels );
+            m_state = State::Failed_Decompression;
+            free( oggData );
+            return;
+        }
+
+        m_compressionFormat = Compression::OggVorbis;
+
+        // emit a successful capture back to the cache
+        {
+            std::basic_ofstream<char> ofs( cacheFile, std::ios::out | std::ios::binary );
+            ofs.write( (char*)audioMemory.m_rawAudio, audioMemory.m_rawReceived );
+        }
+
+        static constexpr double shortToDoubleNormalisedRcp = 1.0 / 32768.0;
+
+        // if the ogg is coming in at a different sample rate, up or downsample it to match our chosen mixer rate
+        if ( oggSampleRate != m_sampleRate )
+        {
+            blog::stem( FMTX( "[s:{}..] resampling ogg data from {}"), stemCouchSnip, oggSampleRate );
+
+            auto* resampleIn = mem::alloc16<double>( m_sampleCount );
+
+            r8b::CDSPResampler24 resampler24(
+                (double)oggSampleRate,
+                m_sampleRate,
+                m_sampleCount );
+
+            const auto outputSampleLength = resampler24.getMaxOutLen( 0 );
+            double* resampleOut = mem::alloc16<double>( outputSampleLength );
+
+            // resample each channel to the chosen sample rate using r8brain
+            for ( std::size_t channel = 0; channel < 2; channel++ )
             {
-                resampleIn[s] = (double)oggData[readIndex] * shortToDoubleNormalisedRcp;
+                // convert sint16 to doubles
+                for ( size_t s = 0, readIndex = channel; s < m_sampleCount; s++, readIndex += 2 )
+                {
+                    resampleIn[s] = (double)oggData[readIndex] * shortToDoubleNormalisedRcp;
+                }
+
+                // resample stem as one-shot, standalone task
+                resampler24.oneshot( resampleIn, m_sampleCount, resampleOut, outputSampleLength );
+
+                // allocate actual channel data storage and copy across, out of resampling buffer
+                m_channel[channel] = mem::alloc16<float>( outputSampleLength );
+                for ( size_t s = 0; s < outputSampleLength; s++ )
+                {
+                    m_channel[channel][s] = static_cast<float>(resampleOut[s]);
+                }
             }
 
-            // resample stem as one-shot, standalone task
-            resampler24.oneshot( resampleIn, m_sampleCount, resampleOut, outputSampleLength );
+            mem::free16( resampleOut );
+            mem::free16( resampleIn );
 
-            // allocate actual channel data storage and copy across, out of resampling buffer
-            m_channel[channel] = mem::alloc16<float>( outputSampleLength );
-            for ( size_t s = 0; s < outputSampleLength; s++ )
+            m_sampleCount = outputSampleLength;
+        }
+        else
+        {
+            // blog::stem( FMTX( "[s:{}..] stem already at {}" ), stemCouchSnip, m_sampleRate );
+
+            m_channel[0] = mem::alloc16<float>( m_sampleCount );
+            m_channel[1] = mem::alloc16<float>( m_sampleCount );
+
+            for ( std::size_t s = 0, readIndex = 0; s < m_sampleCount; s++ )
             {
-                m_channel[channel][s] = static_cast<float>( resampleOut[s] );
+                m_channel[0][s] = (float)((double)oggData[readIndex++] * shortToDoubleNormalisedRcp);
+                m_channel[1][s] = (float)((double)oggData[readIndex++] * shortToDoubleNormalisedRcp);
             }
         }
 
-        mem::free16( resampleOut );
-        mem::free16( resampleIn );
-
-        m_sampleCount = outputSampleLength;
+        // stb mallocs, we discard the data it gave us
+        free( oggData );
     }
-    else
+    else // stemIsFLAC
     {
-        blog::stem( "stem [{}] already at {}", m_data.couchID, m_sampleRate );
+        uint8_t* rawAudio = audioMemory.m_rawAudio;
+        uint32_t rawAudioLen = (uint32_t)audioMemory.m_rawLength;
 
-        m_channel[0] = mem::alloc16<float>( m_sampleCount );
-        m_channel[1] = mem::alloc16<float>( m_sampleCount );
+        // create working memory buffer for the decoder
+        const uint32_t flacWorkingMemorySize = fx_flac_size( FLAC_MAX_BLOCK_SIZE, FLAC_MAX_CHANNEL_COUNT );
+        void* flacWorkingMemory = mem::alloc16< uint8_t >( flacWorkingMemorySize );
 
-        for ( size_t s = 0, readIndex = 0; s < m_sampleCount; s++ )
+        // instance the decoder with the memory pool
+        fx_flac_t* flac = fx_flac_init( flacWorkingMemory, FLAC_MAX_BLOCK_SIZE, FLAC_MAX_CHANNEL_COUNT );
+
+        // prep two channels to append to as we decode frames
+        std::array<double*, 2> flacStreamChannels;
+        flacStreamChannels.fill( nullptr );
+        std::size_t flacStreamChannelsWriteIndex = 0;
+
+        // inner loop decoder buffer, stack local
+        static constexpr std::size_t flacDecoderBufferSize = 1024 * 4;
+        int32_t decodeBuffer[flacDecoderBufferSize];
+
+        // data to pull from METADATA block
+        uint64_t flacSampleRate = 0;
+        uint64_t flacSampleSize = 0;
+        uint64_t flacChannelCount = 0;
+        uint64_t flacSampleCount = 0;
+
+        // int32_t -> double conversion values
+        double conversionNegativeRecp = 1.0;
+        std::size_t conversionBitShift = 0;
+
+        while( rawAudioLen > 0 )
         {
-            m_channel[0][s] = (float)((double)oggData[readIndex++] * shortToDoubleNormalisedRcp);
-            m_channel[1][s] = (float)((double)oggData[readIndex++] * shortToDoubleNormalisedRcp);
+            // hit an error? bail out
+            if ( m_state != State::WorkEnqueued )
+                break;
+
+            // reset incoming data sizes each time
+            uint32_t rawAudioInBytes = rawAudioLen; // size of remaining raw audio
+            uint32_t flacAudioOutSamples = flacDecoderBufferSize; // size of output buffer
+
+#ifdef DEBUG
+            memset( decodeBuffer, 0, sizeof( int32_t ) * flacDecoderBufferSize );
+#endif
+
+            const fx_flac_state_t flacState = fx_flac_process( flac, rawAudio, &rawAudioInBytes, decodeBuffer, &flacAudioOutSamples );
+            switch ( flacState )
+            {
+                case FLAC_ERR:
+                {
+                    blog::error::stem( FMTX( "[s:{}..] flac decode error - unknown error from fx_flac_process" ), stemCouchSnip );
+                    m_state = State::Failed_Decompression;
+                    break;
+                }
+
+                case FLAC_INIT:
+                    break;
+                case FLAC_IN_METADATA:
+                    break;
+
+                // metadata acquired, fetch all the stats we need
+                case FLAC_END_OF_METADATA:
+                {
+                    // check we haven't already seen a metadata block, should just be the one (AFAIK)
+                    ABSL_ASSERT( flacStreamChannels[0] == nullptr );
+
+                    flacSampleRate      = fx_flac_get_streaminfo( flac, FLAC_KEY_SAMPLE_RATE );
+                    flacChannelCount    = fx_flac_get_streaminfo( flac, FLAC_KEY_N_CHANNELS );
+                    flacSampleSize      = fx_flac_get_streaminfo( flac, FLAC_KEY_SAMPLE_SIZE );
+                    flacSampleCount     = fx_flac_get_streaminfo( flac, FLAC_KEY_N_SAMPLES );
+
+                    if ( flacChannelCount != 2 )
+                    {
+                        blog::error::stem( FMTX( "[s:{}..] flac decode error - expecting 2 channels, got {}" ), stemCouchSnip, flacChannelCount );
+                        m_state = State::Failed_Decompression;
+                    }
+
+                    blog::stem( FMTX( "[s:{}..] start flac decode : {} samples, {}-bit @ {}" ),
+                        stemCouchSnip,
+                        flacSampleCount,
+                        flacSampleSize,
+                        flacSampleRate );
+
+                    // given the original sample bit-depth, compute what the largest value we would expect in the stream is
+                    // and then produce the reciprocal used to convert to -1..+1 double values
+                    const int32_t sampleMaxPositiveValue = ((int32_t)1 << (flacSampleSize - 1)) - 1;
+                    const int32_t sampleMaxNegativeValue = sampleMaxPositiveValue + 1;
+
+                    conversionNegativeRecp = 1.0 / static_cast<double>(sampleMaxNegativeValue);
+                    conversionBitShift = 32 - flacSampleSize;
+
+                    // prepare storage for the decompressed frames
+                    flacStreamChannels[0] = mem::alloc16<double>( flacSampleCount );
+                    flacStreamChannels[1] = mem::alloc16<double>( flacSampleCount );
+                    break;
+                }
+
+                case FLAC_SEARCH_FRAME:
+                    break;
+
+                case FLAC_IN_FRAME:
+                case FLAC_DECODED_FRAME:
+                case FLAC_END_OF_FRAME:
+                {
+                    // check we got a metadata block first, otherwise we have nowhere to decode into
+                    if ( flacStreamChannels[0] == nullptr )
+                    {
+                        blog::error::stem( FMTX( "[s:{}..] flac decode error - no metadata decoded before frames encountered" ), stemCouchSnip );
+                        m_state = State::Failed_Decompression;
+                        break;
+                    }
+
+                    ABSL_ASSERT( (flacAudioOutSamples % 2) == 0 );
+                    for ( uint32_t sample = 0; sample < flacAudioOutSamples; sample+=2, flacStreamChannelsWriteIndex++ )
+                    {
+                        /* Quote: Note that this data is always shifted such that it uses the
+                            entire 32-bit signed integer; shift to the right to the desired
+                            output bit depth. You can obtain the bit-depth used in the file
+                            using fx_flac_get_streaminfo(). */
+
+                        double sampleDoubleL = static_cast<double>( decodeBuffer[sample+0] >> conversionBitShift ) * conversionNegativeRecp;
+                        double sampleDoubleR = static_cast<double>( decodeBuffer[sample+1] >> conversionBitShift ) * conversionNegativeRecp;
+
+                        flacStreamChannels[0][flacStreamChannelsWriteIndex] = sampleDoubleL;
+                        flacStreamChannels[1][flacStreamChannelsWriteIndex] = sampleDoubleR;
+                    }
+                    break;
+                }
+            }
+
+            rawAudio += rawAudioInBytes;
+            ABSL_ASSERT( rawAudioInBytes <= rawAudioLen );
+            rawAudioLen -= rawAudioInBytes;
+        }
+
+        // toss the flac decoder instance now we're done with it
+        mem::free16( flacWorkingMemory );
+
+        // check if we emerged from the loop with errors
+        if ( m_state != State::WorkEnqueued )
+        {
+            // clean up the channel buffers before leaving
+            mem::free16( flacStreamChannels[0] );
+            mem::free16( flacStreamChannels[1] );
+
+            blog::error::stem( FMTX( "[s:{}..] stem discarded, flac decompression error" ), stemCouchSnip );
+            return;
+        }
+
+        // we should expect (AFAIK) to have eaten the entire incoming audio stream and produces the 
+        // same number of samples as the metadata specified
+        ABSL_ASSERT( rawAudioLen == 0 );
+        ABSL_ASSERT( flacStreamChannelsWriteIndex == flacSampleCount );
+        m_sampleCount = static_cast<int32_t>( flacSampleCount );
+
+        // similar to OGG, handle sample rate conversion as we create the final data buffers
+        if ( flacSampleRate != m_sampleRate )
+        {
+            blog::stem( FMTX( "[s:{}..] resampling flac from {}" ), stemCouchSnip, flacSampleRate );
+
+            r8b::CDSPResampler24 resampler24(
+                (double)flacSampleRate,
+                m_sampleRate,
+                m_sampleCount );
+
+            const auto outputSampleLength = resampler24.getMaxOutLen( 0 );
+            double* resampleOut = mem::alloc16<double>( outputSampleLength );
+
+            // resample each channel to the chosen sample rate using r8brain
+            for ( std::size_t channel = 0; channel < 2; channel++ )
+            {
+                // resample stem as one-shot, standalone task
+                resampler24.oneshot( flacStreamChannels[channel], m_sampleCount, resampleOut, outputSampleLength);
+
+                // allocate actual channel data storage and copy across, out of resampling buffer
+                m_channel[channel] = mem::alloc16<float>( outputSampleLength );
+                for ( std::size_t s = 0; s < outputSampleLength; s++ )
+                {
+                    m_channel[channel][s] = static_cast<float>(resampleOut[s]);
+                }
+            }
+
+            mem::free16( resampleOut );
+
+            m_sampleCount = outputSampleLength;
+        }
+        // if the sample rate already matches, just copy across verbatim
+        else
+        {
+            // blog::stem( FMTX( "[s:{}..] stem already at {}" ), stemCouchSnip, m_sampleRate );
+
+            m_channel[0] = mem::alloc16<float>( m_sampleCount );
+            m_channel[1] = mem::alloc16<float>( m_sampleCount );
+
+            for ( std::size_t channel = 0; channel < 2; channel++ )
+            {
+                for ( std::size_t s = 0; s < m_sampleCount; s++ )
+                {
+                    m_channel[channel][s] = static_cast<float>(flacStreamChannels[channel][s]);
+                }
+            }
+        }
+
+        mem::free16( flacStreamChannels[0] );
+        mem::free16( flacStreamChannels[1] );
+
+        m_compressionFormat = Compression::FLAC;
+
+        // if the decode worked, stash the original data in the cache
+        {
+            std::basic_ofstream<char> ofs( cacheFile, std::ios::out | std::ios::binary );
+            ofs.write( (char*)audioMemory.m_rawAudio, audioMemory.m_rawReceived );
         }
     }
-
-    // stb mallocs, we discard the data it gave us
-    free( oggData );
 
     // immediate post-processing steps that modify samples
     applyLoopSewingBlend();
@@ -304,7 +546,8 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
         auto stemTime = stemTiming.stop();
         const auto humanisedMemoryUsage = base::humaniseByteSize( "using approx mem : ", estimateMemoryUsageBytes() );
 
-        blog::stem( "finalizing took {}, {}",
+        blog::stem( FMTX( "[s:{}..] finalizing took {}, {}" ),
+            stemCouchSnip,
             stemTime,
             humanisedMemoryUsage );
     }
@@ -313,6 +556,9 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
 // ---------------------------------------------------------------------------------------------------------------------
 bool Stem::attemptRemoteFetch( const api::NetConfiguration& ncfg, const uint32_t attemptUID, RawAudioMemory& audioMemory )
 {
+    // log network traffic
+    ncfg.metricsActivitySend();
+
     // create client to fetch audio stream from the CDN
     const auto& httpUrl = m_data.fullEndpoint();
     auto cdnClient      = std::make_unique< httplib::SSLClient >( httpUrl.c_str() );
@@ -388,6 +634,9 @@ bool Stem::attemptRemoteFetch( const api::NetConfiguration& ncfg, const uint32_t
 
             return true;
         });
+
+    // log network traffic
+    ncfg.metricsActivityRecv( audioMemory.m_rawReceived );
 
     if ( audioMemory.m_rawReceived != audioMemory.m_rawLength )
     {

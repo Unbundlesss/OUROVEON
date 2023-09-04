@@ -113,10 +113,14 @@ struct FLACWriter::StreamInstance : public FLAC::Encoder::File,
 
 // ---------------------------------------------------------------------------------------------------------------------
 std::shared_ptr<FLACWriter> FLACWriter::Create(
-    const std::string&  outputFile,
+    const fs::path&     outputFile,
     const uint32_t      sampleRate,
     const float         writeBufferInSeconds )
 {
+    // produce a 8 and 16-bit encoded version of the filename, supporting utf8 characters in the input
+    const std::u16string outputFileU16 = outputFile.u16string();
+    const std::string outputFileU8 = utf8::utf16to8( outputFileU16 );
+
     const uint32_t writeBufferInSamples = (uint32_t)std::ceil( (float)sampleRate * std::max( 0.25f, writeBufferInSeconds ) );
 
     std::unique_ptr< FLACWriter::StreamInstance > newState = std::make_unique< FLACWriter::StreamInstance >( writeBufferInSamples );
@@ -129,22 +133,31 @@ std::shared_ptr<FLACWriter> FLACWriter::Create(
     flacConfig &= newState->set_sample_rate( sampleRate );
     if ( !flacConfig )
     {
-        blog::error::core( "FLAC failed to configure encoder for [{}]", outputFile );
+        blog::error::core( "FLAC failed to configure encoder for [{}]", outputFileU8 );
         return nullptr;
     }
 
     // open a FILE* to pass to the encoder
-    newState->m_flacFileHandle = fopen( outputFile.c_str(), "w+b" );
+#ifdef OURO_PLATFORM_WIN
+    // wchar_t is 2 bytes on Windows and expects utf16, so pass it that
+    FILE* fpFLAC = _wfopen( reinterpret_cast<const wchar_t*>(outputFileU16.c_str()), L"w+b" );
+#else
+    // elsewhere ... the OS is hopefully on board by default, just pass the utf8-capable 8-bit string
+    // https://stackoverflow.com/questions/396567/is-there-a-standard-way-to-do-an-fopen-with-a-unicode-string-file-path
+    FILE* fpFLAC = fopen( outputFileU8.c_str(), "w+b" );
+#endif
+
+    newState->m_flacFileHandle = fpFLAC;
     if ( newState->m_flacFileHandle == nullptr )
     {
-        blog::error::core( "FLAC could not open [{}] for writing ({})\n", outputFile, std::strerror(errno) );
+        blog::error::core( "FLAC could not open [{}] for writing ({})\n", outputFileU8, std::strerror(errno) );
         return nullptr;
     }
 
     FLAC__StreamEncoderInitStatus flacInit = newState->init( newState->m_flacFileHandle );
     if ( flacInit != FLAC__STREAM_ENCODER_INIT_STATUS_OK ) 
     {
-        blog::error::core( "FLAC unable to begin stream ({}) for file [{}]", FLAC__StreamEncoderInitStatusString[flacInit], outputFile );
+        blog::error::core( "FLAC unable to begin stream ({}) for file [{}]", FLAC__StreamEncoderInitStatusString[flacInit], outputFileU8 );
         return nullptr;
     }
 

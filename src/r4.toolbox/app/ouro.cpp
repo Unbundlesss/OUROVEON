@@ -54,7 +54,6 @@ int OuroApp::EntrypointGUI()
     static constexpr std::array< const char*, 6 > cVibeRenderLabels {   "512",  "1024",  "2048",  "4096" };
     static constexpr std::array< uint32_t,    6 > cVibeRenderValues {    512 ,   1024 ,   2048 ,   4096  };
 
-
     // try and fetch last audio settings from the stash; doesn't really matter if we can't, it is just saved defaults
     // for the config screen
     config::Audio audioConfig;
@@ -82,32 +81,57 @@ int OuroApp::EntrypointGUI()
     const auto timezoneUTC = date::locate_zone( "Etc/UTC" );
 
     // add UTC/Server time on left of status bar
-    const auto sbbTimeStatusLeftID = registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Left, 500.0f, [=]()
+    const auto sbbTimeStatusLeftID = registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Left, 375.0f, [=]()
     {
         auto t  = date::make_zoned( timezoneUTC, std::chrono::system_clock::now() );
         auto tf = date::format( spacetime::defaultDisplayTimeFormatTZ, t );
-        const auto serverTime = fmt::format( FMTX( "{} | {}" ), timezoneUTC->name(), tf );
+        const auto serverTime = fmt::format( FMTX( " {} | {}" ), timezoneUTC->name(), tf );
 
         ImGui::PushStyleColor( ImGuiCol_Text, IM_COL32_WHITE );
         ImGui::TextUnformatted( serverTime );
         ImGui::PopStyleColor();
     });
     // add local timezone time on right 
-    const auto sbbTimeStatusRightID = registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Right, 500.0f, [=]()
+    const auto sbbTimeStatusRightID = registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Left, 375.0f, [=]()
     {
         auto t  = date::make_zoned( timezoneLocal, std::chrono::system_clock::now() );
         auto tf = date::format( spacetime::defaultDisplayTimeFormatTZ, t );
-        const auto localTime = fmt::format( FMTX( "{} | {}" ), tf, timezoneLocal->name() );
-
-        // right-align
-        const auto localTimeLength = ImGui::CalcTextSize( localTime );
-        ImGui::Dummy( ImVec2( 475.0f - localTimeLength.x, 0.0f ) );
+        const auto localTime = fmt::format( FMTX( " {} | {}" ), timezoneLocal->name(), tf );
 
         ImGui::PushStyleColor( ImGuiCol_Text, IM_COL32_WHITE );
         ImGui::TextUnformatted( localTime );
         ImGui::PopStyleColor();
     });
 
+
+    // network activity display
+    const auto sbbNetworkActivity = registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Right, 300.0f, [=]()
+    {
+        const auto pulseCount = m_avgNetPulseHistory.size();
+
+        std::string pulseOverview;
+        pulseOverview.reserve( pulseCount * 3 );
+        for ( std::size_t idx = 0; idx < pulseCount; idx++ )
+        {
+            switch ( m_avgNetPulseHistory[idx] )
+            {
+            default:
+                case 0: pulseOverview += " "; break;
+                case 1: pulseOverview += ICON_FC_VBAR_1; break;
+                case 2: pulseOverview += ICON_FC_VBAR_2; break;
+                case 3: pulseOverview += ICON_FC_VBAR_3; break;
+                case 4: pulseOverview += ICON_FC_VBAR_4; break;
+                case 5: pulseOverview += ICON_FC_VBAR_5; break;
+                case 6: pulseOverview += ICON_FC_VBAR_6; break;
+                case 7: pulseOverview += ICON_FC_VBAR_7; break;
+            }
+        }
+
+        const auto kbAvgPayload = m_avgNetPayloadPerSec.m_average / 1024.0;
+        const auto networkState = fmt::format( FMTX( " {}  {:>6.1f} Kb/s " ), pulseOverview, kbAvgPayload );
+
+        ImGui::TextUnformatted( networkState );
+    });
 
     // load any saved configs
     config::endlesss::Auth endlesssAuth;
@@ -444,7 +468,7 @@ int OuroApp::EntrypointGUI()
                         {
                             const bool offerNoAuthMode = ( supportsUnauthorisedEndlesssMode() && endlesssAuthExpired );
                             ImGui::BeginDisabledControls( !offerNoAuthMode );
-                            ImGui::Checkbox( " Enable Unauthorised Mode", &endlesssWorkUnauthorised );
+                            ImGui::Checkbox( " Continue without Authentication", &endlesssWorkUnauthorised );
                             ImGui::EndDisabledControls( !offerNoAuthMode );
 
                             // give context-aware tooltip help
@@ -476,7 +500,7 @@ int OuroApp::EntrypointGUI()
 
                                 // wipe out any existing auth details in the network config
                                 if ( !m_networkConfiguration->hasNoAccessSet() )
-                                    m_networkConfiguration->initWithoutAuthentication( m_configEndlesssAPI );
+                                    m_networkConfiguration->initWithoutAuthentication( m_appEventBus, m_configEndlesssAPI );
                             }
                             ImGui::CompactTooltip( "Log out" );
                             ImGui::EndDisabledControls( jamsAreUpdating );
@@ -564,7 +588,7 @@ int OuroApp::EntrypointGUI()
                             // if not yet setup, configure the network for full authenticated access
                             if ( m_networkConfiguration->hasNoAccessSet() )
                             {
-                                m_networkConfiguration->initWithAuthentication( m_configEndlesssAPI, endlesssAuth );
+                                m_networkConfiguration->initWithAuthentication( m_appEventBus, m_configEndlesssAPI, endlesssAuth );
                             }
 
                             // stop closing the boot window if we're running background threads or we have no jam data
@@ -629,10 +653,22 @@ int OuroApp::EntrypointGUI()
                                 ImGui::Spacing();
                                 ImGui::Indent( perBlockIndent * 3 );
                                 ImGui::BeginDisabledControls( jamsAreUpdating );
-                                syncOptionsChanged |= ImGui::Checkbox( " Fetch Collectibles", &endlesssAuth.sync_options.sync_collectibles );
-                                                      ImGui::CompactTooltip( "Query and store all the 'collectible' jams\nDue to API issues, this may take a few minutes" );
-                                syncOptionsChanged |= ImGui::Checkbox( " Fetch Jam State", &endlesssAuth.sync_options.sync_state );
-                                                      ImGui::CompactTooltip( "For every jam we know about, query basic data like riff counts\nThis can take a little while but provides the most complete\nview of the jam metadata" );
+
+                                {
+                                    ImGui::AlignTextToFramePadding();
+                                    ImGui::TextDisabled( "[?]" );
+                                    ImGui::SameLine();
+                                    ImGui::CompactTooltip( "Query and store all the 'collectible' jams\nDue to API issues, this may take a few minutes" );
+                                    syncOptionsChanged |= ImGui::Checkbox( " Fetch Collectibles", &endlesssAuth.sync_options.sync_collectibles );
+                                }
+                                {
+                                    ImGui::AlignTextToFramePadding();
+                                    ImGui::TextDisabled( "[?]" );
+                                    ImGui::SameLine();
+                                    ImGui::CompactTooltip( "For every jam we know about, query basic data like riff counts\nThis can take a little while but provides the most complete\nview of the jam metadata" );
+                                    syncOptionsChanged |= ImGui::Checkbox( " Fetch Jam State", &endlesssAuth.sync_options.sync_state );
+                                }
+
                                 ImGui::EndDisabledControls( jamsAreUpdating );
                                 ImGui::Unindent( perBlockIndent * 3 );
 
@@ -774,9 +810,18 @@ int OuroApp::EntrypointGUI()
                     // ---------------------------------------------------------------------------------------------------------
                     // 
                     {
-                        m_mdFrontEnd->titleText( "--" );
+                        m_mdFrontEnd->titleText( "Vibes" );
                         ImGui::Indent( perBlockIndent );
+                       
+                        // fundamental enable/disable of all Vibes systems to avoid booting it or compiling any shaders (JIC)
+                        {
+                            ImGui::AlignTextToFramePadding();
+                            ImGui::TextDisabled( "[?]" );
+                            ImGui::CompactTooltip( "Vibes is the audio-reactive visual effects system\nbuilt into Ouroveon. Disabling it can\nsave some GPU cost and VRAM, or if\nyou experience issues with it during\napplication boot-up" );
+                            ImGui::SameLine();
 
+                            ImGui::Checkbox( " Enable Vibes Rendering", &m_configPerf.enableVibesRenderer );
+                        }
 
                         ImGui::Unindent( perBlockIndent );
                         ImGui::Spacing();
@@ -857,7 +902,7 @@ int OuroApp::EntrypointGUI()
     // stuff (so we can still pull stems from the CDN on demand, for example)
     if ( m_networkConfiguration->hasNoAccessSet() )
     {
-        m_networkConfiguration->initWithoutAuthentication( m_configEndlesssAPI );
+        m_networkConfiguration->initWithoutAuthentication( m_appEventBus, m_configEndlesssAPI );
     }
 
     // save any config data blocks
@@ -998,9 +1043,14 @@ void OuroApp::onEvent_ExportRiff( const base::IEvent& eventRef )
         exportRiffEvent->m_adjustments,
         exportRiffEvent->m_riff );
 
+    blog::core( FMTX( "Exported" ) );
     for ( const auto& exported : exportedFiles )
     {
-        blog::core( " => {}", exported.string() );
+        // have to convert from a u16 encoding as these paths may contain utf8 and calling string()
+        // on them will then throw an exception
+        std::string utf8path = utf8::utf16to8( exported.u16string() );
+
+        blog::core( FMTX("   {}"), utf8path );
     }
 }
 

@@ -1,22 +1,14 @@
 {
     "declarations": [
         {
-            "name": "Horizon",
-            "copyright" : "ishani",
+            "name": "Threads",
+            "copyright" : "CC0 mrange",
             "operations": [
                 {
                     "name": "render",
-                    "fragment": "horizon",
+                    "fragment": "threads",
                     "bufferInA": "final",
-                    "bufferOut": "final",
-                    "toggles" : [
-                        { "name" : "Core Mass",     "opts" : [ "FILMGRAIN" ], "default_value" : 0 },
-                        { "name" : "Colouring",     "opts" : [ "WHITE", "BLACK", "RED" ], "default_value" : 1 }
-                    ],
-                    "dials" : [
-                        { "name" : "Intensity",     "default_value" :  0,     "range" : [ 0, 1] },
-                        { "name" : "Bleed",         "default_value" : -1,     "range" : [-1, 1] }
-                    ]
+                    "bufferOut": "final"
                 }
             ]
         },

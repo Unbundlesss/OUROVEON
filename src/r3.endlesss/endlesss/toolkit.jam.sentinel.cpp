@@ -25,9 +25,9 @@ Sentinel::Sentinel( const services::RiffFetchProvider& riffFetchProvider, const 
     , m_callback( riffLoadCallback )
     , m_pollRateDelaySecs( riffFetchProvider->getNetConfiguration().api().jamSentinelPollRateInSeconds )
 {
-
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
 Sentinel::~Sentinel()
 {
     stopTracking();
@@ -41,8 +41,8 @@ void Sentinel::startTracking( const types::Jam& jamToTrack )
         stopTracking();
     }
 
-    blog::app( "[ SNTL ] starting jam tracker thread @ {} [{}]", jamToTrack.displayName, jamToTrack.couchID );
-    blog::app( "[ SNTL ] manual polling every {} seconds", m_pollRateDelaySecs );
+    blog::app( FMTX( "[ SNTL ] starting jam tracker thread @ {} [{}]" ), jamToTrack.displayName, jamToTrack.couchID );
+    blog::app( FMTX( "[ SNTL ] manual polling every {} seconds" ), m_pollRateDelaySecs );
 
     m_trackedJam    = jamToTrack;
 
@@ -56,7 +56,7 @@ void Sentinel::stopTracking()
 {
     if ( m_runThread )
     {
-        blog::app( "[ SNTL ] halting jam tracker ..." );
+        blog::app( FMTX( "[ SNTL ] halting jam tracker ..." ) );
 
         m_runThread = false;
         m_thread->join();
@@ -80,7 +80,7 @@ void Sentinel::sentinelThreadLoop()
         }
 
         m_lastSeenSequence = jamChange.last_seq;
-        blog::app( "[ SNTL ] captured initial change sequence" );
+        blog::app( FMTX( "[ SNTL ] captured initial change sequence" ) );
 
         // initial arrival, trigger callback
         sentinelThreadFetchLatest();
@@ -102,7 +102,7 @@ void Sentinel::sentinelThreadLoop()
         endlesss::api::JamChanges jamChange;
         if ( !jamChange.fetchSince( m_riffFetchProvider->getNetConfiguration(), m_trackedJam.couchID, m_lastSeenSequence ) )
         {
-            blog::app( "[ SNTL ] fetchSince() failed, aborting tracker thread" );
+            blog::app( FMTX( "[ SNTL ] fetchSince() failed, aborting tracker thread" ) );
             m_threadFailed = true;
             m_runThread = false;
             return;
@@ -113,7 +113,7 @@ void Sentinel::sentinelThreadLoop()
                                 ( jamChange.last_seq != m_lastSeenSequence );
         if ( difference )
         {
-            blog::app( "[ SNTL ] {} change(s) detected", numberOfNewSeq );
+            blog::app( FMTX( "[ SNTL ] {} change(s) detected" ), numberOfNewSeq );
             sentinelThreadFetchLatest();
         }
 
@@ -133,7 +133,7 @@ void Sentinel::sentinelThreadFetchLatest()
 
     if ( !latestRiff.trySynchronousLoad( m_riffFetchProvider->getNetConfiguration() ) )
     {
-        blog::error::app( "[ SYNC ] failed to read latest riff in jam" );
+        blog::error::app( FMTX( "[ SYNC ] failed to read latest riff in jam" ) );
         //riffSyncInProgress = false;
         return;
     }
@@ -150,7 +150,10 @@ void Sentinel::sentinelThreadFetchLatest()
     const bool  isActualNewRiffData = (m_lastFetchedRiffCouchID != syncRiffId );
     m_lastFetchedRiffCouchID = syncRiffId;
 
-    blog::app( "[ SYNC ] last id = [{}], new id = [{}] | {}", m_lastFetchedRiffCouchID, syncRiffId, isActualNewRiffData ? "is-new" : "no-new-data" );
+    blog::app( FMTX( "[ SYNC ] last id = [{}], new id = [{}] | {}" ),
+        m_lastFetchedRiffCouchID,
+        syncRiffId,
+        isActualNewRiffData ? "is-new" : "no-new-data" );
 
     // if new data has arrived, tell our friends
     if ( isActualNewRiffData )

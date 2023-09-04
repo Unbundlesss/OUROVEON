@@ -6,12 +6,14 @@ namespace stdp = std::placeholders;
 #include "base/metaenum.h"
 #include "base/instrumentation.h"
 #include "base/text.h"
+#include "base/text.transform.h"
 #include "base/bimap.h"
 #include "base/paging.h"
 
 #include "buffer/buffer.2d.h"
 
 #include "colour/gradient.h"
+#include "colour/preset.h"
 
 #include "config/frontend.h"
 #include "config/data.h"
@@ -29,6 +31,7 @@ namespace stdp = std::placeholders;
 #include "ux/stem.beats.h"
 #include "ux/stem.analysis.h"
 #include "ux/shared.riffs.view.h"
+#include "ux/user.selector.h"
 
 #include "vx/vibes.h"
 
@@ -97,6 +100,16 @@ struct JamVisualisation
     REFLECT_ENUM( RiffGapOn, uint32_t, _RIFF_GAP_ON );
     #undef _RIFF_GAP_ON
 
+    #define _SIGHTLINE_MODE(_action)  \
+        _action(UserOne)              \
+        _action(UserTwo)              \
+        _action(Tagged)               \
+        _action(Scale)                \
+        _action(Root)                 \
+        _action(BPM)
+    REFLECT_ENUM( SightlineMode, uint32_t, _SIGHTLINE_MODE );
+    #undef _SIGHTLINE_MODE
+
     #define _COLOUR_STYLE(_action)    \
         _action( Uniform )            \
         _action( UserIdentity )       \
@@ -106,7 +119,7 @@ struct JamVisualisation
         _action( Scale )              \
         _action( Root )               \
         _action( BPM )
-    REFLECT_ENUM( ColourStyle, uint32_t, _COLOUR_STYLE );
+    REFLECT_ENUM( ColouringMode, uint32_t, _COLOUR_STYLE );
     #undef _COLOUR_STYLE
 
     #define _COLOUR_SOURCE(_action)     \
@@ -117,48 +130,83 @@ struct JamVisualisation
         _action( Spectral )             \
         _action( SpectralIntense )      \
         _action( Trans )
-    REFLECT_ENUM( ColourSource, uint32_t, _COLOUR_SOURCE );
+    REFLECT_ENUM( GradientChoice, uint32_t, _COLOUR_SOURCE );
     #undef _COLOUR_SOURCE
 
-    static constexpr size_t NameHighlightCount = 3;
+    const char* GetDescriptionForColouringMode( const ColouringMode::Enum cs ) const
+    {
+        switch ( cs )
+        {
+            case ColouringMode::Uniform:          return "Single colour for all cells.";
+            case ColouringMode::UserIdentity:     return "Pick a different colour per user from the gradient; colour repetition will occur over a larger jam with many unique users.";
+            case ColouringMode::UserChangeRate:   return "Increased heat as riffs are submitted by different users. Good for tracking general jam busyness, higher heat indicates more multi-user activity. 'Decay Rate' controls heat decay as the jam progresses.";
+            case ColouringMode::StemChurn:        return "Increased heat when new stems arrive or stems are disabled/enabled. Higher heat indicates major changes to the jam.";
+            case ColouringMode::StemTimestamp:    return "Heat value is picked from 24-hour clock of the stem submission, showing when stems are committed over the course of a day/night cycle.";
+            case ColouringMode::Scale:            return "Heat value from the riff scale.";
+            case ColouringMode::Root:             return "Heat value from the riff root key.";
+            case ColouringMode::BPM:              return "Heat value from the riff BPM, to the chosen maximum value.";
+        }
+        return "unknown";
+    }
+
     struct NameHighlighting
     {
-        NameHighlighting()
-            : m_colour( 0.5f, 0.8f, 1.0f, 1.0f )
+        NameHighlighting( const ImVec4& colour )
+            : m_colour( colour )
         {}
 
-        std::string         m_name;
-        ImVec4              m_colour;
-    };
-    using NameHighlightingArray = std::array< NameHighlighting, NameHighlightCount >;
+        ImGui::ux::UserSelector     m_user;
+        ImVec4                      m_colour;
 
-    NameHighlightingArray   m_nameHighlighting;
+        // precomputed values used during the rendering inner-loop; hashed name for fast comparisons, u32 colour value, etc
+        struct Cached
+        {
+            uint64_t    m_nameHash;
+            uint32_t    m_highlightColour;
+            bool        m_active;
+        };
+
+        Cached makeCached() const
+        {
+            Cached result;
+            result.m_active             = m_user.isEmpty() == false;
+            result.m_nameHash           = absl::Hash< std::string >{}(m_user.getUsername());
+            result.m_highlightColour    = ImGui::ColorConvertFloat4ToU32_BGRA_Flip( m_colour );
+
+            return result;
+        }
+    };
+
+    NameHighlighting        m_userHighlight1    = NameHighlighting( colour::shades::white.neutral()     );  // highlight user riff with top-left indicator (primary)
+    NameHighlighting        m_userHighlight2    = NameHighlighting( colour::shades::sea_green.neutral() );  // highlight user riff with top-right indicator (secondary)
 
     RiffCubeSize::Enum      m_riffCubeSize      = RiffCubeSize::Medium;
     LineBreakOn::Enum       m_lineBreakOn       = LineBreakOn::ChangedBPM;
     RiffGapOn::Enum         m_riffGapOn         = RiffGapOn::ChangedScaleOrRoot;
-    ColourStyle::Enum       m_colourStyle       = ColourStyle::UserChangeRate;
-    ColourSource::Enum      m_colourSource      = ColourSource::ColdBlueHotYellow;
+    ColouringMode::Enum     m_colourMode        = ColouringMode::UserChangeRate;
+    GradientChoice::Enum    m_gradientChoice    = GradientChoice::ColdBlueHotYellow;
+    SightlineMode::Enum     m_sightlineMode     = SightlineMode::UserOne;
 
     // defaults that can be then tuned on the UI depending which colour viz is running
     float                   m_bpmMinimum        = 50.0f;
     float                   m_bpmMaximum        = 200.0f;
-    float                   m_activityTimeSec   = 30.0f;
     float                   m_changeRateDecay   = 0.6f;
-    std::array< float, 4 >  m_uniformColour     = { 0.5, 0.5, 0.5, 1.0f };
+    ImVec4                  m_uniformColour     = colour::shades::slate.neutral();
 
     template<class Archive>
     void serialize( Archive& archive )
     {
-        archive( CEREAL_NVP( m_riffCubeSize )
+        archive( CEREAL_NVP( m_userHighlight1 )
+               , CEREAL_NVP( m_userHighlight2 )
+               , CEREAL_NVP( m_riffCubeSize )
                , CEREAL_NVP( m_lineBreakOn )
                , CEREAL_NVP( m_riffGapOn )
-               , CEREAL_NVP( m_colourStyle )
-               , CEREAL_NVP( m_colourSource )
+               , CEREAL_NVP( m_colourMode )
+               , CEREAL_NVP( m_gradientChoice )
                , CEREAL_NVP( m_bpmMinimum )
                , CEREAL_NVP( m_bpmMaximum )
-               , CEREAL_NVP( m_activityTimeSec )
                , CEREAL_NVP( m_changeRateDecay )
+               , CEREAL_NVP( m_uniformColour )
         );
     }
 
@@ -176,95 +224,147 @@ struct JamVisualisation
         }
     }
 
-    // 
-    colour::col3 colourSampleT( const float t ) const
+    // a selection of heatmap colour gradients, trialled and chosen to provide good readability and
+    // contrast against the existing UI colour scheme
+    colour::col3 getHeatmapColourAtT( const float t ) const
     {
-        switch ( m_colourSource )
+        switch ( m_gradientChoice )
         {
         default:
-            case ColourSource::TealSlateGold:       return colour::map::cividis( t );
-            case ColourSource::ColdBlueHotYellow:   return colour::map::plasma( t );
-            case ColourSource::ColdBlueCyanWhite:   return colour::map::YlGnBu_r( t );
-            case ColourSource::PurplePinkRed:       return colour::map::coolwarm( t );
-            case ColourSource::Spectral:            return colour::map::Spectral_r( t );
-            case ColourSource::SpectralIntense:     return colour::map::RdYlBu_r( t );
-            case ColourSource::Trans:               return colour::map::trans( t );
+            case GradientChoice::TealSlateGold:       return colour::map::cividis( t );
+            case GradientChoice::ColdBlueHotYellow:   return colour::map::plasma( t );
+            case GradientChoice::ColdBlueCyanWhite:   return colour::map::YlGnBu_r( t );
+            case GradientChoice::PurplePinkRed:       return colour::map::coolwarm( t );
+            case GradientChoice::Spectral:            return colour::map::Spectral_r( t );
+            case GradientChoice::SpectralIntense:     return colour::map::RdYlBu_r( t );
+            case GradientChoice::Trans:               return colour::map::trans( t );
         }
     }
 
-    inline bool imgui()
+    inline bool imgui( app::CoreGUI& coreGUI )
     {
         bool choiceChanged = false;
 
-        const float columnInset = 16.0f;
+        const float labelColumnsSize = 100.0f;
         const float panelWidth  = ImGui::GetContentRegionAvail().x;
-        const float columnWidth = panelWidth * 0.5f;
 
-        ImGui::Columns( 2, nullptr, false );
-        ImGui::PushItemWidth( ( columnWidth * 0.7f ) - columnInset );
+        ImGui::PushItemWidth( ( panelWidth - labelColumnsSize) * 0.7f );
 
+        ImGui::TextUnformatted( "Riff Cell Rendering" );
+        ImGui::SeparatorBreak();
+
+        if ( ImGui::BeginTable( "###riff_cell_config", 2,
+            ImGuiTableFlags_NoSavedSettings ) )
         {
-            ImGui::TextUnformatted( "User Highlighting" );
-            ImGui::Spacing();
-            ImGui::Indent( columnInset );
-            for ( auto nH = 0; nH < m_nameHighlighting.size(); nH ++ )
-            {
-                ImGui::PushID( nH );
-                choiceChanged |= ImGui::ColorEdit3( "##Colour", &m_nameHighlighting[nH].m_colour.x , ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_DisplayHex );
-                                 ImGui::SameLine();
-                choiceChanged |= ImGui::InputText( "Name", &m_nameHighlighting[nH].m_name, ImGuiInputTextFlags_EnterReturnsTrue );
-                choiceChanged |= ImGui::IsItemDeactivatedAfterEdit();
-                                 ImGui::CompactTooltip( "enter an Endlesss username to have their riffs highlighted in the view" );
-                ImGui::PopID();
-            }
-            ImGui::Unindent( columnInset );
+            ImGui::TableSetupColumn( "Label",   ImGuiTableColumnFlags_WidthFixed, labelColumnsSize );
+            ImGui::TableSetupColumn( "Content", ImGuiTableColumnFlags_WidthStretch, 1.0f );
 
-            ImGui::TextUnformatted( "Layout" );
-            ImGui::Spacing();
-            ImGui::Indent( columnInset );
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted( "Cell Size" );
+            ImGui::TableNextColumn();
+            choiceChanged |= RiffCubeSize::ImGuiCombo( "###cell_size", m_riffCubeSize );
+
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted( "Colouring" );
+            ImGui::TableNextColumn();
+            choiceChanged |= ColouringMode::ImGuiCombo( "###colour_style", m_colourMode );
+
+            if ( m_colourMode == ColouringMode::Uniform )
             {
-                choiceChanged |= LineBreakOn::ImGuiCombo( "Line Break", m_lineBreakOn );
-                                 ImGui::CompactTooltip( "Add a line-break between blocks of riffs, based on configurable differences" );
-                choiceChanged |= RiffGapOn::ImGuiCombo( "Riff Gap", m_riffGapOn );
-                                 ImGui::CompactTooltip( "Add one-block gaps between riffs, based on configurable differences" );
+                ImGui::SameLine( 0, 3.0f );
+                choiceChanged |= ImGui::ColorEdit3( "###uniform_colour", (float*)&m_uniformColour.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_DisplayHex);
             }
-            ImGui::Unindent( columnInset );
+            else
+            {
+                // in-view tooltip for the colour mode
+                {
+                    ImGui::Indent( 12.0f );
+                    ImGui::PushTextWrapPos( 0.0f );
+                    ImGui::TextUnformatted( GetDescriptionForColouringMode( m_colourMode ) );
+                    ImGui::PopTextWrapPos();
+                    ImGui::Unindent( 12.0f );
+                    ImGui::Spacing();
+                }
+
+                // alongside the gradient function choice, render a line of swatches showing a preview of the colour results
+                choiceChanged |= GradientChoice::ImGuiCombo( "##gradient_choice", m_gradientChoice );
+                {
+                    const int32_t numberOfGradientSampleBoxes = 5;
+                    const float sampleDelta = 1.0f / static_cast<float>(numberOfGradientSampleBoxes - 1);
+                    float sampleT = 0.0f;
+
+                    for ( int32_t gradientBox = 0; gradientBox < numberOfGradientSampleBoxes; gradientBox++ )
+                    {
+                        const colour::col3 previewColour = getHeatmapColourAtT( sampleT );
+                        sampleT += sampleDelta;
+
+                        ImGui::PushID( gradientBox );
+                        ImGui::SameLine( 0, 3.0f );
+                        ImGui::ColorEdit3( "###preview_block", (float*)&previewColour,
+                            ImGuiColorEditFlags_NoAlpha |
+                            ImGuiColorEditFlags_NoInputs |
+                            ImGuiColorEditFlags_NoPicker |
+                            ImGuiColorEditFlags_NoOptions |
+                            ImGuiColorEditFlags_NoTooltip |
+                            ImGuiColorEditFlags_NoBorder
+                        );
+                        ImGui::PopID();
+                    }
+                }
+
+                // add in any other configurable values for the active colour mode, like the BPM range to use for scaling
+                if ( m_colourMode == ColouringMode::BPM )
+                    choiceChanged |= ImGui::DragFloatRange2( "BPM Range", &m_bpmMinimum, &m_bpmMaximum, 1.0f, 25.0f, 999.0f, "%.0f" );
+                else if ( m_colourMode == ColouringMode::UserChangeRate )
+                    choiceChanged |= ImGui::InputFloat( "Decay Rate", &m_changeRateDecay, 0.05f, 0.1f, " %.2f" );
+            }
+
+            ImGui::EndTable();
         }
-        ImGui::NextColumn();
+
+        ImGui::Dummy(ImVec2(0,20.0f));
+        ImGui::TextUnformatted( "User Highlighting" );
+        ImGui::SeparatorBreak();
+
+        if ( ImGui::BeginTable( "###user_highlights", 3,
+            ImGuiTableFlags_NoSavedSettings ) )
         {
-            ImGui::TextUnformatted( "Cell Colouring" );
-            ImGui::Spacing();
-            ImGui::Indent( columnInset );
+            ImGui::TableSetupColumn( "Label", ImGuiTableColumnFlags_WidthFixed, labelColumnsSize );
+            ImGui::TableSetupColumn( "Names", ImGuiTableColumnFlags_WidthFixed, ImGui::ux::UserSelector::cDefaultWidthForUserSize );
+            ImGui::TableSetupColumn( "Names", ImGuiTableColumnFlags_WidthStretch, 1.0f );
+
             {
-                choiceChanged |= ColourStyle::ImGuiCombo( "Colour Style", m_colourStyle );
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted( "Primary" );
 
-                if ( m_colourStyle == ColourStyle::Uniform )
-                {
-                    choiceChanged |= ImGui::ColorEdit3( "Uniform Colour", &m_uniformColour[0], ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_DisplayHex );
-                }
-                else
-                {
-                    choiceChanged |= ColourSource::ImGuiCombo( "Colour Source", m_colourSource );
+                ImGui::TableNextColumn();
+                choiceChanged |= m_userHighlight1.m_user.imgui( "user1", coreGUI.getEndlesssPopulation(), ImGui::ux::UserSelector::cDefaultWidthForUserSize );
 
-                    if ( m_colourStyle == ColourStyle::BPM )
-                        choiceChanged |= ImGui::DragFloatRange2( "BPM Range", &m_bpmMinimum, &m_bpmMaximum, 1.0f, 25.0f, 999.0f, "%.0f" );
-                    else if ( m_colourStyle == ColourStyle::StemChurn )
-                        choiceChanged |= ImGui::InputFloat( "Cooldown Time", &m_activityTimeSec, 1.0f, 5.0f, " %.0f Seconds" );
-                    else if ( m_colourStyle == ColourStyle::UserChangeRate )
-                        choiceChanged |= ImGui::InputFloat( "Decay Rate", &m_changeRateDecay, 0.05f, 0.1f, " %.2f" );
-                    else
-                        ImGui::TextUnformatted( "" );
-                }
+                ImGui::TableNextColumn();
+                choiceChanged |= ImGui::ColorEdit3( "###user1_colour", (float*)&m_userHighlight1.m_colour.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_DisplayHex );
             }
             {
-                choiceChanged |= RiffCubeSize::ImGuiCombo( "Riff Cube", m_riffCubeSize );
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted( "Secondary" );
+
+                ImGui::TableNextColumn();
+                choiceChanged |= m_userHighlight2.m_user.imgui( "user2", coreGUI.getEndlesssPopulation(), ImGui::ux::UserSelector::cDefaultWidthForUserSize );
+
+                ImGui::TableNextColumn();
+                choiceChanged |= ImGui::ColorEdit3( "###user2_colour", (float*)&m_userHighlight2.m_colour.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_DisplayHex );
             }
-            ImGui::Unindent( columnInset );
+
+            ImGui::EndTable();
         }
+
+
+        ImGui::Dummy( ImVec2( 0, 20.0f ) );
+        ImGui::TextUnformatted( "Sightline Mode" );
+        ImGui::SeparatorBreak();
 
         ImGui::PopItemWidth();
-        ImGui::Columns( 1 );
-        ImGui::Spacing();
+
+
 
         return choiceChanged;
     }
@@ -294,208 +394,6 @@ struct LoreApp : public app::OuroApp
 
 
 
-    // all just test code, TODO decruft etc
-#if 0 
-    void initMidi()
-    {
-        m_midiInputDevices = app::module::Midi::fetchListOfInputDevices();
-
-        registerMainMenuEntry( 10, "BOND", [this]()
-        {
-            if ( ImGui::BeginMenu( "Riff Push" ) )
-            {
-                if ( ImGui::MenuItem( "Connect ..." ) )
-                {
-                    activateModalPopup( "Riff Push Connection", [this]( const char* title )
-                    {
-                        modalRiffPushClientConnection( title, m_mdFrontEnd, m_rpClient );
-                    });
-                }
-                
-                bool canReplayJam  = ( m_jamSliceSketch != nullptr ) && ( m_jamSliceSketch->m_slice != nullptr );
-                     canReplayJam &= m_rpClient.getState() == net::bond::Connected;
-
-                if ( ImGui::MenuItem( "Jam Replay ...", nullptr, false, canReplayJam ) )
-                {
-                    activateModalPopup( "Jam Replay Tool", [this]( const char* title )
-                    {
-                        endlesss::types::RiffPlaybackAbstraction defaultAbstraction;
-                        const auto defaultPermutation = defaultAbstraction.asPermutation();
-
-                        static std::size_t startOffsetIndex = 0;
-
-                        ImGui::Text( "%u Riffs to replay", (uint32_t)(m_jamSliceSketch->m_slice->m_ids.size() - startOffsetIndex) );
-                        ImGui::Separator();
-                        ImGui::Text( "Prefetch Index : %u", m_jamSliceReplayState.m_riffPrefetchIndex );
-                        ImGui::Text( "Playback Index : %u", m_jamSliceReplayState.m_currentRiffIndex );
-                        ImGui::Separator();
-
-                        const auto triggerNextRiffSend = [this, &defaultPermutation]()
-                        {
-                            endlesss::live::RiffPtr riffPtr;
-                            m_jamSliceReplayState.m_riffsToSend.try_dequeue( riffPtr );
-
-                            m_rpClient.pushRiff( riffPtr->m_riffData, defaultPermutation );
-                            m_jamSliceReplayState.m_currentRiffSentAt.restart();
-
-                            m_jamSliceReplayState.m_currentRiffDurationInSeconds = riffPtr->getTimingDetails().m_lengthInSec - ( riffPtr->getTimingDetails().m_lengthInSecPerBar * 0.2 );
-                            m_jamSliceReplayState.m_replaySequenceLengthSeconds += riffPtr->getTimingDetails().m_lengthInSec;
-
-                            const auto currentRiffID = riffPtr->m_riffData.riff.couchID;
-                            const auto expectedRiffID = m_jamSliceSketch->m_slice->m_ids[m_jamSliceReplayState.m_currentRiffIndex];
-
-                            if ( currentRiffID != expectedRiffID )
-                                blog::error::app( "REPLAY : id mismatch; got {}, expected {}", currentRiffID, expectedRiffID );
-
-                            blog::app( "REPLAY : {} for {}", currentRiffID, m_jamSliceReplayState.m_currentRiffDurationInSeconds );
-                        };
-
-                        if ( m_jamSliceReplayState.m_state == JamSliceReplayState::State::Idle )
-                        {
-                            ImGui::Text( "Start Offset : %u", startOffsetIndex );
-                            if ( ImGui::Button( "Start At Selected" ) )
-                            {
-                                endlesss::live::RiffPtr currentRiffPtr = m_nowPlayingRiff;
-                                const auto currentRiff = currentRiffPtr.get();
-
-                                for ( std::size_t i = 0; i < m_jamSliceSketch->m_slice->m_ids.size(); i++ )
-                                {
-                                    if ( m_jamSliceSketch->m_slice->m_ids[i] == currentRiff->m_riffData.riff.couchID )
-                                    {
-                                        startOffsetIndex = i;
-                                        break;
-                                    }
-                                }
-                            }
-                            if ( ImGui::Button( "Begin" ) )
-                            {
-                                m_jamSliceReplayState.m_riffPrefetchIndex = startOffsetIndex;
-                                m_jamSliceReplayState.m_currentRiffIndex  = startOffsetIndex;
-
-                                m_jamSliceReplayState.m_state = JamSliceReplayState::State::Warmstart;
-
-                                for ( std::size_t p = 0; p < 4; p++ )
-                                {
-                                    blog::app( "REPLAY : prefetch[{}] = {}", m_jamSliceReplayState.m_riffPrefetchIndex, m_jamSliceSketch->m_slice->m_ids[m_jamSliceReplayState.m_riffPrefetchIndex + p] );
-
-                                    m_jamSliceReplayState.m_replayPipeline->requestRiff( {
-                                        {
-                                            m_jamSliceSketch->m_slice->m_jamID,
-                                            m_jamSliceSketch->m_slice->m_ids[m_jamSliceReplayState.m_riffPrefetchIndex]
-                                        },
-                                        defaultPermutation } );
-
-                                    m_jamSliceReplayState.m_riffPrefetchIndex++;
-                                }
-                            }
-                        }
-                        else if ( m_jamSliceReplayState.m_state == JamSliceReplayState::State::Warmstart )
-                        {
-                            ImGui::TextUnformatted( "Prefetching ..." );
-                            if ( m_jamSliceReplayState.m_riffsToSend.size_approx() > 2 )
-                            {
-                                triggerNextRiffSend();
-
-                                m_jamSliceReplayState.m_state = JamSliceReplayState::State::Primed;
-                            }
-                        }
-                        else if ( m_jamSliceReplayState.m_state == JamSliceReplayState::State::Primed )
-                        {
-                            ImGui::TextUnformatted( "Initial riff sent, waiting ..." );
-                            if ( ImGui::Button( "Continue" ) )
-                            {
-                                m_jamSliceReplayState.m_currentRiffSentAt.restart();
-                                m_jamSliceReplayState.m_state = JamSliceReplayState::State::Sending; 
-                            }
-                        }
-                        else if ( m_jamSliceReplayState.m_state == JamSliceReplayState::State::Sending )
-                        {
-                            const double secondsSinceLastSend = (double)m_jamSliceReplayState.m_currentRiffSentAt.deltaMs().count() * 0.001;
-
-                            ImGui::Text( "Sending [%i], %.2fs since last, current riff length is %.2fs", 
-                                m_jamSliceReplayState.m_currentRiffIndex, 
-                                secondsSinceLastSend,
-                                m_jamSliceReplayState.m_currentRiffDurationInSeconds );
-
-                            ImGui::Text( "Replay length : %.2fs", m_jamSliceReplayState.m_replaySequenceLengthSeconds );
-
-                            if ( secondsSinceLastSend >= m_jamSliceReplayState.m_currentRiffDurationInSeconds )
-                            {
-                                m_jamSliceReplayState.m_currentRiffIndex++;
-                                triggerNextRiffSend();
-
-                                if ( m_jamSliceReplayState.m_riffPrefetchIndex < m_jamSliceSketch->m_slice->m_ids.size() )
-                                {
-                                    blog::app( "REPLAY > prefetch[{}] = {}", m_jamSliceReplayState.m_riffPrefetchIndex, m_jamSliceSketch->m_slice->m_ids[m_jamSliceReplayState.m_riffPrefetchIndex] );
-
-                                    m_jamSliceReplayState.m_replayPipeline->requestRiff( {
-                                        {
-                                            m_jamSliceSketch->m_slice->m_jamID,
-                                            m_jamSliceSketch->m_slice->m_ids[m_jamSliceReplayState.m_riffPrefetchIndex]
-                                        }, defaultPermutation } );
-
-                                    m_jamSliceReplayState.m_riffPrefetchIndex++;
-                                }
-
-                                if ( m_jamSliceReplayState.m_currentRiffIndex + 1 >= m_jamSliceSketch->m_slice->m_ids.size() )
-                                {
-                                    m_jamSliceReplayState.m_state = JamSliceReplayState::State::Idle;
-                                }
-                            }
-                        }
-                    });
-                }
-
-                ImGui::EndMenu();
-            }
-        });
-
-
-        registerMainMenuEntry( 20, "EXPORT", [this]()
-        {
-//             ImGui::Separator();
-//             if ( ImGui::MenuItem( "Configure ..." ) )
-//             {
-//             }
-        });
-
-        registerMainMenuEntry( 30, "MIDI", [this]()
-        {
-            for ( const auto& device : m_midiInputDevices )
-            {
-                if ( ImGui::MenuItem( device.getName().c_str(), nullptr, false ) )
-                {
-                }
-            }
-            /*
-            auto* midiInput = m_mdMidi->getInputControl();
-            if ( midiInput != nullptr && !m_midiInputDevices.empty() )
-            {
-                uint32_t openedIndex;
-                const bool hasOpenPort = midiInput->getOpenPortIndex( openedIndex );
-
-                for ( uint32_t inpIdx = 0; inpIdx < (uint32_t)m_midiInputPortNames.size(); inpIdx++ )
-                {
-                    const bool thisPortIsOpen = hasOpenPort && (openedIndex == inpIdx);
-
-                    if ( ImGui::MenuItem( m_midiInputPortNames[inpIdx].c_str(), nullptr, thisPortIsOpen ) )
-                    {
-                        if ( thisPortIsOpen )
-                            midiInput->closeInputPort();
-                        else
-                            midiInput->openInputPort( inpIdx );
-                    }
-                }
-            }
-            else
-            {
-                ImGui::MenuItem( "Unavailable", nullptr, nullptr, false );
-            }
-            */
-        });
-    }
-#endif 
-
 protected:
 
 
@@ -519,9 +417,6 @@ protected:
     // for IDs that we don't recognise as the normal jam library might be missing jams the user has left etc
     endlesss::types::JamIDToNameMap         m_jamHistoricalFromWarehouse;
 
-
-    base::EventListenerID                   m_eventListenerRiffChange;
-    base::EventListenerID                   m_eventListenerOpComplete;
 
 
     mix::StemDataProcessor                  m_stemDataProcessor;
@@ -592,37 +487,34 @@ protected:
     }
 
 
-    void handleNewRiffPlaying( const base::IEvent& eventPtr )
+    void event_MixerRiffChange( const events::MixerRiffChange* eventData )
     {
-        ABSL_ASSERT( eventPtr.getID() == events::MixerRiffChange::ID );
-
-        const events::MixerRiffChange* riffChangeEvent = dynamic_cast<const events::MixerRiffChange*>( &eventPtr );
-        ABSL_ASSERT( riffChangeEvent != nullptr );
-
-        m_nowPlayingRiff = riffChangeEvent->m_riff;
+        m_nowPlayingRiff = eventData->m_riff;
 
         // might be a empty riff, only track actual riffs
-        if ( riffChangeEvent->m_riff != nullptr )
+        if ( eventData->m_riff != nullptr )
             m_riffsDequedByMixer.emplace( m_nowPlayingRiff->m_riffData.riff.couchID );
     }
 
-    void handleOperationComplete( const base::IEvent& eventPtr )
+    void event_OperationComplete( const events::OperationComplete* eventData )
     {
-        ABSL_ASSERT( eventPtr.getID() == events::OperationComplete::ID );
-
-        const events::OperationComplete* opCompleteEvent = dynamic_cast<const events::OperationComplete*>(&eventPtr);
-        ABSL_ASSERT( opCompleteEvent != nullptr );
-
-        m_permutationOperationImGuiMap.remove( opCompleteEvent->m_id );
+        m_permutationOperationImGuiMap.remove( eventData->m_id );
     }
 
     endlesss::types::RiffPlaybackAbstraction    m_riffPlaybackAbstraction;
 
     base::BiMap< base::OperationID, ImGuiID >   m_permutationOperationImGuiMap;
 
+    base::EventListenerID                       m_eventLID_MixerRiffChange = base::EventListenerID::invalid();
+    base::EventListenerID                       m_eventLID_OperationComplete = base::EventListenerID::invalid();
+
+
 protected:
     endlesss::types::JamCouchID     m_currentViewedJam;
     std::string                     m_currentViewedJamName;
+
+    std::optional< endlesss::types::RiffIdentity >  m_currentViewedJamScrollToRiff = std::nullopt;
+
 
 // data and callbacks used to react to changes from the warehouse
 protected:
@@ -642,6 +534,7 @@ protected:
         m_warehouseContentsReport = report;
         m_warehouseContentsReportJamIDs.clear();
         m_warehouseContentsReportJamTitles.clear();
+        m_warehouseContentsReportJamTitlesForSort.clear();
         m_warehouseContentsReportJamTimestamp.clear();
         m_warehouseContentsReportJamInFlux.clear();
         m_warehouseContentsReportJamInFluxMoment.clear();
@@ -655,6 +548,7 @@ protected:
             {
                 m_warehouseContentsReportJamTimestamp.emplace_back( jamData.m_timestampOrdering );
                 m_warehouseContentsReportJamTitles.emplace_back( jamData.m_displayName );
+                m_warehouseContentsReportJamTitlesForSort.emplace_back( base::StrToLwrExt( jamData.m_displayName ) );
                 return;
             }
 
@@ -668,12 +562,14 @@ protected:
             // take anything that isn't a failure
             if ( lookupResult != endlesss::services::IJamNameCacheServices::LookupResult::NotFound )
             {
+                m_warehouseContentsReportJamTitlesForSort.emplace_back( base::StrToLwrExt( resolvedName ) );
                 m_warehouseContentsReportJamTitles.emplace_back( std::move(resolvedName) );
                 return;
             }
 
             // TODO: use the new jam name remote resolver to make async request for this
             m_warehouseContentsReportJamTitles.emplace_back( "[ Unknown ID ]" );
+            m_warehouseContentsReportJamTitlesForSort.emplace_back( "[ unknown id ]" );
         };
 
         for ( auto jIdx = 0; jIdx < m_warehouseContentsReport.m_jamCouchIDs.size(); jIdx++ )
@@ -721,8 +617,8 @@ protected:
                 switch ( m_warehouseContentsSortMode )
                 {
                     case WarehouseContentsSortMode::ByName:
-                        return m_warehouseContentsReportJamTitles[lhsIdx] <
-                               m_warehouseContentsReportJamTitles[rhsIdx];
+                        return m_warehouseContentsReportJamTitlesForSort[lhsIdx] <
+                               m_warehouseContentsReportJamTitlesForSort[rhsIdx];
 
                     case WarehouseContentsSortMode::ByJoinTime:
                         return m_warehouseContentsReportJamTimestamp[lhsIdx] <
@@ -742,15 +638,16 @@ protected:
         generateWarehouseContentsSortOrder();
     }
 
+    std::unique_ptr< endlesss::toolkit::Warehouse > m_warehouse;
 
     std::string                                     m_warehouseWorkState;
     bool                                            m_warehouseWorkUnderway = false;
-
 
     std::mutex                                      m_warehouseContentsReportMutex;
     endlesss::toolkit::Warehouse::ContentsReport    m_warehouseContentsReport;
     endlesss::types::JamCouchIDSet                  m_warehouseContentsReportJamIDs;
     std::vector< std::string >                      m_warehouseContentsReportJamTitles;
+    std::vector< std::string >                      m_warehouseContentsReportJamTitlesForSort;
     std::vector< int64_t >                          m_warehouseContentsReportJamTimestamp;
     std::vector< bool >                             m_warehouseContentsReportJamInFlux;
     std::vector< spacetime::Moment >                m_warehouseContentsReportJamInFluxMoment;
@@ -764,37 +661,6 @@ protected:
         // local copy of warehouse lookup to avoid threading drama
         endlesss::types::JamCouchIDSet      m_warehouseJamIDs;
     };
-
-
-
-protected:
-
-    struct JamSliceReplayState
-    {
-        enum class State
-        {
-            Idle,
-            Warmstart,
-            Primed,
-            Sending,
-        }                   m_state = State::Idle;
-
-        std::size_t         m_riffPrefetchIndex = 0;
-
-        double              m_jamSequenceLengthSeconds = 0;
-        double              m_replaySequenceLengthSeconds = 0;
-
-        std::size_t         m_currentRiffIndex = 0;
-        double              m_currentRiffDurationInSeconds = 0;
-        spacetime::Moment   m_currentRiffSentAt;
-
-        RiffPipeline        m_replayPipeline;
-
-        mcc::ReaderWriterQueue< endlesss::live::RiffPtr >
-                            m_riffsToSend;
-    };
-    JamSliceReplayState     m_jamSliceReplayState;
-
 
 
 public:
@@ -832,7 +698,7 @@ protected:
 
     gfx::Sketchbook     m_sketchbook;
 
-    void syncJamViewLayoutAndAsyncRendering( const ImVec2& dimensions, const float browserHeight )
+    void syncJamViewLayoutAndAsyncRendering( const ImVec2& dimensions, const int32_t browserHeight )
     {
         const ViewDimension viewDim( dimensions );
 
@@ -907,7 +773,7 @@ protected:
         std::vector< std::string >          m_labelText;
 
         std::vector< float >                m_jumpTargetsY;
-        std::vector< bool >                 m_heatmapRows;
+        std::vector< uint32_t >             m_sightlineRowOn;
 
         UserHashFMap                        m_jamViewRenderUserHashFMap;
 
@@ -917,7 +783,7 @@ protected:
         int32_t                             m_jamViewFullHeight = 0;
 
         std::vector< gfx::SketchUploadPtr > m_textures;
-        gfx::SketchUploadPtr                m_heatMapUpload;
+        gfx::SketchUploadPtr                m_sightlineUpload;
 
         void prepare( endlesss::toolkit::Warehouse::JamSlicePtr&& slicePtr )
         {
@@ -926,7 +792,7 @@ protected:
 
         void raster(
             gfx::Sketchbook& sketchbook,
-            const JamVisualisation& jamVis,
+            const JamVisualisation& jamViz,
             const ViewDimension& viewDimensions,
             const int32_t viewBrowserHeight )
         {
@@ -936,7 +802,7 @@ protected:
             m_textures.clear();
             m_jamViewRenderUserHashFMap.clear();
 
-            m_heatMapUpload.reset();
+            m_sightlineUpload.reset();
 
             const endlesss::toolkit::Warehouse::JamSlice& slice = *m_slice;
             const int32_t totalRiffs = (int32_t)slice.m_ids.size();
@@ -959,44 +825,43 @@ protected:
 
             // these counts are purely speculative, we don't know how large the final payloads will be
             m_jumpTargetsY.clear();
-            m_jumpTargetsY.reserve( totalRiffs );
-            m_heatmapRows.clear();
-            m_heatmapRows.reserve( totalRiffs );
+            m_jumpTargetsY.reserve( totalRiffs >> 2 );
+            m_sightlineRowOn.clear();
+            m_sightlineRowOn.reserve( totalRiffs >> 2 );
 
 
-            const uint32_t  riffCubeSize  = jamVis.getRiffCubeSize();
-            const float     riffCubeSizeF = static_cast<float>( jamVis.getRiffCubeSize() );
+            // get the size of cubes to be rendering
+            const uint32_t  riffCubeSize        = jamViz.getRiffCubeSize();
+            const uint32_t  riffCubeCorner      = jamViz.getRiffCubeSize() / 4;
+            const float     riffCubeSizeF       = static_cast<float>( jamViz.getRiffCubeSize() );
 
-            std::array< bool,     JamVisualisation::NameHighlightCount > nameHighlightOn;
-            std::array< uint64_t, JamVisualisation::NameHighlightCount > nameHighlightHashes;
-            std::array< uint32_t, JamVisualisation::NameHighlightCount > nameHighlightColourU32;
-            for ( auto nH = 0; nH < JamVisualisation::NameHighlightCount; nH++ )
-            {
-                nameHighlightOn[nH]             = !jamVis.m_nameHighlighting[nH].m_name.empty();
-                if ( nameHighlightOn[nH] )
-                {
-                    nameHighlightHashes[nH]     = absl::Hash< std::string >{}( jamVis.m_nameHighlighting[nH].m_name );
-                    nameHighlightColourU32[nH]  = ImGui::ColorConvertFloat4ToU32_BGRA_Flip( jamVis.m_nameHighlighting[nH].m_colour );
-                }
-            }
+            ABSL_ASSERT( riffCubeSize > 1 );
+
+            // get cached data for doing user highlighting
+            const auto vizUserHighlight1        = jamViz.m_userHighlight1.makeCached();
+            const auto vizUserHighlight2        = jamViz.m_userHighlight2.makeCached();
+
+            // convert uniform colour choice in case it is in use
+            const uint32_t bgraUniformColourU32 = ImGui::ColorConvertFloat4ToU32_BGRA_Flip( jamViz.m_uniformColour );
 
 
-            uint32_t bgraUniformColourU32 = ImGui::ColorConvertFloat4ToU32_BGRA_Flip( ImVec4(jamVis.m_uniformColour) );
-
-
-
-            const int32_t cellColumns   = std::max( 16, (int32_t)std::floor( (float)viewDimensions.m_width / riffCubeSizeF ) );
+            // compute how many cells we render per row
+            const int32_t cellColumns           = std::max( 16, (int32_t)std::floor( (float)viewDimensions.m_width / riffCubeSizeF ) );
             
-            const int32_t pageHeight = 1024;
-            const int32_t cellsPerPage = (int32_t)std::floor( (pageHeight - riffCubeSize) / riffCubeSizeF );
+            // given a fixed texture page height, mostly-accurate guess at how many rows we can fit in
+            // the width of the page is determined by the size of the window, rounded up to the next pow2
+            const int32_t pageHeight            = 1024;
+            const int32_t cellRowsPerPage       = (int32_t)std::floor( (pageHeight - riffCubeSize) / riffCubeSizeF );
 
-            gfx::DimensionsPow2 sketchPageDim( viewDimensions.m_width, pageHeight );
+            // go reserve us a texture page to start drawing on
+            // each time we exhaust a page, we fetch a new identically sized one from the book and continue
+            const gfx::DimensionsPow2 sketchPageDim( viewDimensions.m_width, pageHeight );
+            gfx::SketchBufferPtr activeSketch = sketchbook.getBuffer( sketchPageDim );
+
 
             int32_t cellX = 0;
             int32_t cellY = 0;
             int32_t fullCellY = 0;
-
-            gfx::SketchBufferPtr activeSketch = sketchbook.getBuffer( sketchPageDim );
 
             const auto commitCurrentPage = [&]()
             {
@@ -1008,27 +873,32 @@ protected:
                 m_textures.emplace_back( sketchbook.scheduleBufferUploadToGPU( std::move( activeSketch ) ) );
             };
 
-            bool bHeatmapActivation = false;
+            uint32_t sightlineRowColour = 0;
 
             const auto incrementCellY = [&]()
             {
-                if ( cellY + 1 >= cellsPerPage )
+                // run out of page space?
+                if ( cellY + 1 >= cellRowsPerPage )
                 {
+                    // send this off to be pushed to GPU, pull a fresh page out ready to scribble on
                     commitCurrentPage();
 
                     activeSketch = sketchbook.getBuffer( sketchPageDim );
                     cellY = 0;
                 }
+                // space left on the current page, just increment cellY
                 else
                 {
                     cellY++;
                 }
 
-                m_heatmapRows.emplace_back( bHeatmapActivation );
-                bHeatmapActivation = false;
+                // log if the most recent row needed an entry in the sightline map (then auto-resets that tracking variable)
+                m_sightlineRowOn.emplace_back( sightlineRowColour );
+                sightlineRowColour = 0;
 
                 fullCellY++;
             };
+            
 
             const float imguiSmallFontSize = 13.0f; // TODO get this from imgio
             const float labelCenteringOffset = (riffCubeSize * 0.5f) - (imguiSmallFontSize * 0.5f);
@@ -1065,7 +935,7 @@ protected:
                     const uint32_t riffScale = slice.m_scales[riffI];
                     const auto     riffDay   = spacetime::getDayIndex( slice.m_timestamps[riffI] );
 
-                    switch ( jamVis.m_lineBreakOn )
+                    switch ( jamViz.m_lineBreakOn )
                     {
                         default:
                         case JamVisualisation::LineBreakOn::Never:
@@ -1112,7 +982,7 @@ protected:
                 }
 
                 bool addRiffGap = false;
-                switch ( jamVis.m_riffGapOn )
+                switch ( jamViz.m_riffGapOn )
                 {
                     default:
                     case JamVisualisation::RiffGapOn::Never:
@@ -1146,13 +1016,13 @@ protected:
 
                 float colourT = 0.0f;
 
-                switch ( jamVis.m_colourStyle )
+                switch ( jamViz.m_colourMode )
                 {
-                    case JamVisualisation::ColourStyle::Uniform:
+                    case JamVisualisation::ColouringMode::Uniform:
                         // override later
                         break;
 
-                    case JamVisualisation::ColourStyle::UserIdentity:
+                    case JamVisualisation::ColouringMode::UserIdentity:
                     {
                         if ( m_jamViewRenderUserHashFMap.contains( userHash ) )
                         {
@@ -1169,25 +1039,25 @@ protected:
                     }
                     break;
 
-                    case JamVisualisation::ColourStyle::UserChangeRate:
+                    case JamVisualisation::ColouringMode::UserChangeRate:
                     {
                         if ( riffI > 0 && userHash != lastUserHash )
                             runningColourV = std::clamp( runningColourV + 0.15f, 0.0f, 0.999f );
                         else
-                            runningColourV *= jamVis.m_changeRateDecay;
+                            runningColourV *= jamViz.m_changeRateDecay;
 
                         colourT = runningColourV;
                     }
                     break;
 
-                    case JamVisualisation::ColourStyle::StemChurn:
+                    case JamVisualisation::ColouringMode::StemChurn:
                     {
                         static constexpr float cStemDeltaRecpF = 1.0f / 8.0f;
                         colourT = static_cast<float>(slice.m_deltaStem[riffI]) * cStemDeltaRecpF;
                     }
                     break;
 
-                    case JamVisualisation::ColourStyle::StemTimestamp:
+                    case JamVisualisation::ColouringMode::StemTimestamp:
                     {
                         const auto stemTimestamp    = slice.m_timestamps[riffI];
 
@@ -1200,35 +1070,46 @@ protected:
                     }
                     break;
 
-                    case JamVisualisation::ColourStyle::Scale:
+                    case JamVisualisation::ColouringMode::Scale:
                     {
                         static constexpr float cScaleCountRecpF = 1.0f / static_cast<float>( endlesss::constants::cScaleNames.size() - 1 );
                         colourT = static_cast<float>( slice.m_scales[riffI] ) * cScaleCountRecpF;
                     }
                     break;
 
-                    case JamVisualisation::ColourStyle::Root:
+                    case JamVisualisation::ColouringMode::Root:
                     {
                         static constexpr float cRootCountRecpF = 1.0f / static_cast<float>( endlesss::constants::cRootNames.size() - 1 );
                         colourT = static_cast<float>( slice.m_roots[riffI] ) * cRootCountRecpF;
                     }
                     break;
 
-                    case JamVisualisation::ColourStyle::BPM:
+                    case JamVisualisation::ColouringMode::BPM:
                     {
                         const float shiftRate = (float)std::clamp(
-                            slice.m_bpms[riffI] - jamVis.m_bpmMinimum,
+                            slice.m_bpms[riffI] - jamViz.m_bpmMinimum,
                             0.0f,
-                            jamVis.m_bpmMaximum ) / (jamVis.m_bpmMaximum - jamVis.m_bpmMinimum);
+                            jamViz.m_bpmMaximum ) / (jamViz.m_bpmMaximum - jamViz.m_bpmMinimum);
 
                         colourT = shiftRate;
                     }
                     break;
                 }
 
+                const bool bActiveUserHighlight1 = vizUserHighlight1.m_active && ( vizUserHighlight1.m_nameHash == slice.m_userhash[riffI] );
+                const bool bActiveUserHighlight2 = vizUserHighlight2.m_active && ( vizUserHighlight2.m_nameHash == slice.m_userhash[riffI] );
+
+                // #todo
+                if ( bActiveUserHighlight2 )
+                    sightlineRowColour = vizUserHighlight2.m_highlightColour;
+                if ( bActiveUserHighlight1 )
+                    sightlineRowColour = vizUserHighlight1.m_highlightColour;
+
+
                 // sample from the gradient, or override with a uniform single manual choice
-                uint32_t cellColour = jamVis.colourSampleT( colourT ).bgrU32();
-                if ( jamVis.m_colourStyle == JamVisualisation::ColourStyle::Uniform )
+                auto cellColourF = jamViz.getHeatmapColourAtT( colourT );
+                auto cellColour = cellColourF.bgrU32();
+                if ( jamViz.m_colourMode == JamVisualisation::ColouringMode::Uniform )
                     cellColour = bgraUniformColourU32;
 
 
@@ -1249,27 +1130,16 @@ protected:
                 m_riffToBitmapOffset.try_emplace( cellRiffCouchID, ImVec2{ (float)cellPixelX, (float)cellPixelFullY } );
 
 
-
-                bool userHighlightApply = false;
-                uint32_t userHighlightColour = 0;
-                for ( auto nH = 0; nH < JamVisualisation::NameHighlightCount; nH++ )
-                {
-                    if ( nameHighlightOn[nH] &&
-                         slice.m_userhash[riffI] == nameHighlightHashes[nH] )
-                    {
-                        userHighlightColour = nameHighlightColourU32[nH];
-                        userHighlightApply  = true;
-                        bHeatmapActivation  = true;
-                        break;
-                    }
-                }
-
                 base::U32Buffer& activeBuffer = activeSketch->get();
 
-                for ( auto cellWriteY = 0; cellWriteY < riffCubeSize; cellWriteY++ )
+
+                for ( auto cellWriteY = 0U; cellWriteY < riffCubeSize; cellWriteY++ )
                 {
-                    for ( auto cellWriteX = 0; cellWriteX < riffCubeSize; cellWriteX++ )
+                    for ( auto cellWriteX = 0U; cellWriteX < riffCubeSize; cellWriteX++ )
                     {
+                        auto cellWriteXMirroredX = ( riffCubeSize - 1 ) - cellWriteX;
+                        auto cellWriteXMirroredY = ( riffCubeSize - 1 ) - cellWriteY;
+
                         const bool edge0 = (cellWriteX == 0 ||
                             cellWriteY == 0 ||
                             cellWriteX == riffCubeSize - 1 ||
@@ -1279,18 +1149,38 @@ protected:
                             cellWriteX == riffCubeSize - 2 ||
                             cellWriteY == riffCubeSize - 2);
 
-                        if ( edge0 )
+                        const bool cornerTL = (cellWriteX + cellWriteY) <= riffCubeCorner;
+                        const bool edgeTL   = (cellWriteX + cellWriteY) <= riffCubeCorner + 2;
+
+                        const bool cornerBR = (cellWriteXMirroredX + cellWriteY) <= riffCubeCorner;
+                        const bool edgeBR   = (cellWriteXMirroredX + cellWriteY) <= riffCubeCorner + 2;
+
+                        if ( cornerTL )
                         {
-                            if ( userHighlightApply )
+                            if ( bActiveUserHighlight1 )
                             {
                                 activeBuffer(
                                     cellPixelX + cellWriteX,
-                                    cellPixelY + cellWriteY ) = userHighlightColour;
+                                    cellPixelY + cellWriteY ) = vizUserHighlight1.m_highlightColour;
                             }
+                        }
+                        else if ( cornerBR && bActiveUserHighlight2 )
+                        {
+                            activeBuffer(
+                                cellPixelX + cellWriteX,
+                                cellPixelY + cellWriteY ) = vizUserHighlight2.m_highlightColour;
+                        }
+                        else if ( edgeTL && bActiveUserHighlight1 )
+                        {
+                        }
+                        else if ( edgeBR && bActiveUserHighlight2 )
+                        {
+                        }
+                        else if ( edge0 )
+                        {
                         }
                         else if ( edge1 )
                         {
-
                         }
                         else
                         {
@@ -1316,31 +1206,35 @@ protected:
             if ( cellX != 0 )
             {
                 m_jamViewFullHeight += riffCubeSize;
-                m_heatmapRows.emplace_back( bHeatmapActivation );
+                m_sightlineRowOn.emplace_back( sightlineRowColour );
             }
 
             commitCurrentPage();
 
+            // build the sightline texture for rendering text to the scroll bar
+            // this serves as a compact overview of jams of any size - eg. viewing where your riffs might be amongst
+            // 40,000 others without randomly scrolling around looking for markers
             {
-                const auto heatmapHeight     = static_cast<uint32_t>( m_jamViewFullHeight < viewBrowserHeight ? m_jamViewFullHeight : viewBrowserHeight );
-                const auto heatmapHeightPow2 = base::nextPow2( heatmapHeight );
+                const auto sightlineHeight     = static_cast<uint32_t>( m_jamViewFullHeight < viewBrowserHeight ? m_jamViewFullHeight : viewBrowserHeight );
+                const auto sightlineHeightPow2 = base::nextPow2( sightlineHeight );
 
-                gfx::DimensionsPow2 heatmapDim( 1, heatmapHeightPow2 );
+                gfx::DimensionsPow2 sightlineDim( 1, sightlineHeightPow2 );
 
-                gfx::SketchBufferPtr heatMapBuffer = sketchbook.getBuffer( heatmapDim );
-                heatMapBuffer->setExtents( { 1, heatmapHeight } );
+                gfx::SketchBufferPtr sightlineBuffer = sketchbook.getBuffer( sightlineDim );
+                sightlineBuffer->setExtents( { 1, sightlineHeight } );
                 {
-                    base::U32Buffer& heapMap = heatMapBuffer->get();
+                    base::U32Buffer& sightlineMap = sightlineBuffer->get();
 
-                    const uint32_t heatmapRowCount = static_cast<uint32_t>( m_heatmapRows.size() );
-                    const double rowsPerPixel = (double)heatmapHeight / (double)heatmapRowCount;
+                    const uint32_t sightlineRowCount = static_cast<uint32_t>( m_sightlineRowOn.size() );
+                    const double rowsPerPixel = (double)sightlineHeight / (double)sightlineRowCount;
 
-                    bool heatState = false;
+                    uint32_t sightColour = 0;
                     double pixelD = 0;
                     uint32_t pixelI = 0;
-                    for ( auto hmR = 0U; hmR < heatmapRowCount; hmR++ )
+                    for ( auto hmR = 0U; hmR < sightlineRowCount; hmR++ )
                     {
-                        heatState |= m_heatmapRows[hmR];
+                        if ( m_sightlineRowOn[hmR] != 0 )
+                            sightColour = m_sightlineRowOn[hmR];
 
                         pixelD += rowsPerPixel;
 
@@ -1349,16 +1243,15 @@ protected:
                         {
                             for ( auto hmY = pixelI; hmY < newPixelI; hmY++ )
                             {
-                                heapMap( 0, hmY ) = heatState ? 0xffffffff : 0;
+                                sightlineMap( 0, hmY ) = sightColour;
                             }
                             pixelI = newPixelI;
-                            heatState = false;
+                            sightColour = 0;
                         }
                     }
                 }
-                m_heatMapUpload = sketchbook.scheduleBufferUploadToGPU( std::move( heatMapBuffer ) );
+                m_sightlineUpload = sketchbook.scheduleBufferUploadToGPU( std::move( sightlineBuffer ) );
             }
-
 
             m_syncToUI = true;
         }
@@ -1379,6 +1272,59 @@ protected:
     JamSliceSketchPtr                           m_jamSliceSketch;
 
 
+    using RiffTagMap = absl::flat_hash_map< endlesss::types::RiffCouchID, endlesss::types::RiffTag >;
+    using RiffTagSet = absl::flat_hash_set< endlesss::types::RiffCouchID >;
+
+    endlesss::types::JamCouchID                 m_jamTaggingJamID;
+    RiffTagMap                                  m_jamTaggingMap;    // full map of riff -> tag data
+    RiffTagSet                                  m_jamTaggingSet;    // simplified set of 'does this riff ID have a tag'
+    std::vector< endlesss::types::RiffTag >     m_jamTaggingVector; // flat data array returned from db query; kept around to try and reuse the memory
+
+    base::EventListenerID                       m_eventLID_RiffTagAction            = base::EventListenerID::invalid();
+    base::EventListenerID                       m_eventLID_RequestNavigationToRiff  = base::EventListenerID::invalid();
+
+
+
+    void beginChangeToViewJam( const endlesss::types::JamCouchID& jamID, const endlesss::types::RiffIdentity* optionalRiffScrollTo = nullptr  )
+    {
+        if ( isJamBeingSynced( jamID ) )
+            return;
+
+        // NB currently we don't check to see if the warehouse data had changed which would mean we DO need to reissue
+        // the view request / fetch new data TODO fix
+        // if ( m_currentViewedJam != jamID )
+        {
+            clearJamSlice();
+
+            // change which jam we're viewing, reset active riff hover in the process as this will invalidate it
+            m_currentViewedJam = jamID;
+            m_jamSliceHoveredRiffIndex = -1;
+
+            const auto lookupResult = lookupNameForJam( m_currentViewedJam, m_currentViewedJamName );
+            if ( lookupResult == endlesss::services::IJamNameCacheServices::LookupResult::NotFound )
+            {
+                m_currentViewedJamName = "[ Unknown ]";
+            }
+
+            m_warehouse->addJamSliceRequest( m_currentViewedJam, [this](
+                const endlesss::types::JamCouchID& jamCouchID,
+                endlesss::toolkit::Warehouse::JamSlicePtr&& resultSlice )
+                {
+                    newJamSliceGenerated( jamCouchID, std::move( resultSlice ) );
+                });
+        }
+
+        // we have a riff to scroll to once the view is built
+        m_currentViewedJamScrollToRiff = std::nullopt;
+        if ( optionalRiffScrollTo != nullptr )
+        {
+            m_currentViewedJamScrollToRiff = *optionalRiffScrollTo;
+        }
+
+        // force-switch over to make the jam view in focus
+        ImGui::MakeTabVisible( "###jam_view" );
+    }
+
     void clearJamSlice()
     {
         std::scoped_lock<std::mutex> sliceLock( m_jamSliceMapLock );
@@ -1386,6 +1332,17 @@ protected:
         m_jamSlice              = nullptr;
         m_jamSliceRenderState   = JamSliceRenderState::Invalidated;
         m_jamSliceSketch        = nullptr;
+
+        // reset any latent scroll-to requests
+        m_currentViewedJamScrollToRiff = std::nullopt;
+
+        // purge the tag data
+        {
+            m_jamTaggingJamID = {};
+            m_jamTaggingMap.clear();
+            m_jamTaggingSet.clear();
+            m_jamTaggingVector.clear();
+        }
     }
 
     void newJamSliceGenerated(
@@ -1399,7 +1356,173 @@ protected:
         m_jamSliceSketch        = nullptr;
 
         m_jamSliceRenderChangePendingTimer.setToFuture( c_jamSliceRenderChangeDuration );
+
+        // fetch the tags for this jam
+        {
+            m_jamTaggingJamID = jamCouchID;
+            m_jamTaggingMap.clear();
+            m_jamTaggingSet.clear();
+            m_jamTaggingVector.clear();
+
+            const auto tagCount = m_warehouse->fetchTagsForJam( m_jamTaggingJamID, m_jamTaggingVector );
+
+            blog::app( FMTX( "fetched {} tags for jam {}" ), tagCount, m_jamTaggingJamID );
+
+            m_jamTaggingMap.reserve( tagCount );
+            m_jamTaggingSet.reserve( tagCount );
+            for ( const auto& tag : m_jamTaggingVector )
+            {
+                m_jamTaggingMap.emplace( tag.m_riff, tag );
+                m_jamTaggingSet.emplace( tag.m_riff );
+            }
+        }
     }
+
+    void event_RiffTagAction( const events::RiffTagAction* eventData )
+    {
+        if ( eventData->m_tag.m_jam == m_jamTaggingJamID )
+        {
+
+        }
+    }
+
+    void modalBasicErrorPopup( const char* title, std::string_view errorMessage )
+    {
+        const ImVec2 configWindowSize = ImVec2( 600.0f, 150.0f );
+        ImGui::SetNextWindowContentSize( configWindowSize );
+
+        if ( ImGui::BeginPopupModal( title, nullptr, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize ) )
+        {
+            const ImVec2 buttonSize( 240.0f, 32.0f );
+
+            ImGui::TextWrapped( errorMessage.data() );
+
+            ImGui::SeparatorBreak();
+
+            const auto panelRegionAvail = ImGui::GetContentRegionAvail();
+            {
+                const float alignButtonsToBase = panelRegionAvail.y - (buttonSize.y + 6.0f);
+                ImGui::Dummy( ImVec2( 0, alignButtonsToBase ) );
+            }
+
+            if ( ImGui::Button( "Close", buttonSize ) )
+                ImGui::CloseCurrentPopup();
+
+            ImGui::EndPopup();
+        }
+    }
+
+    void event_RequestNavigationToRiff( const events::RequestNavigationToRiff* eventData )
+    {
+        // get the jam we need to display to begin looking for the riff requested
+        const auto jamToNavigateTo = eventData->m_identity.getJamID();
+
+        // can't navigate to a in-flux jam, bail out early with a message
+        if ( isJamBeingSynced( jamToNavigateTo ) )
+        {
+            activateModalPopup( "Cannot View Jam", [this]( const char* title )
+                {
+                    static constexpr auto cJamViewError = "Cannot view this jam currently, it is being synchronised. Try again later.";
+                    modalBasicErrorPopup( title, cJamViewError );
+                });
+
+            return;
+        }
+
+
+        // go look up a display name for the jam in question; this should always resolve if the nav request came
+        // from any of our UI tools as they automatically resolve and store unknown jam name results upfront
+        std::string jamName;
+        const LookupResult jamNameLookup = lookupNameForJam( jamToNavigateTo, jamName );
+        if ( jamNameLookup == endlesss::services::IJamNameCacheServices::LookupResult::NotFound )
+        {
+            jamName = "Unknown Jam";
+        }
+
+        const auto haveSyncedJamIt = m_warehouseContentsReportJamIDs.find( jamToNavigateTo );
+        if ( haveSyncedJamIt == m_warehouseContentsReportJamIDs.end() )
+        {
+            activateModalPopup( "Sync Missing Jam?", [this, jamToNavigateTo, jamNameResolved = std::move( jamName ), netCfg = getNetworkConfiguration()]( const char* title )
+            {
+                static endlesss::types::JamCouchID lastValidatedJamCouchID;
+
+                const ImVec2 configWindowSize = ImVec2( 620.0f, 250.0f );
+                ImGui::SetNextWindowContentSize( configWindowSize );
+
+                if ( ImGui::BeginPopupModal( title, nullptr, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize ) )
+                {
+                    const ImVec2 buttonSize( 240.0f, 32.0f );
+
+                    const bool bHasFullAccess = netCfg->hasAccess( endlesss::api::NetConfiguration::Access::Authenticated );
+
+
+                    ImGui::PushFont( m_mdFrontEnd->getFont( app::module::Frontend::FontChoice::MediumTitle ) );
+                    ImGui::TextUnformatted( jamNameResolved );
+                    ImGui::PopFont();
+                    ImGui::Separator();
+
+                    // describe the process
+                    if ( bHasFullAccess )
+                    {
+                        ImGui::TextWrapped( "To jump to the requested riff, we need to first download the jam it originated in. First validate you have permissions to do that; once successfully validated, the jam can be added to the warehouse and will begin downloading.\n\nOnce fully complete, re-try jumping to the chosen riff." );
+                    }
+                    else
+                    {
+                        ImGui::TextWrapped( "Cannot synchronise this jam without network authentication." );
+                    }
+                    ImGui::Spacing();
+                    
+                    const auto panelRegionAvail = ImGui::GetContentRegionAvail();
+                    {
+                        const float alignButtonsToBase = panelRegionAvail.y - (buttonSize.y + 6.0f);
+                        ImGui::Dummy( ImVec2( 0, alignButtonsToBase ) );
+                    }
+
+                    if ( ImGui::Button( "Cancel", buttonSize ) )
+                        ImGui::CloseCurrentPopup();
+
+                    if ( bHasFullAccess )
+                    {
+                        ImGui::SameLine( 0, panelRegionAvail.x - (buttonSize.x * 2.0f) );
+
+                        if ( lastValidatedJamCouchID == jamToNavigateTo )
+                        {
+                            if ( ImGui::Button( ICON_FA_CIRCLE_PLUS " Add Jam to Warehouse ...", buttonSize ) )
+                            {
+                                m_warehouseContentsReportJamInFluxSet.emplace( jamToNavigateTo ); // immediately add to the current in-flux set to represent things are in play
+                                m_warehouse->addOrUpdateJamSnapshot( jamToNavigateTo );
+
+                                ImGui::CloseCurrentPopup();
+                            }
+                        }
+                        else
+                        {
+                            if ( ImGui::Button( "Validate Permissions ...", buttonSize ) )
+                            {
+                                // test-run access to whatever they're asking for to avoid adding garbage to the warehouse
+                                endlesss::api::JamLatestState testPermissions;
+                                if ( testPermissions.fetch( *netCfg, jamToNavigateTo ) )
+                                {
+                                    lastValidatedJamCouchID = jamToNavigateTo;
+                                }
+                                else
+                                {
+                                    lastValidatedJamCouchID = {};
+                                }
+                            }
+                        }
+                    }
+
+                    ImGui::EndPopup();
+                }
+            });
+        }
+        else
+        {
+            beginChangeToViewJam( jamToNavigateTo, &eventData->m_identity );
+        }
+    }
+    
 
     void notifyForRenderUpdate()
     {
@@ -1490,31 +1613,65 @@ protected:
         return LookupResult::NotFound;
     }
 
+    // take a band### id and go find a public name for it, via circuitous means
     void event_RequestJamNameRemoteFetch( const events::RequestJamNameRemoteFetch* eventData )
     {
         getTaskExecutor().silent_async( [this, jamID = eventData->m_jamID, netCfg = getNetworkConfiguration()]()
             {
                 blog::api( FMTX( "name resolution for {}" ), jamID );
 
-                // use the permalink query to fetch the public name
+                // use the permalink query to fetch the original name and the full extended ID we can use to investigate further
                 endlesss::api::BandPermalinkMeta bandPermalink;
                 if ( bandPermalink.fetch( *netCfg, jamID ) )
                 {
                     if ( bandPermalink.errors.empty() )
                     {
-                        // NB this name can actually be different to the current name, we would need to reproduce what the 
-                        // /join page does and do a fetch of a single riff, giving us the current name
+                        // "/jam/296a74e8a64d254c0df007dda8a205d08e63915959ac5e912bdb8dde7077c638/join"
+                        //       ^->                                                          <-^
+                        //
+                        static constexpr auto cRegexTakeLongFormJamID = "jam/([^/]+)/join";
 
-                        // .. for now, just log out the name we found, this will be processed on the main thread
-                        m_jamNameRemoteFetchResultQueue.enqueue(
+                        std::regex regexLongForm( cRegexTakeLongFormJamID );
+
+                        const auto& pathExtraction = bandPermalink.data.path;
+                        std::smatch m;
+                        if ( !pathExtraction.empty() && std::regex_search( pathExtraction, m, regexLongForm ) )
+                        {
+                            // cut the big ID oot
+                            const std::string extendedID = m[1].str();
+
+                            endlesss::api::BandNameFromExtendedID bandNameFromExtended;
+                            if ( bandNameFromExtended.fetch( *netCfg, extendedID ) && bandNameFromExtended.ok )
                             {
-                                std::move( jamID ),
-                                std::move( bandPermalink.data.band_name )
-                            });
+                                // note any name updates, just for interest
+                                if ( bandNameFromExtended.data.name != bandPermalink.data.band_name )
+                                {
+                                    blog::api( FMTX( "name resolution; update from original [{}] to [{}]" ),
+                                        bandPermalink.data.band_name,
+                                        bandNameFromExtended.data.name
+                                    );
+                                }
+
+                                // .. for now, just log out the name we found, this will be processed on the main thread
+                                m_jamNameRemoteFetchResultQueue.enqueue(
+                                    {
+                                        std::move( jamID ),
+                                        std::move( bandNameFromExtended.data.name )
+                                    } );
+                            }
+                            else
+                            {
+                                blog::error::api( FMTX( "name resolution failure, BandNameFromExtendedID failed [{}]" ), bandNameFromExtended.message );
+                            }
+                        }
+                        else
+                        {
+                            blog::error::api( FMTX( "name resolution failure, long-form ID not recognised [{}]" ), pathExtraction );
+                        }
                     }
                     else
                     {
-                        blog::error::api( FMTX( "band name resolution failure, {}" ), bandPermalink.errors.front() );
+                        blog::error::api( FMTX( "name resolution failure, {}" ), bandPermalink.errors.front() );
                     }
                 }
             });
@@ -1524,7 +1681,6 @@ protected:
     JamNameRemoteFetchResultQueue   m_jamNameRemoteFetchResultQueue;
     float                           m_jamNameRemoteFetchUpdateBroadcastTimer = 0;
 };
-
 
 
 
@@ -1538,24 +1694,26 @@ int LoreApp::EntrypointOuro()
 
 
     // create warehouse instance to manage ambient downloading
-    endlesss::toolkit::Warehouse warehouse(
+    m_warehouse = std::make_unique<endlesss::toolkit::Warehouse>(
         m_storagePaths.value(),
-        m_networkConfiguration );
+        m_networkConfiguration,
+        m_appEventBus );
 
-    warehouse.upsertJamDictionaryFromCache( m_jamLibrary );             // update warehouse list of jam IDs -> names from the current cache
-    warehouse.extractJamDictionary( m_jamHistoricalFromWarehouse );     // pull full list of jam IDs -> names from warehouse as "historical" list
-
-    warehouse.setCallbackWorkReport( std::bind( &LoreApp::handleWarehouseWorkUpdate, this, stdp::_1, stdp::_2 ) );
-    warehouse.setCallbackContentsReport( std::bind( &LoreApp::handleWarehouseContentsReport, this, stdp::_1 ) );
+    m_warehouse->upsertJamDictionaryFromCache( m_jamLibrary );             // update warehouse list of jam IDs -> names from the current cache
+    m_warehouse->extractJamDictionary( m_jamHistoricalFromWarehouse );     // pull full list of jam IDs -> names from warehouse as "historical" list
+    
+    m_warehouse->setCallbackWorkReport( std::bind( &LoreApp::handleWarehouseWorkUpdate, this, stdp::_1, stdp::_2 ) );
+    m_warehouse->setCallbackContentsReport( std::bind( &LoreApp::handleWarehouseContentsReport, this, stdp::_1 ) );
 
     WarehouseJamBrowserBehaviour warehouseJamBrowser;
     warehouseJamBrowser.fnIsDisabled = [&warehouseJamBrowser]( const endlesss::types::JamCouchID& newJamCID )
     {
         return warehouseJamBrowser.m_warehouseJamIDs.contains( newJamCID );
     };
-    warehouseJamBrowser.fnOnSelected = [&warehouse]( const endlesss::types::JamCouchID& newJamCID )
+    warehouseJamBrowser.fnOnSelected = [this]( const endlesss::types::JamCouchID& newJamCID )
     {
-        warehouse.addOrUpdateJamSnapshot( newJamCID );
+        m_warehouseContentsReportJamInFluxSet.emplace( newJamCID ); // immediately add to the current in-flux set to represent things are in play
+        m_warehouse->addOrUpdateJamSnapshot( newJamCID );
     };
 
 
@@ -1584,14 +1742,16 @@ int LoreApp::EntrypointOuro()
     // default to viewing logged-in user in the jam view highlight
     if ( bHasValidEndlesssAuth )
     {
-        m_jamVisualisation.m_nameHighlighting[0].m_name     = m_networkConfiguration->auth().user_id;
-        m_jamVisualisation.m_nameHighlighting[0].m_colour   = ImVec4( 1.0f, 0.95f, 0.8f, 1.0f );
+        m_jamVisualisation.m_userHighlight1.m_user.setUsername( m_networkConfiguration->auth().user_id );
     }
 
-    m_vibes = std::make_unique<vx::Vibes>();
-    if ( const auto vibeStatus = m_vibes->initialize( *this ); !vibeStatus.ok() )
+    if ( m_configPerf.enableVibesRenderer )
     {
-        blog::error::app( FMTX( "Bad vibes : {}" ), vibeStatus.ToString() );
+        m_vibes = std::make_unique<vx::Vibes>();
+        if ( const auto vibeStatus = m_vibes->initialize( *this ); !vibeStatus.ok() )
+        {
+            blog::error::app( FMTX( "Bad vibes : {}" ), vibeStatus.ToString() );
+        }
     }
 
     m_sharedRiffView = std::make_unique<ux::SharedRiffView>( m_networkConfiguration, std::move( getEventBusClient() ) );
@@ -1610,12 +1770,12 @@ int LoreApp::EntrypointOuro()
     {
         base::EventBusClient m_eventBusClient( m_appEventBus );
 
-        m_eventListenerRiffChange = m_appEventBus->addListener( events::MixerRiffChange::ID, std::bind( &LoreApp::handleNewRiffPlaying, this, stdp::_1 ) );
-        m_eventListenerOpComplete = m_appEventBus->addListener( events::OperationComplete::ID, std::bind( &LoreApp::handleOperationComplete, this, stdp::_1 ) );
-
+        APP_EVENT_BIND_TO( MixerRiffChange );
+        APP_EVENT_BIND_TO( OperationComplete );
         APP_EVENT_BIND_TO( RequestJamNameRemoteFetch );
+        APP_EVENT_BIND_TO( RiffTagAction );
+        APP_EVENT_BIND_TO( RequestNavigationToRiff );
     }
-
 
     checkedCoreCall( "add stem listener", [this] { return m_stemDataProcessor.connect( m_appEventBus ); } );
 
@@ -1630,10 +1790,10 @@ int LoreApp::EntrypointOuro()
     m_riffPipeline = std::make_unique< endlesss::toolkit::Pipeline >(
         riffFetchProvider,
         m_configPerf.liveRiffInstancePoolSize,
-        [&warehouse, this]( const endlesss::types::RiffIdentity& request, endlesss::types::RiffComplete& result) -> bool
+        [this]( const endlesss::types::RiffIdentity& request, endlesss::types::RiffComplete& result) -> bool
         {
             // most requests can be serviced direct from the DB
-            if ( warehouse.fetchSingleRiffByID( request.getRiffID(), result ) )
+            if ( m_warehouse->fetchSingleRiffByID( request.getRiffID(), result ) )
                 return true;
 
             return endlesss::toolkit::Pipeline::defaultNetworkResolver( *m_networkConfiguration, request, result );
@@ -1665,25 +1825,7 @@ int LoreApp::EntrypointOuro()
             m_riffPipelineClearInProgress = false;
         });
 
-    m_jamSliceReplayState.m_replayPipeline = std::make_unique< endlesss::toolkit::Pipeline >(
-        riffFetchProvider,
-        4,
-        [&warehouse, this]( const endlesss::types::RiffIdentity& request, endlesss::types::RiffComplete& result ) -> bool
-        {
-            // most requests can be serviced direct from the DB
-            if ( warehouse.fetchSingleRiffByID( request.getRiffID(), result ) )
-                return true;
 
-            return endlesss::toolkit::Pipeline::defaultNetworkResolver( *m_networkConfiguration, request, result );
-        },
-        [this]( const endlesss::types::RiffIdentity& request, endlesss::live::RiffPtr& loadedRiff, const endlesss::types::RiffPlaybackPermutationOpt& )
-        {
-            if ( loadedRiff )
-                m_jamSliceReplayState.m_riffsToSend.enqueue( loadedRiff );
-        },
-        []()
-        {
-        });
 
     m_eventListenerRiffEnqueue = m_appEventBus->addListener( events::EnqueueRiffPlayback::ID, [this]( const base::IEvent& evt ) { onEvent_EnqueueRiffPlayback( evt ); } );
 
@@ -1706,11 +1848,17 @@ int LoreApp::EntrypointOuro()
         // tidy up any messages from our riff-sync background thread
         synchroniseRiffWork();
 
+
+        // async jam name resolution tasks
         {
             // see if we have any outstanding new jam name resolution results
             JamNameRemoteResolution jamNameRemoteResolution;
             if ( m_jamNameRemoteFetchResultQueue.try_dequeue( jamNameRemoteResolution ) )
             {
+                // plug this new resolved name directly back into the warehouse (upserting any existing ID)
+                m_warehouse->upsertSingleJamIDToName( jamNameRemoteResolution.first, jamNameRemoteResolution.second );
+
+                // and then also mirror it into the historical record we already pulled from the warehouse, so the data sets match
                 m_jamHistoricalFromWarehouse.emplace( jamNameRemoteResolution.first, std::move( jamNameRemoteResolution.second ) );
                 m_jamNameRemoteFetchUpdateBroadcastTimer = 1.0f;
             }
@@ -1725,6 +1873,58 @@ int LoreApp::EntrypointOuro()
                     getEventBusClient().Send< ::events::NotifyJamNameCacheUpdated >( 0 );
                     m_jamNameRemoteFetchUpdateBroadcastTimer = 0;
                 }
+            }
+        }
+
+
+        // for rendering state from the current riff;
+        // take a shared ptr copy here, just in case the riff is swapped out mid-tick
+        endlesss::live::RiffPtr currentRiffPtr = m_nowPlayingRiff;
+        const auto currentRiff = currentRiffPtr.get();
+
+        // optionally pop the stem debug analysis
+        if ( m_showStemAnalysis )
+        {
+            ImGui::ux::StemAnalysis( currentRiffPtr, m_mdAudio->getSampleRate() );
+        }
+
+        // update the Exchange data block; this also serves as a way to push sanitized beat / energy / playback 
+        // information around other parts of the app. this pulls data from a few different sources to try and 
+        // give a solid, accurate overview of what is coming out of the audio engine at this instant
+        {
+            // take basic riff & stem data from the Riff instance
+            endlesss::toolkit::Exchange::copyDetailsFromRiff( m_endlesssExchange, currentRiffPtr, m_currentViewedJamName.c_str() );
+
+            if ( currentRiff != nullptr )
+            {
+                // copy in the current stem energy/pulse data that may have arrived from the mixer
+                m_stemDataProcessor.copyToExchangeData( m_endlesssExchange );
+
+                // compute the progression (bar/percentage through riff) of playback based on the current sample, embed in Exchange
+                endlesss::live::RiffProgression playbackProgression;
+
+                const auto timingData = currentRiff->getTimingDetails();
+                timingData.ComputeProgressionAtSample(
+                    (uint64_t)mixPreview.getTimeInfoPtr()->samplePos,
+                    playbackProgression );
+
+                endlesss::toolkit::Exchange::copyDetailsFromProgression( m_endlesssExchange, playbackProgression );
+
+                // take a snapshot of the mixer layer gains and apply that to the exchange data so "stem gain" is 
+                // more representative of what's coming out of the audio pipeline
+                const auto currentMixPermutation = mixPreview.getCurrentPermutation();
+                for ( std::size_t i = 0; i < currentMixPermutation.m_layerGainMultiplier.size(); i++ )
+                    m_endlesssExchange.m_stemGain[i] *= currentMixPermutation.m_layerGainMultiplier[i];
+
+                // copy in the scope data
+                const dsp::Scope8::Result& scopeResult = m_mdAudio->getCurrentScopeResult();
+                static_assert(dsp::Scope8::FrequencyBucketCount == endlesss::toolkit::Exchange::ScopeBucketCount, "fft bucket count mismatch");
+                for ( std::size_t i = 0; i < endlesss::toolkit::Exchange::ScopeBucketCount; i++ )
+                    m_endlesssExchange.m_scope[i] = scopeResult[i];
+
+                // mark exchange as having a full complement of data
+                m_endlesssExchange.m_dataflags |= endlesss::toolkit::Exchange::DataFlags_Playback;
+                m_endlesssExchange.m_dataflags |= endlesss::toolkit::Exchange::DataFlags_Scope;
             }
         }
 
@@ -1781,13 +1981,21 @@ int LoreApp::EntrypointOuro()
                 }
 
                 ImGui::SameLine( 0, 8.0f );
-                if ( ImGui::BeginChild( "disk-recorders", ImVec2( 250.0f, 0 ) ) )
+                if ( ImGui::BeginChild( "disk-recorders", ImVec2( 200.0f, 0 ) ) )
                 {
                     ux::widget::DiskRecorder( *m_mdAudio, m_storagePaths->outputApp );
 
                     auto* mixRecordable = mixPreview.getRecordable();
                     if ( mixRecordable != nullptr )
                         ux::widget::DiskRecorder( *mixRecordable, m_storagePaths->outputApp );
+                }
+                ImGui::EndChild();
+
+                ImGui::SameLine();
+
+                if ( ImGui::BeginChild( "beat-box" ) )
+                {
+                    ImGui::ux::StemBeats( "##stem_beat", m_endlesssExchange, 18.0f, false );
                 }
                 ImGui::EndChild();
             }
@@ -1803,74 +2011,20 @@ int LoreApp::EntrypointOuro()
 #endif // OURO_FEATURE_VST24
         }
 
-
-
-        // for rendering state from the current riff;
-        // take a shared ptr copy here, just in case the riff is swapped out mid-tick
-        endlesss::live::RiffPtr currentRiffPtr = m_nowPlayingRiff;
-        const auto currentRiff = currentRiffPtr.get();
-
-        // optionally pop the stem debug analysis
-        if ( m_showStemAnalysis )
-        {
-            ImGui::ux::StemAnalysis( currentRiffPtr, m_mdAudio->getSampleRate() );
-        }
-
-        // update the Exchange data block; this also serves as a way to push sanitized beat / energy / playback 
-        // information around other parts of the app. this pulls data from a few different sources to try and 
-        // give a solid, accurate overview of what is coming out of the audio engine at this instant
-        {
-            // take basic riff & stem data from the Riff instance
-            endlesss::toolkit::Exchange::copyDetailsFromRiff( m_endlesssExchange, currentRiffPtr, m_currentViewedJamName.c_str() );
-
-            if ( currentRiff != nullptr )
-            {
-                // copy in the current stem energy/pulse data that may have arrived from the mixer
-                m_stemDataProcessor.copyToExchangeData( m_endlesssExchange );
-
-                // compute the progression (bar/percentage through riff) of playback based on the current sample, embed in Exchange
-                endlesss::live::RiffProgression playbackProgression;
-
-                const auto timingData = currentRiff->getTimingDetails();
-                timingData.ComputeProgressionAtSample(
-                    (uint64_t)mixPreview.getTimeInfoPtr()->samplePos,
-                    playbackProgression );
-
-                endlesss::toolkit::Exchange::copyDetailsFromProgression( m_endlesssExchange, playbackProgression );
-
-                // take a snapshot of the mixer layer gains and apply that to the exchange data so "stem gain" is 
-                // more representative of what's coming out of the audio pipeline
-                const auto currentMixPermutation = mixPreview.getCurrentPermutation();
-                for ( std::size_t i = 0; i < currentMixPermutation.m_layerGainMultiplier.size(); i++ )
-                    m_endlesssExchange.m_stemGain[i] *= currentMixPermutation.m_layerGainMultiplier[i];
-
-                // copy in the scope data
-                const dsp::Scope8::Result& scopeResult = m_mdAudio->getCurrentScopeResult();
-                static_assert(dsp::Scope8::FrequencyBucketCount == endlesss::toolkit::Exchange::ScopeBucketCount, "fft bucket count mismatch");
-                for ( std::size_t i = 0; i < endlesss::toolkit::Exchange::ScopeBucketCount; i++ )
-                    m_endlesssExchange.m_scope[i] = scopeResult[i];
-
-                // mark exchange as having a full complement of data
-                m_endlesssExchange.m_dataflags |= endlesss::toolkit::Exchange::DataFlags_Playback;
-                m_endlesssExchange.m_dataflags |= endlesss::toolkit::Exchange::DataFlags_Scope;
-            }
-        }
-
-
-        m_vibes->doImGui( m_endlesssExchange, this );
+        if ( m_vibes )
+            m_vibes->doImGui( m_endlesssExchange, this );
 
         m_mdMidi->processMessages( []( const app::midi::Message& ){ } );
 
         m_discordBotUI->imgui( *this );
 
+        mixPreview.imgui();
+
 
         {
-            mixPreview.imgui();
-
 
             if ( ImGui::Begin( ICON_FA_BARS " Riff Details###riff_details" ) )
             {
-
                 struct TableFixedColumn
                 {
                     constexpr TableFixedColumn( const char* title, const float width )
@@ -1883,18 +2037,18 @@ int LoreApp::EntrypointOuro()
                 };
 
                 static constexpr std::array< TableFixedColumn, 12 > RiffViewTable{ {
-                    { "",           15.0f  },
-                    { "",           15.0f  },
-                    { "",           10.0f  },
-                    { "User",       140.0f },
-                    { "Instr",      60.0f  },
-                    { "Preset",     140.0f },
-                    { "Gain",       45.0f  },
-                    { "Speed",      45.0f  },
-                    { "Rep",        30.0f  },
-                    { "Length",     65.0f  },
-                    { "Rate",       65.0f  },
-                    { "Size/KB",    65.0f  }
+                    { "",           15.0f  }, // 0 [M]
+                    { "",           15.0f  }, // 1 [S]
+                    { "",           10.0f  }, // 2 [gain]
+                    { "User",       140.0f }, // 3
+                    { "Instr",      65.0f  }, // 4
+                    { "Preset",     175.0f }, // 5
+                    { "Format",     65.0f  }, // 6
+                    { "Rate",       55.0f  }, // 7
+                    { "Gain",       45.0f  }, // 8
+                    { "Speed",      45.0f  }, // 9
+                    { "Length/s",   65.0f  }, // 10
+                    { "Size/KB",    60.0f  }  // 11
                 } };
 
                 // based on the screen space we have available, figure out which columns we can draw
@@ -1913,10 +2067,6 @@ int LoreApp::EntrypointOuro()
                     if ( visibleColumns >= maxColumns )
                         break;
                 }
-
-                ImGui::Dummy( ImVec2( 0.0f, 4.0f ) );
-                ImGui::ux::StemBeats( "##stem_beat", m_endlesssExchange, 18.0f, false );
-                ImGui::Dummy( ImVec2( 0.0f, 8.0f ) );
 
                 if ( visibleColumns >= 3 && // only bother if there's actually enough space to make it worth while viewing
                     ImGui::BeginTable( "##stem_stack", visibleColumns, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg ) )
@@ -2051,7 +2201,7 @@ int LoreApp::EntrypointOuro()
                         {
                             for ( std::size_t cI = 3; cI < visibleColumns; cI++ )
                             {
-                                ImGui::TableNextColumn(); 
+                                ImGui::TableNextColumn();
                                 ImGui::TextUnformatted( "" );
                             }
                         }
@@ -2065,15 +2215,72 @@ int LoreApp::EntrypointOuro()
                                 ImGui::TableNextColumn();
                                 switch ( cI )
                                 {
-                                case 3:  ImGui::TextUnformatted( stem->m_data.user.c_str() );           break;
-                                case 4:  ImGui::TextUnformatted( stem->m_data.getInstrumentName() );    break;
-                                case 5:  ImGui::TextUnformatted( stem->m_data.preset.c_str() );         break;
-                                case 6:  ImGui::Text( "%.2f", m_endlesssExchange.m_stemGain[sI] );      break;
-                                case 7:  ImGui::Text( "%.2f", currentRiff->m_stemTimeScales[sI] );      break;
-                                case 8:  ImGui::Text( "%ix", currentRiff->m_stemRepetitions[sI] );      break;
-                                case 9:  ImGui::Text( "%.2fs", currentRiff->m_stemLengthInSec[sI] );    break;
-                                case 10: ImGui::Text( "%i", stem->m_data.sampleRate );                  break;
-                                case 11: ImGui::Text( "%i", stem->m_data.fileLengthBytes / 1024 );      break;
+                                    case 3:
+                                    {
+                                        ImGui::TextUnformatted( stem->m_data.user );
+                                        break;
+                                    }
+                                    case 4:
+                                    {
+                                        ImGui::PushStyleColor( ImGuiCol_Text, stem->m_colourU32 );
+                                        ImGui::TextUnformatted( ICON_FC_FULL_BLOCK );
+                                        ImGui::PopStyleColor();
+                                        ImGui::SameLine( 0, 6.0f );
+                                        ImGui::TextUnformatted( stem->m_data.getInstrumentName() );
+                                        break;
+                                    }
+                                    case 5:
+                                    {
+                                        ImGui::TextUnformatted( stem->m_data.preset );
+                                        break;
+                                    }
+                                    case 6:
+                                    {
+                                        switch ( stem->getCompressionFormat() )
+                                        {
+                                            case endlesss::live::Stem::Compression::Unknown:
+                                                break;
+                                            case endlesss::live::Stem::Compression::OggVorbis:
+                                                ImGui::PushStyleColor( ImGuiCol_Text, colour::shades::blue_gray.neutralU32() );
+                                                ImGui::TextUnformatted( ICON_FA_CIRCLE " OggV" );
+                                                ImGui::PopStyleColor();
+                                                break;
+                                            case endlesss::live::Stem::Compression::FLAC:
+                                                ImGui::PushStyleColor( ImGuiCol_Text, colour::shades::sea_green.darkU32() );
+                                                ImGui::TextUnformatted( ICON_FA_CIRCLE_UP " FLAC");
+                                                ImGui::PopStyleColor();
+                                                break;
+                                        }
+                                        break;
+                                    }
+                                    case 7:
+                                    {
+                                        ImGui::Text( "%i", stem->m_data.sampleRate );
+                                        break;
+                                    }
+                                    case 8:
+                                    {
+                                        ImGui::Text( "%.2f", m_endlesssExchange.m_stemGain[sI] );
+                                        break;
+                                    }
+                                    case 9:
+                                    {
+                                        ImGui::Text( "%.2f", currentRiff->m_stemTimeScales[sI] );
+                                        break;
+                                    }
+                                    case 10:
+                                    {
+                                        ImGui::Text( "%.2f", currentRiff->m_stemLengthInSec[sI] );
+                                        break;
+                                    }
+                                    case 11:
+                                    {
+                                        ImGui::Text( "%i", stem->m_data.fileLengthBytes / 1024 );
+                                        break;
+                                    }
+                                    default:
+                                        ABSL_ASSERT( 0 );
+                                        break;
                                 }
                             }
                         }
@@ -2087,8 +2294,9 @@ int LoreApp::EntrypointOuro()
                     }
 
                     ImGui::EndTable();
-                    ImGui::Spacing();
 
+                    /*
+                    ImGui::Spacing();
                     {
                         const auto riffToolButtonSize = ImVec2( 180.0f, 0.0f );
 
@@ -2098,21 +2306,19 @@ int LoreApp::EntrypointOuro()
                             ImGui::BeginDisabledControls( disableButton );
                             if ( ImGui::Button( " " ICON_FA_BOOK " Add to Scrapbook ", riffToolButtonSize ) )
                             {
-
-                            }
-                            ImGui::EndDisabledControls( disableButton );
-                        }
-                        ImGui::SameLine( 0, 10.0f );
-                        {
-                            const bool disableButton = (m_rpClient.getState() != net::bond::BondState::Connected);
-                            ImGui::BeginDisabledControls( disableButton );
-                            if ( ImGui::Button( " " ICON_FA_CIRCLE_NODES " Push via BOND ", riffToolButtonSize ) )
-                            {
-                                m_rpClient.pushRiff( currentRiff->m_riffData, m_riffPlaybackAbstraction.asPermutation() );
+                                m_appEventBus->send< ::events::RiffTagAction >( endlesss::types::RiffTag{
+                                    currentRiff->m_riffData.jam.couchID,
+                                    currentRiff->m_riffData.riff.couchID,
+                                    -1,
+                                    currentRiff->m_riffData.riff.creationTimeUnix,
+                                    0,
+                                    ""
+                                    }, ::events::RiffTagAction::Action::Upsert );
                             }
                             ImGui::EndDisabledControls( disableButton );
                         }
                     }
+                    */
                 }
             }
             ImGui::End();
@@ -2127,7 +2333,7 @@ int LoreApp::EntrypointOuro()
 
                 if ( jamView == JamView::Visualisation )
                 {
-                    const bool visOptionChanged = m_jamVisualisation.imgui();
+                    const bool visOptionChanged = m_jamVisualisation.imgui( *this );
                     if ( visOptionChanged )
                     {
                         notifyForRenderUpdate();
@@ -2150,16 +2356,24 @@ int LoreApp::EntrypointOuro()
 
                     // check to see if we need to rebuild the jam view on size change
                     // also pokes the main-gl-thread texture GPU syncing jobs
-                    syncJamViewLayoutAndAsyncRendering( jamViewDimensions, ImGui::GetContentRegionAvail().y );
+                    syncJamViewLayoutAndAsyncRendering( jamViewDimensions, static_cast<int32_t>( ImGui::GetContentRegionAvail().y ) );
 
 
                     const ImVec2 outerPos = ImGui::GetCursorPos();
                     const auto contentRegion = ImGui::GetContentRegionAvail();
 
-                    bool shouldShowHeatmap = false;
+                    bool shouldShowSightline = false;
 
                     if ( ImGui::BeginChild( "##jam_browser" ) )
                     {
+                        const float jamGridCellF = static_cast<float>( m_jamVisualisation.getRiffCubeSize() );
+                        const float jamGridCellHalf = jamGridCellF * 0.5f;
+                        const ImVec2 jamGridCell( jamGridCellF, jamGridCellF );
+                        const ImVec2 jamGridCellCenter( jamGridCellHalf, jamGridCellHalf );
+                        const ImU32 jamCellColourPlaying = ImGui::GetColorU32( ImGuiCol_Text );
+                        const ImU32 jamCellColourEnqueue = ImGui::GetColorU32( ImGuiCol_ChildBg, 0.8f );
+                        const ImU32 jamCellColourLoading = ImGui::GetPulseColour();
+
                         if ( isJamBeingSynced( m_currentViewedJam ) )
                         {
                             ImGui::TextUnformatted( "Jam being synced ..." );
@@ -2174,7 +2388,7 @@ int LoreApp::EntrypointOuro()
 
                             if ( m_jamSliceRenderState == JamSliceRenderState::Ready || renderUpdatePending )
                             {
-                                shouldShowHeatmap = !renderUpdatePending;
+                                shouldShowSightline = !renderUpdatePending;
 
                                 ImVec2 pos = ImGui::GetCursorScreenPos();
                                 ImDrawList* draw_list = ImGui::GetWindowDrawList();
@@ -2253,6 +2467,35 @@ int LoreApp::EntrypointOuro()
                                     }
                                 }
 
+
+                                // deal with scrolling to a specific riff, if one has been specified for us
+                                if ( m_currentViewedJamScrollToRiff.has_value() )
+                                {
+                                    ABSL_ASSERT( m_currentViewedJamScrollToRiff->getJamID() == m_currentViewedJam );
+                                    const auto riffToScrollTo = m_currentViewedJamScrollToRiff->getRiffID();
+
+                                    // lookup the riff position from the bitmap offset table
+                                    const auto& scrollToRectIt = m_jamSliceSketch->m_riffToBitmapOffset.find( riffToScrollTo );
+                                    if ( scrollToRectIt != m_jamSliceSketch->m_riffToBitmapOffset.end() )
+                                    {
+                                        // overwrite any existing scroll-restoration, plug in new value that roughly centers the chosen riff
+                                        m_jamSliceSketch->m_syncToUI = true;
+                                        m_jamSliceSketch->m_currentScrollY = scrollToRectIt->second.y - ( contentRegion.y * 0.5f );
+                                    }
+                                    else
+                                    {
+                                        activateModalPopup( "Unable to find rifff", [this]( const char* title )
+                                        {
+                                            static constexpr auto cRiffSearchError = "Could not navigate to riff; you may need to synchronise this jam to ensure it has the latest data available.";
+                                            modalBasicErrorPopup( title, cRiffSearchError );
+                                        });
+                                    }
+
+                                    m_currentViewedJamScrollToRiff = std::nullopt;
+                                }
+
+                                // when rebuilding the UI, we save the scroll position while UI elements are modified
+                                // so the user doesn't lose their position
                                 if ( m_jamSliceSketch->m_syncToUI )
                                 {
                                     ImGui::SetScrollY( m_jamSliceSketch->m_currentScrollY );
@@ -2261,18 +2504,13 @@ int LoreApp::EntrypointOuro()
                                 m_jamSliceSketch->m_currentScrollY = ImGui::GetScrollY();
 
 
+
+
                                 for ( size_t lb = 0; lb < m_jamSliceSketch->m_labelY.size(); lb++ )
                                 {
                                     draw_list->AddText( ImVec2{ pos.x, pos.y + m_jamSliceSketch->m_labelY[lb] }, 0x80ffffff, m_jamSliceSketch->m_labelText[lb].c_str() );
                                 }
 
-                                const float jamGridCellF = static_cast<float>( m_jamVisualisation.getRiffCubeSize() );
-                                const float jamGridCellHalf = jamGridCellF * 0.5f;
-                                const ImVec2 jamGridCell( jamGridCellF, jamGridCellF );
-                                const ImVec2 jamGridCellCenter( jamGridCellHalf, jamGridCellHalf );
-                                const ImU32 jamCellColourPlaying = ImGui::GetColorU32( ImGuiCol_Text );
-                                const ImU32 jamCellColourEnqueue = ImGui::GetColorU32( ImGuiCol_ChildBg, 0.8f );
-                                const ImU32 jamCellColourLoading = ImGui::GetPulseColour();
 
                                 if ( currentRiff )
                                 {
@@ -2315,13 +2553,34 @@ int LoreApp::EntrypointOuro()
                                         draw_list->AddRectFilled( pos + riffRectXY, pos + riffRectXY + jamGridCell, jamCellColourLoading, 4.0f );
                                     }
                                 }
+
+                                for ( const auto& taggedRiffs : m_jamTaggingSet )
+                                {
+                                    const auto& activeRectIt = m_jamSliceSketch->m_riffToBitmapOffset.find( taggedRiffs );
+                                    if ( activeRectIt != m_jamSliceSketch->m_riffToBitmapOffset.end() )
+                                    {
+                                        ImVec2 rv2 = pos + activeRectIt->second;
+
+                                        draw_list->AddTriangleFilled(
+                                            rv2 + ImVec2( -2.0f, jamGridCell.y - 2.0f ),
+                                            rv2 + ImVec2( jamGridCell.x * 0.5f, (jamGridCell.y * 0.7f) - 4.0f ),
+                                            rv2 + ImVec2( jamGridCell.x + 2.0f, jamGridCell.y - 2.0f ),
+                                            ImGui::GetColorU32( ImGuiCol_ChildBg ) );
+
+                                        draw_list->AddTriangleFilled(
+                                            rv2 + ImVec2( 2.0f, jamGridCell.y - 2.0f ),
+                                            rv2 + ImVec2( jamGridCell.x * 0.5f, jamGridCell.y * 0.7f ),
+                                            rv2 + ImVec2( jamGridCell.x - 2.0f, jamGridCell.y - 2.0f ),
+                                            colour::shades::lime.neutralU32() );
+                                    }
+                                }
                             }
                             ImGui::PopStyleVar();
                         }
                     }
                     ImGui::EndChild();
 
-                    if ( m_jamSliceSketch && shouldShowHeatmap )
+                    if ( m_jamSliceSketch && shouldShowSightline )
                     {
                         ImDrawList* draw_list = ImGui::GetWindowDrawList();
 
@@ -2330,14 +2589,8 @@ int LoreApp::EntrypointOuro()
 
                         const float fullHeightRecp = 1.0f / m_jamSliceSketch->m_jamViewFullHeight;
 
-    //                     draw_list->AddRectFilled( outerPos + ImVec2( contentRegion.x - 20.0f, 0.0f ), outerPos + ImVec2( contentRegion.x - 15.0f, contentRegion.y ), 0x20f0f0ff );
-    // 
-//                         draw_list->AddRectFilled(
-//                             outerPosScreen + ImVec2( contentRegion.x - 25.0f, regionTop * fullHeightRecp * contentRegion.y ),
-//                             outerPosScreen + ImVec2( contentRegion.x - 10.0f, regionBottom * fullHeightRecp * contentRegion.y ), 0x40ffffff );
-
                         gfx::GPUTask::ValidState textureState;
-                        if ( m_jamSliceSketch->m_heatMapUpload->getStateIfValid( textureState ) )
+                        if ( m_jamSliceSketch->m_sightlineUpload->getStateIfValid( textureState ) )
                         {
                             const auto savedCursor = ImGui::GetCursorPos();
                             ImGui::SetCursorPos( outerPos + ImVec2( contentRegion.x - 20.0f, 0 ) );
@@ -2363,7 +2616,7 @@ int LoreApp::EntrypointOuro()
             {
                 warehouseView.checkForImGuiTabSwitch();
 
-                const bool warehouseHasEndlesssAccess = warehouse.hasFullEndlesssNetworkAccess();
+                const bool warehouseHasEndlesssAccess = m_warehouse->hasFullEndlesssNetworkAccess();
 
                 if ( warehouseView == WarehouseView::Maintenance )
                 {
@@ -2415,7 +2668,7 @@ int LoreApp::EntrypointOuro()
                     else if ( warehouseView == WarehouseView::Maintenance )
                     {
                         // note if the warehouse is running ops, if not then disable new-task buttons
-                        const bool bWarehouseIsPaused = warehouse.workerIsPaused();
+                        const bool bWarehouseIsPaused = m_warehouse->workerIsPaused();
 
                         {
                             // enable or disable the worker thread
@@ -2424,7 +2677,7 @@ int LoreApp::EntrypointOuro()
                                 ICON_FA_CIRCLE_PLAY  " RESUME  " :
                                 ICON_FA_CIRCLE_PAUSE " RUNNING ", toolbarButtonSize ) )
                             {
-                                warehouse.workerTogglePause();
+                                m_warehouse->workerTogglePause();
                             }
                         }
                     }
@@ -2483,7 +2736,8 @@ int LoreApp::EntrypointOuro()
                             const bool bHasDataToSync       = ( unpopulated > 0 || knownCachedRiffCount > populated );
 
 
-                            if ( !jamNameFilter.PassFilter( m_warehouseContentsReportJamTitles[jI].c_str() ) )
+                            const auto& jamNameToFilterAgainst = m_warehouseContentsReportJamTitlesForSort[jI];
+                            if ( !jamNameFilter.PassFilter( jamNameToFilterAgainst.c_str(), &jamNameToFilterAgainst.back() + 1 ) )
                                 continue;
 
                             ImGui::PushID( (int32_t)jI );
@@ -2500,17 +2754,7 @@ int LoreApp::EntrypointOuro()
                                 ImGui::BeginDisabledControls( bIsJamInFlux );
                                 if ( ImGui::PrecisionButton( ICON_FA_GRIP, buttonSizeMidTable, 1.0f ) )
                                 {
-                                    clearJamSlice();
-
-                                    // change which jam we're viewing, reset active riff hover in the process as this will invalidate it
-                                    m_currentViewedJam          = m_warehouseContentsReport.m_jamCouchIDs[jI];
-                                    m_currentViewedJamName      = m_warehouseContentsReportJamTitles[jI];
-                                    m_jamSliceHoveredRiffIndex  = -1;
-
-                                    warehouse.addJamSliceRequest( m_currentViewedJam, std::bind( &LoreApp::newJamSliceGenerated, this, std::placeholders::_1, std::placeholders::_2 ) );
-
-                                    // force-switch over to make the jam view in focus
-                                    ImGui::MakeTabVisible( "###jam_view" );
+                                    beginChangeToViewJam( m_warehouseContentsReport.m_jamCouchIDs[jI] );
                                 }
                                 ImGui::EndDisabledControls( bIsJamInFlux );
 
@@ -2546,7 +2790,7 @@ int LoreApp::EntrypointOuro()
                                             ImGui::Scoped::ColourButton cb( colour::shades::errors );
                                             if ( ImGui::PrecisionButton( ICON_FA_BAN, buttonSizeMidTable, 1.0f ) )
                                             {
-                                                warehouse.requestJamPurge( m_warehouseContentsReport.m_jamCouchIDs[jI] );
+                                                m_warehouse->requestJamPurge( m_warehouseContentsReport.m_jamCouchIDs[jI] );
                                                 // push the abort task timer way forward to immediately disable the button
                                                 m_warehouseContentsReportJamInFluxMoment[jI].setToFuture( std::chrono::hours( 1 ) );
                                             }
@@ -2559,7 +2803,7 @@ int LoreApp::EntrypointOuro()
                                         {
                                             m_warehouseContentsReportJamInFlux[jI] = true;
                                             m_warehouseContentsReportJamInFluxMoment[jI].setToFuture( std::chrono::seconds( 4 ) );
-                                            warehouse.addOrUpdateJamSnapshot( m_warehouseContentsReport.m_jamCouchIDs[jI] );
+                                            m_warehouse->addOrUpdateJamSnapshot( m_warehouseContentsReport.m_jamCouchIDs[jI] );
                                         }
                                         ImGui::CompactTooltip( "Update and download the latest metadata for this jam" );
                                     }
@@ -2600,12 +2844,12 @@ int LoreApp::EntrypointOuro()
                             {
                                 ImGui::TableNextColumn();
 
-                                ImGui::BeginDisabledControls( bIsJamInFlux );
+                                // trashing a jam even in sync should be fine, given the way the warehouse works and
+                                // sequences operations. a purge will remove and future scanning for empty riffs & stems
                                 if ( ImGui::PrecisionButton( ICON_FA_TRASH, buttonSizeMidTable ) )
                                 {
-                                    warehouse.requestJamPurge( m_warehouseContentsReport.m_jamCouchIDs[jI] );
+                                    m_warehouse->requestJamPurge( m_warehouseContentsReport.m_jamCouchIDs[jI] );
                                 }
-                                ImGui::EndDisabledControls( bIsJamInFlux );
                             }
                             ImGui::PopID();
                         }
@@ -2630,6 +2874,15 @@ int LoreApp::EntrypointOuro()
     {
         checkedCoreCall( "remove listener", [this] { return m_appEventBus->removeListener( m_eventListenerRiffEnqueue ); } );
     }
+    {
+        base::EventBusClient m_eventBusClient( m_appEventBus );
+
+        APP_EVENT_UNBIND( MixerRiffChange );
+        APP_EVENT_UNBIND( OperationComplete );
+        APP_EVENT_UNBIND( RequestJamNameRemoteFetch );
+        APP_EVENT_UNBIND( RiffTagAction );
+        APP_EVENT_UNBIND( RequestNavigationToRiff );
+    }
 
     unregisterStatusBarBlock( sbbWarehouseID );
 
@@ -2646,9 +2899,7 @@ int LoreApp::EntrypointOuro()
 
     // unregister any listeners
     checkedCoreCall( "remove stem listener", [this] { return m_stemDataProcessor.disconnect( m_appEventBus ); } );
-    
-    checkedCoreCall( "remove op listener",   [this] { return m_appEventBus->removeListener( m_eventListenerOpComplete ); } );
-    checkedCoreCall( "remove riff listener", [this] { return m_appEventBus->removeListener( m_eventListenerRiffChange ); } );
+
 
 #if OURO_FEATURE_VST24
     // serialize effects

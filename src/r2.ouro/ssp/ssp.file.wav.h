@@ -24,9 +24,9 @@ public:
     ~WAVWriter();
 
     static std::shared_ptr<WAVWriter> Create(
-        const std::string& outputFile,
-        const uint32_t sampleRate,
-        const uint32_t writeBufferInSeconds = 10 );
+        const fs::path& outputFile,
+        const uint32_t  sampleRate,
+        const uint32_t  writeBufferInSeconds = 10 );
 
     void appendSamples( float* buffer0, float* buffer1, const uint32_t sampleCount ) override;
 

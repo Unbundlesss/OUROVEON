@@ -14,12 +14,14 @@ namespace ux {
 
 struct UserSelector
 {
+    static constexpr float cDefaultWidthForUserSize = 180.0f;   // should comfortably fit the 16-letter username limit
+
     UserSelector() = default;
     UserSelector( const std::string_view defaultUsername )
         : m_username( defaultUsername )
     {}
 
-    void imgui( const endlesss::toolkit::PopulationQuery& population, float itemWidth = -1.0f );
+    bool imgui( const char* widgetID, const endlesss::toolkit::PopulationQuery& population, float itemWidth = -1.0f );
 
     ouro_nodiscard const std::string& getUsername() const { return m_username; }
     void setUsername( const std::string_view username ) { m_username = username; }

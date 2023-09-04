@@ -13,8 +13,12 @@
 namespace ImGui {
 namespace ux {
 
-void UserSelector::imgui( const endlesss::toolkit::PopulationQuery& population, float itemWidth )
+bool UserSelector::imgui( const char* widgetID, const endlesss::toolkit::PopulationQuery& population, float itemWidth )
 {
+    ImGui::PushID( widgetID );
+
+    bool bDataChanged = false;
+
     if ( itemWidth > 0 )
         ImGui::SetNextItemWidth( itemWidth );
 
@@ -28,6 +32,8 @@ void UserSelector::imgui( const endlesss::toolkit::PopulationQuery& population, 
         | ImGuiWindowFlags_NoResize
         | ImGuiWindowFlags_ChildWindow
         ;
+
+    bDataChanged |= bIsInputEnterPressed;
 
     // activate popup when text input first gets activated
     if ( bIsInputJustActivated )
@@ -80,6 +86,8 @@ void UserSelector::imgui( const endlesss::toolkit::PopulationQuery& population, 
                         {
                             ImGui::ClearActiveID();
                             m_username = m_autocompletion.m_values[suggestion];
+
+                            bDataChanged = true;
                         }
                     }
 
@@ -88,6 +96,8 @@ void UserSelector::imgui( const endlesss::toolkit::PopulationQuery& population, 
                     {
                         m_username = m_autocompletion.m_values[m_suggestionIndex];
                         m_suggestionIndex = -1;
+
+                        bDataChanged = true;
                     }
 
                     // finish on enter or focus-away
@@ -103,6 +113,10 @@ void UserSelector::imgui( const endlesss::toolkit::PopulationQuery& population, 
             m_suggestionIndex = 0;
         }
     }
+
+    ImGui::PopID();
+
+    return bDataChanged;
 }
 
 } // namespace ux

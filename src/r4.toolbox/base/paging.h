@@ -88,8 +88,11 @@ private:
             }                                                                                                       \
             void checkForImGuiTabSwitch()                                                                           \
             {                                                                                                       \
-                if ( ImGui::IsWindowHovered( ImGuiHoveredFlags_RootAndChildWindows ) &&                             \
-                     ImGui::IsKeyPressedMap( ImGuiKey_Tab, false ) )                                                \
+                const bool bSwitchOnBarRClick = ( ImGui::IsItemHovered() && ImGui::IsItemClicked( 1 ) );            \
+                const bool bSwitchOnTabKey    = ( ImGui::IsWindowHovered( ImGuiHoveredFlags_RootAndChildWindows )   \
+                                               && ImGui::IsKeyPressedMap( ImGuiKey_Tab, false ) );                  \
+                                                                                                                    \
+                if ( bSwitchOnBarRClick || bSwitchOnTabKey )                                                        \
                 {                                                                                                   \
                     switchToNextPage();                                                                             \
                 }                                                                                                   \

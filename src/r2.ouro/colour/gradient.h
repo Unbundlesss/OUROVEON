@@ -27,37 +27,46 @@ inline float tricycle( const float phase )
 struct col3
 {
     constexpr col3( const float _x, const float _y, const float _z )
-        : x(_x)
-        , y(_y)
-        , z(_z)
+        : r(_x)
+        , g(_y)
+        , b(_z)
     {}
 
     constexpr col3( const float _single )
-        : x( _single )
-        , y( _single )
-        , z( _single )
+        : r( _single )
+        , g( _single )
+        , b( _single )
     {}
 
-    constexpr col3 operator*( const float rhs ) const { return col3( this->x * rhs, this->y * rhs, this->z * rhs ); }
-    constexpr col3 operator+( const col3& rhs ) const { return col3( this->x + rhs.x, this->y + rhs.y, this->z + rhs.z ); }
-    constexpr col3 operator*( const col3& rhs ) const { return col3( this->x * rhs.x, this->y * rhs.y, this->z * rhs.z ); }
-    constexpr col3 operator/( const col3& rhs ) const { return col3( this->x / rhs.x, this->y / rhs.y, this->z / rhs.z ); }
-    constexpr col3& operator*=( const float rhs ) { this->x *= rhs; this->y *= rhs; this->z *= rhs; return *this; }
-    constexpr col3& operator+=( const col3& rhs ) { this->x += rhs.x; this->y += rhs.y; this->z += rhs.z; return *this; }
-    constexpr col3& operator*=( const col3& rhs ) { this->x *= rhs.x; this->y *= rhs.y; this->z *= rhs.z; return *this; }
-    constexpr col3& operator/=( const col3& rhs ) { this->x /= rhs.x; this->y /= rhs.y; this->z /= rhs.z; return *this; }
+    constexpr col3 operator*( const float rhs ) const { return col3( this->r * rhs, this->g * rhs, this->b * rhs ); }
+    constexpr col3 operator+( const col3& rhs ) const { return col3( this->r + rhs.r, this->g + rhs.g, this->b + rhs.b ); }
+    constexpr col3 operator*( const col3& rhs ) const { return col3( this->r * rhs.r, this->g * rhs.g, this->b * rhs.b ); }
+    constexpr col3 operator/( const col3& rhs ) const { return col3( this->r / rhs.r, this->g / rhs.g, this->b / rhs.b ); }
+    constexpr col3& operator*=( const float rhs ) { this->r *= rhs; this->g *= rhs; this->b *= rhs; return *this; }
+    constexpr col3& operator+=( const col3& rhs ) { this->r += rhs.r; this->g += rhs.g; this->b += rhs.b; return *this; }
+    constexpr col3& operator*=( const col3& rhs ) { this->r *= rhs.r; this->g *= rhs.g; this->b *= rhs.b; return *this; }
+    constexpr col3& operator/=( const col3& rhs ) { this->r /= rhs.r; this->g /= rhs.g; this->b /= rhs.b; return *this; }
 
     inline uint32_t bgrU32() const
     {
-        uint32_t _x = (uint32_t)(std::clamp( x, 0.0f, 1.0f ) * 255.0f );
-        uint32_t _y = (uint32_t)(std::clamp( y, 0.0f, 1.0f ) * 255.0f );
-        uint32_t _z = (uint32_t)(std::clamp( z, 0.0f, 1.0f ) * 255.0f );
+        uint32_t _x = (uint32_t)(std::clamp( r, 0.0f, 1.0f ) * 255.0f );
+        uint32_t _y = (uint32_t)(std::clamp( g, 0.0f, 1.0f ) * 255.0f );
+        uint32_t _z = (uint32_t)(std::clamp( b, 0.0f, 1.0f ) * 255.0f );
         return _PACK_COL32( _z, _y, _x, 255 );
+    }
+
+    inline void desaturate( float amount )
+    {
+        const float lum = ((r * 0.299f) + (g * 0.587f) + (b * 0.114f));
+
+        r = r + ( ( lum - r ) * amount );
+        g = g + ( ( lum - g ) * amount );
+        b = b + ( ( lum - b ) * amount );
     }
 
     static col3 cosine( const col3& rhs )
     {
-        return col3( (float)std::cos(rhs.x), (float)std::cos( rhs.y ), (float)std::cos( rhs.z ) );
+        return col3( (float)std::cos(rhs.r), (float)std::cos( rhs.g ), (float)std::cos( rhs.b ) );
     }
 
     static col3 cosineGradient(
@@ -70,11 +79,11 @@ struct col3
         return a + (b * col3::cosine( (c * t + d) * (float)constants::d_2pi ));
     }
 
-    float x = 0.0f,
-          y = 0.0f,
-          z = 0.0f;
+    float r = 0.0f,
+          g = 0.0f,
+          b = 0.0f;
 
-    friend inline col3 operator*( const float lhs, const col3& rhs ) { return col3( rhs.x * lhs, rhs.y * lhs, rhs.z * lhs ); }
+    friend inline col3 operator*( const float lhs, const col3& rhs ) { return col3( rhs.r * lhs, rhs.g * lhs, rhs.b * lhs ); }
 };
 
 

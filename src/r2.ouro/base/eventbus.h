@@ -88,8 +88,9 @@ struct IEvent
         })
 
 #define APP_EVENT_UNBIND( _eventType )                                                                              \
-    checkedCoreCall( fmt::format( FMTX("{{{}}} : [{}]"), source_location::current().function_name(), #_eventType ), [this] {  \
-        return m_eventBusClient.removeListener( m_eventLID_##_eventType );                                          \
+    checkedCoreCall( fmt::format( FMTX("{{{}}} : [{}]"), source_location::current().function_name(), #_eventType ), \
+        [&, this] {                                                                                                    \
+            return m_eventBusClient.removeListener( m_eventLID_##_eventType );                                      \
         });
 
 
@@ -126,7 +127,7 @@ struct EventBus
             memset( eventMemoryBlock, 0, sizeof( _eventType ) );
             _eventType* eventInstance = new (eventMemoryBlock) _eventType( std::forward<Args>( args )... );
 
-            pipe->m_queue.emplace( eventInstance );
+            pipe->m_queue.enqueue( eventInstance );
             return true;
         }
 
@@ -151,7 +152,7 @@ private:
     std::atomic_uint32_t    m_listenerUID = 0;
 
 
-    using EventQueue   = mcc::ReaderWriterQueue< IEvent* >;
+    using EventQueue   = mcc::ConcurrentQueue< IEvent* >;
     using ListenerMap  = absl::flat_hash_map< EventListenerID, EventListenerFn >;
 
     // structure created on Register() to manage a single ID

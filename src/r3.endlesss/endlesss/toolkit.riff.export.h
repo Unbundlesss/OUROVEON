@@ -27,6 +27,7 @@ namespace xp {
 #define _OUTPUT_TOKENS(_action)                                                                \
     _action( Jam_Name )                 /* 'CoolTimesAhoy'      (path sanitised)            */ \
     _action( Jam_UniqueID )             /* b7eca81...           (customisable length)       */ \
+    _action( Jam_Description )          /* 'extra_context'      (path sanitised)            */ \
     _action( Riff_Timestamp )           /* 20220301.152303      (customisable format)       */ \
     _action( Riff_UniqueID )            /* e50c3be...           (customisable length)       */ \
     _action( Riff_BPM )                 /* '156.3bpm'                                       */ \
@@ -49,6 +50,10 @@ struct Customisations
     std::string         timestampFormatStem     = "%Y%m%d.%H%M%S";
     uint32_t            uniqueIDLength          = 5;
 
+    // jam description data is optional and may not be present for all exports;
+    // if it is, specify a suffix to automatically add - can be a path split '/', underscore, whatever
+    std::string         jamDescriptionSeparator = "/";
+
     template<class Archive>
     void serialize( Archive& archive )
     {
@@ -68,7 +73,7 @@ enum class AudioFormat
 struct OutputSpec
 {
     AudioFormat     format = AudioFormat::WAV;
-    std::string     riff   = "[Jam_Name]/[Riff_Timestamp]_#[Riff_UniqueID]_[Riff_BPM]_[Riff_Root][Riff_Scale]";
+    std::string     riff   = "[Jam_Name]/[Jam_Description][Riff_Timestamp]_#[Riff_UniqueID]_[Riff_BPM]_[Riff_Root][Riff_Scale]";
     std::string     stem   = "[Stem_Index]-[Stem_Timestamp]-#[Stem_UniqueID]-[Stem_Author]";
 
     Customisations  custom;

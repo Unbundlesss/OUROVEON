@@ -48,10 +48,12 @@ public:
 
     // initialise without Endlesss auth for a network layer that can't talk to Couch, etc (but can grab stuff from CDN)
     void initWithoutAuthentication(
+        base::EventBusClient eventBusClient,
         const config::endlesss::rAPI& api );
 
     // initialise with validated Endlesss auth for full access
     void initWithAuthentication(
+        base::EventBusClient eventBusClient,
         const config::endlesss::rAPI& api,
         const config::endlesss::Auth& auth );
 
@@ -91,12 +93,28 @@ public:
 
     ouro_nodiscard constexpr const std::regex& getDataFixRegex_lengthTypeMismatch() const { return m_dataFixRegex_lengthTypeMismatch; }
 
+
+    // metrics functions that dispatch network activity events via mutable event bus
+    // used to tell the rest of the app that network stuff is happening
+    void metricsActivitySend() const
+    {
+        m_eventBusClient->Send< ::events::NetworkActivity >(0);
+    }
+    void metricsActivityRecv( std::size_t bytesIn ) const
+    {
+        m_eventBusClient->Send< ::events::NetworkActivity >( bytesIn );
+    }
+
 private:
+
+    using EventBusOpt = std::optional< base::EventBusClient >;
 
     // counter used for debug verbose captures to avoid duplication
     inline static std::atomic_uint32_t  m_writeIndex = 0;
 
     Access                      m_access;
+
+    mutable EventBusOpt         m_eventBusClient = std::nullopt;
 
     config::endlesss::rAPI      m_api;
     config::endlesss::Auth      m_auth;
@@ -173,6 +191,8 @@ inline static bool deserializeJson(
             fclose( fExport );
         }
     }
+
+    netConfig.metricsActivityRecv( bodyText.size() );
 
     // attempt the parse
     try
@@ -346,10 +366,23 @@ struct TypeCheckDocument
             }
         } oggAudio;
 
+        struct FLACAudio
+        {
+            std::string     endpoint;   // eg. "ndls-att0.fra1.digitaloceanspaces.com", 
+
+            template<class Archive>
+            inline void serialize( Archive& archive )
+            {
+                archive( CEREAL_OPTIONAL_NVP( endpoint ) );
+            }
+        } flacAudio;
+
         template<class Archive>
         inline void serialize( Archive& archive )
         {
-            archive( CEREAL_OPTIONAL_NVP( oggAudio ) );
+            archive( CEREAL_OPTIONAL_NVP( oggAudio )
+                    ,CEREAL_OPTIONAL_NVP( flacAudio )
+            );
         }
     } cdn_attachments;
 
@@ -460,11 +493,36 @@ struct ResultRiffDocument
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
+struct IStemAudioFormat
+{
+    enum class CompressionFormat
+    {
+        OGG,
+        FLAC
+    };
+
+    virtual ~IStemAudioFormat() = default;
+
+    virtual std::string_view getEndpoint() const = 0;
+    virtual std::string_view getBucket() const { return ""; }   // optional
+    virtual std::string_view getKey() const = 0;
+    virtual std::string_view getMIME() const = 0;
+    virtual int32_t getLength() const = 0;
+    virtual CompressionFormat getFormat() const = 0;
+
+#define IStemAudioFormat_DefaultImpl                                            \
+    std::string_view getEndpoint() const override { return endpoint; }          \
+    std::string_view getKey() const override { return key; }                    \
+    std::string_view getMIME() const override { return mime; }                  \
+    int32_t getLength() const override { return length; }
+
+};
+
 struct ResultStemDocument
 {
     struct CDNAttachments
     {
-        struct OGGAudio
+        struct OGGAudio : public IStemAudioFormat
         {
             std::string     bucket;                 // in old jams, this could be set (eg. would be "ndls-att0")
             std::string     endpoint;               // eg. "ndls-att0.fra1.digitaloceanspaces.com", 
@@ -472,6 +530,11 @@ struct ResultStemDocument
             std::string     url;                    // full URL to the audio data
             std::string     mime = "audio/ogg";     // leave as default; very old jams (/stems) lack MIME data
             int32_t         length = 0;
+
+            // implement IStemAudioFormat
+            IStemAudioFormat_DefaultImpl;
+            std::string_view getBucket() const override { return bucket; }
+            CompressionFormat getFormat() const override { return IStemAudioFormat::CompressionFormat::OGG; }
 
             // OGGAudio blocks have changed a bit over the lifetime of the app and require the most manual 
             // fix-up and error-correction
@@ -532,14 +595,56 @@ struct ResultStemDocument
             }
         } oggAudio;
 
+        struct FLACAudio : public IStemAudioFormat
+        {
+            std::string     endpoint;               // eg. "endlesss-dev.fra1.digitaloceanspaces.com", 
+            std::string     hash;                   // no idea 
+            std::string     key;                    // eg. "attachments/flacAudio/band####/################"
+            int32_t         length = 0;
+            std::string     mime = "audio/flac";    // as one might expect
+            std::string     url;                    // full URL to the audio data
+
+            // implement IStemAudioFormat
+            IStemAudioFormat_DefaultImpl;
+            CompressionFormat getFormat() const override { return IStemAudioFormat::CompressionFormat::FLAC; }
+
+            template<class Archive>
+            inline void serialize( Archive& archive )
+            {
+                archive( CEREAL_NVP( endpoint )
+                       , CEREAL_NVP( key )
+                       , CEREAL_NVP( length )
+                       , CEREAL_NVP( url )
+                );
+            }
+
+        } flacAudio;
+
         template<class Archive>
         inline void serialize( Archive& archive )
         {
-            // marked as OPTIONAL as there are very rare times where there seems to just be no ogg data at all
+            // oggAudiomarked as OPTIONAL as there are very rare times where there seems to just be no ogg data at all
             // .. and in those times, we can leave the ogg structure above barren, the riff resolover can deal with that, 
             // it's braver than cereal's very picky json parsing
-            archive( CEREAL_OPTIONAL_NVP( oggAudio ) );
+            archive( CEREAL_OPTIONAL_NVP( oggAudio )
+            // and of course flacAudio is a recent addition for the lossless platform. hopefully at least one of these
+            // data blocks is here otherwise we're in trouble
+                   , CEREAL_OPTIONAL_NVP( flacAudio )
+            );
         }
+
+        // choose a prevailing audio format for this stem, given the deserialised data
+        // one of oggData or flacData should have something for us to use...
+        const IStemAudioFormat& getAudioFormat() const
+        {
+            const bool bHasFLAC = (flacAudio.getLength() > 0);
+            const endlesss::api::IStemAudioFormat& audioFormat = bHasFLAC ?
+                static_cast<const endlesss::api::IStemAudioFormat&>(flacAudio) :
+                static_cast<const endlesss::api::IStemAudioFormat&>(oggAudio);
+
+            return audioFormat;
+        }
+
     } cdn_attachments;
 
     endlesss::types::StemCouchID
@@ -795,6 +900,7 @@ struct BandPermalinkMeta
     struct Data
     {
         std::string                 url;        // full spec /join URL for this jam
+        std::string                 path;       // just the "/jam/<full id>/join" component of the URL
         endlesss::types::JamCouchID band_id;    // repeated couch ID
         std::string                 band_name;  // public display name
 
@@ -802,6 +908,7 @@ struct BandPermalinkMeta
         inline void serialize( Archive& archive )
         {
             archive( CEREAL_NVP( url )
+                   , CEREAL_NVP( path )
                    , CEREAL_NVP( band_id )
                    , CEREAL_NVP( band_name )
             );
@@ -823,6 +930,42 @@ struct BandPermalinkMeta
     }
 
     bool fetch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID );
+};
+
+// ---------------------------------------------------------------------------------------------------------------------
+// given the long-form jam ID (eg. "487dd4be90b25fe7ea018e10d87ce251aeb41a35f781199cc0820fdab568b59c") this will use the 
+// public riffs api to fetch its current name, as opposed to the original name set at creation time that BandPermalinkMeta returns
+//
+struct BandNameFromExtendedID
+{
+    struct Data
+    {
+        std::string      legacy_id;     // band#### name, just for debugging/checking
+        std::string      name;          // most up-to-date public name
+
+        template<class Archive>
+        inline void serialize( Archive& archive )
+        {
+            archive( CEREAL_NVP( legacy_id )
+                   , CEREAL_NVP( name )
+            );
+        }
+    };
+
+    bool        ok;
+    Data        data;
+    std::string message;
+
+    template<class Archive>
+    inline void serialize( Archive& archive )
+    {
+        archive( CEREAL_NVP( ok )
+               , CEREAL_NVP( data )
+               , CEREAL_OPTIONAL_NVP( message ) // valid if ok==false (afaik)
+        );
+    }
+
+    bool fetch( const NetConfiguration& ncfg, const std::string& jamLongID );
 };
 
 

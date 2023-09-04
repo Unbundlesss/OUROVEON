@@ -20,14 +20,6 @@ using namespace std::chrono_literals;
 namespace endlesss {
 namespace toolkit {
 
-static constexpr auto cRegexBandNameExtract = "/(band[a-f0-9]+)/";
-
-// ---------------------------------------------------------------------------------------------------------------------
-Shares::Shares()
-    : m_regexExtractBandName( cRegexBandNameExtract )
-{
-}
-
 // ---------------------------------------------------------------------------------------------------------------------
 tf::Taskflow Shares::taskFetchLatest(
     const endlesss::api::NetConfiguration& apiCfg,
@@ -52,38 +44,7 @@ tf::Taskflow Shares::taskFetchLatest(
             {
                 for ( const auto& riffData : sharedRiffs.data )
                 {
-                    std::string jamCID = riffData.band;
-                    
-                    // sometimes there's no top-level "bandXXXX" identifier in shared riffs, so we go look through the loops'
-                    // audio URLs to find it via regex & consensus
-                    if ( jamCID.empty() )
-                    {
-                        for ( const auto& riffLoop : riffData.loops )
-                        {
-                            const auto& loopUrl = riffLoop.cdn_attachments.oggAudio.url;
-
-                            std::smatch m;
-                            if ( std::regex_search( loopUrl, m, m_regexExtractBandName ) )
-                            {
-                                const auto& extractedBandID = m[1].str();
-
-                                // we assume all the band IDs across the loops should be consistent - check for this
-                                // and fail out if this doesn't hold up
-                                if ( !jamCID.empty() && jamCID != extractedBandID )
-                                {
-                                    blog::error::api( FMTX( "multiple jam band IDs found inside shread riff loop data, unexpected ( existing {}, new {} )" ), extractedBandID, jamCID );
-                                    jamCID.clear();
-                                    break;
-                                }
-
-                                jamCID = extractedBandID;
-                            }
-                        }
-
-                        // failed to reach a jam ID consensus
-                        if ( jamCID.empty() )
-                            continue;
-                    }
+                    std::string jamCID = m_riffBandExtractor.estimateJamCouchID( riffData );
                     
                     // remove any invalid UTF8 characters from the title string before storage
                     std::string sanitisedTitle;
@@ -139,6 +100,56 @@ tf::Taskflow Shares::taskFetchLatest(
     });
 
     return taskResult;
+}
+
+static constexpr auto cRegexBandNameExtract = "/(band[a-f0-9]+)/";
+
+// ---------------------------------------------------------------------------------------------------------------------
+RiffBandExtractor::RiffBandExtractor()
+    : m_regexExtractBandName( cRegexBandNameExtract )
+{
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+std::string RiffBandExtractor::estimateJamCouchID( const api::SharedRiffsByUser::Data& sharedData ) const
+{
+    std::string jamCID = sharedData.band;
+
+    // sometimes there's no top-level "bandXXXX" identifier in shared riffs, so we go look through the loops'
+    // audio URLs to find it via regex & consensus
+    if ( jamCID.empty() )
+    {
+        for ( const auto& riffLoop : sharedData.loops )
+        {
+            // try formats in order, one should be not empty at least
+            const std::string& loopUrl = (riffLoop.cdn_attachments.oggAudio.url.empty()) ?
+                riffLoop.cdn_attachments.flacAudio.url :
+                riffLoop.cdn_attachments.oggAudio.url;
+
+            std::smatch m;
+            if ( !loopUrl.empty() && std::regex_search( loopUrl, m, m_regexExtractBandName ) )
+            {
+                const auto& extractedBandID = m[1].str();
+
+                // we assume all the band IDs across the loops should be consistent - check for this
+                // and fail out if this doesn't hold up
+                if ( !jamCID.empty() && jamCID != extractedBandID )
+                {
+                    blog::error::api( FMTX( "multiple jam band IDs found inside shread riff loop data, unexpected ( existing {}, new {} )" ), extractedBandID, jamCID );
+                    jamCID.clear();
+                    break;
+                }
+
+                jamCID = extractedBandID;
+            }
+        }
+
+        // failed to reach a jam ID consensus (hit the error above)
+        if ( jamCID.empty() )
+            return jamCID;
+    }
+
+    return jamCID;
 }
 
 } // namespace toolkit

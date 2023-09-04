@@ -12,6 +12,7 @@
 #include "base/instrumentation.h"
 
 #include "endlesss/toolkit.riff.pipeline.h"
+#include "endlesss/toolkit.shares.h"
 
 #include "live.riff.cache.h"
 #include "endlesss/api.h"
@@ -125,10 +126,31 @@ bool Pipeline::resolveSharedRiff(
     api::SharedRiffsByUser sharedRiffData;
     sharedRiffData.fetchSpecific( ncfg, endlesss::types::SharedRiffCouchID{ request.getRiffID().c_str() } );
 
+    if ( sharedRiffData.data.empty() )
+    {
+        blog::error::api( FMTX( "resolveSharedRiff failed to get data, possible network error" ) );
+        return false;
+    }
+
     api::SharedRiffsByUser::Data riffData = sharedRiffData.data[0];
 
     result.jam.couchID = riffData.band;
-    result.jam.displayName = fmt::format( FMTX( "shared riff {}" ), riffData.rifff.userName ); // encode the username in for export delineation
+
+    // no ID specified? how useful. go try and find one by looking at the stem URLs
+    if ( result.jam.couchID.empty() )
+    {
+        endlesss::toolkit::RiffBandExtractor riffBandExtractor;
+        result.jam.couchID = endlesss::types::JamCouchID( riffBandExtractor.estimateJamCouchID( riffData ) );
+    }
+
+    // use the encoded custom name if given, this should be the perferred export name
+    if ( request.hasCustomName() )
+        result.jam.displayName = request.getCustomName();
+    else
+        result.jam.displayName = fmt::format( FMTX( "shared_riff_{}" ), riffData.rifff.userName ); // encode the username we have for sake of export
+
+    // log the given title from the shared-riff as an extra bit of jam metadata
+    result.jam.description = riffData.title;
 
     result.riff = endlesss::types::Riff( result.jam.couchID, riffData.rifff );
 

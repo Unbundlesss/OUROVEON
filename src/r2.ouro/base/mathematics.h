@@ -22,6 +22,7 @@ double constexpr sqrtNewtonRaphson(double x, double curr, double prev)
 
 } // namespace detail
 
+// ---------------------------------------------------------------------------------------------------------------------
 // https://gist.github.com/alexshtf/eb5128b3e3e143187794
 double constexpr constSqrt( double x )
 {
@@ -44,7 +45,8 @@ constexpr uint32_t nextPow2( uint32_t v )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-inline float fract( const float x )
+template <typename _T>
+inline _T fract( const _T x )
 {
     return x - std::floor( x );
 }

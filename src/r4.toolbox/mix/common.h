@@ -18,11 +18,11 @@
 // ---------------------------------------------------------------------------------------------------------------------
 CREATE_EVENT_BEGIN( MixerRiffChange )
 
-    MixerRiffChange( endlesss::live::RiffPtr& riff )
-        : m_riff( riff )
-    {}
+MixerRiffChange( endlesss::live::RiffPtr& riff )
+    : m_riff( riff )
+{}
 
-    endlesss::live::RiffPtr     m_riff;
+endlesss::live::RiffPtr     m_riff;
 
 CREATE_EVENT_END()
 
