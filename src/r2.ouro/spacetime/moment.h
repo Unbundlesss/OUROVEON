@@ -41,7 +41,7 @@ public:
     }
 
     // has the moment passed? if setToFuture() was used, this checks if that moment has gone by
-    ouro_nodiscard constexpr bool hasPassed() const
+    ouro_nodiscard bool hasPassed() const
     {
         return ( m_instant < now() );
     }

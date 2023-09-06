@@ -138,7 +138,7 @@ std::shared_ptr<FLACWriter> FLACWriter::Create(
     }
 
     // open a FILE* to pass to the encoder
-#ifdef OURO_PLATFORM_WIN
+#if OURO_PLATFORM_WIN
     // wchar_t is 2 bytes on Windows and expects utf16, so pass it that
     FILE* fpFLAC = _wfopen( reinterpret_cast<const wchar_t*>(outputFileU16.c_str()), L"w+b" );
 #else

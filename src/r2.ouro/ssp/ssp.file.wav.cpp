@@ -79,7 +79,7 @@ std::shared_ptr<WAVWriter> WAVWriter::Create(
     const std::u16string outputFileU16 = outputFile.u16string();
     const std::string outputFileU8 = utf8::utf16to8( outputFileU16 );
 
-#ifdef OURO_PLATFORM_WIN
+#if OURO_PLATFORM_WIN
     // wchar_t is 2 bytes on Windows and expects utf16, so pass it that
     FILE* fpWAV = _wfopen( reinterpret_cast<const wchar_t*>( outputFileU16.c_str() ), L"wb" );
 #else
@@ -98,7 +98,7 @@ std::shared_ptr<WAVWriter> WAVWriter::Create(
     data::WavHeader nullHeader( 0, sampleRate );
     fwrite( &nullHeader, sizeof( data::WavHeader ), 1, fpWAV );
 
-#ifdef OURO_PLATFORM_WIN
+#if OURO_PLATFORM_WIN
     SYSTEM_INFO sinf;
     ::GetSystemInfo( &sinf );
     const uint32_t bufferChunkSize = (uint32_t)sinf.dwAllocationGranularity;
