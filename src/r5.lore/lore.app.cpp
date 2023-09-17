@@ -3051,9 +3051,9 @@ int LoreApp::EntrypointOuro()
                             }
                             {
                                 ImGui::TableNextColumn();
-                                ImGui::TextColored( colour::shades::callout.neutral(), "LOAD (overwrite)" );
+                                ImGui::TextColored( colour::shades::callout.neutral(), "LOAD (replace)" );
                                 ImGui::Spacing();
-                                ImGui::TextWrapped( "Replace the current tags in the database with new data loaded from a file. This will REPLACE your current data!" );
+                                ImGui::TextWrapped( "Overwrite the current tags in the database with new data loaded from a file. This will REPLACE your current data!" );
                                 ImGui::Spacing();
                             }
                             {

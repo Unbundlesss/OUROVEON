@@ -965,10 +965,6 @@ int OuroApp::EntrypointGUI()
             {
                 xpOpenURL( m_storagePaths->outputApp.string().c_str() );
             }
-            ImGui::Separator();
-            if ( ImGui::MenuItem( "Configure..." ) )
-            {
-            }
         });
 
     // events
