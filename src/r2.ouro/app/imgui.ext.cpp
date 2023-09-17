@@ -220,6 +220,7 @@ ImU32 ParseHexColour( const char* hexColour )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+
 ImVec4 GetPulseColourVec4( float alpha )
 {
     const auto colour1 = ImGui::GetStyleColorVec4( ImGuiCol_PlotHistogram );
@@ -232,6 +233,15 @@ ImVec4 GetPulseColourVec4( float alpha )
 ImU32 GetPulseColour( float alpha )
 {
     return ImGui::GetColorU32( GetPulseColourVec4( alpha ) );
+}
+
+ImU32 GetSyncBusyColour( float alpha )
+{
+    const auto colour1 = colour::shades::blue_gray.neutral( alpha );
+    const auto colour2 = colour::shades::slate.dark( alpha );
+    auto pulse = lerpVec4( colour1, colour2, g_cycleTimerSlow );
+
+    return ImGui::GetColorU32( pulse );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -823,17 +833,33 @@ Enabled::~Enabled()
     }
 }
 
-ColourButton::ColourButton( const colour::Preset& preset )
+ColourButton::ColourButton( const colour::Preset& buttonColour, const bool bIsColoured )
+    : m_isColoured( bIsColoured )
 {
-    ImGui::PushStyleColor( ImGuiCol_Button,         preset.neutral() );
-    ImGui::PushStyleColor( ImGuiCol_ButtonHovered,  preset.light() );
-    ImGui::PushStyleColor( ImGuiCol_ButtonActive,   preset.dark() );
-    ImGui::PushStyleColor( ImGuiCol_Text, IM_COL32_BLACK );
+    if ( m_isColoured )
+    {
+        ImGui::PushStyleColor( ImGuiCol_Button,         buttonColour.neutral() );
+        ImGui::PushStyleColor( ImGuiCol_ButtonHovered,  buttonColour.light() );
+        ImGui::PushStyleColor( ImGuiCol_ButtonActive,   buttonColour.dark() );
+        ImGui::PushStyleColor( ImGuiCol_Text, IM_COL32_BLACK );
+    }
+}
+ColourButton::ColourButton( const colour::Preset& buttonColour, const colour::Preset& textColour, const bool bIsColoured )
+    : m_isColoured( bIsColoured )
+{
+    if ( m_isColoured )
+    {
+        ImGui::PushStyleColor( ImGuiCol_Button,         buttonColour.neutral() );
+        ImGui::PushStyleColor( ImGuiCol_ButtonHovered,  buttonColour.light() );
+        ImGui::PushStyleColor( ImGuiCol_ButtonActive,   buttonColour.dark() );
+        ImGui::PushStyleColor( ImGuiCol_Text,           textColour.neutral() );
+    }
 }
 
 ColourButton::~ColourButton()
 {
-    ImGui::PopStyleColor( 4 );
+    if ( m_isColoured )
+        ImGui::PopStyleColor( 4 );
 }
 
 } // namespace Scoped

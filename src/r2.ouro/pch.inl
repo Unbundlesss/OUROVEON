@@ -7,7 +7,7 @@
 //  
 //
 
-#define OURO_FRAMEWORK_VERSION    "0.7.8"
+#define OURO_FRAMEWORK_VERSION    "0.8.0"
 #define OURO_FRAMEWORK_CREDIT     "ishani.org 2023"
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -211,7 +211,8 @@ ADD_BLOG( instr,    0xAEEF1A,    "PERF" )
 ADD_BLOG( cfg,      0xe6a637,    " CFG" )
 ADD_BLOG( cache,    0xe6d738,    "  C$" )
 ADD_BLOG( api,      0xa2e65a,    " API" )
-ADD_BLOG( vst,      0x78DCE8,    " VST" )
+ADD_BLOG( database, 0x55e52d,    "  DB" )
+ADD_BLOG( vst,      0x78dce8,    " VST" )
 ADD_BLOG( discord,  0x885de6,    "DISC" )
 
 ADD_BLOG( mix,      0x5bcce6,    " MIX" )

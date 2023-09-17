@@ -23,6 +23,35 @@ namespace endlesss {
 namespace cache {
 
 // ---------------------------------------------------------------------------------------------------------------------
+fs::path Stems::getCachePathRoot( CacheVersion cv )
+{
+    switch ( cv )
+    {
+        case CacheVersion::Version1: return "stem";
+        default:
+        case CacheVersion::Version2: return "stem_v2";
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+fs::path Stems::getCachePathForStemData(
+    const fs::path& cacheRoot,
+    const endlesss::types::JamCouchID& jamCID,
+    const endlesss::types::StemCouchID& stemCID )
+{
+    // pluck the first hex character from the couch ID 
+    const fs::path stemRoot( stemCID.value().substr( 0, 1 ) );
+
+    if ( jamCID.empty() )
+        // support fallback where we just have no parent Jam ID at all, lump them together
+        return (cacheRoot / "_orphans" / stemRoot);
+    else
+        // partition by jam ID, each folder then using the initial character from the stem couch ID to avoid having 
+        // one directory with potentially thousands of stems in
+        return (cacheRoot / jamCID.value() / stemRoot);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 Stems::Stems()
 {
     m_stems.reserve( 2048 );
@@ -32,7 +61,7 @@ Stems::Stems()
 // ---------------------------------------------------------------------------------------------------------------------
 absl::Status Stems::initialise( const fs::path& cachePath, const uint32_t targetSampleRate )
 {
-    static const fs::path stemSubdir( "stem_v2" );
+    const fs::path stemSubdir = getCachePathRoot( CacheVersion::Version2 );
 
     m_cacheStemRoot     = cachePath / stemSubdir;
     m_targetSampleRate  = targetSampleRate;
@@ -48,15 +77,6 @@ absl::Status Stems::initialise( const fs::path& cachePath, const uint32_t target
 
     // single processing instance, used during post-fetch stem analysis
     m_processing = endlesss::live::Stem::createStemProcessing( targetSampleRate );
-
-//     spacetime::Moment pruneTimer;
-//     for ( const auto& dirEntry : recursive_directory_iterator( m_cacheStemRoot ) )
-//     {
-//         if ( dirEntry.is_directory() )
-//             continue;
-//         const auto stat = dirEntry.path().stem();
-//     }
-//     blog::stem( "stem cache examination took {}", pruneTimer.deltaMs() );
 
     return absl::OkStatus();
 }
@@ -175,17 +195,9 @@ void Stems::lockAndPrune( const bool verbose, const uint32_t generationsToKeep )
 //
 fs::path Stems::getCachePathForStem( const endlesss::types::Stem& stemData ) const
 {
-    // pluck the first hex character from the couch ID 
-    const fs::path stemRoot( stemData.couchID.value().substr( 0, 1 ) );
-
-    if ( stemData.jamCouchID.empty() )
-        // support fallback where we just have no parent Jam ID at all, lump them together
-        return (m_cacheStemRoot / "_orphans" / stemRoot);
-    else
-        // partition by jam ID, each folder then using the initial character from the stem couch ID to avoid having 
-        // one directory with potentially thousands of stems in
-        return (m_cacheStemRoot / stemData.jamCouchID.value() / stemRoot);
+    return getCachePathForStemData( m_cacheStemRoot, stemData.jamCouchID, stemData.couchID );
 }
+
 
 } // namespace cache
 } // namespace endlesss

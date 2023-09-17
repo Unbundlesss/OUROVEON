@@ -181,12 +181,11 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
             m_data.fileKey );
 
         // things can take a while to propogate to the CDN; wait longer each cycle and try repeatedly
-        for ( auto remoteFetchAttempst = 0; remoteFetchAttempst < 2; remoteFetchAttempst++ )
+        for ( auto remoteFetchAttempst = 0; remoteFetchAttempst < ncfg.getRequestRetries(); remoteFetchAttempst++ )
         {
-            // extend fetch delay each time we start a full fetch attempt
-            const auto fetchDelayMs = lRng.genInt32( 250, 750 ) + ( remoteFetchAttempst * 1500 );
+            // extend & jitter fetch delay each time we start a full fetch attempt, up to 1s
+            const auto fetchDelayMs = std::min( lRng.genInt32( 0, 500 ) + ( remoteFetchAttempst * 250 ), 1000 );
 
-            // jitter our calls to the CDN
             std::this_thread::sleep_for( std::chrono::milliseconds( fetchDelayMs ) );
 
             if ( !attemptRemoteFetch( ncfg, lRng.genUInt32(), audioMemory ) )

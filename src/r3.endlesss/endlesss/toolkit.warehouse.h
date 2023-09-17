@@ -25,6 +25,9 @@ namespace toolkit {
 //
 struct Warehouse
 {
+    struct _change_index {};
+    using ChangeIndex = base::id::Simple<_change_index, uint32_t, 1, 0>;
+
     struct ContentsReport
     {
         std::vector< types::JamCouchID >    m_jamCouchIDs;
@@ -32,6 +35,7 @@ struct Warehouse
         std::vector< int64_t >              m_unpopulatedRiffs;
         std::vector< int64_t >              m_populatedStems;
         std::vector< int64_t >              m_unpopulatedStems;
+        std::vector< bool >                 m_awaitingInitialSync;  // initial data set has not yet arrived, consider in flux
     };
     using ContentsReportCallback = std::function<void( const ContentsReport& report )>;
 
@@ -81,7 +85,12 @@ struct Warehouse
     struct ITask;
     struct INetworkTask;
 
-    using WorkUpdateCallback = std::function<void( const bool tasksRunning, const std::string& currentTask ) >;
+    using WorkUpdateCallback    = std::function<void( const bool tasksRunning, const std::string& currentTask ) >;
+
+    using TagBatchingCallback   = std::function<void( bool bBatchUpdateBegun )>;
+    using TagUpdateCallback     = std::function<void( const endlesss::types::RiffTag& tagData )>;
+    using TagRemovedCallback    = std::function<void( const endlesss::types::RiffCouchID& tagRiffID )>;
+
 
     Warehouse( const app::StoragePaths& storagePaths, api::NetConfiguration::Shared& networkConfig, base::EventBusClient eventBus );
     ~Warehouse();
@@ -96,6 +105,10 @@ struct Warehouse
     // larger data packets like the full contents report
     void setCallbackWorkReport( const WorkUpdateCallback& cb );
     void setCallbackContentsReport( const ContentsReportCallback& cb );
+
+
+    void setCallbackTagUpdate( const TagUpdateCallback& cbUpdate, const TagBatchingCallback& cbBatch );
+    void setCallbackTagRemoved( const TagRemovedCallback& cb );
 
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -123,6 +136,9 @@ struct Warehouse
     // erase the given jam from the warehouse database entirely
     void requestJamPurge( const types::JamCouchID& jamCouchID );
 
+    // erase all unfilled riffs, effectively cutting short any in-progress sync
+    void requestJamSyncAbort( const types::JamCouchID& jamCouchID );
+
 
     // -----------------------------------------------------------------------------------------------------------------
     // Riff Resolution
@@ -130,6 +146,13 @@ struct Warehouse
     // instead of hitting the Endlesss network, the warehouse may be able to fill in all the data required to 
     // bring a riff online; returns true if that was the case
     bool fetchSingleRiffByID( const endlesss::types::RiffCouchID& riffID, endlesss::types::RiffComplete& result );
+
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Stem Operations
+
+    // given N stems, return a matching vector of origin jam IDs for each; if no jam ID can be determined, an empty ID is stored
+    bool batchFindJamIDForStem( const endlesss::types::StemCouchIDs& stems, endlesss::types::JamCouchIDs& result );
 
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -142,17 +165,21 @@ struct Warehouse
     void removeTag( const endlesss::types::RiffTag& tag );
 
     // returns true if the given riff has tag data, optionally also returning the tag data if a structure is passed in
-    bool isRiffTagged( const endlesss::types::RiffCouchID& riffID, endlesss::types::RiffTag* tagOutput = nullptr );
+    bool isRiffTagged( const endlesss::types::RiffCouchID& riffID, endlesss::types::RiffTag* tagOutput = nullptr ) const;
 
     // get the current set of tags for a jam; returns the size of outputTags on return
-    std::size_t fetchTagsForJam( const endlesss::types::JamCouchID& jamCID, std::vector<endlesss::types::RiffTag>& outputTags );
+    std::size_t fetchTagsForJam( const endlesss::types::JamCouchID& jamCID, std::vector<endlesss::types::RiffTag>& outputTags ) const;
 
     // set all the specific tag data in a single transaction
     void batchUpdateTags( const std::vector<endlesss::types::RiffTag>& inputTags );
 
+    // delete all tags for a jam as a batch operation
+    void batchRemoveAllTags( const endlesss::types::JamCouchID& jamCID );
+
 
     // -----------------------------------------------------------------------------------------------------------------
 
+    ouro_nodiscard ChangeIndex getChangeIndexForJam( const endlesss::types::JamCouchID& jamID ) const;
 
     // control background task processing; pausing will stop any new work from being generated
     void workerTogglePause();
@@ -164,10 +191,14 @@ struct Warehouse
 
 protected:
 
+    using ChangeIndexMap = absl::flat_hash_map< ::endlesss::types::JamCouchID, ChangeIndex >;
+
     friend ITask;
     struct TaskSchedule;
 
     void threadWorker();
+
+    void incrementChangeIndexForJam( const ::endlesss::types::JamCouchID& jamID );
 
     // handle riff tag actions, do database operations to add/remove as requested
     void event_RiffTagAction( const events::RiffTagAction* eventData );
@@ -179,10 +210,15 @@ protected:
 
     std::unique_ptr<TaskSchedule>           m_taskSchedule;
 
+    ChangeIndexMap                          m_changeIndexMap;
+
     WorkUpdateCallback                      m_cbWorkUpdate              = nullptr;
     WorkUpdateCallback                      m_cbWorkUpdateToInstall     = nullptr;
     ContentsReportCallback                  m_cbContentsReport          = nullptr;
     ContentsReportCallback                  m_cbContentsReportToInstall = nullptr;
+    TagUpdateCallback                       m_cbTagUpdate;
+    TagBatchingCallback                     m_cbTagBatching;
+    TagRemovedCallback                      m_cbTagRemoved;
     std::mutex                              m_cbMutex;
 
     std::unique_ptr<std::thread>            m_workerThread;

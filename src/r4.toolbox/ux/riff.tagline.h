@@ -9,11 +9,24 @@
 
 #pragma once
 
-namespace app { struct StoragePaths; }
+#include "app/core.h"
+#include "base/utils.h"
+#include "endlesss/core.types.h"
 
-namespace endlesss {
-namespace toolkit {
+namespace ux {
 
+struct TagLine
+{
+    TagLine( base::EventBusClient eventBus );
+    ~TagLine();
 
-} // namespace toolkit
-} // namespace endlesss
+    void imgui( const endlesss::toolkit::Warehouse& warehouse, endlesss::live::RiffPtr& currentRiffPtr );
+
+private:
+
+    struct State;
+    std::unique_ptr< State >    m_state;
+
+};
+
+} // namespace ux

@@ -12,8 +12,7 @@
 #include "app/ouro.h"
 
 #include "ux/diskrecorder.h"
-#include "ux/cache.jams.browser.h"
-#include "ux/live.riff.details.h"
+#include "ux/jams.browser.h"
 #include "ux/stem.beats.h"
 
 #include "ssp/ssp.file.flac.h"
@@ -993,8 +992,6 @@ int BeamApp::EntrypointOuro()
     endlesss::services::RiffFetchInstance riffFetchService( this );
     endlesss::services::RiffFetchProvider riffFetchProvider = riffFetchService.makeBound();
 
-    // fetch any customised stem export spec
-    const auto exportLoadResult = config::load( *this, m_configExportOutput );
 
     // create and install the mixer engine
     MixEngine mixEngine( m_mdAudio );
@@ -1040,6 +1037,7 @@ int BeamApp::EntrypointOuro()
     };
 
     endlesss::toolkit::Pipeline riffPipeline(
+        m_appEventBus,
         riffFetchProvider,
         32,
         [this]( const endlesss::types::RiffIdentity& request, endlesss::types::RiffComplete& result) -> bool
@@ -1057,13 +1055,17 @@ int BeamApp::EntrypointOuro()
         {
         } );
 
+    static constexpr base::OperationVariant OV_RiffPlayback{ 0xBB };
+
     net::bond::RiffPushServer rpServer;
     rpServer.setRiffPushedCallback([&]( 
         const endlesss::types::JamCouchID&                  jamID,
         const endlesss::types::RiffCouchID&                 riffID,
         const endlesss::types::RiffPlaybackPermutationOpt&  permutationOpt )
     {
-        riffPipeline.requestRiff( { { jamID, riffID }, permutationOpt } );
+        const auto operationID = base::Operations::newID( OV_RiffPlayback );
+
+        riffPipeline.requestRiff( { { jamID, riffID }, permutationOpt, operationID } );
     });
     std::ignore = rpServer.start();
 
@@ -1341,7 +1343,7 @@ int BeamApp::EntrypointOuro()
                 ImGui::PopStyleColor();
 
 
-                ImGui::ux::RiffDetails( currentRiffPtr, m_appEventBusClient.value() );
+                //ImGui::ux::RiffDetails( currentRiffPtr, m_appEventBusClient.value() );
             }
             else
             {
@@ -1429,7 +1431,7 @@ int BeamApp::EntrypointOuro()
                     ImGui::EndTable();
 
                     ImGui::Dummy( ImVec2( 0.0f, 12.0f ) );
-                    ImGui::ux::StemBeats( "##stem_beat", m_endlesssExchange, 18.0f, false );
+                    ux::StemBeats( "##stem_beat", m_endlesssExchange, 18.0f, false );
 
                 }
             }

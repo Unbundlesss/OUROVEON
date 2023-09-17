@@ -115,6 +115,9 @@ ImU32 ParseHexColour( const char* hexColour );
 ImVec4 GetPulseColourVec4( float alpha = 1.0f );
 ImU32 GetPulseColour( float alpha = 1.0f );
 
+ImU32 GetSyncBusyColour( float alpha = 1.0f );
+
+
 inline ImVec4 GetWarningTextColour() { return ImVec4( 0.981f, 0.874f, 0.378f, 0.985f ); }
 inline ImVec4 GetErrorTextColour() { return ImVec4(0.981f, 0.074f, 0.178f, 0.985f); }
 
@@ -375,8 +378,12 @@ private:
 struct ColourButton
 {
     ColourButton() = delete;
-    ColourButton( const colour::Preset& preset );
+    ColourButton( const colour::Preset& buttonColour, const bool bIsColoured = true );
+    ColourButton( const colour::Preset& buttonColour, const colour::Preset& textColour, const bool bIsColoured = true );
     ~ColourButton();
+
+private:
+    bool m_isColoured;
 };
 
 

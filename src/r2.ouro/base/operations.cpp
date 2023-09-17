@@ -44,7 +44,7 @@ void OperationsTerm()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-OperationID Operations::newID()
+OperationID Operations::newID( const OperationVariant variant )
 {
     ABSL_ASSERT( gOperationIDCache != nullptr );
 
@@ -56,7 +56,22 @@ OperationID Operations::newID()
     {
         OperationsFill( 256 );
     }
-    return result;
+
+    // encode variant ID
+    const uint32_t opValue = result.get();
+    const uint32_t finalValue = ( opValue & 0x00FFFFFF ) | ( variant.get() << 24 );
+
+    return OperationID( finalValue );
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+OperationVariant Operations::variantFromID( const OperationID operationID )
+{
+    const uint32_t opValue  = operationID.get();
+    const uint32_t varValue = ( opValue & 0xFF000000 ) >> 24;
+
+    return OperationVariant( varValue );
+}
+
 
 } // namespace base

@@ -92,12 +92,26 @@ OURO_CONFIG( rAPI )
     // seconds between polls when using a sentinel to track jam changes
     int32_t                 jamSentinelPollRateInSeconds = 5;
 
+
+    // 
+    // NB. default vs unstable below is selected via the saved Performance configuration
+    // 
+
     // connection and read timeouts for all network requests
-    int32_t                 networkTimeoutInSeconds = 5;
+    int32_t                 networkTimeoutInSecondsDefault = 2;         // for LAN broadband / stable connections
+    int32_t                 networkTimeoutInSecondsUnstable = 6;        // for 4G / less reliable connections
+
+    // how many times we'll retry a request until abandoning the idea and failing out
+    int32_t                 networkRequestRetryLimitDefault = 2;        // for LAN broadband / stable connections
+    int32_t                 networkRequestRetryLimitUnstable = 5;       // for 4G / less reliable connections
+
 
 
     // BEHAVIOURAL HACKS
     // tweaks to how things should be when harsh reality shows up
+
+    // enable http network compression
+    bool                    connectionCompressionSupport = true;
 
     // set to relax requirements on the database size having to match the CDN actual size for stem data
     // this is basically required for deep diving back more than about 6 months, there is often some strange
@@ -127,7 +141,10 @@ OURO_CONFIG( rAPI )
                , CEREAL_NVP( userAgentWeb )
                , CEREAL_NVP( certBundleRelative )
                , CEREAL_OPTIONAL_NVP( jamSentinelPollRateInSeconds )
-               , CEREAL_OPTIONAL_NVP( networkTimeoutInSeconds )
+               , CEREAL_OPTIONAL_NVP( networkTimeoutInSecondsDefault )
+               , CEREAL_OPTIONAL_NVP( networkTimeoutInSecondsUnstable )
+               , CEREAL_OPTIONAL_NVP( networkRequestRetryLimitDefault )
+               , CEREAL_OPTIONAL_NVP( networkRequestRetryLimitUnstable )
                , CEREAL_OPTIONAL_NVP( hackAllowStemSizeMismatch )
                , CEREAL_OPTIONAL_NVP( debugVerboseNetLog )
                , CEREAL_OPTIONAL_NVP( debugVerboseNetDataCapture )

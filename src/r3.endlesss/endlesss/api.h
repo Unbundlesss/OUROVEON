@@ -19,6 +19,11 @@
 namespace endlesss {
 namespace api {
 
+// ---------------------------------------------------------------------------------------------------------------------
+// turn httplib error into printable string
+const char* getHttpLibErrorString( const httplib::Error err );
+
+// ---------------------------------------------------------------------------------------------------------------------
 // binding of config data into the state required to make API calls to various bits of Endlesss backend
 struct NetConfiguration
 {
@@ -31,6 +36,12 @@ private:
     static constexpr auto cRegexLengthTypeMismatch = "\"length\":\"([0-9]+)\"";
 
 public:
+
+    enum class NetworkQuality
+    {
+        Stable,             // eg. LAN, broadband, stable
+        Unstable            // eg. 4G dongle, mobile, more unreliable
+    };
 
     enum class Access
     {
@@ -83,6 +94,48 @@ public:
         return m_access == Access::None;
     }
 
+    constexpr void setQuality( NetworkQuality quality )
+    {
+        if ( m_quality != quality )
+        {
+            m_quality = quality;
+            switch ( m_quality )
+            {
+            default:
+            case NetworkQuality::Stable:    blog::api( FMTX( "network quality set to Stable" ) ); break;
+            case NetworkQuality::Unstable:  blog::api( FMTX( "network quality set to Unstable" ) ); break;
+            }
+        }
+    }
+    ouro_nodiscard constexpr NetworkQuality getQuality() const
+    {
+        return m_quality;
+    }
+
+    // based on set network quality, how long to wait for endlessss servers to pick up / write back
+    ouro_nodiscard constexpr std::chrono::seconds getRequestTimeout() const
+    {
+        using namespace std::chrono_literals;
+
+        switch ( m_quality )
+        {
+        default:
+        case NetworkQuality::Stable:    return 1s * m_api.networkTimeoutInSecondsDefault;
+        case NetworkQuality::Unstable:  return 1s * m_api.networkTimeoutInSecondsUnstable;
+        }
+    }
+
+    // based on set network quality, how many retries should we give API calls
+    ouro_nodiscard constexpr int32_t getRequestRetries() const
+    {
+        switch ( m_quality )
+        {
+        default:
+        case NetworkQuality::Stable:    return m_api.networkRequestRetryLimitDefault;
+        case NetworkQuality::Unstable:  return m_api.networkRequestRetryLimitUnstable;
+        }
+    }
+
     // spin an RNG to produce a new LB=live## cookie value
     ouro_nodiscard std::string generateRandomLoadBalancerCookie() const;
 
@@ -94,25 +147,38 @@ public:
     ouro_nodiscard constexpr const std::regex& getDataFixRegex_lengthTypeMismatch() const { return m_dataFixRegex_lengthTypeMismatch; }
 
 
+    // utility function used by API calls to get their call attempted an getRequestRetries() number of times, returning
+    // on success (or whatever the final failure is otherwise)
+    httplib::Result attempt( const std::function<httplib::Result()>& operation ) const;
+
+
     // metrics functions that dispatch network activity events via mutable event bus
     // used to tell the rest of the app that network stuff is happening
     void metricsActivitySend() const
     {
-        m_eventBusClient->Send< ::events::NetworkActivity >(0);
+        m_eventBusClient->Send< ::events::NetworkActivity >( 0 );
     }
     void metricsActivityRecv( std::size_t bytesIn ) const
     {
         m_eventBusClient->Send< ::events::NetworkActivity >( bytesIn );
+    }
+    void metricsActivityFailure() const
+    {
+        m_eventBusClient->Send< ::events::NetworkActivity >( ::events::NetworkActivity::failure() );
     }
 
 private:
 
     using EventBusOpt = std::optional< base::EventBusClient >;
 
+    // run after either init configuration call
+    void postInit();
+
     // counter used for debug verbose captures to avoid duplication
     inline static std::atomic_uint32_t  m_writeIndex = 0;
 
-    Access                      m_access;
+    NetworkQuality              m_quality = NetworkQuality::Stable;
+    Access                      m_access = Access::None;
 
     mutable EventBusOpt         m_eventBusClient = std::nullopt;
 
@@ -134,15 +200,6 @@ enum class UserAgent
     WebWithoutAuth,         // plain external web APIs without any credentials
     WebWithAuth,            // as above but with the user authentication included
 };
-
-
-// ---------------------------------------------------------------------------------------------------------------------
-// used by all API calls to create a primed http client instance; seeded with the correct headers, authentication, SSL etc
-// 
-std::unique_ptr<httplib::SSLClient> createEndlesssHttpClient( const NetConfiguration& ncfg, const UserAgent ua );
-
-// ---------------------------------------------------------------------------------------------------------------------
-const char* getHttpLibErrorString( const httplib::Error err );
 
 // ---------------------------------------------------------------------------------------------------------------------
 // general boilerplate that takes a httplib response and tries to deserialize it from JSON to
@@ -745,37 +802,19 @@ struct JamChanges
 // ---------------------------------------------------------------------------------------------------------------------
 struct JamLatestState : public ResultRowHeader<ResultRiffAndStemIDs>
 {
-    bool fetch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID )
-    {
-        auto res = createEndlesssHttpClient( ncfg, UserAgent::Couchbase )->Get(
-            fmt::format( "/user_appdata${}/_design/types/_view/rifffLoopsByCreateTime?descending=true&limit=1", jamDatabaseID ).c_str() );
-
-        return deserializeJson< JamLatestState >( ncfg, res, *this, __FUNCTION__, "jam_latest_state" );
-    }
+    bool fetch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID );
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
 struct JamFullSnapshot : public ResultRowHeader<ResultRiffAndStemIDs>
 {
-    bool fetch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID )
-    {
-        auto res = createEndlesssHttpClient( ncfg, UserAgent::Couchbase )->Get(
-            fmt::format( "/user_appdata${}/_design/types/_view/rifffLoopsByCreateTime?descending=true", jamDatabaseID ).c_str() );
-
-        return deserializeJson< JamFullSnapshot >( ncfg, res, *this, __FUNCTION__, "jam_full_snapshot" );
-    }
+    bool fetch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID );
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
 struct JamRiffCount : public TotalRowsOnly
 {
-    bool fetch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID )
-    {
-        auto res = createEndlesssHttpClient( ncfg, UserAgent::Couchbase )->Get(
-            fmt::format( "/user_appdata${}/_design/types/_view/rifffsByCreateTime", jamDatabaseID ).c_str() );
-
-        return deserializeJson< JamRiffCount >( ncfg, res, *this, __FUNCTION__, "jam_riff_count" );
-    }
+    bool fetch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID );
 };
 
 // ---------------------------------------------------------------------------------------------------------------------

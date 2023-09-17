@@ -175,7 +175,7 @@ void SharedRiffView::State::imgui(
             // if we get a cache miss, issue a fetch request to go plumb the servers for answers
             if ( bJamNameFound == endlesss::services::IJamNameCacheServices::LookupResult::NotFound )
             {
-                coreGUI.getEventBusClient().Send< ::events::RequestJamNameRemoteFetch >(
+                m_eventBusClient.Send< ::events::RequestJamNameRemoteFetch >(
                     dataPtr->m_jamIDs[m_jamNameCacheSyncIndex] );
             }
         }
@@ -320,14 +320,16 @@ void SharedRiffView::State::imgui(
                                     const endlesss::types::RiffCouchID sharedRiffToEnqueue( dataPtr->m_sharedRiffIDs[entry].c_str() );
                                     const endlesss::types::RiffCouchID originRiffToEnqueue( dataPtr->m_riffIDs[entry] );
 
+                                    endlesss::types::IdentityCustomNaming customNaming;
+                                    
                                     // encode an export/display name from the active username that shared the riff
                                     // .. there is no way to get that info during network resolve, so we have to tag it here
-                                    const auto customSharedName = fmt::format( FMTX( "shared_riff_{}" ), dataPtr->m_username );
+                                    customNaming.m_jamDisplayName = fmt::format( FMTX( "shared_riff_{}" ), dataPtr->m_username );
 
                                     return endlesss::types::RiffIdentity(
                                         asSharedRiff ? endlesss::types::Constants::SharedRiffJam() : originJam,
                                         asSharedRiff ? sharedRiffToEnqueue : originRiffToEnqueue,
-                                        customSharedName
+                                        std::move( customNaming )
                                     );
                                 };
 
@@ -351,7 +353,7 @@ void SharedRiffView::State::imgui(
                                         ImGui::Scoped::ToggleButton highlightButton( bIsPlaying, true );
                                         if ( ImGui::PrecisionButton( bRiffWasEnqueued ? ICON_FA_CIRCLE_CHEVRON_DOWN : ICON_FA_PLAY, buttonSizeMidTable, 1.0f ) )
                                         {
-                                            coreGUI.getEventBusClient().Send< ::events::EnqueueRiffPlayback >( getEntryRiffIdentity( true ) );
+                                            m_eventBusClient.Send< ::events::EnqueueRiffPlayback >( getEntryRiffIdentity( true ) );
 
                                             // enqueue the riff ID, not the *shared* riff ID as the default riff ID is what will
                                             // be flowing back through "riff now being played" messages
@@ -389,7 +391,7 @@ void SharedRiffView::State::imgui(
                                     if ( ImGui::PrecisionButton( ICON_FA_GRIP, buttonSizeMidTable, 1.0f ) )
                                     {
                                         // dispatch a request to navigate this this riff, if we can find it
-                                        coreGUI.getEventBusClient().Send< ::events::RequestNavigationToRiff >( getEntryRiffIdentity( false ) );
+                                        m_eventBusClient.Send< ::events::RequestNavigationToRiff >( getEntryRiffIdentity( false ) );
                                     }
                                 }
                                 ImGui::TableNextColumn();

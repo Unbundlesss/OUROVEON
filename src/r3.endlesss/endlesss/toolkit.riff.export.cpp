@@ -102,6 +102,13 @@ std::vector<fs::path> exportRiff(
         std::string jamNameSanitised, jamDescriptionSanitised;
         sanitiseNameForPath( currentRiff->m_riffData.jam.displayName, jamNameSanitised );
         sanitiseNameForPath( currentRiff->m_riffData.jam.description, jamDescriptionSanitised );
+
+        // ensure we have some kind of jam name, just in case - this should not happen though, so assert and trace
+        ABSL_ASSERT( !jamNameSanitised.empty() );
+        if ( jamNameSanitised.empty() )
+        {
+            jamNameSanitised = "UnknownJamName";
+        }
         
         // bolt on some kind of separator if we have a description
         if ( !jamDescriptionSanitised.empty() )
@@ -115,6 +122,9 @@ std::vector<fs::path> exportRiff(
     }
     // riff level
     {
+        std::string riffDescriptionSanitised;
+        sanitiseNameForPath( currentRiff->m_riffData.riff.description, riffDescriptionSanitised );
+
         const auto riffTimestampZoned = date::make_zoned(
             date::current_zone(),
             date::floor<std::chrono::seconds>( currentRiff->m_stTimestamp )
@@ -133,6 +143,8 @@ std::vector<fs::path> exportRiff(
 
         tokenReplacements.emplace( OutputTokens::toString( OutputTokens::Enum::Riff_Scale ),
             endlesss::constants::cScaleNamesFilenameSanitize[currentRiff->m_riffData.riff.scale] );
+
+        tokenReplacements.emplace( OutputTokens::toString( OutputTokens::Enum::Riff_Description ), riffDescriptionSanitised );
     }
 
     std::string rootPathStringU8;
@@ -152,8 +164,9 @@ std::vector<fs::path> exportRiff(
     const char8_t* rootPathAsChar8 = reinterpret_cast< const char8_t* >( rootPathStringU8.c_str() );
 
     // forge the basic path to export to 
-    const auto rootPathU8 = fs::absolute( fs::path{ destination.m_paths.outputApp } /
-                                          fs::path{ rootPathAsChar8 } );
+    const auto path_baseOutput  = fs::path{ destination.m_paths.outputApp };
+    const auto path_fileRoot    = fs::path{ rootPathAsChar8 };
+    const auto rootPathU8       = path_baseOutput / path_fileRoot;
 
     if ( exportMode != RiffExportMode::DryRun )
     {

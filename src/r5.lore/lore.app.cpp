@@ -10,6 +10,9 @@ namespace stdp = std::placeholders;
 #include "base/bimap.h"
 #include "base/paging.h"
 
+#include "filesys/fsutil.h"
+#include "xp/open.url.h"
+
 #include "buffer/buffer.2d.h"
 
 #include "colour/gradient.h"
@@ -27,10 +30,11 @@ namespace stdp = std::placeholders;
 #include "app/ouro.h"
 
 #include "ux/diskrecorder.h"
-#include "ux/cache.jams.browser.h"
+#include "ux/jams.browser.h"
 #include "ux/stem.beats.h"
 #include "ux/stem.analysis.h"
 #include "ux/shared.riffs.view.h"
+#include "ux/riff.tagline.h"
 #include "ux/user.selector.h"
 
 #include "vx/vibes.h"
@@ -48,6 +52,8 @@ namespace stdp = std::placeholders;
 
 #include "net/bond.riffpush.h"
 #include "net/bond.riffpush.connect.h"
+#include "ImGuiFileDialog.h"
+
 
 #define OUROVEON_LORE           "LORE"
 #define OUROVEON_LORE_VERSION   OURO_FRAMEWORK_VERSION "-alpha"
@@ -70,6 +76,15 @@ DEFINE_PAGE_MANAGER( WarehouseView, ICON_FA_DATABASE " Data Warehouse", "data_wa
 DEFINE_PAGE_MANAGER( JamView, ICON_FA_GRIP " Jam View", "jam_view", _JAM_VIEW_STATES );
 
 #undef _JAM_VIEW_STATES
+
+// ---------------------------------------------------------------------------------------------------------------------
+#define _TAG_VIEW_STATES(_action)   \
+      _action(Default)              \
+      _action(Management)
+
+DEFINE_PAGE_MANAGER( TagView, ICON_FA_ANGLES_UP " Jam Tags", "jam_view_tags", _TAG_VIEW_STATES );
+
+#undef _TAG_VIEW_STATES
 
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -215,12 +230,12 @@ struct JamVisualisation
     {
         switch ( m_riffCubeSize )
         {
-            case RiffCubeSize::Nano:    return 13;
-            case RiffCubeSize::Small:   return 16;
+            case RiffCubeSize::Nano:    return 16;
+            case RiffCubeSize::Small:   return 20;
             default:
-            case RiffCubeSize::Medium:  return 22;
+            case RiffCubeSize::Medium:  return 24;
             case RiffCubeSize::Large:   return 28;
-            case RiffCubeSize::Jumbo:   return 32;
+            case RiffCubeSize::Jumbo:   return 34;
         }
     }
 
@@ -246,125 +261,155 @@ struct JamVisualisation
         bool choiceChanged = false;
 
         const float labelColumnsSize = 100.0f;
-        const float panelWidth  = ImGui::GetContentRegionAvail().x;
+        const float subgroupInsetSize = 16.0f;
+        const float panelWidth = ImGui::GetContentRegionAvail().x;
 
-        ImGui::PushItemWidth( ( panelWidth - labelColumnsSize) * 0.7f );
-
-        ImGui::TextUnformatted( "Riff Cell Rendering" );
-        ImGui::SeparatorBreak();
-
-        if ( ImGui::BeginTable( "###riff_cell_config", 2,
-            ImGuiTableFlags_NoSavedSettings ) )
+        ImGui::PushItemWidth( (panelWidth - labelColumnsSize) * 0.7f );
         {
-            ImGui::TableSetupColumn( "Label",   ImGuiTableColumnFlags_WidthFixed, labelColumnsSize );
-            ImGui::TableSetupColumn( "Content", ImGuiTableColumnFlags_WidthStretch, 1.0f );
+            ImGui::TextUnformatted( "Riff Cell Rendering" );
+            ImGui::SeparatorBreak();
+            ImGui::Indent( subgroupInsetSize );
 
-            ImGui::TableNextColumn();
-            ImGui::TextUnformatted( "Cell Size" );
-            ImGui::TableNextColumn();
-            choiceChanged |= RiffCubeSize::ImGuiCombo( "###cell_size", m_riffCubeSize );
-
-            ImGui::TableNextColumn();
-            ImGui::TextUnformatted( "Colouring" );
-            ImGui::TableNextColumn();
-            choiceChanged |= ColouringMode::ImGuiCombo( "###colour_style", m_colourMode );
-
-            if ( m_colourMode == ColouringMode::Uniform )
+            if ( ImGui::BeginTable( "###riff_cell_config", 2,
+                ImGuiTableFlags_NoSavedSettings ) )
             {
-                ImGui::SameLine( 0, 3.0f );
-                choiceChanged |= ImGui::ColorEdit3( "###uniform_colour", (float*)&m_uniformColour.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_DisplayHex);
-            }
-            else
-            {
-                // in-view tooltip for the colour mode
+                ImGui::TableSetupColumn( "Label", ImGuiTableColumnFlags_WidthFixed, labelColumnsSize );
+                ImGui::TableSetupColumn( "Content", ImGuiTableColumnFlags_WidthStretch, 1.0f );
+
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted( "Cell Size" );
+                ImGui::TableNextColumn();
+                choiceChanged |= RiffCubeSize::ImGuiCombo( "###cell_size", m_riffCubeSize );
+
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted( "Colouring" );
+                ImGui::TableNextColumn();
+                choiceChanged |= ColouringMode::ImGuiCombo( "###colour_style", m_colourMode );
+
+                if ( m_colourMode == ColouringMode::Uniform )
                 {
-                    ImGui::Indent( 12.0f );
-                    ImGui::PushTextWrapPos( 0.0f );
-                    ImGui::TextUnformatted( GetDescriptionForColouringMode( m_colourMode ) );
-                    ImGui::PopTextWrapPos();
-                    ImGui::Unindent( 12.0f );
-                    ImGui::Spacing();
+                    ImGui::SameLine( 0, 3.0f );
+                    choiceChanged |= ImGui::ColorEdit3( "###uniform_colour", (float*)&m_uniformColour.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_DisplayHex );
                 }
-
-                // alongside the gradient function choice, render a line of swatches showing a preview of the colour results
-                choiceChanged |= GradientChoice::ImGuiCombo( "##gradient_choice", m_gradientChoice );
+                else
                 {
-                    const int32_t numberOfGradientSampleBoxes = 5;
-                    const float sampleDelta = 1.0f / static_cast<float>(numberOfGradientSampleBoxes - 1);
-                    float sampleT = 0.0f;
-
-                    for ( int32_t gradientBox = 0; gradientBox < numberOfGradientSampleBoxes; gradientBox++ )
+                    // in-view tooltip for the colour mode
                     {
-                        const colour::col3 previewColour = getHeatmapColourAtT( sampleT );
-                        sampleT += sampleDelta;
-
-                        ImGui::PushID( gradientBox );
-                        ImGui::SameLine( 0, 3.0f );
-                        ImGui::ColorEdit3( "###preview_block", (float*)&previewColour,
-                            ImGuiColorEditFlags_NoAlpha |
-                            ImGuiColorEditFlags_NoInputs |
-                            ImGuiColorEditFlags_NoPicker |
-                            ImGuiColorEditFlags_NoOptions |
-                            ImGuiColorEditFlags_NoTooltip |
-                            ImGuiColorEditFlags_NoBorder
-                        );
-                        ImGui::PopID();
+                        ImGui::Indent( 12.0f );
+                        ImGui::PushTextWrapPos( 0.0f );
+                        ImGui::TextUnformatted( GetDescriptionForColouringMode( m_colourMode ) );
+                        ImGui::PopTextWrapPos();
+                        ImGui::Unindent( 12.0f );
+                        ImGui::Spacing();
                     }
+
+                    // alongside the gradient function choice, render a line of swatches showing a preview of the colour results
+                    choiceChanged |= GradientChoice::ImGuiCombo( "##gradient_choice", m_gradientChoice );
+                    {
+                        const int32_t numberOfGradientSampleBoxes = 5;
+                        const float sampleDelta = 1.0f / static_cast<float>(numberOfGradientSampleBoxes - 1);
+                        float sampleT = 0.0f;
+
+                        for ( int32_t gradientBox = 0; gradientBox < numberOfGradientSampleBoxes; gradientBox++ )
+                        {
+                            const colour::col3 previewColour = getHeatmapColourAtT( sampleT );
+                            sampleT += sampleDelta;
+
+                            ImGui::PushID( gradientBox );
+                            ImGui::SameLine( 0, 3.0f );
+                            ImGui::ColorEdit3( "###preview_block", (float*)&previewColour,
+                                ImGuiColorEditFlags_NoAlpha |
+                                ImGuiColorEditFlags_NoInputs |
+                                ImGuiColorEditFlags_NoPicker |
+                                ImGuiColorEditFlags_NoOptions |
+                                ImGuiColorEditFlags_NoTooltip |
+                                ImGuiColorEditFlags_NoBorder
+                            );
+                            ImGui::PopID();
+                        }
+                    }
+
+                    // add in any other configurable values for the active colour mode, like the BPM range to use for scaling
+                    if ( m_colourMode == ColouringMode::BPM )
+                        choiceChanged |= ImGui::DragFloatRange2( "BPM Range", &m_bpmMinimum, &m_bpmMaximum, 1.0f, 25.0f, 999.0f, "%.0f" );
+                    else if ( m_colourMode == ColouringMode::UserChangeRate )
+                        choiceChanged |= ImGui::InputFloat( "Decay Rate", &m_changeRateDecay, 0.05f, 0.1f, " %.2f" );
                 }
 
-                // add in any other configurable values for the active colour mode, like the BPM range to use for scaling
-                if ( m_colourMode == ColouringMode::BPM )
-                    choiceChanged |= ImGui::DragFloatRange2( "BPM Range", &m_bpmMinimum, &m_bpmMaximum, 1.0f, 25.0f, 999.0f, "%.0f" );
-                else if ( m_colourMode == ColouringMode::UserChangeRate )
-                    choiceChanged |= ImGui::InputFloat( "Decay Rate", &m_changeRateDecay, 0.05f, 0.1f, " %.2f" );
+                ImGui::EndTable();
             }
-
-            ImGui::EndTable();
+            ImGui::Unindent( subgroupInsetSize );
         }
-
-        ImGui::Dummy(ImVec2(0,20.0f));
-        ImGui::TextUnformatted( "User Highlighting" );
-        ImGui::SeparatorBreak();
-
-        if ( ImGui::BeginTable( "###user_highlights", 3,
-            ImGuiTableFlags_NoSavedSettings ) )
         {
-            ImGui::TableSetupColumn( "Label", ImGuiTableColumnFlags_WidthFixed, labelColumnsSize );
-            ImGui::TableSetupColumn( "Names", ImGuiTableColumnFlags_WidthFixed, ImGui::ux::UserSelector::cDefaultWidthForUserSize );
-            ImGui::TableSetupColumn( "Names", ImGuiTableColumnFlags_WidthStretch, 1.0f );
+            ImGui::Dummy(ImVec2(0,10.0f));
+            ImGui::TextUnformatted( "Riff Cell Layout" );
+            ImGui::SeparatorBreak();
+            ImGui::Indent( subgroupInsetSize );
 
+            if ( ImGui::BeginTable( "###riff_layout_config", 2,
+                ImGuiTableFlags_NoSavedSettings ) )
             {
-                ImGui::TableNextColumn();
-                ImGui::TextUnformatted( "Primary" );
+                ImGui::TableSetupColumn( "Label",   ImGuiTableColumnFlags_WidthFixed, labelColumnsSize );
+                ImGui::TableSetupColumn( "Content", ImGuiTableColumnFlags_WidthStretch, 1.0f );
 
                 ImGui::TableNextColumn();
-                choiceChanged |= m_userHighlight1.m_user.imgui( "user1", coreGUI.getEndlesssPopulation(), ImGui::ux::UserSelector::cDefaultWidthForUserSize );
+                ImGui::TextUnformatted( "Line Break" );
+                ImGui::TableNextColumn();
+                choiceChanged |= LineBreakOn::ImGuiCombo( "###line_break", m_lineBreakOn );
 
                 ImGui::TableNextColumn();
-                choiceChanged |= ImGui::ColorEdit3( "###user1_colour", (float*)&m_userHighlight1.m_colour.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_DisplayHex );
+                ImGui::TextUnformatted( "Riff Gap" );
+                ImGui::TableNextColumn();
+                choiceChanged |= RiffGapOn::ImGuiCombo( "###riff_gap", m_riffGapOn );
+
+                ImGui::EndTable();
             }
+            ImGui::Unindent( subgroupInsetSize );
+        }
+        {
+            ImGui::Dummy(ImVec2(0,10.0f));
+            ImGui::TextUnformatted( "User Highlighting" );
+            ImGui::SeparatorBreak();
+            ImGui::Indent( subgroupInsetSize );
+
+            if ( ImGui::BeginTable( "###user_highlights", 3,
+                ImGuiTableFlags_NoSavedSettings ) )
             {
-                ImGui::TableNextColumn();
-                ImGui::TextUnformatted( "Secondary" );
+                ImGui::TableSetupColumn( "Label", ImGuiTableColumnFlags_WidthFixed, labelColumnsSize );
+                ImGui::TableSetupColumn( "Names", ImGuiTableColumnFlags_WidthFixed, ImGui::ux::UserSelector::cDefaultWidthForUserSize );
+                ImGui::TableSetupColumn( "Names", ImGuiTableColumnFlags_WidthStretch, 1.0f );
 
-                ImGui::TableNextColumn();
-                choiceChanged |= m_userHighlight2.m_user.imgui( "user2", coreGUI.getEndlesssPopulation(), ImGui::ux::UserSelector::cDefaultWidthForUserSize );
+                {
+                    ImGui::TableNextColumn();
+                    ImGui::TextUnformatted( "Primary" );
 
-                ImGui::TableNextColumn();
-                choiceChanged |= ImGui::ColorEdit3( "###user2_colour", (float*)&m_userHighlight2.m_colour.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_DisplayHex );
+                    ImGui::TableNextColumn();
+                    choiceChanged |= m_userHighlight1.m_user.imgui( "user1", coreGUI.getEndlesssPopulation(), ImGui::ux::UserSelector::cDefaultWidthForUserSize );
+
+                    ImGui::TableNextColumn();
+                    choiceChanged |= ImGui::ColorEdit3( "###user1_colour", (float*)&m_userHighlight1.m_colour.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_DisplayHex );
+                }
+                {
+                    ImGui::TableNextColumn();
+                    ImGui::TextUnformatted( "Secondary" );
+
+                    ImGui::TableNextColumn();
+                    choiceChanged |= m_userHighlight2.m_user.imgui( "user2", coreGUI.getEndlesssPopulation(), ImGui::ux::UserSelector::cDefaultWidthForUserSize );
+
+                    ImGui::TableNextColumn();
+                    choiceChanged |= ImGui::ColorEdit3( "###user2_colour", (float*)&m_userHighlight2.m_colour.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_DisplayHex );
+                }
+
+                ImGui::EndTable();
             }
-
-            ImGui::EndTable();
+            ImGui::Unindent( subgroupInsetSize );
         }
 
-
-        ImGui::Dummy( ImVec2( 0, 20.0f ) );
-        ImGui::TextUnformatted( "Sightline Mode" );
-        ImGui::SeparatorBreak();
+//         ImGui::Dummy( ImVec2( 0, 10.0f ) );
+//         ImGui::TextUnformatted( "Sightline Mode" );
+//         ImGui::SeparatorBreak();
 
         ImGui::PopItemWidth();
-
-
 
         return choiceChanged;
     }
@@ -410,7 +455,8 @@ protected:
     
     std::unique_ptr< vx::Vibes >            m_vibes;
 
-    std::unique_ptr< ux::SharedRiffView >   m_sharedRiffView;
+    std::unique_ptr< ux::SharedRiffView >   m_uxSharedRiffView;
+    std::unique_ptr< ux::TagLine >          m_uxTagLine;
 
 
     // jam ID -> public name data that has been cached in the Warehouse database, used as secondary lookup
@@ -418,9 +464,7 @@ protected:
     endlesss::types::JamIDToNameMap         m_jamHistoricalFromWarehouse;
 
 
-
     mix::StemDataProcessor                  m_stemDataProcessor;
-
 
     bool                                    m_showStemAnalysis = false;
 
@@ -459,7 +503,24 @@ protected:
 
     base::EventListenerID           m_eventListenerRiffEnqueue;
 
-    
+
+    static constexpr base::OperationVariant OV_RiffExport{ 0xBA };
+    static constexpr base::OperationVariant OV_RiffPlayback{ 0xBB };
+
+    using RiffExportOperations = base::BiMap< base::OperationID, endlesss::types::RiffCouchID >;
+
+    RiffPipeline                    m_riffExportPipeline;
+    RiffExportOperations            m_riffExportOperationsMap;
+
+    void enqueueRiffForExport( const endlesss::types::RiffIdentity& identity )
+    {
+        const auto operationID = base::Operations::newID( OV_RiffExport );
+
+        m_riffExportOperationsMap.add( operationID, identity.getRiffID() );
+        m_riffExportPipeline->requestRiff( { identity, operationID } );
+    }
+
+
 
     // ---------------------------------------------------------------------------------------------------------------------
     void onEvent_EnqueueRiffPlayback( const base::IEvent& eventRef )
@@ -472,18 +533,22 @@ protected:
         requestRiffPlayback( enqueueRiffPlaybackEvent->m_identity, m_riffPlaybackAbstraction.asPermutation() );
     }
 
-    void requestRiffPlayback( const endlesss::types::RiffIdentity& riffIdent, const endlesss::types::RiffPlaybackPermutation& playback )
+    base::OperationID requestRiffPlayback( const endlesss::types::RiffIdentity& riffIdent, const endlesss::types::RiffPlaybackPermutation& playback )
     {
+        const auto operationID = base::Operations::newID( OV_RiffPlayback );
+
         const auto& riffCouchID = riffIdent.getRiffID();
 
-        blog::app( "requestRiffPlayback: {}", riffCouchID );
+        blog::app( FMTX("requestRiffPlayback: {}"), riffCouchID );
 
         m_riffsQueuedForPlayback.emplace( riffCouchID );        // stash it in the "queued but not playing yet" list; removed from 
                                                                 // when the mixer eventually gets to playing it
 
         m_syncAndPlaybackInFlight.emplace( riffCouchID );       // log that we will be asynchronously fetching this
 
-        m_riffPipeline->requestRiff( { riffIdent, playback } ); // kick the request to the pipeline
+        m_riffPipeline->requestRiff( { riffIdent, playback, operationID } ); // kick the request to the pipeline
+
+        return operationID;
     }
 
 
@@ -498,7 +563,20 @@ protected:
 
     void event_OperationComplete( const events::OperationComplete* eventData )
     {
-        m_permutationOperationImGuiMap.remove( eventData->m_id );
+        const auto variant = base::Operations::variantFromID( eventData->m_id );
+        
+        if ( variant == mix::Preview::OV_Permutation )
+        {
+            m_permutationOperationImGuiMap.remove( eventData->m_id );
+        }
+        else if ( variant == OV_RiffExport )
+        {
+            m_riffExportOperationsMap.remove( eventData->m_id );
+        }
+        else
+        {
+
+        }
     }
 
     endlesss::types::RiffPlaybackAbstraction    m_riffPlaybackAbstraction;
@@ -510,8 +588,9 @@ protected:
 
 
 protected:
-    endlesss::types::JamCouchID     m_currentViewedJam;
-    std::string                     m_currentViewedJamName;
+    endlesss::types::JamCouchID                 m_currentViewedJam;
+    endlesss::toolkit::Warehouse::ChangeIndex   m_currentViewedJamChangeIndex = endlesss::toolkit::Warehouse::ChangeIndex::invalid();
+    std::string                                 m_currentViewedJamName;
 
     std::optional< endlesss::types::RiffIdentity >  m_currentViewedJamScrollToRiff = std::nullopt;
 
@@ -581,7 +660,8 @@ protected:
             resolveJamPublicNameFromCID( jamCID );
 
             if ( m_warehouseContentsReport.m_unpopulatedRiffs[jIdx] > 0 ||
-                 m_warehouseContentsReport.m_unpopulatedStems[jIdx] > 0 )
+                 m_warehouseContentsReport.m_unpopulatedStems[jIdx] > 0 ||
+                 m_warehouseContentsReport.m_awaitingInitialSync[jIdx] )
             {
                 m_warehouseContentsReportJamInFluxSet.emplace( jamCID );
                 m_warehouseContentsReportJamInFlux.push_back( true );
@@ -1275,12 +1355,55 @@ protected:
     using RiffTagMap = absl::flat_hash_map< endlesss::types::RiffCouchID, endlesss::types::RiffTag >;
     using RiffTagSet = absl::flat_hash_set< endlesss::types::RiffCouchID >;
 
-    endlesss::types::JamCouchID                 m_jamTaggingJamID;
-    RiffTagMap                                  m_jamTaggingMap;    // full map of riff -> tag data
-    RiffTagSet                                  m_jamTaggingSet;    // simplified set of 'does this riff ID have a tag'
-    std::vector< endlesss::types::RiffTag >     m_jamTaggingVector; // flat data array returned from db query; kept around to try and reuse the memory
+    struct JamTaggingState
+    {
+        endlesss::types::JamCouchID                 jamID;
+        RiffTagSet                                  tagSet;    // simplified set of 'does this riff ID have a tag'
+        std::vector< endlesss::types::RiffTag >     tagVector; // flat data array returned from db query; kept around to try and reuse the memory
 
-    base::EventListenerID                       m_eventLID_RiffTagAction            = base::EventListenerID::invalid();
+        void clear()
+        {
+            jamID = {};
+            tagSet.clear();
+            tagVector.clear();
+            blog::app( FMTX( "tag state cleared" ) );
+        }
+
+        void rebuildSet()
+        {
+            tagSet.clear();
+            tagSet.reserve( tagVector.size() );
+            for ( const auto& tag : tagVector )
+            {
+                tagSet.emplace( tag.m_riff );
+            }
+        }
+
+        template<class Archive>
+        void save( Archive& archive ) const
+        {
+            archive( CEREAL_NVP( jamID )
+                   , CEREAL_NVP( tagVector )
+            );
+            blog::app( FMTX( "tag state saved | jam [{}] | {} riffs" ), jamID, tagVector.size() );
+        }
+
+        template<class Archive>
+        void load( Archive& archive )
+        {
+            archive( CEREAL_NVP( jamID )
+                   , CEREAL_NVP( tagVector )
+            );
+            rebuildSet();
+            blog::app( FMTX( "tag state loaded | jam [{}] | {} riffs" ), jamID, tagVector.size() );
+        }
+    }                                           m_jamTagging;
+    bool                                        m_jamTaggingInBatch = false;
+
+    endlesss::types::RiffCouchID                m_jamTaggingCurrentlyHovered;
+
+    fs::path                                    m_jamTaggingSaveLoadDir;
+
     base::EventListenerID                       m_eventLID_RequestNavigationToRiff  = base::EventListenerID::invalid();
 
 
@@ -1290,14 +1413,18 @@ protected:
         if ( isJamBeingSynced( jamID ) )
             return;
 
-        // NB currently we don't check to see if the warehouse data had changed which would mean we DO need to reissue
-        // the view request / fetch new data TODO fix
-        // if ( m_currentViewedJam != jamID )
+        const auto jamChangeIndex = m_warehouse->getChangeIndexForJam( jamID );
+
+        if ( m_currentViewedJam != jamID || jamChangeIndex != m_currentViewedJamChangeIndex )
         {
             clearJamSlice();
 
             // change which jam we're viewing, reset active riff hover in the process as this will invalidate it
-            m_currentViewedJam = jamID;
+            m_currentViewedJam              = jamID;
+            m_currentViewedJamChangeIndex   = jamChangeIndex;
+
+            blog::database( FMTX( "new jam view setup, id {} with cI:[{}]" ), m_currentViewedJam, m_currentViewedJamChangeIndex.get() );
+
             m_jamSliceHoveredRiffIndex = -1;
 
             const auto lookupResult = lookupNameForJam( m_currentViewedJam, m_currentViewedJamName );
@@ -1337,12 +1464,20 @@ protected:
         m_currentViewedJamScrollToRiff = std::nullopt;
 
         // purge the tag data
-        {
-            m_jamTaggingJamID = {};
-            m_jamTaggingMap.clear();
-            m_jamTaggingSet.clear();
-            m_jamTaggingVector.clear();
-        }
+        m_jamTagging.clear();
+    }
+
+    void fetchAndUpdateTagsForCurrentJam( const endlesss::types::JamCouchID jamCouchID )
+    {
+        // fetch the tags for this jam
+        m_jamTagging.clear();
+        m_jamTagging.jamID = jamCouchID;
+        ABSL_ASSERT( !jamCouchID.empty() );
+
+        const auto tagCount = m_warehouse->fetchTagsForJam( m_jamTagging.jamID, m_jamTagging.tagVector );
+        m_jamTagging.rebuildSet();
+
+        blog::app( FMTX( "fetched {} tags for jam {} from warehouse" ), tagCount, m_jamTagging.jamID );
     }
 
     void newJamSliceGenerated(
@@ -1357,34 +1492,59 @@ protected:
 
         m_jamSliceRenderChangePendingTimer.setToFuture( c_jamSliceRenderChangeDuration );
 
-        // fetch the tags for this jam
+        fetchAndUpdateTagsForCurrentJam( jamCouchID );
+    }
+
+    void warehouseCallbackTagBatching( bool bBatchUpdateBegun )
+    {
+        m_jamTaggingInBatch = bBatchUpdateBegun;
+
+        // finished a batch update, rebuild
+        if ( !m_jamTaggingInBatch )
         {
-            m_jamTaggingJamID = jamCouchID;
-            m_jamTaggingMap.clear();
-            m_jamTaggingSet.clear();
-            m_jamTaggingVector.clear();
+            fetchAndUpdateTagsForCurrentJam( m_jamTagging.jamID );
+        }
+    }
 
-            const auto tagCount = m_warehouse->fetchTagsForJam( m_jamTaggingJamID, m_jamTaggingVector );
+    void warehouseCallbackTagUpdate( const endlesss::types::RiffTag& updatedTag )
+    {
+        if ( m_jamTaggingInBatch )
+            return;
 
-            blog::app( FMTX( "fetched {} tags for jam {}" ), tagCount, m_jamTaggingJamID );
+        if ( updatedTag.m_jam == m_jamTagging.jamID )
+        {
+            // insert or ignore the riff ID in the tag set
+            m_jamTagging.tagSet.emplace( updatedTag.m_riff );
 
-            m_jamTaggingMap.reserve( tagCount );
-            m_jamTaggingSet.reserve( tagCount );
-            for ( const auto& tag : m_jamTaggingVector )
+            bool bWasUpdated = false;
+            // find and update existing tag
+            for ( std::size_t idx = 0; idx < m_jamTagging.tagVector.size(); idx++ )
             {
-                m_jamTaggingMap.emplace( tag.m_riff, tag );
-                m_jamTaggingSet.emplace( tag.m_riff );
+                if ( m_jamTagging.tagVector[idx].m_riff == updatedTag.m_riff )
+                {
+                    m_jamTagging.tagVector[idx] = updatedTag;
+                    bWasUpdated = true;
+                    break;
+                }
+            }
+
+            // didn't find existing tag, assume this is a new insert
+            if ( !bWasUpdated )
+            {
+                m_jamTagging.tagVector.push_back( updatedTag );
             }
         }
     }
 
-    void event_RiffTagAction( const events::RiffTagAction* eventData )
+    void warehouseCallbackTagRemoved( const endlesss::types::RiffCouchID& tagRiffID )
     {
-        if ( eventData->m_tag.m_jam == m_jamTaggingJamID )
-        {
+        if ( m_jamTaggingInBatch )
+            return;
 
-        }
+        m_jamTagging.tagSet.erase( tagRiffID );
+        base::erase_where( m_jamTagging.tagVector, [&]( const endlesss::types::RiffTag& tag ) { return tag.m_riff == tagRiffID; } );
     }
+
 
     void modalBasicErrorPopup( const char* title, std::string_view errorMessage )
     {
@@ -1438,6 +1598,11 @@ protected:
         {
             jamName = "Unknown Jam";
         }
+        // regardless of sync check below, we upsert the jam name into internal warehouse lookup; it needs it set so when we
+        // pull riff data out of the warehouse we can also resolve its origin jam name (rather than interrogating the app / BNS)
+        // .. doing it early/often ensures we have an up-to-date record, just in case
+        m_warehouse->upsertSingleJamIDToName( jamToNavigateTo, jamName );
+
 
         const auto haveSyncedJamIt = m_warehouseContentsReportJamIDs.find( jamToNavigateTo );
         if ( haveSyncedJamIt == m_warehouseContentsReportJamIDs.end() )
@@ -1680,8 +1845,183 @@ protected:
     base::EventListenerID           m_eventLID_RequestJamNameRemoteFetch = base::EventListenerID::invalid();
     JamNameRemoteFetchResultQueue   m_jamNameRemoteFetchResultQueue;
     float                           m_jamNameRemoteFetchUpdateBroadcastTimer = 0;
-};
 
+
+// ---------------------------------------------------------------------------------------------------------------------
+// a dumb little utility for moving all the stems from a v1 cache to the new v2 format
+protected:
+
+    struct MigrationState
+    {
+        using recursive_directory_iterator = std::filesystem::recursive_directory_iterator;
+        using iterator_instance = std::unique_ptr< recursive_directory_iterator >;
+
+        MigrationState( const fs::path& cacheCommonRootPath )
+            : m_cacheRoot( cacheCommonRootPath )
+            , m_rootPathVersion1( cacheCommonRootPath / endlesss::cache::Stems::getCachePathRoot( endlesss::cache::Stems::CacheVersion::Version1 ) )
+            , m_rootPathVersion2( cacheCommonRootPath / endlesss::cache::Stems::getCachePathRoot( endlesss::cache::Stems::CacheVersion::Version2 ) )
+        {
+            if ( fs::exists( m_rootPathVersion1 ) )
+                m_iterator = std::make_unique< recursive_directory_iterator >( m_rootPathVersion1 );
+        }
+
+        fs::path            m_cacheRoot;
+        fs::path            m_rootPathVersion1;
+        fs::path            m_rootPathVersion2;
+        iterator_instance   m_iterator;
+
+        std::vector< fs::path >         m_resolverOriginalFiles;
+        endlesss::types::StemCouchIDs   m_resolverInputs;
+        endlesss::types::JamCouchIDs    m_resolverOutputs;
+
+        bool                m_running = false;
+        uint32_t            m_filesExamined = 0;
+        uint32_t            m_filesMigrated = 0;
+    };
+    std::unique_ptr<MigrationState>     m_cacheMigrationState;
+
+    void doStemCacheMigrationPopup( const char* title )
+    {
+        const ImVec2 buttonSize( 240.0f, 32.0f );
+
+        const ImVec2 configWindowSize( 600.0f, 320.0f );
+        ImGui::SetNextWindowContentSize( configWindowSize );
+
+        ABSL_ASSERT( m_cacheMigrationState != nullptr );
+        MigrationState& state = *m_cacheMigrationState;
+
+        if ( ImGui::BeginPopupModal( title, nullptr, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize ) )
+        {
+            if ( !fs::exists( state.m_rootPathVersion1 ) )
+            {
+                ImGui::TextWrapped( "This tool is for migrating older OUROVEON stem caches but you do not appear to have one in your installation" );
+            }
+            else
+            {
+                ImGui::TextWrapped( "This is a tool to migrate your older OUROVEON stem cache to the latest format. This process involves identifying & copying the old stem files; it may take a moment to complete, depending on the size of your cache." );
+                ImGui::Spacing();
+                ImGui::TextWrapped( "Click [Run Migration] and wait for it to complete. You only need do this process once." );
+                ImGui::Spacing();
+                ImGui::SeparatorBreak();
+
+                {
+                    ImGui::Scoped::ToggleButton tbl( state.m_running, true );
+                    if ( ImGui::Button( "Run Migration", buttonSize ) )
+                        state.m_running = !state.m_running;
+                }
+                ImGui::Text( "Stems Examined : %u", state.m_filesExamined );
+                ImGui::Text( "Stems Migrated : %u", state.m_filesMigrated );
+
+                ImGui::Spacing();
+                ImGui::SeparatorBreak();
+                ImGui::TextWrapped( "Once complete, you can delete the old cache folder : " );
+                if ( ImGui::Button( "Open..." ) )
+                {
+                    xpOpenURL( state.m_cacheRoot.string().c_str() );
+                }
+                ImGui::SameLine( 0, 12.0f );
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextColored( colour::shades::callout.neutral(), state.m_rootPathVersion1.string().c_str() );
+
+
+                if ( state.m_running )
+                {
+                    state.m_resolverOriginalFiles.clear();
+                    state.m_resolverInputs.clear();
+                    state.m_resolverOutputs.clear();
+
+                    int32_t runs = 8;
+                    for ( const auto& dirEntry : *state.m_iterator )
+                    {
+                        if ( dirEntry.is_directory() )
+                            continue;
+
+                        if ( runs <= 0 )
+                            break;
+                        runs--;
+
+                        const std::string filename = dirEntry.path().stem().string();
+                        if ( filename.size() > 10 && 
+                             filename[0] == 's' &&
+                             filename[1] == 't' &&
+                             filename[2] == 'e' &&
+                             filename[3] == 'm' )
+                        {
+                            const auto stemID = filename.substr( 5 );
+                            state.m_resolverInputs.emplace_back( stemID );
+                            state.m_resolverOriginalFiles.emplace_back( dirEntry.path() );
+
+                            state.m_filesExamined++;
+                        }
+                    }
+
+                    if ( state.m_resolverInputs.empty() )
+                    {
+                        state.m_running = false;
+                    }
+
+                    // ask warehouse about where we should be relocating these
+                    m_warehouse->batchFindJamIDForStem( state.m_resolverInputs, state.m_resolverOutputs );
+                    ABSL_ASSERT( state.m_resolverInputs.size() == state.m_resolverOutputs.size() );
+
+                    for ( auto idx = 0U; idx < state.m_resolverInputs.size(); idx++ )
+                    {
+                        if ( state.m_resolverOutputs[idx].empty() )
+                            continue;
+
+                        const auto stemID = state.m_resolverInputs[idx];
+
+                        const auto copyToPath = endlesss::cache::Stems::getCachePathForStemData(
+                            state.m_rootPathVersion2,
+                            state.m_resolverOutputs[idx],
+                            stemID ) ;
+                        const auto copyToFile = copyToPath / stemID.value();
+
+                        if ( !fs::exists( copyToFile ) )
+                        {
+    //                         blog::cache( FMTX( "{} = {} >> {}" ),
+    //                             state.m_resolverInputs[idx],
+    //                             state.m_resolverOutputs[idx],
+    //                             copyToFile.string() );
+
+                            absl::Status directoryBuildStatus = filesys::ensureDirectoryExists( copyToPath );
+                            if ( directoryBuildStatus.ok() )
+                            {
+                                try
+                                {
+                                    fs::copy_file( state.m_resolverOriginalFiles[idx], copyToFile );
+                                }
+                                catch ( fs::filesystem_error& fsE )
+                                {
+                                    blog::error::cache( FMTX( "error while copying [{}] : {}" ), copyToFile.string(), fsE.what() );
+                                }
+                            }
+
+                            state.m_filesMigrated++;
+                        }
+                    }
+                }
+            }
+
+            const auto panelRegionAvail = ImGui::GetContentRegionAvail();
+            {
+                const float alignButtonsToBase = panelRegionAvail.y - (buttonSize.y + 6.0f);
+                ImGui::Dummy( ImVec2( 0, alignButtonsToBase ) );
+            }
+
+            {
+                ImGui::Scoped::Disabled sd( state.m_running );
+                if ( ImGui::Button( "Close", buttonSize ) )
+                {
+                    m_cacheMigrationState.reset();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+
+            ImGui::EndPopup();
+        }
+    }
+};
 
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1692,6 +2032,18 @@ int LoreApp::EntrypointOuro()
     endlesss::services::RiffFetchInstance riffFetchService( this );
     endlesss::services::RiffFetchProvider riffFetchProvider = riffFetchService.makeBound();
 
+    // build cache control menu
+    registerMainMenuEntry( 2, "CACHE", [this]()
+        {
+            if ( ImGui::MenuItem( "Migration..." ) )
+            {
+                m_cacheMigrationState = std::make_unique<MigrationState>( m_storagePaths->cacheCommon );
+                activateModalPopup( "Stem Cache Migration", [this]( const char* title )
+                {
+                    doStemCacheMigrationPopup( title );
+                });
+            }
+        });
 
     // create warehouse instance to manage ambient downloading
     m_warehouse = std::make_unique<endlesss::toolkit::Warehouse>(
@@ -1705,6 +2057,13 @@ int LoreApp::EntrypointOuro()
     m_warehouse->setCallbackWorkReport( std::bind( &LoreApp::handleWarehouseWorkUpdate, this, stdp::_1, stdp::_2 ) );
     m_warehouse->setCallbackContentsReport( std::bind( &LoreApp::handleWarehouseContentsReport, this, stdp::_1 ) );
 
+    m_warehouse->setCallbackTagUpdate(
+        [this]( const endlesss::types::RiffTag& updatedTag ) { this->warehouseCallbackTagUpdate( updatedTag ); },
+        [this]( const bool bBatchUpdateBegun ) { this->warehouseCallbackTagBatching( bBatchUpdateBegun ); }
+    );
+    m_warehouse->setCallbackTagRemoved( [this]( const endlesss::types::RiffCouchID& tagRiffID ) { this->warehouseCallbackTagRemoved( tagRiffID ); } );
+
+
     WarehouseJamBrowserBehaviour warehouseJamBrowser;
     warehouseJamBrowser.fnIsDisabled = [&warehouseJamBrowser]( const endlesss::types::JamCouchID& newJamCID )
     {
@@ -1716,9 +2075,6 @@ int LoreApp::EntrypointOuro()
         m_warehouse->addOrUpdateJamSnapshot( newJamCID );
     };
 
-
-    // fetch any customised stem export spec
-    const auto exportLoadResult = config::load( *this, m_configExportOutput );
 
 
     // add status bar section to report warehouse activity
@@ -1754,9 +2110,10 @@ int LoreApp::EntrypointOuro()
         }
     }
 
-    m_sharedRiffView = std::make_unique<ux::SharedRiffView>( m_networkConfiguration, std::move( getEventBusClient() ) );
+    m_uxSharedRiffView  = std::make_unique<ux::SharedRiffView>( m_networkConfiguration, std::move( getEventBusClient() ) );
+    m_uxTagLine         = std::make_unique<ux::TagLine>( std::move( getEventBusClient() ) );
 
-
+    m_jamTaggingSaveLoadDir = m_storagePaths->outputApp;
 
     // add developer menu entry for stem analysis flag
     addDeveloperMenuFlag( "Stem Analysis", &m_showStemAnalysis );
@@ -1773,7 +2130,6 @@ int LoreApp::EntrypointOuro()
         APP_EVENT_BIND_TO( MixerRiffChange );
         APP_EVENT_BIND_TO( OperationComplete );
         APP_EVENT_BIND_TO( RequestJamNameRemoteFetch );
-        APP_EVENT_BIND_TO( RiffTagAction );
         APP_EVENT_BIND_TO( RequestNavigationToRiff );
     }
 
@@ -1788,13 +2144,17 @@ int LoreApp::EntrypointOuro()
 
 
     m_riffPipeline = std::make_unique< endlesss::toolkit::Pipeline >(
+        m_appEventBus,
         riffFetchProvider,
         m_configPerf.liveRiffInstancePoolSize,
         [this]( const endlesss::types::RiffIdentity& request, endlesss::types::RiffComplete& result) -> bool
         {
             // most requests can be serviced direct from the DB
             if ( m_warehouse->fetchSingleRiffByID( request.getRiffID(), result ) )
+            {
+                endlesss::toolkit::Pipeline::applyRequestCustomNaming( request, result );
                 return true;
+            }
 
             return endlesss::toolkit::Pipeline::defaultNetworkResolver( *m_networkConfiguration, request, result );
         },
@@ -1825,7 +2185,29 @@ int LoreApp::EntrypointOuro()
             m_riffPipelineClearInProgress = false;
         });
 
+    m_riffExportPipeline = std::make_unique< endlesss::toolkit::Pipeline >(
+        m_appEventBus,
+        riffFetchProvider,
+        16,
+        [this]( const endlesss::types::RiffIdentity& request, endlesss::types::RiffComplete& result ) -> bool
+        {
+            // most requests can be serviced direct from the DB
+            if ( m_warehouse->fetchSingleRiffByID( request.getRiffID(), result ) )
+            {
+                endlesss::toolkit::Pipeline::applyRequestCustomNaming( request, result );
+                return true;
+            }
 
+            return endlesss::toolkit::Pipeline::defaultNetworkResolver( *m_networkConfiguration, request, result );
+        },
+        [this]( const endlesss::types::RiffIdentity& request, endlesss::live::RiffPtr& loadedRiff, const endlesss::types::RiffPlaybackPermutationOpt& )
+        {
+            ::events::ExportRiff exportRiffData( loadedRiff, {} );
+            event_ExportRiff( &exportRiffData );
+        },
+        []()
+        {
+        });
 
     m_eventListenerRiffEnqueue = m_appEventBus->addListener( events::EnqueueRiffPlayback::ID, [this]( const base::IEvent& evt ) { onEvent_EnqueueRiffPlayback( evt ); } );
 
@@ -1981,7 +2363,7 @@ int LoreApp::EntrypointOuro()
                 }
 
                 ImGui::SameLine( 0, 8.0f );
-                if ( ImGui::BeginChild( "disk-recorders", ImVec2( 200.0f, 0 ) ) )
+                if ( ImGui::BeginChild( "disk-recorders", ImVec2( 210.0f, 0 ) ) )
                 {
                     ux::widget::DiskRecorder( *m_mdAudio, m_storagePaths->outputApp );
 
@@ -1995,7 +2377,7 @@ int LoreApp::EntrypointOuro()
 
                 if ( ImGui::BeginChild( "beat-box" ) )
                 {
-                    ImGui::ux::StemBeats( "##stem_beat", m_endlesssExchange, 18.0f, false );
+                    ux::StemBeats( "##stem_beat", m_endlesssExchange, 18.0f, false );
                 }
                 ImGui::EndChild();
             }
@@ -2025,6 +2407,10 @@ int LoreApp::EntrypointOuro()
 
             if ( ImGui::Begin( ICON_FA_BARS " Riff Details###riff_details" ) )
             {
+                m_uxTagLine->imgui( *m_warehouse, currentRiffPtr );
+
+                ImGui::Spacing();
+
                 struct TableFixedColumn
                 {
                     constexpr TableFixedColumn( const char* title, const float width )
@@ -2294,31 +2680,6 @@ int LoreApp::EntrypointOuro()
                     }
 
                     ImGui::EndTable();
-
-                    /*
-                    ImGui::Spacing();
-                    {
-                        const auto riffToolButtonSize = ImVec2( 180.0f, 0.0f );
-
-                        ImGui::Scoped::ButtonTextAlignLeft riffToolButtons;
-                        {
-                            const bool disableButton = ( currentRiff == nullptr );
-                            ImGui::BeginDisabledControls( disableButton );
-                            if ( ImGui::Button( " " ICON_FA_BOOK " Add to Scrapbook ", riffToolButtonSize ) )
-                            {
-                                m_appEventBus->send< ::events::RiffTagAction >( endlesss::types::RiffTag{
-                                    currentRiff->m_riffData.jam.couchID,
-                                    currentRiff->m_riffData.riff.couchID,
-                                    -1,
-                                    currentRiff->m_riffData.riff.creationTimeUnix,
-                                    0,
-                                    ""
-                                    }, ::events::RiffTagAction::Action::Upsert );
-                            }
-                            ImGui::EndDisabledControls( disableButton );
-                        }
-                    }
-                    */
                 }
             }
             ImGui::End();
@@ -2331,279 +2692,719 @@ int LoreApp::EntrypointOuro()
             {
                 jamView.checkForImGuiTabSwitch();
 
-                if ( jamView == JamView::Visualisation )
+                if ( m_currentViewedJamName.empty() || m_currentViewedJam.empty() )
                 {
-                    const bool visOptionChanged = m_jamVisualisation.imgui( *this );
-                    if ( visOptionChanged )
-                    {
-                        notifyForRenderUpdate();
-                    }
+                    ImGui::TextColored( colour::shades::toast.light(), "No jam currently loaded" );
+                    ImGui::TextColored( colour::shades::toast.neutral(), "Use the " ICON_FA_DATABASE " Data Warehouse view to select one" );
                 }
                 else
                 {
-                    // capture the zone we'll be working with - this also lets us track if the user is changing the
-                    // view size which will lazily trigger a re-rendering of all the backing textures
-                    const ImVec2 jamViewDimensions = ImVec2(
-                        ImGui::GetContentRegionAvail().x - 20.0f,
-                        ImGui::GetContentRegionAvail().y );
-
-                    ImGui::PushFont( m_mdFrontEnd->getFont( app::module::Frontend::FontChoice::MediumTitle ) );
-                    ImGui::TextUnformatted( m_currentViewedJamName.c_str() );
-                    ImGui::PopFont();
-
-                    // font used for labels in amongst the jam cubes
-                    ImGui::PushFont( m_mdFrontEnd->getFont( app::module::Frontend::FontChoice::FixedSmaller ) );
-
-                    // check to see if we need to rebuild the jam view on size change
-                    // also pokes the main-gl-thread texture GPU syncing jobs
-                    syncJamViewLayoutAndAsyncRendering( jamViewDimensions, static_cast<int32_t>( ImGui::GetContentRegionAvail().y ) );
-
-
-                    const ImVec2 outerPos = ImGui::GetCursorPos();
-                    const auto contentRegion = ImGui::GetContentRegionAvail();
-
-                    bool shouldShowSightline = false;
-
-                    if ( ImGui::BeginChild( "##jam_browser" ) )
+                    if ( jamView == JamView::Visualisation )
                     {
-                        const float jamGridCellF = static_cast<float>( m_jamVisualisation.getRiffCubeSize() );
-                        const float jamGridCellHalf = jamGridCellF * 0.5f;
-                        const ImVec2 jamGridCell( jamGridCellF, jamGridCellF );
-                        const ImVec2 jamGridCellCenter( jamGridCellHalf, jamGridCellHalf );
-                        const ImU32 jamCellColourPlaying = ImGui::GetColorU32( ImGuiCol_Text );
-                        const ImU32 jamCellColourEnqueue = ImGui::GetColorU32( ImGuiCol_ChildBg, 0.8f );
-                        const ImU32 jamCellColourLoading = ImGui::GetPulseColour();
-
-                        if ( isJamBeingSynced( m_currentViewedJam ) )
+                        const bool visOptionChanged = m_jamVisualisation.imgui( *this );
+                        if ( visOptionChanged )
                         {
-                            ImGui::TextUnformatted( "Jam being synced ..." );
+                            notifyForRenderUpdate();
                         }
-                        else
+                    }
+                    else
+                    {
+                        // capture the zone we'll be working with - this also lets us track if the user is changing the
+                        // view size which will lazily trigger a re-rendering of all the backing textures
+                        const ImVec2 jamViewDimensions = ImVec2(
+                            ImGui::GetContentRegionAvail().x - 20.0f,
+                            ImGui::GetContentRegionAvail().y );
+
+                        ImGui::PushFont( m_mdFrontEnd->getFont( app::module::Frontend::FontChoice::MediumTitle ) );
+                        ImGui::TextUnformatted( m_currentViewedJamName.c_str() );
+                        ImGui::PopFont();
+
+                        // font used for labels in amongst the jam cubes
+                        ImGui::PushFont( m_mdFrontEnd->getFont( app::module::Frontend::FontChoice::FixedSmaller ) );
+
+                        // check to see if we need to rebuild the jam view on size change
+                        // also pokes the main-gl-thread texture GPU syncing jobs
+                        syncJamViewLayoutAndAsyncRendering( jamViewDimensions, static_cast<int32_t>( ImGui::GetContentRegionAvail().y ) );
+
+
+                        const ImVec2 outerPos = ImGui::GetCursorPos();
+                        const auto contentRegion = ImGui::GetContentRegionAvail();
+
+                        bool shouldShowSightline = false;
+
+                        if ( ImGui::BeginChild( "##jam_browser" ) )
                         {
-                            ImGui::PushStyleVar( ImGuiStyleVar_ItemSpacing, ImVec2( 0, 0 ) );
-                            std::scoped_lock<std::mutex> sliceLock( m_jamSliceMapLock );
+                            const float jamGridCellF = static_cast<float>( m_jamVisualisation.getRiffCubeSize() );
+                            const float jamGridCellHalf = jamGridCellF * 0.5f;
+                            const ImVec2 jamGridCell( jamGridCellF, jamGridCellF );
+                            const ImVec2 jamGridCellCenter( jamGridCellHalf, jamGridCellHalf );
+                            const ImU32 jamCellColourPlaying = ImGui::GetColorU32( ImGuiCol_Text );
+                            const ImU32 jamCellColourEnqueue = ImGui::GetColorU32( ImGuiCol_ChildBg, 0.8f );
+                            const ImU32 jamCellColourLoading = ImGui::GetPulseColour();
 
-                            const bool renderUpdatePending = isRenderUpdatePending();
-                            const ImVec4 texturePageBlending = renderUpdatePending ? ImVec4( 1.0f, 1.0f, 1.0f, 0.5f ) : ImVec4( 1.0f, 1.0f, 1.0f, 1.0f );
-
-                            if ( m_jamSliceRenderState == JamSliceRenderState::Ready || renderUpdatePending )
+                            if ( isJamBeingSynced( m_currentViewedJam ) )
                             {
-                                shouldShowSightline = !renderUpdatePending;
+                                ImGui::TextUnformatted( "Jam being synced ..." );
+                            }
+                            else
+                            {
+                                ImGui::PushStyleVar( ImGuiStyleVar_ItemSpacing, ImVec2( 0, 0 ) );
+                                std::scoped_lock<std::mutex> sliceLock( m_jamSliceMapLock );
 
-                                ImVec2 pos = ImGui::GetCursorScreenPos();
-                                ImDrawList* draw_list = ImGui::GetWindowDrawList();
-                                ImGuiIO& io = ImGui::GetIO();
+                                const bool renderUpdatePending = isRenderUpdatePending();
+                                const ImVec4 texturePageBlending = renderUpdatePending ? ImVec4( 1.0f, 1.0f, 1.0f, 0.5f ) : ImVec4( 1.0f, 1.0f, 1.0f, 1.0f );
 
-                                gfx::GPUTask::ValidState textureState;
-
-                                for ( const auto& texture : m_jamSliceSketch->m_textures )
+                                if ( m_jamSliceRenderState == JamSliceRenderState::Ready || renderUpdatePending )
                                 {
-                                    if ( texture->getStateIfValid( textureState ) )
+                                    shouldShowSightline = !renderUpdatePending;
+
+                                    ImVec2 pos = ImGui::GetCursorScreenPos();
+                                    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+                                    ImGuiIO& io = ImGui::GetIO();
+
+                                    gfx::GPUTask::ValidState textureState;
+
+                                    for ( const auto& texture : m_jamSliceSketch->m_textures )
                                     {
-                                        const bool isTextureOnScreen = ImGui::Image(
-                                            textureState.m_imTextureID,
-                                            textureState.m_usageDimensionsVec2,
-                                            ImVec2( 0, 0 ),
-                                            textureState.m_usageUV,
-                                            texturePageBlending );
-
-                                        if ( isTextureOnScreen )
+                                        if ( texture->getStateIfValid( textureState ) )
                                         {
-                                            const auto mouseToCenterX = io.MousePos.x - pos.x;
-                                            const auto mouseToCenterY = io.MousePos.y - pos.y;
+                                            const bool isTextureOnScreen = ImGui::Image(
+                                                textureState.m_imTextureID,
+                                                textureState.m_usageDimensionsVec2,
+                                                ImVec2( 0, 0 ),
+                                                textureState.m_usageUV,
+                                                texturePageBlending );
 
-                                            if ( ImGui::IsItemHovered() )
+                                            if ( isTextureOnScreen )
                                             {
-                                                const auto cellX = (int32_t)std::floor( mouseToCenterX / (float)m_jamVisualisation.getRiffCubeSize() );
-                                                const auto cellY = (int32_t)std::floor( mouseToCenterY / (float)m_jamVisualisation.getRiffCubeSize() );
+                                                const auto mouseToCenterX = io.MousePos.x - pos.x;
+                                                const auto mouseToCenterY = io.MousePos.y - pos.y;
 
-                                                const uint64_t cellIndex = (uint64_t)cellX | ((uint64_t)cellY << 32);
-
-                                                // check and set which riff we are hovering over, if any
-                                                const auto& indexHovered = m_jamSliceSketch->m_cellIndexToSliceIndex.find( cellIndex );
-                                                if ( indexHovered != m_jamSliceSketch->m_cellIndexToSliceIndex.end() )
+                                                if ( ImGui::IsItemHovered() )
                                                 {
-                                                    m_jamSliceHoveredRiffIndex = indexHovered->second;
+                                                    const auto cellX = (int32_t)std::floor( mouseToCenterX / (float)m_jamVisualisation.getRiffCubeSize() );
+                                                    const auto cellY = (int32_t)std::floor( mouseToCenterY / (float)m_jamVisualisation.getRiffCubeSize() );
 
-                                                    if ( ImGui::IsItemClicked() )
+                                                    const uint64_t cellIndex = (uint64_t)cellX | ((uint64_t)cellY << 32);
+
+                                                    // check and set which riff we are hovering over, if any
+                                                    const auto& indexHovered = m_jamSliceSketch->m_cellIndexToSliceIndex.find( cellIndex );
+                                                    if ( indexHovered != m_jamSliceSketch->m_cellIndexToSliceIndex.end() )
                                                     {
-                                                        if ( ImGui::GetMergedModFlags() & ImGuiModFlags_Alt )
+                                                        m_jamSliceHoveredRiffIndex = indexHovered->second;
+
+                                                        if ( ImGui::IsItemClicked() )
                                                         {
-                                                            if ( m_jamSliceRangeClick < 0 )
+                                                            if ( ImGui::GetMergedModFlags() & ImGuiModFlags_Alt )
                                                             {
-                                                                blog::app( "Selecting first riff in range [{}]", m_jamSliceHoveredRiffIndex );
-                                                                m_jamSliceRangeClick = m_jamSliceHoveredRiffIndex;
+                                                                if ( m_jamSliceRangeClick < 0 )
+                                                                {
+                                                                    blog::app( "Selecting first riff in range [{}]", m_jamSliceHoveredRiffIndex );
+                                                                    m_jamSliceRangeClick = m_jamSliceHoveredRiffIndex;
+                                                                }
+                                                                else
+                                                                {
+                                                                    const int32_t direction = std::clamp( m_jamSliceHoveredRiffIndex - m_jamSliceRangeClick, -1, 1 );
+
+                                                                    int32_t currentRiffInRange = m_jamSliceRangeClick;
+                                                                    while ( currentRiffInRange != m_jamSliceHoveredRiffIndex )
+                                                                    {
+                                                                        const auto& riffCouchID = m_jamSliceSketch->m_slice->m_ids[currentRiffInRange];
+                                                                        requestRiffPlayback( { m_currentViewedJam, riffCouchID }, m_riffPlaybackAbstraction.asPermutation() );
+
+                                                                        currentRiffInRange += direction;
+                                                                    }
+
+                                                                    m_jamSliceRangeClick = -1;
+                                                                }
                                                             }
                                                             else
                                                             {
-                                                                const int32_t direction = std::clamp( m_jamSliceHoveredRiffIndex - m_jamSliceRangeClick, -1, 1 );
-
-                                                                int32_t currentRiffInRange = m_jamSliceRangeClick;
-                                                                while ( currentRiffInRange != m_jamSliceHoveredRiffIndex )
-                                                                {
-                                                                    const auto& riffCouchID = m_jamSliceSketch->m_slice->m_ids[currentRiffInRange];
-                                                                    requestRiffPlayback( { m_currentViewedJam, riffCouchID }, m_riffPlaybackAbstraction.asPermutation() );
-
-                                                                    currentRiffInRange += direction;
-                                                                }
-
-                                                                m_jamSliceRangeClick = -1;
+                                                                const auto& riffCouchID = m_jamSliceSketch->m_slice->m_ids[m_jamSliceHoveredRiffIndex];
+                                                                requestRiffPlayback( { m_currentViewedJam, riffCouchID }, m_riffPlaybackAbstraction.asPermutation() );
                                                             }
-                                                        }
-                                                        else
-                                                        {
-                                                            const auto& riffCouchID = m_jamSliceSketch->m_slice->m_ids[m_jamSliceHoveredRiffIndex];
-                                                            requestRiffPlayback( { m_currentViewedJam, riffCouchID }, m_riffPlaybackAbstraction.asPermutation() );
                                                         }
                                                     }
                                                 }
                                             }
                                         }
-                                    }
-                                    else
-                                    {
-                                        const auto dummyBounds = texture->bounds();
-                                        ImGui::Dummy( ImVec2( (float)dummyBounds.width(), (float)dummyBounds.height() ) );
-                                    }
-                                }
-
-
-                                // deal with scrolling to a specific riff, if one has been specified for us
-                                if ( m_currentViewedJamScrollToRiff.has_value() )
-                                {
-                                    ABSL_ASSERT( m_currentViewedJamScrollToRiff->getJamID() == m_currentViewedJam );
-                                    const auto riffToScrollTo = m_currentViewedJamScrollToRiff->getRiffID();
-
-                                    // lookup the riff position from the bitmap offset table
-                                    const auto& scrollToRectIt = m_jamSliceSketch->m_riffToBitmapOffset.find( riffToScrollTo );
-                                    if ( scrollToRectIt != m_jamSliceSketch->m_riffToBitmapOffset.end() )
-                                    {
-                                        // overwrite any existing scroll-restoration, plug in new value that roughly centers the chosen riff
-                                        m_jamSliceSketch->m_syncToUI = true;
-                                        m_jamSliceSketch->m_currentScrollY = scrollToRectIt->second.y - ( contentRegion.y * 0.5f );
-                                    }
-                                    else
-                                    {
-                                        activateModalPopup( "Unable to find rifff", [this]( const char* title )
+                                        else
                                         {
-                                            static constexpr auto cRiffSearchError = "Could not navigate to riff; you may need to synchronise this jam to ensure it has the latest data available.";
-                                            modalBasicErrorPopup( title, cRiffSearchError );
-                                        });
+                                            const auto dummyBounds = texture->bounds();
+                                            ImGui::Dummy( ImVec2( (float)dummyBounds.width(), (float)dummyBounds.height() ) );
+                                        }
                                     }
 
-                                    m_currentViewedJamScrollToRiff = std::nullopt;
-                                }
 
-                                // when rebuilding the UI, we save the scroll position while UI elements are modified
-                                // so the user doesn't lose their position
-                                if ( m_jamSliceSketch->m_syncToUI )
-                                {
-                                    ImGui::SetScrollY( m_jamSliceSketch->m_currentScrollY );
-                                    m_jamSliceSketch->m_syncToUI = false;
-                                }
-                                m_jamSliceSketch->m_currentScrollY = ImGui::GetScrollY();
-
-
-
-
-                                for ( size_t lb = 0; lb < m_jamSliceSketch->m_labelY.size(); lb++ )
-                                {
-                                    draw_list->AddText( ImVec2{ pos.x, pos.y + m_jamSliceSketch->m_labelY[lb] }, 0x80ffffff, m_jamSliceSketch->m_labelText[lb].c_str() );
-                                }
-
-
-                                if ( currentRiff )
-                                {
-                                    const auto& activeRectIt = m_jamSliceSketch->m_riffToBitmapOffset.find( currentRiff->m_riffData.riff.couchID );
-                                    if ( activeRectIt != m_jamSliceSketch->m_riffToBitmapOffset.end() )
+                                    // deal with scrolling to a specific riff, if one has been specified for us
+                                    if ( m_currentViewedJamScrollToRiff.has_value() )
                                     {
-                                        const auto& riffRectXY = activeRectIt->second;
-                                        draw_list->AddNgonFilled( pos + riffRectXY + jamGridCellCenter, jamGridCellHalf * 0.85f, jamCellColourEnqueue, 3 );
-                                        draw_list->AddNgonFilled( pos + riffRectXY + jamGridCellCenter, jamGridCellHalf * 0.7f, jamCellColourPlaying, 3 );
-                                    }
-                                }
-                                if ( m_jamSliceRangeClick >= 0 )
-                                {
-                                    const auto& riffCouchID = m_jamSliceSketch->m_slice->m_ids[m_jamSliceRangeClick];
+                                        ABSL_ASSERT( m_currentViewedJamScrollToRiff->getJamID() == m_currentViewedJam );
+                                        const auto riffToScrollTo = m_currentViewedJamScrollToRiff->getRiffID();
 
-                                    const auto& activeRectIt = m_jamSliceSketch->m_riffToBitmapOffset.find( riffCouchID );
-                                    if ( activeRectIt != m_jamSliceSketch->m_riffToBitmapOffset.end() )
+                                        // lookup the riff position from the bitmap offset table
+                                        const auto& scrollToRectIt = m_jamSliceSketch->m_riffToBitmapOffset.find( riffToScrollTo );
+                                        if ( scrollToRectIt != m_jamSliceSketch->m_riffToBitmapOffset.end() )
+                                        {
+                                            // overwrite any existing scroll-restoration, plug in new value that roughly centers the chosen riff
+                                            m_jamSliceSketch->m_syncToUI = true;
+                                            m_jamSliceSketch->m_currentScrollY = scrollToRectIt->second.y - ( contentRegion.y * 0.5f );
+                                        }
+                                        else
+                                        {
+                                            activateModalPopup( "Unable to find rifff", [this]( const char* title )
+                                            {
+                                                static constexpr auto cRiffSearchError = "Could not navigate to riff; you may need to synchronise this jam to ensure it has the latest data available.";
+                                                modalBasicErrorPopup( title, cRiffSearchError );
+                                            });
+                                        }
+
+                                        m_currentViewedJamScrollToRiff = std::nullopt;
+                                    }
+
+                                    // when rebuilding the UI, we save the scroll position while UI elements are modified
+                                    // so the user doesn't lose their position
+                                    if ( m_jamSliceSketch->m_syncToUI )
                                     {
-                                        const auto& riffRectXY = activeRectIt->second;
-                                        draw_list->AddCircle( pos + riffRectXY + jamGridCellCenter, 8.0f, jamCellColourLoading, 8, 2.5f );
+                                        ImGui::SetScrollY( m_jamSliceSketch->m_currentScrollY );
+                                        m_jamSliceSketch->m_syncToUI = false;
                                     }
-                                }
+                                    m_jamSliceSketch->m_currentScrollY = ImGui::GetScrollY();
 
-                                for ( const auto& riffEnqueue : m_riffsQueuedForPlayback )
-                                {
-                                    const auto& activeRectIt = m_jamSliceSketch->m_riffToBitmapOffset.find( riffEnqueue );
-                                    if ( activeRectIt != m_jamSliceSketch->m_riffToBitmapOffset.end() )
+
+
+
+                                    for ( size_t lb = 0; lb < m_jamSliceSketch->m_labelY.size(); lb++ )
                                     {
-                                        const auto& riffRectXY = activeRectIt->second;
-                                        draw_list->AddNgonFilled( pos + riffRectXY + jamGridCellCenter, jamGridCellHalf * 0.85f, jamCellColourEnqueue, 3 );
+                                        draw_list->AddText( ImVec2{ pos.x, pos.y + m_jamSliceSketch->m_labelY[lb] }, 0x80ffffff, m_jamSliceSketch->m_labelText[lb].c_str() );
                                     }
-                                }
-                                for ( const auto& riffInFlight : m_syncAndPlaybackInFlight )
-                                {
-                                    const auto& activeRectIt = m_jamSliceSketch->m_riffToBitmapOffset.find( riffInFlight );
-                                    if ( activeRectIt != m_jamSliceSketch->m_riffToBitmapOffset.end() )
+
+                                    if ( m_jamSliceRangeClick >= 0 )
                                     {
-                                        const auto& riffRectXY = activeRectIt->second;
-                                        draw_list->AddRectFilled( pos + riffRectXY, pos + riffRectXY + jamGridCell, jamCellColourEnqueue );
-                                        draw_list->AddRectFilled( pos + riffRectXY, pos + riffRectXY + jamGridCell, jamCellColourLoading, 4.0f );
-                                    }
-                                }
+                                        const auto& riffCouchID = m_jamSliceSketch->m_slice->m_ids[m_jamSliceRangeClick];
 
-                                for ( const auto& taggedRiffs : m_jamTaggingSet )
-                                {
-                                    const auto& activeRectIt = m_jamSliceSketch->m_riffToBitmapOffset.find( taggedRiffs );
-                                    if ( activeRectIt != m_jamSliceSketch->m_riffToBitmapOffset.end() )
+                                        const auto& activeRectIt = m_jamSliceSketch->m_riffToBitmapOffset.find( riffCouchID );
+                                        if ( activeRectIt != m_jamSliceSketch->m_riffToBitmapOffset.end() )
+                                        {
+                                            const auto& riffRectXY = activeRectIt->second;
+                                            draw_list->AddCircle( pos + riffRectXY + jamGridCellCenter, 8.0f, jamCellColourLoading, 8, 2.5f );
+                                        }
+                                    }
+
+                                    for ( const auto& riffTag : m_jamTagging.tagVector )
                                     {
-                                        ImVec2 rv2 = pos + activeRectIt->second;
+                                        const auto& activeRectIt = m_jamSliceSketch->m_riffToBitmapOffset.find( riffTag.m_riff );
+                                        if ( activeRectIt != m_jamSliceSketch->m_riffToBitmapOffset.end() )
+                                        {
+                                            ImVec2 rv2 = pos + activeRectIt->second;
 
-                                        draw_list->AddTriangleFilled(
-                                            rv2 + ImVec2( -2.0f, jamGridCell.y - 2.0f ),
-                                            rv2 + ImVec2( jamGridCell.x * 0.5f, (jamGridCell.y * 0.7f) - 4.0f ),
-                                            rv2 + ImVec2( jamGridCell.x + 2.0f, jamGridCell.y - 2.0f ),
-                                            ImGui::GetColorU32( ImGuiCol_ChildBg ) );
+                                            uint32_t favourColour = colour::shades::tag_lvl_1.neutralU32();
+                                            if ( riffTag.m_favour == 1 )
+                                                favourColour = colour::shades::tag_lvl_2.neutralU32();
 
-                                        draw_list->AddTriangleFilled(
-                                            rv2 + ImVec2( 2.0f, jamGridCell.y - 2.0f ),
-                                            rv2 + ImVec2( jamGridCell.x * 0.5f, jamGridCell.y * 0.7f ),
-                                            rv2 + ImVec2( jamGridCell.x - 2.0f, jamGridCell.y - 2.0f ),
-                                            colour::shades::lime.neutralU32() );
+                                            if ( !m_jamTaggingCurrentlyHovered.empty() && 
+                                                  m_jamTaggingCurrentlyHovered == riffTag.m_riff )
+                                            {
+                                                favourColour = colour::shades::white.lightU32();
+                                            }
+
+
+                                            draw_list->AddTriangleFilled(
+                                                rv2 + ImVec2( -2.0f, jamGridCell.y - 2.0f ),
+                                                rv2 + ImVec2( jamGridCell.x * 0.5f, (jamGridCell.y * 0.7f) - 4.0f ),
+                                                rv2 + ImVec2( jamGridCell.x + 2.0f, jamGridCell.y - 2.0f ),
+                                                ImGui::GetColorU32( ImGuiCol_ChildBg ) );
+
+                                            draw_list->AddTriangleFilled(
+                                                rv2 + ImVec2( 2.0f, jamGridCell.y - 2.0f ),
+                                                rv2 + ImVec2( jamGridCell.x * 0.5f, jamGridCell.y * 0.7f ),
+                                                rv2 + ImVec2( jamGridCell.x - 2.0f, jamGridCell.y - 2.0f ),
+                                                favourColour );
+                                        }
+                                    }
+
+
+                                    if ( currentRiff )
+                                    {
+                                        const auto& activeRectIt = m_jamSliceSketch->m_riffToBitmapOffset.find( currentRiff->m_riffData.riff.couchID );
+                                        if ( activeRectIt != m_jamSliceSketch->m_riffToBitmapOffset.end() )
+                                        {
+                                            const auto& riffRectXY = activeRectIt->second;
+                                            draw_list->AddCircleFilled( pos + riffRectXY + jamGridCellCenter, jamGridCellHalf * 0.77f, colour::shades::black.neutralU32() );
+                                            draw_list->AddNgonFilled( pos + riffRectXY + jamGridCellCenter, jamGridCellHalf * 0.68f, jamCellColourLoading, 3 );
+                                        }
+                                    }
+                                    for ( const auto& riffEnqueue : m_riffsQueuedForPlayback )
+                                    {
+                                        const auto& activeRectIt = m_jamSliceSketch->m_riffToBitmapOffset.find( riffEnqueue );
+                                        if ( activeRectIt != m_jamSliceSketch->m_riffToBitmapOffset.end() )
+                                        {
+                                            const auto& riffRectXY = activeRectIt->second;
+                                            draw_list->AddCircleFilled( pos + riffRectXY + jamGridCellCenter, jamGridCellHalf * 0.77f, jamCellColourEnqueue );
+                                        }
+                                    }
+                                    for ( const auto& riffInFlight : m_syncAndPlaybackInFlight )
+                                    {
+                                        const auto& activeRectIt = m_jamSliceSketch->m_riffToBitmapOffset.find( riffInFlight );
+                                        if ( activeRectIt != m_jamSliceSketch->m_riffToBitmapOffset.end() )
+                                        {
+                                            const auto& riffRectXY = activeRectIt->second;
+                                            draw_list->AddRectFilled( pos + riffRectXY, pos + riffRectXY + jamGridCell, jamCellColourEnqueue );
+                                            draw_list->AddRectFilled( pos + riffRectXY, pos + riffRectXY + jamGridCell, jamCellColourLoading, 4.0f );
+                                        }
                                     }
                                 }
+                                ImGui::PopStyleVar();
                             }
-                            ImGui::PopStyleVar();
                         }
+                        ImGui::EndChild();
+
+                        if ( m_jamSliceSketch && shouldShowSightline )
+                        {
+                            ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+                            const float regionTop = m_jamSliceSketch->m_currentScrollY;
+                            const float regionBottom = regionTop + contentRegion.y;
+
+                            const float fullHeightRecp = 1.0f / m_jamSliceSketch->m_jamViewFullHeight;
+
+                            gfx::GPUTask::ValidState textureState;
+                            if ( m_jamSliceSketch->m_sightlineUpload->getStateIfValid( textureState ) )
+                            {
+                                const auto savedCursor = ImGui::GetCursorPos();
+                                ImGui::SetCursorPos( outerPos + ImVec2( contentRegion.x - 20.0f, 0 ) );
+                                ImGui::Image(
+                                    textureState.m_imTextureID,
+                                    ImVec2( 5.0f, textureState.m_usageDimensionsVec2.y ),
+                                    ImVec2( 0, 0 ),
+                                    textureState.m_usageUV,
+                                    ImVec4( 1.0f, 1.0f, 1.0f, 1.0f ) );
+                            }
+                        }
+
+                        ImGui::PopFont();
+                    }
+                }
+            }
+            ImGui::End();
+        }
+        {
+            static TagView tagView( TagView::Default );
+
+            if ( ImGui::Begin( tagView.generateTitle().c_str() ) )
+            {
+                static ImVec2 buttonSizeTools( 200.0, 30.0f );
+
+                tagView.checkForImGuiTabSwitch();
+
+                // can't view tags without a jam!
+                if ( m_currentViewedJamName.empty() || m_currentViewedJam.empty() )
+                {
+                    ImGui::TextColored( colour::shades::toast.light(), "No jam currently loaded" );
+                    ImGui::TextColored( colour::shades::toast.neutral(), "Use the " ICON_FA_DATABASE " Data Warehouse view to select one" );
+                }
+                // mid-sync; we have a viewed jam and are just waiting on the Warehouse
+                else if ( m_jamTagging.jamID.empty() )
+                {
+                    ImGui::TextColored( colour::shades::toast.light(), "Fetching tags ..." );
+                }
+                else
+                {
+                    ABSL_ASSERT( m_jamTagging.jamID == m_currentViewedJam );
+                    if ( ImGui::BeginChild( "tag-title-align", ImVec2( -(buttonSizeTools.x + GImGui->Style.WindowPadding.x), buttonSizeTools.y ) ) )
+                    {
+                        ImGui::Dummy( ImVec2( 0, (buttonSizeTools.y * 0.5f) - (ImGui::GetTextLineHeight() * 0.5f) ) );
+                        ImGui::TextUnformatted( "Tagged Riffs in " );
+                        ImGui::SameLine( 0, 0 );
+                        ImGui::TextColored( colour::shades::toast.light(), m_currentViewedJamName.c_str() );
                     }
                     ImGui::EndChild();
 
-                    if ( m_jamSliceSketch && shouldShowSightline )
+                    if ( tagView == TagView::Management )
                     {
-                        ImDrawList* draw_list = ImGui::GetWindowDrawList();
-
-                        const float regionTop = m_jamSliceSketch->m_currentScrollY;
-                        const float regionBottom = regionTop + contentRegion.y;
-
-                        const float fullHeightRecp = 1.0f / m_jamSliceSketch->m_jamViewFullHeight;
-
-                        gfx::GPUTask::ValidState textureState;
-                        if ( m_jamSliceSketch->m_sightlineUpload->getStateIfValid( textureState ) )
+                        enum class LoadTask
                         {
-                            const auto savedCursor = ImGui::GetCursorPos();
-                            ImGui::SetCursorPos( outerPos + ImVec2( contentRegion.x - 20.0f, 0 ) );
-                            ImGui::Image(
-                                textureState.m_imTextureID,
-                                ImVec2( 5.0f, textureState.m_usageDimensionsVec2.y ),
-                                ImVec2( 0, 0 ),
-                                textureState.m_usageUV,
-                                ImVec4( 1.0f, 1.0f, 1.0f, 1.0f ) );
+                            None,
+                            LoadToReplace,
+                            LoadToMerge
+                        } loadTask = LoadTask::None;
+
+                        ImGui::SeparatorBreak();
+                        if ( ImGui::BeginTable( "###file_io", 4,
+                            ImGuiTableFlags_NoSavedSettings ) )
+                        {
+                            ImGui::TableSetupColumn( "Save",  ImGuiTableColumnFlags_WidthStretch, 0.3f );
+                            ImGui::TableSetupColumn( "Gap",   ImGuiTableColumnFlags_WidthStretch, 0.1f );
+                            ImGui::TableSetupColumn( "Load",  ImGuiTableColumnFlags_WidthStretch, 0.3f );
+                            ImGui::TableSetupColumn( "Merge", ImGuiTableColumnFlags_WidthStretch, 0.3f );
+
+                            {
+                                ImGui::TableNextColumn();
+                                ImGui::TextColored( colour::shades::callout.neutral(), "SAVE" );
+                                ImGui::Spacing();
+                                ImGui::TextWrapped( "Save tags out to a file for backup or exchange with others. These are associated with the current jam and can be re-imported later or by other users who have access to the same jam." );
+                                ImGui::Spacing();
+                            }
+                            {
+                                ImGui::TableNextColumn();
+                                // gap row
+                            }
+                            {
+                                ImGui::TableNextColumn();
+                                ImGui::TextColored( colour::shades::callout.neutral(), "LOAD (overwrite)" );
+                                ImGui::Spacing();
+                                ImGui::TextWrapped( "Replace the current tags in the database with new data loaded from a file. This will REPLACE your current data!" );
+                                ImGui::Spacing();
+                            }
+                            {
+                                ImGui::TableNextColumn();
+                                ImGui::TextColored( colour::shades::callout.neutral(), "LOAD (merge)" );
+                                ImGui::Spacing();
+                                ImGui::TextWrapped( "Merge data from a tag file with your current data; your current data will remain intact, any conflicts in the incoming data are ignored." );
+                                ImGui::Spacing();
+                            }
+
+                            ImGui::TableNextColumn();
+                            {
+                                ImGui::Scoped::Disabled sd( m_jamTagging.tagVector.empty() );
+                                if ( ImGui::Button( ICON_FA_FILE_EXPORT " Save Tags ...", buttonSizeTools ) )
+                                {
+                                    auto fileDialog = std::make_unique< ImGuiFileDialog >();
+
+                                    fileDialog->OpenDialog(
+                                        "TagSaveDlg",
+                                        "Choose File To Save Tags To ...",
+                                        ".tags",
+                                        m_jamTaggingSaveLoadDir.string(),
+                                        1,
+                                        nullptr,
+                                        ImGuiFileDialogFlags_Modal | ImGuiFileDialogFlags_ConfirmOverwrite );
+
+                                    std::ignore = activateFileDialog( std::move( fileDialog ), [this]( ImGuiFileDialog& dlg )
+                                        {
+                                            if ( !dlg.IsOk() )
+                                                return;
+
+                                            const fs::path fullPathToWriteTo = dlg.GetFilePathName();
+                                            m_jamTaggingSaveLoadDir = dlg.GetCurrentPath();
+
+                                            try
+                                            {
+                                                std::ofstream is( fullPathToWriteTo, std::ofstream::out );
+                                                is.exceptions( std::ofstream::failbit | std::ofstream::badbit );
+
+                                                cereal::JSONOutputArchive archive( is );
+
+                                                m_jamTagging.save( archive );
+                                            }
+                                            catch ( std::exception& cEx )
+                                            {
+                                                blog::error::app( "tag save failed; cannot write to [{}] | {}", fullPathToWriteTo.string(), cEx.what() );
+
+                                                activateModalPopup( "Failed to Save Tags", [this]( const char* title )
+                                                    {
+                                                        static constexpr auto cTagSaveError = "Failed to write tags data to disk.\nEnsure file is not read-only or in use by another application.";
+                                                        modalBasicErrorPopup( title, cTagSaveError );
+                                                    } );
+                                            }
+                                        } );
+                                }
+                            }
+                            ImGui::TableNextColumn();
+                            {
+                                // gap row
+                            }
+                            ImGui::TableNextColumn();
+                            {
+                                if ( ImGui::Button( ICON_FA_FILE_IMPORT " Replace Tags ...", buttonSizeTools ) )
+                                {
+                                    loadTask = LoadTask::LoadToReplace;
+                                }
+                            }
+                            ImGui::TableNextColumn();
+                            {
+                                if ( ImGui::Button( ICON_FA_FILE_IMPORT " Merge Tags ...", buttonSizeTools ) )
+                                {
+                                    loadTask = LoadTask::LoadToMerge;
+                                }
+                            }
+                            ImGui::EndTable();
+
+                            if ( loadTask != LoadTask::None )
+                            {
+                                auto fileDialog = std::make_unique< ImGuiFileDialog >();
+
+                                fileDialog->OpenDialog(
+                                    "TagLoadDlg",
+                                    "Choose File To Load Tags From ...",
+                                    ".tags",
+                                    m_jamTaggingSaveLoadDir.string(),
+                                    1,
+                                    nullptr,
+                                    ImGuiFileDialogFlags_Modal );
+
+                                std::ignore = activateFileDialog( std::move( fileDialog ), [this, loadTask]( ImGuiFileDialog& dlg )
+                                    {
+                                        if ( !dlg.IsOk() )
+                                            return;
+
+                                        const fs::path fullPathToReadFrom = dlg.GetFilePathName();
+                                        m_jamTaggingSaveLoadDir = dlg.GetCurrentPath();
+
+                                        try
+                                        {
+                                            std::ifstream is( fullPathToReadFrom );
+
+                                            cereal::JSONInputArchive archive( is );
+
+                                            JamTaggingState loadedState;
+                                            loadedState.load( archive );
+
+                                            // lock loading to our current viewed jam to avoid any confusion
+                                            // technically we can load whatever but it makes more sense I think if they user
+                                            // is looking at the jam they are importing for
+                                            if ( loadedState.jamID != m_jamTagging.jamID )
+                                            {
+                                                std::string resolvedName;
+                                                const auto lookupResult = lookupNameForJam( loadedState.jamID, resolvedName );
+
+                                                const auto mismatchedJamTag = fmt::format( FMTX( "The selected file contains tags for [{}] - please load that jam first if you want to import tags for it" ), resolvedName );
+
+                                                activateModalPopup( "Failed to Load Tags", [this, errorText = std::move(mismatchedJamTag)](const char* title)
+                                                    {
+                                                        modalBasicErrorPopup( title, errorText );
+                                                    });
+                                            }
+                                            else
+                                            {
+                                                if ( loadTask == LoadTask::LoadToReplace )
+                                                {
+                                                    m_warehouse->batchRemoveAllTags( m_jamTagging.jamID );
+                                                    m_jamTagging = std::move( loadedState );
+                                                    m_warehouse->batchUpdateTags( m_jamTagging.tagVector );
+                                                }
+                                                else
+                                                {
+                                                    for ( const auto& newTag : loadedState.tagVector )
+                                                    {
+                                                        if ( m_jamTagging.tagSet.contains( newTag.m_riff ) )
+                                                        {
+                                                            blog::error::app( "Skipped tagged riff during import : [{}]", newTag.m_riff );
+                                                        }
+                                                        else
+                                                        {
+                                                            m_jamTagging.tagVector.emplace_back( newTag );
+                                                        }
+                                                    }
+                                                    m_jamTagging.rebuildSet();
+
+                                                    // re-index everything
+                                                    for ( int32_t newIndex = 0; newIndex < static_cast<int32_t>(m_jamTagging.tagVector.size()); newIndex++ )
+                                                        m_jamTagging.tagVector[newIndex].m_order = newIndex;
+
+                                                    // batch update everything
+                                                    m_warehouse->batchUpdateTags( m_jamTagging.tagVector );
+                                                }
+                                            }
+                                        }
+                                        catch ( std::exception& cEx )
+                                        {
+                                            blog::error::app( "tag load failed; cannot load from [{}] | {}", fullPathToReadFrom.string(), cEx.what() );
+
+                                            activateModalPopup( "Failed to Load Tags", [this]( const char* title )
+                                                {
+                                                    static constexpr auto cTagLoadError = "Failed to load tags data to disk.\nFile may be corrupt or otherwise unreadable. Send it to ishani for analysis!";
+                                                    modalBasicErrorPopup( title, cTagLoadError );
+                                                });
+                                        }
+
+                                    });
+                            }
+                        }
+                        ImGui::Spacing();
+                        ImGui::Spacing();
+                        ImGui::SeparatorBreak();
+                        ImGui::Spacing();
+                        ImGui::Spacing();
+                        {
+                            ImGui::TextUnformatted( "Remove all tags from this jam. This cannot be undone." );
+                            ImGui::Scoped::ColourButton cb( colour::shades::errors, colour::shades::white );
+                            if ( ImGui::Button( ICON_FA_TRASH_CAN " Delete All", buttonSizeTools ) )
+                            {
+                                m_warehouse->batchRemoveAllTags( m_jamTagging.jamID );
+                            }
                         }
                     }
+                    else
+                    {
+                        ImGui::SameLine();
+                        if ( ImGui::Button( ICON_FA_FLOPPY_DISK " Export All Tagged", buttonSizeTools ) )
+                        {
+                            for ( const auto& riffTag : m_jamTagging.tagVector )
+                            {
+                                endlesss::types::IdentityCustomNaming customNaming;
+                                customNaming.m_riffDescription = fmt::format( FMTX( "tag{:03}_f{}_" ), riffTag.m_order, riffTag.m_favour );
 
-                    ImGui::PopFont();
+                                enqueueRiffForExport( { riffTag.m_jam, riffTag.m_riff, std::move( customNaming ) } );
+                            }
+                        }
+
+                        ImGui::SeparatorBreak();
+                        ImGui::Spacing();
+                        ImGui::Spacing();
+
+                        static ImVec2 buttonSizeMidTable( 31.0f, 22.0f );
+
+                        endlesss::types::RiffCouchID viewHoveredRiffID;
+                        if ( m_jamSliceSketch && m_jamSliceHoveredRiffIndex >= 0 )
+                            viewHoveredRiffID = m_jamSliceSketch->m_slice->m_ids[m_jamSliceHoveredRiffIndex];
+
+                        endlesss::types::RiffCouchID viewCurrentPlayingRiffID;
+                        if ( currentRiff )
+                            viewCurrentPlayingRiffID = currentRiff->m_riffData.riff.couchID;
+
+
+                        ImGui::PushStyleVar( ImGuiStyleVar_ItemSpacing, { 4.0f, 0.0f } );
+
+                        if ( ImGui::BeginTable( "##riff_tag_table", 5,
+                            ImGuiTableFlags_ScrollY |
+                            ImGuiTableFlags_Borders |
+                            ImGuiTableFlags_RowBg   |
+                            ImGuiTableFlags_NoSavedSettings ) )
+                        {
+                            ImGui::TableSetupScrollFreeze( 0, 1 );  // top row always visible
+
+                            ImGui::TableSetupColumn( "Play",                    ImGuiTableColumnFlags_WidthFixed,   48.0f );
+                            ImGui::TableSetupColumn( "Notes",                   ImGuiTableColumnFlags_WidthStretch, 0.5f  );
+                            ImGui::TableSetupColumn( "Find",                    ImGuiTableColumnFlags_WidthFixed,   32.0f );
+                            ImGui::TableSetupColumn( " " ICON_FA_FLOPPY_DISK,   ImGuiTableColumnFlags_WidthFixed,   32.0f );
+                            ImGui::TableSetupColumn( "Order",                   ImGuiTableColumnFlags_WidthFixed,   70.0f );
+                            ImGui::TableHeadersRow();
+
+                            m_jamTaggingCurrentlyHovered = {};
+
+                            std::size_t riffEntry = 0;
+                            const std::size_t tagCount = m_jamTagging.tagVector.size();
+                            std::optional< std::pair< std::size_t, std::size_t > > tagSwapToDo = std::nullopt;
+
+                            for ( auto& riffTag : m_jamTagging.tagVector )
+                            {
+                                const auto& riffID = riffTag.m_riff;
+
+                                ImGui::TableNextColumn();
+                                ImGui::PushID( static_cast<int32_t>( riffEntry ) );
+
+                                const bool bRiffIsHoveredInJamView  = viewHoveredRiffID == riffID;
+                                const bool bRiffIsPlaying           = viewCurrentPlayingRiffID == riffID;
+                                const bool bRiffWaitingToPlay       = m_riffsQueuedForPlayback.contains( riffID );
+                                const bool bRiffIsExporting         = m_riffExportOperationsMap.hasValue( riffID );
+
+                                if ( bRiffIsHoveredInJamView )
+                                {
+                                    ImVec4 highlightRow = ImGui::GetStyleColorVec4( ImGuiCol_TableRowBg );
+                                    highlightRow.w *= 3.0f;
+
+                                    ImGui::TableSetBgColor( ImGuiTableBgTarget_RowBg1, ImGui::ColorConvertFloat4ToU32( highlightRow ) );
+                                }
+                                if ( bRiffWaitingToPlay )
+                                {
+                                    ImGui::TableSetBgColor( ImGuiTableBgTarget_RowBg1, ImGui::GetPulseColour( 0.25f ) );
+                                }
+
+                                {
+                                    ImGui::Scoped::Disabled disabledButton( bRiffWaitingToPlay );
+                                    ImGui::Scoped::ToggleButton highlightButton( bRiffIsPlaying, true );
+                                    if ( ImGui::Button( ICON_FA_PLAY, buttonSizeMidTable ) )
+                                    {
+                                        getEventBusClient().Send< ::events::EnqueueRiffPlayback >( riffTag.m_jam, riffID );
+                                    }
+                                    if ( ImGui::IsItemHovered() )
+                                    {
+                                        m_jamTaggingCurrentlyHovered = riffID;
+                                    }
+                                }
+                                ImGui::SameLine();
+                                ImGui::AlignTextToFramePadding();
+                                {
+                                    uint32_t favourColour = colour::shades::tag_lvl_1.neutralU32();
+                                    switch ( riffTag.m_favour )
+                                    {
+                                        case 1: favourColour = colour::shades::tag_lvl_2.neutralU32();
+                                    }
+                                    ImGui::PushStyleColor( ImGuiCol_Text, favourColour );
+                                    ImGui::TextUnformatted( ICON_FC_FULL_BLOCK );
+                                    ImGui::PopStyleColor();
+                                }
+
+                                ImGui::TableNextColumn();
+                                ImGui::AlignTextToFramePadding();
+                                const bool bTextAccept = ImGui::InputText( "###note", &riffTag.m_note, ImGuiInputTextFlags_EnterReturnsTrue );
+                                if ( bTextAccept || ImGui::IsItemDeactivatedAfterEdit() )
+                                {
+                                    getEventBusClient().Send< ::events::RiffTagAction >( riffTag, ::events::RiffTagAction::Action::Upsert );
+                                }
+
+                                ImGui::TableNextColumn();
+                                if ( ImGui::Button( ICON_FA_GRIP, buttonSizeMidTable ) )
+                                {
+                                    // dispatch a request to navigate this this riff, if we can find it
+                                    getEventBusClient().Send< ::events::RequestNavigationToRiff >( endlesss::types::RiffIdentity{ riffTag.m_jam, riffID } );
+                                }
+
+                                ImGui::TableNextColumn();
+                                if ( bRiffIsExporting )
+                                {
+                                    ImGui::AlignTextToFramePadding();
+                                    ImGui::Dummy( { 0, 0 } );
+                                    ImGui::SameLine( 0, 4.0f );
+                                    ImGui::Spinner( "##exporting", true, ImGui::GetTextLineHeight() * 0.48f, 3.0f, 0.0f, ImGui::GetColorU32( ImGuiCol_Text ) );
+                                }
+
+                                ImGui::TableNextColumn();
+                                ImGui::AlignTextToFramePadding();
+                                {
+                                    ImGui::Scoped::Enabled disabledButton( riffEntry > 0 );
+                                    if ( ImGui::Button( ICON_FA_ARROW_UP, buttonSizeMidTable ) )
+                                    {
+                                        tagSwapToDo = { riffEntry, riffEntry - 1 };
+                                    }
+                                }
+                                ImGui::SameLine( 0, 2.0f );
+                                {
+                                    ImGui::Scoped::Enabled disabledButton( riffEntry < tagCount - 1 );
+                                    if ( ImGui::Button( ICON_FA_ARROW_DOWN, buttonSizeMidTable ) )
+                                    {
+                                        tagSwapToDo = { riffEntry, riffEntry + 1 };
+                                    }
+                                }
+
+                                ImGui::PopID();
+                                riffEntry++;
+                            }
+
+                            if ( tagSwapToDo.has_value() )
+                            {
+                                // flip the requested pair in the array
+                                std::swap(
+                                    m_jamTagging.tagVector[tagSwapToDo.value().first],
+                                    m_jamTagging.tagVector[tagSwapToDo.value().second]
+                                );
+
+                                // re-index everything
+                                for ( int32_t newIndex = 0; newIndex < static_cast<int32_t>(m_jamTagging.tagVector.size() ); newIndex++ )
+                                    m_jamTagging.tagVector[newIndex].m_order = newIndex;
+
+                                // batch update all the tags so the ordering is synchronised
+                                m_warehouse->batchUpdateTags( m_jamTagging.tagVector );
+
+                                tagSwapToDo = std::nullopt;
+                            }
+
+                            ImGui::EndTable();
+                        }
+
+                        ImGui::PopStyleVar();
+                    }
                 }
             }
             ImGui::End();
@@ -2745,7 +3546,7 @@ int LoreApp::EntrypointOuro()
 
                             // highlight or lowlight column based on state
                             if ( bIsJamInFlux )
-                                ImGui::TableSetBgColor( ImGuiTableBgTarget_RowBg0, ImGui::GetColorU32( ImGuiCol_TableRowBgAlt, 0.0f ) );
+                                ImGui::TableSetBgColor( ImGuiTableBgTarget_RowBg0, ImGui::GetSyncBusyColour( 0.2f ) );
                             if ( m_currentViewedJam == m_warehouseContentsReport.m_jamCouchIDs[jI] )
                                 ImGui::TableSetBgColor( ImGuiTableBgTarget_RowBg0, ImGui::GetColorU32( ImGuiCol_TableRowBgAlt, 2.5f ) );
 
@@ -2787,15 +3588,15 @@ int LoreApp::EntrypointOuro()
                                             // given that it purges the jam entirely
                                             const bool bNotEnoughTimePassedSinceAbortShown = !m_warehouseContentsReportJamInFluxMoment[jI].hasPassed();
                                             ImGui::Scoped::Disabled se( bNotEnoughTimePassedSinceAbortShown || !bHasDataToSync );
-                                            ImGui::Scoped::ColourButton cb( colour::shades::errors );
+                                            ImGui::Scoped::ColourButton cb( colour::shades::errors, colour::shades::white );
                                             if ( ImGui::PrecisionButton( ICON_FA_BAN, buttonSizeMidTable, 1.0f ) )
                                             {
-                                                m_warehouse->requestJamPurge( m_warehouseContentsReport.m_jamCouchIDs[jI] );
+                                                m_warehouse->requestJamSyncAbort( m_warehouseContentsReport.m_jamCouchIDs[jI] );
                                                 // push the abort task timer way forward to immediately disable the button
                                                 m_warehouseContentsReportJamInFluxMoment[jI].setToFuture( std::chrono::hours( 1 ) );
                                             }
                                         }
-                                        ImGui::CompactTooltip( "Abort sync by purging entire jam\nIMPORTANT\nThis will remove all jam data to clean up any\nin-progress data" );
+                                        ImGui::CompactTooltip( "Stop jam sync by removing all currently un-synchronised riffs, leaving the jam not up-to-date" );
                                     }
                                     else
                                     {
@@ -2846,7 +3647,8 @@ int LoreApp::EntrypointOuro()
 
                                 // trashing a jam even in sync should be fine, given the way the warehouse works and
                                 // sequences operations. a purge will remove and future scanning for empty riffs & stems
-                                if ( ImGui::PrecisionButton( ICON_FA_TRASH, buttonSizeMidTable ) )
+                                ImGui::Scoped::ColourButton cb( colour::shades::errors, colour::shades::white );
+                                if ( ImGui::PrecisionButton( ICON_FA_TRASH_CAN, buttonSizeMidTable ) )
                                 {
                                     m_warehouse->requestJamPurge( m_warehouseContentsReport.m_jamCouchIDs[jI] );
                                 }
@@ -2863,7 +3665,7 @@ int LoreApp::EntrypointOuro()
 
         } // warehouse imgui 
 
-        m_sharedRiffView->imgui( *this, *this );
+        m_uxSharedRiffView->imgui( *this, *this );
 
         maintainStemCacheAsync();
 
@@ -2880,7 +3682,6 @@ int LoreApp::EntrypointOuro()
         APP_EVENT_UNBIND( MixerRiffChange );
         APP_EVENT_UNBIND( OperationComplete );
         APP_EVENT_UNBIND( RequestJamNameRemoteFetch );
-        APP_EVENT_UNBIND( RiffTagAction );
         APP_EVENT_UNBIND( RequestNavigationToRiff );
     }
 
@@ -2890,7 +3691,9 @@ int LoreApp::EntrypointOuro()
 
     m_discordBotUI.reset();
 
-    m_sharedRiffView.reset();
+    m_uxTagLine.reset();
+    m_uxSharedRiffView.reset();
+
     m_vibes.reset();
 
     // remove the mixer and ensure the async op has taken before leaving scope

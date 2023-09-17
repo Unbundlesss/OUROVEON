@@ -550,14 +550,17 @@ void Core::networkActivityUpdate()
         m_avgNetPulseUpdateTimer = 0.2f;
     }
 
-    // update the payload average every second
-    m_avgNetPayloadPerSecTimer -= deltaTime;
-    if ( m_avgNetPayloadPerSecTimer <= 0.0f )
+    // update the per-second averages .. uh, every second
+    m_avgNetRollingPerSecTimer -= deltaTime;
+    if ( m_avgNetRollingPerSecTimer <= 0.0f )
     {
         m_avgNetPayloadPerSec.update( m_avgNetPayloadValue );
         m_avgNetPayloadValue = 0;
 
-        m_avgNetPayloadPerSecTimer = 1.0f;
+        m_avgNetErrorsPerSec.update( m_avgNetErrorCount );
+        m_avgNetErrorCount = 0;
+
+        m_avgNetRollingPerSecTimer = 1.0f;
     }
 }
 
@@ -654,6 +657,7 @@ int CoreGUI::Entrypoint()
             ImGui::EndMenu();
         }
     });
+
 
     addDeveloperMenuFlag( "Performance Tracing", &m_showPerformanceWindow );
 #if OURO_DEBUG

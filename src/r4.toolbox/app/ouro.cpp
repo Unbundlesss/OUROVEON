@@ -30,6 +30,7 @@
 #include "endlesss/all.h"
 
 #include "platform_folders.h"
+#include "xp/open.url.h"
 
 namespace app {
 
@@ -54,6 +55,9 @@ int OuroApp::EntrypointGUI()
     static constexpr std::array< const char*, 6 > cVibeRenderLabels {   "512",  "1024",  "2048",  "4096" };
     static constexpr std::array< uint32_t,    6 > cVibeRenderValues {    512 ,   1024 ,   2048 ,   4096  };
 
+    // fetch any customised stem export spec
+    const auto exportLoadResult = config::load( *this, m_configExportOutput );
+
     // try and fetch last audio settings from the stash; doesn't really matter if we can't, it is just saved defaults
     // for the config screen
     config::Audio audioConfig;
@@ -77,8 +81,8 @@ int OuroApp::EntrypointGUI()
     std::string previewBufferSize = ImGui::ValueArrayPreviewString( cBufferSizeLabels, cBufferSizeValues, audioConfig.bufferSize );
 
     // stash current TZ
-    const auto timezoneLocal = date::current_zone();
-    const auto timezoneUTC = date::locate_zone( "Etc/UTC" );
+    const auto timezoneLocal    = date::current_zone();
+    const auto timezoneUTC      = date::locate_zone( "Etc/UTC" );
 
     // add UTC/Server time on left of status bar
     const auto sbbTimeStatusLeftID = registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Left, 375.0f, [=]()
@@ -215,6 +219,12 @@ int OuroApp::EntrypointGUI()
     };
     UpdateLocalFsRecordsForDataStoragePath();
 
+    const auto GetNetworkQuality = [this]() {
+        return m_configPerf.enableUnstableNetworkCompensation ?
+            endlesss::api::NetConfiguration::NetworkQuality::Unstable :
+            endlesss::api::NetConfiguration::NetworkQuality::Stable;
+    };
+
 
     // used if we need to pop a modal showing some error feedback
     static constexpr auto popupErrorModalName = "Error";
@@ -248,10 +258,10 @@ int OuroApp::EntrypointGUI()
 
         const float  configWindowColumn1 = 500.0f;
         const float  configWindowColumn2 = 500.0f;
-        const ImVec2 configWindowSize = ImVec2( configWindowColumn1 + configWindowColumn2, 630.0f );
+        const ImVec2 configWindowSize = ImVec2( configWindowColumn1 + configWindowColumn2, 650.0f );
         const ImVec2 viewportWorkSize = ImGui::GetMainViewport()->GetCenter();
 
-        ImGui::SetNextWindowPos( viewportWorkSize - ( configWindowSize * 0.5f ) );
+        ImGui::SetNextWindowPos( viewportWorkSize - ( configWindowSize * 0.5f ) - ImVec2(0, 50.0f) );
         ImGui::SetNextWindowContentSize( configWindowSize );
 
         ImGui::Begin( "Framework Preflight | Version " OURO_FRAMEWORK_VERSION, nullptr,
@@ -455,6 +465,9 @@ int OuroApp::EntrypointGUI()
                     {
                         m_mdFrontEnd->titleText( "Endlesss Accesss" );
                         ImGui::Indent( perBlockIndent );
+
+                        ImGui::Checkbox( " Unstable Network Compensation", &m_configPerf.enableUnstableNetworkCompensation );
+                        ImGui::CompactTooltip( "Enable if connecting over less reliable networks or via 4G/mobile\nto have increased API retries on failures\nplus longer time-out allowance on all calls" );
 
                         // used to enable/disable buttons if the jam cache update thread is working
                         const bool jamsAreUpdating = (asyncFetchState == endlesss::cache::Jams::AsyncFetchState::Working);
@@ -882,6 +895,11 @@ int OuroApp::EntrypointGUI()
 
         ImGui::End();
 
+        if ( m_networkConfiguration )
+        {
+            m_networkConfiguration->setQuality( GetNetworkQuality() );
+        }
+
         // pending error message? transfer and pop the modal open on the next cycle round
         // must be done here, after ImGui::End for annoying Imgui ordering / hierarchy reasons
         if ( !popupErrorMessageToDisplay.empty() )
@@ -940,20 +958,37 @@ int OuroApp::EntrypointGUI()
     unregisterStatusBarBlock( sbbTimeStatusLeftID );
     unregisterStatusBarBlock( sbbTimeStatusRightID );
 
+
+    registerMainMenuEntry( 2, "EXPORT", [this]()
+        {
+            if ( ImGui::MenuItem( "Open Output Folder..." ) )
+            {
+                xpOpenURL( m_storagePaths->outputApp.string().c_str() );
+            }
+            ImGui::Separator();
+            if ( ImGui::MenuItem( "Configure..." ) )
+            {
+            }
+        });
+
     // events
     {
         APP_EVENT_REGISTER( ExportRiff );
         APP_EVENT_REGISTER( StemDataAmalgamGenerated );
         APP_EVENT_REGISTER_SPECIFIC( MixerRiffChange, 16 * 4096 );
 
-        m_eventListenerRiffExport = m_appEventBus->addListener( events::ExportRiff::ID, [this]( const base::IEvent& evt ) { onEvent_ExportRiff( evt ); } );
+        {
+            base::EventBusClient m_eventBusClient( m_appEventBus );
+            APP_EVENT_BIND_TO( ExportRiff );
+        }
     }
 
     int appResult = EntrypointOuro();
 
     // unhook events
     {
-        checkedCoreCall( "remove listener", [this] { return m_appEventBus->removeListener( m_eventListenerRiffExport ); } );
+        base::EventBusClient m_eventBusClient( m_appEventBus );
+        APP_EVENT_UNBIND( ExportRiff );
     }
 
     // wrap up any dangling async work before teardown
@@ -1025,13 +1060,8 @@ void OuroApp::maintainStemCacheAsync()
 
 
 // ---------------------------------------------------------------------------------------------------------------------
-void OuroApp::onEvent_ExportRiff( const base::IEvent& eventRef )
+void OuroApp::event_ExportRiff( const events::ExportRiff* eventData )
 {
-    ABSL_ASSERT( eventRef.getID() == events::ExportRiff::ID );
-    
-    const events::ExportRiff* exportRiffEvent = dynamic_cast<const events::ExportRiff*>( &eventRef );
-    ABSL_ASSERT( exportRiffEvent != nullptr );
-
     endlesss::toolkit::xp::RiffExportDestination destination(
         m_storagePaths.value(),
         m_configExportOutput.spec
@@ -1040,8 +1070,8 @@ void OuroApp::onEvent_ExportRiff( const base::IEvent& eventRef )
     const auto exportedFiles = endlesss::toolkit::xp::exportRiff(
         endlesss::toolkit::xp::RiffExportMode::Stems,
         destination,
-        exportRiffEvent->m_adjustments,
-        exportRiffEvent->m_riff );
+        eventData->m_adjustments,
+        eventData->m_riff );
 
     blog::core( FMTX( "Exported" ) );
     for ( const auto& exported : exportedFiles )

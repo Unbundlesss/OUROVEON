@@ -23,6 +23,21 @@ namespace cache {
 // 
 struct Stems
 {
+    enum class CacheVersion
+    {
+        Version1,       // pre 0.7.7; stems were stored in a single root directory, partitioned by the initial stem ID letter
+        Version2        // stems are now organised per-jam-ID, still partitioned by initial stem ID inside each sub-folder
+    };
+    // get path root relative to the ouroveon cache/common path
+    static ouro_nodiscard fs::path getCachePathRoot( CacheVersion cv );
+
+    static ouro_nodiscard fs::path getCachePathForStemData(
+        const fs::path& cacheRoot,
+        const endlesss::types::JamCouchID& jamCID,
+        const endlesss::types::StemCouchID& stemCID
+    );
+
+
     DECLARE_NO_COPY_NO_MOVE( Stems );
 
 

@@ -8,10 +8,8 @@
 //
 
 #include "pch.h"
-#include "endlesss/toolkit.jam.meta.h"
+#include "ux/stem.cache.control.h"
 
-namespace endlesss {
-namespace toolkit {
+namespace ux {
 
-} // namespace toolkit
-} // namespace endlesss
+} // namespace ux

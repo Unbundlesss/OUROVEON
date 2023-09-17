@@ -15,11 +15,16 @@ namespace base {
 struct _operation_id {};
 using OperationID = base::id::Simple<_operation_id, uint32_t, 1, 0>;
 
+struct _operation_variant {};
+using OperationVariant = base::id::Simple<_operation_variant, uint8_t, 1, 0>;
+
 // ---------------------------------------------------------------------------------------------------------------------
 // 
 struct Operations
 {
-    static OperationID newID();
+    static OperationID newID( const OperationVariant variant );
+
+    static OperationVariant variantFromID( const OperationID operationID );
 };
 
 // ---------------------------------------------------------------------------------------------------------------------

@@ -28,6 +28,9 @@ struct Preview final : public app::module::MixerInterface,
                             public rec::IRecordable,
                             public RiffMixerBase
 {
+    static constexpr base::OperationVariant OV_EnqueueRiff { 0xAA };
+    static constexpr base::OperationVariant OV_Permutation { 0xAB };
+
     using AudioBuffer           = app::module::Audio::OutputBuffer;
     using AudioSignal           = app::module::Audio::OutputSignal;
 
@@ -57,7 +60,7 @@ struct Preview final : public app::module::MixerInterface,
         if ( nextRiff->getSyncState() != endlesss::live::Riff::SyncState::Success )
             return base::OperationID::invalid();
 
-        const auto operationID = base::Operations::newID();
+        const auto operationID = base::Operations::newID( OV_EnqueueRiff );
 
         m_riffQueue.emplace( operationID, nextRiff );
         return operationID;
@@ -72,7 +75,7 @@ struct Preview final : public app::module::MixerInterface,
 
     inline base::OperationID enqueuePermutation( const Permutation& newPerm )
     {
-        const auto operationID = base::Operations::newID();
+        const auto operationID = base::Operations::newID( OV_Permutation );
 
         m_permutationQueue.emplace( operationID, newPerm );
         return operationID;

@@ -117,9 +117,13 @@ struct shades
     static constexpr Preset pink        { "ffb3c6", "ff8fab", "fb6f92" };
     static constexpr Preset slate       { "9a8c98", "4a4e69", "22223b" };
     static constexpr Preset white       { "e2e2e2", "f2f2f2", "ffffff" };
+    static constexpr Preset black       { "000000", "000000", "000000" };
 
     static constexpr Preset errors      { "c9184a", "f53923", "800f2f" };
     static constexpr Preset callout     { "467f8e", "56b8d0", "c0faff" };
+
+    static constexpr Preset tag_lvl_1   { "9d4edd", "c77dff", "e0aaff" };
+    static constexpr Preset tag_lvl_2   { "cc1e6f", "f72585", "f44292" };
     // clang-format on
 };
 

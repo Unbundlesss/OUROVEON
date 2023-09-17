@@ -7,8 +7,9 @@
 //  
 //
 
-#include "pch.h"
-#include "ux/export.config.editor.h"
+#pragma once
+
+namespace app { struct StoragePaths; }
 
 namespace ux {
 

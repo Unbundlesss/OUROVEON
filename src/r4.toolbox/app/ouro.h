@@ -76,13 +76,12 @@ protected:
 
     // -------------
 
-    void onEvent_ExportRiff( const base::IEvent& eventRef );
+    void event_ExportRiff( const events::ExportRiff* eventData );
 
     // riff export config
     config::endlesss::Export                m_configExportOutput;
 
-    base::EventListenerID                   m_eventListenerRiffExport;
-
+    base::EventListenerID                   m_eventLID_ExportRiff = base::EventListenerID::invalid();
 };
 
 } // namespace app

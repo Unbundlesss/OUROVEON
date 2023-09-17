@@ -22,27 +22,54 @@ static constexpr auto cEndlesssDataDomain       = "data.endlesss.fm";
 static constexpr auto cEndlesssAPIDomain        = "api.endlesss.fm";
 static constexpr auto cMimeApplicationJson      = "application/json";
 
+// ---------------------------------------------------------------------------------------------------------------------
+const char* getHttpLibErrorString( const httplib::Error err )
+{
+    switch ( err )
+    {
+    case httplib::Error::Success:                           return "Success";
+    default:
+    case httplib::Error::Unknown:                           return "Unknown";
+    case httplib::Error::Connection:                        return "Connection";
+    case httplib::Error::BindIPAddress:                     return "Bind IPAddress";
+    case httplib::Error::Read:                              return "Read";
+    case httplib::Error::Write:                             return "Write";
+    case httplib::Error::ExceedRedirectCount:               return "Exceed Redirect Count";
+    case httplib::Error::Canceled:                          return "Canceled";
+    case httplib::Error::SSLConnection:                     return "SSL Connection";
+    case httplib::Error::SSLLoadingCerts:                   return "SSL Loading Certs";
+    case httplib::Error::SSLServerVerification:             return "SSL Server Verification";
+    case httplib::Error::UnsupportedMultipartBoundaryChars: return "Unsupported Multipart Boundary Chars";
+    case httplib::Error::Compression:                       return "Compression";
+    }
+    return "";
+}
 
 // ---------------------------------------------------------------------------------------------------------------------
-void NetConfiguration::initWithoutAuthentication( base::EventBusClient eventBusClient, const config::endlesss::rAPI& api )
+void NetConfiguration::initWithoutAuthentication(
+    base::EventBusClient eventBusClient,
+    const config::endlesss::rAPI& api )
 {
     m_eventBusClient = std::move( eventBusClient );
 
     // downgrade would be unusual
     if ( m_access == Access::Authenticated )
     {
-        blog::error::api( "downgrading network configuration from authenticated -> public" );    // technically just a warning
+        blog::error::api( FMTX("downgrading network configuration from authenticated -> public") );    // technically just a warning
         m_auth = {};
     }
 
     m_access = Access::Public;
     m_api = api;
 
-    ABSL_ASSERT( !m_api.certBundleRelative.empty() );
+    postInit();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void NetConfiguration::initWithAuthentication( base::EventBusClient eventBusClient, const config::endlesss::rAPI& api, const config::endlesss::Auth& auth )
+void NetConfiguration::initWithAuthentication(
+    base::EventBusClient eventBusClient,
+    const config::endlesss::rAPI& api,
+    const config::endlesss::Auth& auth )
 {
     m_eventBusClient = std::move( eventBusClient );
 
@@ -50,8 +77,31 @@ void NetConfiguration::initWithAuthentication( base::EventBusClient eventBusClie
     m_api = api;
     m_auth = auth;
 
-    ABSL_ASSERT( !m_api.certBundleRelative.empty() );
     ABSL_ASSERT( !m_auth.token.empty() );
+
+    postInit();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void NetConfiguration::postInit()
+{
+    // preflights
+    ABSL_ASSERT( !m_api.certBundleRelative.empty() );
+
+    // log out httplib features we've compiled in, for our own references' sake
+    blog::api( FMTX( "[httplib] compression {}, engines compiled : {}{}" ),
+        m_api.connectionCompressionSupport ? "enabled" : "disabled",
+#ifdef CPPHTTPLIB_BROTLI_SUPPORT
+        "[brotli] ",
+#else
+        "",
+#endif
+#ifdef CPPHTTPLIB_ZLIB_SUPPORT
+        "[gzip / deflate] "
+#else
+        ""
+#endif
+    );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -88,6 +138,40 @@ std::string NetConfiguration::getVerboseCaptureFilename( std::string_view contex
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// there was an
+httplib::Result NetConfiguration::attempt( const std::function<httplib::Result()>& operation ) const
+{
+    int32_t retries = getRequestRetries();
+
+    httplib::Result opResult = operation();
+
+    // on failure, circle until we run out of tries or the call succeeds
+    uint32_t delayInMs = 250;
+    while ( (opResult == nullptr || opResult.error() != httplib::Error::Success) && retries > 0 )
+    {
+        {
+            metricsActivityFailure();
+
+            std::this_thread::sleep_for( std::chrono::milliseconds( delayInMs ) );
+            opResult = operation();
+        }
+        retries--;
+        delayInMs = std::min( delayInMs + 150, 1000u );   // arbitrary; push up delay up to 1s each. just break up the re-send cycle a bit
+    }
+
+    // make attempt to log out a failure code if we bungled it
+    if ( opResult != nullptr && opResult.error() != httplib::Error::Success )
+    {
+        blog::error::api( FMTX( "network request failed with error state '{}'" ), getHttpLibErrorString( opResult.error() ) );
+    }
+
+    return opResult;
+}
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+// used by all API calls to create a primed http client instance; seeded with the correct headers, authentication, SSL etc
+// 
 std::unique_ptr<httplib::SSLClient> createEndlesssHttpClient( const NetConfiguration& ncfg, const UserAgent ua )
 {
     using namespace std::literals::chrono_literals;
@@ -133,10 +217,13 @@ std::unique_ptr<httplib::SSLClient> createEndlesssHttpClient( const NetConfigura
     dataClient->set_ca_cert_path( ncfg.api().certBundleRelative.c_str() );
     dataClient->enable_server_certificate_verification( true );
 
-    // some of endlesss' servers are slow to respond
-    const auto timeoutSec = 1s * ncfg.api().networkTimeoutInSeconds;
-    dataClient->set_connection_timeout( timeoutSec );
-    dataClient->set_read_timeout( timeoutSec );
+    // blanket the timeouts all the same
+    {
+        const auto timeoutSec = ncfg.getRequestTimeout();
+        dataClient->set_connection_timeout( timeoutSec );
+        dataClient->set_read_timeout( timeoutSec );
+        dataClient->set_write_timeout( timeoutSec );
+    }
 
     // most of the API calls expect Basic auth credentials
     if ( authHeaders == AuthHeaders::Basic )
@@ -149,7 +236,8 @@ std::unique_ptr<httplib::SSLClient> createEndlesssHttpClient( const NetConfigura
         dataClient->set_bearer_token_auth( fmt::format( FMTX("{}:{}"), ncfg.auth().token, ncfg.auth().password ) );
     }
 
-    dataClient->set_compress( true );
+    dataClient->set_compress( ncfg.api().connectionCompressionSupport );
+    dataClient->set_decompress( ncfg.api().connectionCompressionSupport );
 
     if ( ncfg.api().debugVerboseNetLog )
     {
@@ -177,35 +265,15 @@ std::unique_ptr<httplib::SSLClient> createEndlesssHttpClient( const NetConfigura
 }
 
 
-// ---------------------------------------------------------------------------------------------------------------------
-const char* getHttpLibErrorString( const httplib::Error err )
-{
-    switch ( err )
-    {
-        case httplib::Error::Success:                           return "Success";
-        default:
-        case httplib::Error::Unknown:                           return "Unknown";
-        case httplib::Error::Connection:                        return "Connection";
-        case httplib::Error::BindIPAddress:                     return "BindIPAddress";
-        case httplib::Error::Read:                              return "Read";
-        case httplib::Error::Write:                             return "Write";
-        case httplib::Error::ExceedRedirectCount:               return "ExceedRedirectCount";
-        case httplib::Error::Canceled:                          return "Canceled";
-        case httplib::Error::SSLConnection:                     return "SSLConnection";
-        case httplib::Error::SSLLoadingCerts:                   return "SSLLoadingCerts";
-        case httplib::Error::SSLServerVerification:             return "SSLServerVerification";
-        case httplib::Error::UnsupportedMultipartBoundaryChars: return "UnsupportedMultipartBoundaryChars";
-        case httplib::Error::Compression:                       return "Compression";
-    }
-    return "";
-}
-
 
 // ---------------------------------------------------------------------------------------------------------------------
 bool JamProfile::fetch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID )
 {
-    auto res = createEndlesssHttpClient( ncfg, UserAgent::Couchbase )->Get(
-        fmt::format( "/user_appdata${}/Profile", jamDatabaseID ).c_str() );
+    auto client = createEndlesssHttpClient( ncfg, UserAgent::Couchbase );
+
+    auto res = ncfg.attempt( [&]() -> httplib::Result {
+        return client->Get( fmt::format( "/user_appdata${}/Profile", jamDatabaseID ).c_str() );
+        });
 
     return deserializeJson< JamProfile >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ), "jam_profile" );
 }
@@ -213,10 +281,14 @@ bool JamProfile::fetch( const NetConfiguration& ncfg, const endlesss::types::Jam
 // ---------------------------------------------------------------------------------------------------------------------
 bool JamChanges::fetch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID )
 {
-    auto res = createEndlesssHttpClient( ncfg, UserAgent::Couchbase )->Post(
-        fmt::format( "/user_appdata${}/_changes?descending=true&limit=1", jamDatabaseID ).c_str(),
-        keyBody,
-        cMimeApplicationJson );
+    auto client = createEndlesssHttpClient( ncfg, UserAgent::Couchbase );
+
+    auto res = ncfg.attempt( [&]() -> httplib::Result {
+        return client->Post(
+            fmt::format( "/user_appdata${}/_changes?descending=true&limit=1", jamDatabaseID ).c_str(),
+            keyBody,
+            cMimeApplicationJson );
+        });
 
     return deserializeJson< JamChanges >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ), "jam_changes" );
 }
@@ -224,12 +296,54 @@ bool JamChanges::fetch( const NetConfiguration& ncfg, const endlesss::types::Jam
 // ---------------------------------------------------------------------------------------------------------------------
 bool JamChanges::fetchSince( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID, const std::string& seqSince )
 {
-    auto res = createEndlesssHttpClient( ncfg, UserAgent::Couchbase )->Post(
-        fmt::format( "/user_appdata${}/_changes?since={}", jamDatabaseID, seqSince ).c_str(),
-        keyBody,
-        cMimeApplicationJson );
+    auto client = createEndlesssHttpClient( ncfg, UserAgent::Couchbase );
+
+    auto res = ncfg.attempt( [&]() -> httplib::Result {
+        return client->Post(
+            fmt::format( "/user_appdata${}/_changes?since={}", jamDatabaseID, seqSince ).c_str(),
+            keyBody,
+            cMimeApplicationJson );
+        });
 
     return deserializeJson< JamChanges >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ), "jam_changes_since" );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+bool JamLatestState::fetch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID )
+{
+    auto client = createEndlesssHttpClient( ncfg, UserAgent::Couchbase );
+
+    auto res = ncfg.attempt( [&]() -> httplib::Result {
+        return client->Get(
+            fmt::format( "/user_appdata${}/_design/types/_view/rifffLoopsByCreateTime?descending=true&limit=1", jamDatabaseID ).c_str() );
+        });
+
+    return deserializeJson< JamLatestState >( ncfg, res, *this, __FUNCTION__, "jam_latest_state" );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+bool JamFullSnapshot::fetch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID )
+{
+    auto client = createEndlesssHttpClient( ncfg, UserAgent::Couchbase );
+
+    auto res = ncfg.attempt( [&]() -> httplib::Result {
+        return client->Get(
+            fmt::format( "/user_appdata${}/_design/types/_view/rifffLoopsByCreateTime?descending=true", jamDatabaseID ).c_str() );
+        });
+
+    return deserializeJson< JamFullSnapshot >( ncfg, res, *this, __FUNCTION__, "jam_full_snapshot" );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+bool JamRiffCount::fetch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID )
+{
+    auto client = createEndlesssHttpClient( ncfg, UserAgent::Couchbase );
+
+    auto res = ncfg.attempt( [&]() -> httplib::Result {
+        return client->Get( fmt::format( "/user_appdata${}/_design/types/_view/rifffsByCreateTime", jamDatabaseID ).c_str() );
+        } );
+
+    return deserializeJson< JamRiffCount >( ncfg, res, *this, __FUNCTION__, "jam_riff_count" );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -238,11 +352,15 @@ bool RiffDetails::fetch( const NetConfiguration& ncfg, const endlesss::types::Ja
     // manually form a json body with the single document filter
     auto keyBody = fmt::format( R"({{ "keys" : [ "{}" ]}})", riffDocumentID );
 
+    auto client = createEndlesssHttpClient( ncfg, UserAgent::Couchbase );
+
     // post the query, we expect a single document stream back
-    auto res = createEndlesssHttpClient( ncfg, UserAgent::Couchbase )->Post(
-        fmt::format( "/user_appdata${}/_all_docs?include_docs=true", jamDatabaseID ).c_str(),
-        keyBody,
-        cMimeApplicationJson );
+    auto res = ncfg.attempt( [&]() -> httplib::Result {
+        return client->Post(
+            fmt::format( "/user_appdata${}/_all_docs?include_docs=true", jamDatabaseID ).c_str(),
+            keyBody,
+            cMimeApplicationJson );
+        });
 
     return deserializeJson< RiffDetails >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ), "riff_details" );
 }
@@ -253,11 +371,15 @@ bool RiffDetails::fetchBatch( const NetConfiguration& ncfg, const endlesss::type
     // expand all riff ids into a json array
     auto keyBody = fmt::format( R"({{ "keys" : [ "{}" ]}})", fmt::join( riffDocumentIDs, R"(", ")" ) );
 
+    auto client = createEndlesssHttpClient( ncfg, UserAgent::Couchbase );
+
     // post the query, we expect multiple rows of documents in return
-    auto res = createEndlesssHttpClient( ncfg, UserAgent::Couchbase )->Post(
-        fmt::format( "/user_appdata${}/_all_docs?include_docs=true", jamDatabaseID ).c_str(),
-        keyBody,
-        cMimeApplicationJson );
+    auto res = ncfg.attempt( [&]() -> httplib::Result {
+        return client->Post(
+            fmt::format( "/user_appdata${}/_all_docs?include_docs=true", jamDatabaseID ).c_str(),
+            keyBody,
+            cMimeApplicationJson );
+        });
 
     return deserializeJson< RiffDetails >( ncfg, res, *this, fmt::format("{}( {} )", __FUNCTION__, jamDatabaseID ), "riff_details_batch" );
 }
@@ -268,11 +390,15 @@ bool StemTypeCheck::fetchBatch( const NetConfiguration& ncfg, const endlesss::ty
     // expand all stem ids into a json array
     auto keyBody = fmt::format( R"({{ "keys" : [ "{}" ]}})", fmt::join( stemDocumentIDs, R"(", ")" ) );
 
+    auto client = createEndlesssHttpClient( ncfg, UserAgent::Couchbase );
+
     // fetch all the stem data docs but only do a very minimal parse for 'type' fields
-    auto res = createEndlesssHttpClient( ncfg, UserAgent::Couchbase )->Post(
-        fmt::format( "/user_appdata${}/_all_docs?include_docs=true", jamDatabaseID ).c_str(),
-        keyBody,
-        cMimeApplicationJson );
+    auto res = ncfg.attempt( [&]() -> httplib::Result {
+        return client->Post(
+            fmt::format( "/user_appdata${}/_all_docs?include_docs=true", jamDatabaseID ).c_str(),
+            keyBody,
+            cMimeApplicationJson );
+        });
 
     return deserializeJson< StemTypeCheck >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ), "stem_type_check_batch" );
 }
@@ -283,11 +409,15 @@ bool StemDetails::fetchBatch( const NetConfiguration& ncfg, const endlesss::type
     // expand all stem ids into a json array
     auto keyBody = fmt::format( R"({{ "keys" : [ "{}" ]}})", fmt::join( stemDocumentIDs, R"(", ")" ) );
 
+    auto client = createEndlesssHttpClient( ncfg, UserAgent::Couchbase );
+
     // fetch data about all the stems in bulk
-    auto res = createEndlesssHttpClient( ncfg, UserAgent::Couchbase )->Post(
-        fmt::format( "/user_appdata${}/_all_docs?include_docs=true", jamDatabaseID ).c_str(),
-        keyBody,
-        cMimeApplicationJson );
+    auto res = ncfg.attempt( [&]() -> httplib::Result {
+        return client->Post(
+            fmt::format( "/user_appdata${}/_all_docs?include_docs=true", jamDatabaseID ).c_str(),
+            keyBody,
+            cMimeApplicationJson );
+        });
 
     return deserializeJson< StemDetails >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ), "stem_details_batch" );
 }
@@ -295,7 +425,11 @@ bool StemDetails::fetchBatch( const NetConfiguration& ncfg, const endlesss::type
 // ---------------------------------------------------------------------------------------------------------------------
 bool CurrentJoinInJams::fetch( const NetConfiguration& ncfg )
 {
-    auto res = createEndlesssHttpClient( ncfg, UserAgent::ClientService )->Get( "/app_client_config/bands:joinable" );
+    auto client = createEndlesssHttpClient( ncfg, UserAgent::ClientService );
+
+    auto res = ncfg.attempt( [&]() -> httplib::Result {
+        return client->Get( "/app_client_config/bands:joinable" );
+        });
 
     return deserializeJson< CurrentJoinInJams >( ncfg, res, *this, __FUNCTION__, "current_join_in_jams" );
 }
@@ -309,12 +443,9 @@ bool CurrentCollectibleJams::fetch( const NetConfiguration& ncfg, int32_t pageNo
 
     auto client = createEndlesssHttpClient( ncfg, UserAgent::WebWithoutAuth );
 
-    // this endpoint is slow and prone to failure. give it a second try if it fails immediately.
-    auto res = client->Get( requestUrl);
-    if ( res.error() != httplib::Error::Success )
-    {
-        res = client->Get( requestUrl );
-    }
+    auto res = ncfg.attempt( [&]() -> httplib::Result {
+            return client->Get( requestUrl );
+        });
 
     return deserializeJson< CurrentCollectibleJams >( ncfg, res, *this, __FUNCTION__, "current_collectible_jams" );
 }
@@ -324,8 +455,11 @@ bool CurrentCollectibleJams::fetch( const NetConfiguration& ncfg, int32_t pageNo
 //
 bool SubscribedJams::fetch( const NetConfiguration& ncfg, const std::string& userName )
 {
-    auto res = createEndlesssHttpClient( ncfg, UserAgent::ClientService )->Get(
-        fmt::format( "/user_appdata${}/_design/membership/_view/getMembership", userName ).c_str() );
+    auto client = createEndlesssHttpClient( ncfg, UserAgent::ClientService );
+
+    auto res = ncfg.attempt( [&]() -> httplib::Result {
+        return client->Get( fmt::format( "/user_appdata${}/_design/membership/_view/getMembership", userName ).c_str() );
+        } );
 
     return deserializeJson< SubscribedJams >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, userName ), "subscribed_jams" );
 }
@@ -333,8 +467,11 @@ bool SubscribedJams::fetch( const NetConfiguration& ncfg, const std::string& use
 // ---------------------------------------------------------------------------------------------------------------------
 bool BandPermalinkMeta::fetch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID )
 {
-    auto res = createEndlesssHttpClient( ncfg, UserAgent::WebWithoutAuth )->Get(
-        fmt::format( "/api/band/{}/permalink", jamDatabaseID ).c_str() );
+    auto client = createEndlesssHttpClient( ncfg, UserAgent::WebWithoutAuth );
+
+    auto res = ncfg.attempt( [&]() -> httplib::Result {
+        return client->Get( fmt::format( "/api/band/{}/permalink", jamDatabaseID ).c_str() );
+        });
 
     return deserializeJson< BandPermalinkMeta >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ), "band_permalink_meta" );
 }
@@ -342,8 +479,11 @@ bool BandPermalinkMeta::fetch( const NetConfiguration& ncfg, const endlesss::typ
 // ---------------------------------------------------------------------------------------------------------------------
 bool BandNameFromExtendedID::fetch( const NetConfiguration& ncfg, const std::string& jamLongID )
 {
-    auto res = createEndlesssHttpClient( ncfg, UserAgent::WebWithoutAuth )->Get(
-        fmt::format( "/jam/{}/rifffs?pageNo=0&pageSize=1", jamLongID ).c_str() );
+    auto client = createEndlesssHttpClient( ncfg, UserAgent::WebWithoutAuth );
+
+    auto res = ncfg.attempt( [&]() -> httplib::Result {
+        return client->Get( fmt::format( "/jam/{}/rifffs?pageNo=0&pageSize=1", jamLongID ).c_str() );
+        });
 
     return deserializeJson< BandNameFromExtendedID >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamLongID ), "band_name_from_extid" );
 }
@@ -367,7 +507,11 @@ bool SharedRiffsByUser::commonRequest( const NetConfiguration& ncfg, const std::
     // as everything else is available via public calls
     const UserAgent srUA = ncfg.hasAccess( NetConfiguration::Access::Authenticated ) ? UserAgent::WebWithAuth : UserAgent::WebWithoutAuth;
 
-    auto res = createEndlesssHttpClient( ncfg, srUA )->Get( requestUrl );
+    auto client = createEndlesssHttpClient( ncfg, srUA );
+
+    auto res = ncfg.attempt( [&]() -> httplib::Result {
+        return client->Get( requestUrl );
+        });
 
     #define CHECK_CHAR( _idx, _chr ) if ( bodyStream[i + _idx] == _chr )
 

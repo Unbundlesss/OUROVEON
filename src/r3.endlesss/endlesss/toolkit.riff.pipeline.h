@@ -8,6 +8,7 @@
 //
 
 #pragma once
+#include "base/operations.h"
 
 #include "endlesss/core.types.h"
 #include "endlesss/live.riff.h"
@@ -23,20 +24,24 @@ struct Pipeline
     struct Request
     {
         Request() = default;
-        Request( const endlesss::types::RiffIdentity& riff )
+        Request( const endlesss::types::RiffIdentity& riff, const base::OperationID& opID )
             : m_riff( riff )
+            , m_operationID( opID )
         {}
-        Request( const endlesss::types::RiffIdentity& riff, const endlesss::types::RiffPlaybackPermutation& permutation )
+        Request( const endlesss::types::RiffIdentity& riff, const endlesss::types::RiffPlaybackPermutation& permutation, const base::OperationID& opID )
             : m_riff( riff )
             , m_playback( permutation )
+            , m_operationID( opID )
         {}
-        Request( const endlesss::types::RiffIdentity& riff, const endlesss::types::RiffPlaybackPermutationOpt& permutationOpt )
+        Request( const endlesss::types::RiffIdentity& riff, const endlesss::types::RiffPlaybackPermutationOpt& permutationOpt, const base::OperationID& opID )
             : m_riff( riff )
             , m_playback( permutationOpt )
+            , m_operationID( opID )
         {}
 
+        base::OperationID                               m_operationID;  // opID to broadcast once loaded and any callbacks dispatched
         endlesss::types::RiffIdentity                   m_riff;         // what to play
-        endlesss::types::RiffPlaybackPermutationOpt     m_playback;     // how to play, optional
+        endlesss::types::RiffPlaybackPermutationOpt     m_playback;     // how to play (optional)
     };
 
     using RiffDataResolver      = std::function<bool( const endlesss::types::RiffIdentity&, endlesss::types::RiffComplete& )>;
@@ -45,6 +50,7 @@ struct Pipeline
 
 
     Pipeline(
+        base::EventBusClient                    eventBus,                   // event bus for sending operation-complete events
         endlesss::services::RiffFetchProvider&  riffFetchProvider,          // api required for riff fetching / caching
         const std::size_t                       liveRiffCacheSize,          // number of live riffs to hold in the local pipeline cache
         const RiffDataResolver&                 riffDataResolver,           // resolver function that can process a request into riff data
@@ -60,6 +66,10 @@ struct Pipeline
     // request to purge all currently enqueued pipeline requests
     void requestClear();
 
+    // if present, apply IdentityCustomNaming data to the RiffComplete
+    static void applyRequestCustomNaming(
+        const endlesss::types::RiffIdentity& request,
+        endlesss::types::RiffComplete& result );
 
     // given a jam+riff, this resolver will fetch all the metadata from the endlesss backend from scratch
     static bool defaultNetworkResolver(
@@ -90,6 +100,7 @@ private:
 
     using RiffIDQueue = mcc::ReaderWriterQueue< Request >;
 
+    base::EventBusClient            m_eventBusClient;
     services::RiffFetchProvider     m_riffFetchProvider;
 
     RiffIDQueue                     m_requests;         // riffs to fetch & play - written to by main thread, read from worker

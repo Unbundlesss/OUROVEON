@@ -36,7 +36,7 @@ struct Jam
     JamCouchID                couchID;
     std::string               displayName;
 
-    // this is ouroveon-specific metadata; extra descriptors that can be embedded for use by
+    // this is transient, ouroveon-specific metadata; extra descriptors that can be embedded for use by
     // search / sort / export / etc as required. Example: name of a shared riff
     std::string               description;
 
@@ -172,6 +172,10 @@ struct Riff
     RiffCouchID     couchID;
     JamCouchID      jamCouchID;             // CID for the jam that owns the riff
 
+    // this is transient, ouroveon-specific metadata; extra descriptors that can be embedded for use by
+    // search / sort / export / etc as required. Example: tag ordering metadata
+    std::string     description;
+
     std::string     user;
 
     StemOn          stemsOn;                // bitfield of stem activation
@@ -245,6 +249,15 @@ struct RiffComplete
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
+// block of custom names that can be slid into live jam/riff structures on resolve; then used for export/etc
+struct IdentityCustomNaming
+{
+    std::string     m_jamDisplayName;
+    std::string     m_jamDescription;
+    std::string     m_riffDescription;
+};
+
+// ---------------------------------------------------------------------------------------------------------------------
 // presently to "uniquely" identify a riff - to load it from the backend, for example - we need the jam that owns it
 // as well as the riff's own Couch ID. Our own Warehouse can use just the riff ID but there isn't an existing endlesss API to look up
 // full metadata just on riff ID alone (as far as I know)
@@ -261,16 +274,16 @@ struct RiffIdentity
         , m_riff( std::move( riff ) )
     {}
 
-    // option for passing in additional naming data; used by shared_riff resolver to encode the 
+    // option for passing in additional naming data; used by (for example) shared_riff resolver to encode the 
     // original username that shared the riff, as this is not accessible during network resolve and its something
     // we want to encode for later export purposes
     RiffIdentity(
         endlesss::types::JamCouchID jam,
         endlesss::types::RiffCouchID riff,
-        std::string_view customName )
+        IdentityCustomNaming&& customNaming )
         : m_jam( std::move( jam ) )
         , m_riff( std::move( riff ) )
-        , m_customName( customName )
+        , m_customNaming( std::move(customNaming) )
     {}
 
 
@@ -284,13 +297,17 @@ struct RiffIdentity
     constexpr const endlesss::types::RiffCouchID& getRiffID() const { return m_riff; }
 
     // check & access custom name data
-    bool hasCustomName() const { return !m_customName.empty(); }
-    const std::string_view getCustomName() const { return m_customName; }
+    bool hasCustomJamDisplayName() const { return !m_customNaming.m_jamDisplayName.empty(); }
+    bool hasCustomJamDescription() const { return !m_customNaming.m_jamDescription.empty(); }
+    bool hasCustomRiffDescription() const { return !m_customNaming.m_riffDescription.empty(); }
+
+    const IdentityCustomNaming& getCustomNaming() const { return m_customNaming; }
 
 private:
     endlesss::types::JamCouchID     m_jam;
     endlesss::types::RiffCouchID    m_riff;
-    std::string                     m_customName;
+
+    IdentityCustomNaming            m_customNaming;
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -510,6 +527,8 @@ struct RiffTag
         archive( CEREAL_NVP( m_jam )
                , CEREAL_NVP( m_riff )
                , CEREAL_NVP( m_order )
+               , CEREAL_NVP( m_timestamp )
+               , CEREAL_NVP( m_favour )
                , CEREAL_NVP( m_note )
         );
     }
@@ -559,8 +578,8 @@ EnqueueRiffPlayback( const endlesss::types::JamCouchID& jam, const endlesss::typ
     ABSL_ASSERT( m_identity.hasData() );
 }
 
-EnqueueRiffPlayback( const endlesss::types::JamCouchID& jam, const endlesss::types::RiffCouchID& riff, std::string_view customName )
-    : m_identity( jam, riff, customName )
+EnqueueRiffPlayback( const endlesss::types::JamCouchID& jam, const endlesss::types::RiffCouchID& riff, endlesss::types::IdentityCustomNaming&& customNaming )
+    : m_identity( jam, riff, std::move( customNaming ) )
 {
     ABSL_ASSERT( m_identity.hasData() );
 }
@@ -582,7 +601,7 @@ enum class Action
 
 RiffTagAction() = delete;
 
-RiffTagAction( endlesss::types::RiffTag&& tag, const Action act )
+RiffTagAction( endlesss::types::RiffTag tag, const Action act )
     : m_tag( std::move( tag ) )
     , m_action( act )
 {
@@ -646,17 +665,25 @@ CREATE_EVENT_END()
 
 // ---------------------------------------------------------------------------------------------------------------------
 // some kind of network activity is happening; 0-bytes passed means we're just notifying of some kind of outbound event
-// otherwise bytes should contain the amount of data parsed (not including any compression, wire-side)
+// otherwise bytes should contain the amount of data parsed (not including any compression, wire-side);
+// may set the failure tag to indicate a request bailed for noting on the UI if required
 
 CREATE_EVENT_BEGIN( NetworkActivity )
 
 NetworkActivity() = delete;
 
-NetworkActivity( std::size_t bytes )
+NetworkActivity( std::size_t bytes, bool bFailure = false )
     : m_bytes( bytes )
+    , m_bFailure( bFailure )
 {
 }
 
+static NetworkActivity failure()
+{
+    return { 0, true };
+}
+
 std::size_t    m_bytes;
+bool           m_bFailure;
 
 CREATE_EVENT_END()

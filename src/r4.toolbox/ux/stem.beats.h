@@ -8,10 +8,9 @@
 
 namespace endlesss { namespace toolkit { struct Exchange; } }
 
-namespace ImGui {
 namespace ux {
 
 void StemBeats( const char* label, const endlesss::toolkit::Exchange& data, const float beatIndicatorSize = 16.0f, const bool monochrome = true );
 
 } // namespace ux
-} // namespace ImGui
+

@@ -19,7 +19,6 @@
 #include "ssp/ssp.file.flac.h"
 #include "ssp/ssp.file.wav.h"
 
-#include "ux/live.riff.details.h"
 #include "ux/stem.beats.h"
 
 #include "endlesss/core.constants.h"
@@ -431,6 +430,9 @@ void Preview::update(
     // early out when nothing is happening
     if ( riffEmpty && !riffEnqueued )
     {
+        // keep permutations updating even if we early out
+        flushPendingPermutations();
+
         outputBuffer.applySilence();
 
         // blank out tx cache
@@ -632,7 +634,7 @@ void Preview::imgui()
 // ---------------------------------------------------------------------------------------------------------------------
 void Preview::imguiDefault()
 {
-    const auto panelVolumeModule = 75.0f;
+    const auto panelVolumeModule = 64.0f;
     const auto panelNudgeModule = 140.0f;
 
     const auto panelRegionAvailable = ImGui::GetContentRegionAvail();
@@ -658,43 +660,43 @@ void Preview::imguiDefault()
                                 currentRiff->m_syncState == endlesss::live::Riff::SyncState::Success );
 
     {
-        endlesss::toolkit::xp::RiffExportAdjustments riffExportAdjustments;
-        riffExportAdjustments.m_exportSampleOffset = m_riffPlaybackNudge;
-
-        {
-            ImGui::Columns( 2, "##nudge_edit", false );
-            ImGui::SetColumnWidth( 0, ( panelRegionAvailable.x - panelNudgeModule ) + 16.0f );
-            ImGui::SetColumnWidth( 1, panelNudgeModule );
-
-            ImGui::ux::RiffDetails( currentRiffPtr, m_eventBusClient, &riffExportAdjustments );
-
-            ImGui::NextColumn();
-            if ( currentRiffIsValid )
-            {
-                // you come up with a better name then go on
-                ImGui::TextUnformatted( "  Wuncle Nudge" );
-                const auto stepSize = currentRiffPtr->m_timingDetails.m_lengthInSamplesPerBar / 32;
-
-                int32_t nudgeEdit = m_riffPlaybackNudge;
-                ImGui::SetNextItemWidth( panelNudgeModule - 20.0f );
-                const auto nudgeChanged = ImGui::InputInt(
-                    "##wuncle",
-                    &nudgeEdit,
-                    stepSize,
-                    stepSize * 2,
-                    ImGuiInputTextFlags_CharsDecimal | ImGuiInputTextFlags_EnterReturnsTrue );
-
-                if ( nudgeChanged || ImGui::IsItemDeactivatedAfterEdit() )
-                {
-                    m_riffPlaybackNudge = nudgeEdit;
-                }
-            }
-
-            ImGui::Columns( 1 );
-        }
-
-        ImGui::Spacing();
-        ImGui::Spacing();
+//         endlesss::toolkit::xp::RiffExportAdjustments riffExportAdjustments;
+//         riffExportAdjustments.m_exportSampleOffset = m_riffPlaybackNudge;
+// 
+//         {
+//             ImGui::Columns( 2, "##nudge_edit", false );
+//             ImGui::SetColumnWidth( 0, ( panelRegionAvailable.x - panelNudgeModule ) + 16.0f );
+//             ImGui::SetColumnWidth( 1, panelNudgeModule );
+// 
+//             ImGui::ux::RiffDetails( currentRiffPtr, m_eventBusClient, &riffExportAdjustments );
+// 
+//             ImGui::NextColumn();
+//             if ( currentRiffIsValid )
+//             {
+//                 // you come up with a better name then go on
+//                 ImGui::TextUnformatted( "  Wuncle Nudge" );
+//                 const auto stepSize = currentRiffPtr->m_timingDetails.m_lengthInSamplesPerBar / 32;
+// 
+//                 int32_t nudgeEdit = m_riffPlaybackNudge;
+//                 ImGui::SetNextItemWidth( panelNudgeModule - 20.0f );
+//                 const auto nudgeChanged = ImGui::InputInt(
+//                     "##wuncle",
+//                     &nudgeEdit,
+//                     stepSize,
+//                     stepSize * 2,
+//                     ImGuiInputTextFlags_CharsDecimal | ImGuiInputTextFlags_EnterReturnsTrue );
+// 
+//                 if ( nudgeChanged || ImGui::IsItemDeactivatedAfterEdit() )
+//                 {
+//                     m_riffPlaybackNudge = nudgeEdit;
+//                 }
+//             }
+// 
+//             ImGui::Columns( 1 );
+//         }
+// 
+//         ImGui::Spacing();
+//         ImGui::Spacing();
 
         ImGui::Columns( 2, "##beat_display", false );
         ImGui::SetColumnWidth( 0, panelVolumeModule );
@@ -705,7 +707,7 @@ void Preview::imguiDefault()
         {
             {
                 ImGui::Scoped::ToggleButtonLit highlightButton( lockTransitionLocal, riffTransitColourU32 );
-                if ( ImGui::Button( ICON_FA_TIMELINE, ImVec2( 65.0f, 0.0f ) ) )
+                if ( ImGui::Button( ICON_FA_TIMELINE, ImVec2( 48.0f, 24.0f ) ) )
                 {
                     lockTransitionLocal = !lockTransitionLocal;
                     m_lockTransitionToNextBar = lockTransitionLocal;
@@ -716,19 +718,20 @@ void Preview::imguiDefault()
 
         ImGui::NextColumn();
 
+        const float progressBarHeight = 5.0f;
         if ( currentRiffIsValid )
         {
             const bool waitingOnMultiBarCountdown = ( m_lockTransitionBarCount == TransitionBarCount::Many );
             const int32_t remainingBarCounter = waitingOnMultiBarCountdown ? ( m_playbackProgression.m_playbackBar + m_lockTransitionBarCounter ) : -1;
 
-            ImGui::ProgressBar( (float)m_playbackProgression.m_playbackPercentage, ImVec2( -1, 3.0f ), "" );
-            ImGui::BeatSegments( "##bars_play", currentRiff->m_timingDetails.m_barCount, m_playbackProgression.m_playbackBar, remainingBarCounter, 3.0f, riffTransitColourU32 );
+            ImGui::ProgressBar( (float)m_playbackProgression.m_playbackPercentage, ImVec2( -1, progressBarHeight ), "" );
+            ImGui::BeatSegments( "##bars_play", currentRiff->m_timingDetails.m_barCount, m_playbackProgression.m_playbackBar, remainingBarCounter, progressBarHeight, riffTransitColourU32 );
             ImGui::BeatSegments( "##beats", currentRiff->m_timingDetails.m_quarterBeats, m_playbackProgression.m_playbackBarSegment );
         }
         else
         {
-            ImGui::ProgressBar( 0, ImVec2( -1, 3.0f ), "" );
-            ImGui::BeatSegments( "##bars_play", 1, -1, -1, 3.0f, riffTransitColourU32 );
+            ImGui::ProgressBar( 0, ImVec2( -1, progressBarHeight ), "" );
+            ImGui::BeatSegments( "##bars_play", 1, -1, -1, progressBarHeight, riffTransitColourU32 );
             ImGui::BeatSegments( "##beats", 1, -1 );
         }
 
@@ -738,9 +741,11 @@ void Preview::imguiDefault()
             ImGui::NextColumn();
             ImGui::Spacing();
             ImGui::Spacing();
+            ImGui::Spacing();
             ImGui::TextUnformatted( "Offset" );
 
             ImGui::NextColumn();
+            ImGui::Spacing();
             ImGui::Spacing();
             ImGui::Spacing();
             {
@@ -787,15 +792,23 @@ void Preview::imguiDefault()
                 }
 
                 ImGui::NextColumn();
+                ImGui::Spacing();
+                ImGui::Spacing();
+                ImGui::Spacing();
+                ImGui::AlignTextToFramePadding();
                 ImGui::TextUnformatted( "Repeat" );
+
                 ImGui::NextColumn();
+                ImGui::Spacing();
+                ImGui::Spacing();
+                ImGui::Spacing();
 
                 const auto repeatSliderWidth = ImGui::GetContentRegionAvail().x * 0.3f;
                 const auto buttonBarAreaWidth = ImGui::GetContentRegionAvail().x - repeatSliderWidth;
 
                 const auto buttonGap   = 4.0f;
                 const auto buttonCount = (float)TransitionBarCount::Count;
-                const auto buttonSize  = ImVec2( (buttonBarAreaWidth - (buttonGap * (buttonCount - 1.0f) ) ) / buttonCount, ImGui::GetTextLineHeight() * 1.25f );
+                const auto buttonSize  = ImVec2( (buttonBarAreaWidth - (buttonGap * (buttonCount - 1.0f) ) ) / buttonCount, ImGui::GetTextLineHeight() * 1.35f );
 
                 META_FOREACH( TransitionBarCount, lb )
                 {

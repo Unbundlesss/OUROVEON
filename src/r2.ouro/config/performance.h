@@ -15,6 +15,7 @@
 
 namespace config {
 
+// various cross-system performance settings
 OURO_CONFIG( Performance )
 {
     // data routing
@@ -31,6 +32,10 @@ OURO_CONFIG( Performance )
     // when possible viable, keep this number of live full riff instances alive once they are fully loaded
     int32_t         liveRiffInstancePoolSize = 64;
 
+    // for people connecting over less reliable networks that may be lossy or take a few persistent bumps to make
+    // API calls land, enabling this will ramp up the retry rates in the network layer, bump up the timeouts
+    bool            enableUnstableNetworkCompensation = false;
+
     // optionally enable/disable the Vibes rendering system at the root to avoid burning any memory or GPU if desired
     bool            enableVibesRenderer = true;
 
@@ -40,6 +45,7 @@ OURO_CONFIG( Performance )
     {
         archive( CEREAL_NVP( stemCacheAutoPruneAtMemoryUsageMb )
                , CEREAL_NVP( liveRiffInstancePoolSize )
+               , CEREAL_OPTIONAL_NVP( enableUnstableNetworkCompensation )
                , CEREAL_OPTIONAL_NVP( enableVibesRenderer )
         );
     }

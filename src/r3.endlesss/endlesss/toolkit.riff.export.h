@@ -27,12 +27,13 @@ namespace xp {
 #define _OUTPUT_TOKENS(_action)                                                                \
     _action( Jam_Name )                 /* 'CoolTimesAhoy'      (path sanitised)            */ \
     _action( Jam_UniqueID )             /* b7eca81...           (customisable length)       */ \
-    _action( Jam_Description )          /* 'extra_context'      (path sanitised)            */ \
+    _action( Jam_Description )          /* 'extra_context'      (optional, path sanitised)  */ \
     _action( Riff_Timestamp )           /* 20220301.152303      (customisable format)       */ \
     _action( Riff_UniqueID )            /* e50c3be...           (customisable length)       */ \
     _action( Riff_BPM )                 /* '156.3bpm'                                       */ \
     _action( Riff_Root )                /* 'Ab'                                             */ \
     _action( Riff_Scale )               /* 'phrygian'                                       */ \
+    _action( Riff_Description )         /* 'tag1'               (optional, path sanitised)  */ \
     _action( Stem_Index )               /* '1'                                              */ \
     _action( Stem_Timestamp )           /* 20220301.152218      (customisable format)       */ \
     _action( Stem_Author )              /* 'ishaniii'                                       */ \
@@ -73,7 +74,7 @@ enum class AudioFormat
 struct OutputSpec
 {
     AudioFormat     format = AudioFormat::WAV;
-    std::string     riff   = "[Jam_Name]/[Jam_Description][Riff_Timestamp]_#[Riff_UniqueID]_[Riff_BPM]_[Riff_Root][Riff_Scale]";
+    std::string     riff   = "[Jam_Name]/[Jam_Description][Riff_Description][Riff_Timestamp]_#[Riff_UniqueID]_[Riff_BPM]_[Riff_Root][Riff_Scale]";
     std::string     stem   = "[Stem_Index]-[Stem_Timestamp]-#[Stem_UniqueID]-[Stem_Author]";
 
     Customisations  custom;

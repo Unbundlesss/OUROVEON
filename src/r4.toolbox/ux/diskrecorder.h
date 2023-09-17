@@ -10,8 +10,6 @@
 #include "spacetime/chronicle.h"
 #include "base/text.h"
 
-#include "xp/open.url.h"
-
 namespace ux {
 namespace widget {
 
@@ -43,33 +41,6 @@ void DiskRecorder( rec::IRecordable& recordable, const fs::path& recordingRootPa
     const bool bRecodingInProgress = recordable.isRecording();
 
     ImGui::PushID( recordableUID );
-
-    {
-        const auto hostContainerPosSS = ImGui::GetWindowPos();
-        const auto hostContainerSize  = ImGui::GetWindowSize();
-
-        // when the mouse is over the host container and the modifier is down,
-        // early out with a button that takes the user to where the recordings are stored
-        if ( ImGui::IsMouseHoveringRect( hostContainerPosSS, hostContainerPosSS + hostContainerSize ) &&
-             bOpenOutputDirectoryOnClick )
-        {
-            const auto pathToOpen = recordingRootPath.string();
-
-            if ( ImGui::Button( ICON_FA_UP_RIGHT_FROM_SQUARE, commonButtonSize ) )
-            {
-                xpOpenURL( pathToOpen.data() );
-            }
-
-            ImGui::SameLine( 0.0f, 4.0f );
-            ImGui::PushItemWidth( ImGui::GetContentRegionAvail().x );
-            ImGui::TextUnformatted( " Open Output Directory ..." );
-            ImGui::CompactTooltip( pathToOpen );
-            ImGui::PopItemWidth();
-
-            ImGui::PopID();
-            return;
-        }
-    }
 
     // recorder may be in a state of flux; if so, display what it's telling us
     if ( bRecodingInProgress &&

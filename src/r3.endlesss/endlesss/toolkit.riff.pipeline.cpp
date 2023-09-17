@@ -22,12 +22,14 @@ namespace toolkit {
 
 // ---------------------------------------------------------------------------------------------------------------------
 Pipeline::Pipeline(
+    base::EventBusClient eventBus,
     endlesss::services::RiffFetchProvider& riffFetchProvider,
     const std::size_t liveRiffCacheSize,
     const RiffDataResolver& riffDataResolver,
     const RiffLoadCallback& riffLoadCallback,
     const QueueClearedCallback& queueClearedCallback )
-    : m_riffFetchProvider( riffFetchProvider )
+    : m_eventBusClient( eventBus )
+    , m_riffFetchProvider( riffFetchProvider )
     , m_cacheSize( liveRiffCacheSize )
     , m_resolver( riffDataResolver )
     , m_callbackRiffLoad( riffLoadCallback )
@@ -59,6 +61,20 @@ void Pipeline::requestClear()
     m_pipelineRequestSema.signal();
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+void Pipeline::applyRequestCustomNaming(
+    const endlesss::types::RiffIdentity& request,
+    endlesss::types::RiffComplete& result )
+{
+    if ( request.hasCustomJamDisplayName() )
+        result.jam.displayName = request.getCustomNaming().m_jamDisplayName;
+
+    if ( request.hasCustomJamDescription() )
+        result.jam.description = request.getCustomNaming().m_jamDescription;
+
+    if ( request.hasCustomRiffDescription() )
+        result.riff.description = request.getCustomNaming().m_riffDescription;
+}
 
 // ---------------------------------------------------------------------------------------------------------------------
 bool Pipeline::resolveStandardRiff(
@@ -113,6 +129,8 @@ bool Pipeline::resolveStandardRiff(
             result.stems[stemI] = {};
         }
     }
+    
+    applyRequestCustomNaming( request, result );
     return true;
 }
 
@@ -143,11 +161,7 @@ bool Pipeline::resolveSharedRiff(
         result.jam.couchID = endlesss::types::JamCouchID( riffBandExtractor.estimateJamCouchID( riffData ) );
     }
 
-    // use the encoded custom name if given, this should be the perferred export name
-    if ( request.hasCustomName() )
-        result.jam.displayName = request.getCustomName();
-    else
-        result.jam.displayName = fmt::format( FMTX( "shared_riff_{}" ), riffData.rifff.userName ); // encode the username we have for sake of export
+    result.jam.displayName = fmt::format( FMTX( "shared_riff_{}" ), riffData.rifff.userName ); // encode the username we have for sake of export
 
     // log the given title from the shared-riff as an extra bit of jam metadata
     result.jam.description = riffData.title;
@@ -168,6 +182,7 @@ bool Pipeline::resolveSharedRiff(
         }
     }
 
+    applyRequestCustomNaming( request, result );
     return true;
 }
 
@@ -229,6 +244,9 @@ void Pipeline::pipelineThread()
                     // we still report that a request was "processed", just with a null result as it was skipped
                     // systems using the pipeline may need to know outflow of requests even if they weren't loaded
                     m_callbackRiffLoad( riffRequest.m_riff, nullRiff, riffRequest.m_playback );
+
+                    // emit operation complete
+                    m_eventBusClient.Send< ::events::OperationComplete >( riffRequest.m_operationID );
                 }
 
                 m_pipelineClear = false;
@@ -266,6 +284,9 @@ void Pipeline::pipelineThread()
                 }
 
                 m_callbackRiffLoad( riffRequest.m_riff, riffToPlay, riffRequest.m_playback );
+
+                // emit operation complete
+                m_eventBusClient.Send< ::events::OperationComplete >( riffRequest.m_operationID );
             }
         }
         std::this_thread::yield();

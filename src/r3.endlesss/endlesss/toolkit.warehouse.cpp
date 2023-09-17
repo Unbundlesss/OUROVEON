@@ -135,6 +135,26 @@ struct JamPurgeTask : Warehouse::ITask
     virtual bool Work( TaskQueue& currentTasks ) override;
 };
 
+// ---------------------------------------------------------------------------------------------------------------------
+struct JamSyncAbortTask : Warehouse::ITask
+{
+    static constexpr char Tag[] = "SYNC-ABORT";
+
+    JamSyncAbortTask( const types::JamCouchID& jamCID )
+        : Warehouse::ITask()
+        , m_jamCID( jamCID )
+    {}
+
+    // always trigger a contents update after wiping out data
+    virtual bool forceContentReport() const override { return true; }
+
+    types::JamCouchID m_jamCID;
+
+    virtual const char* getTag() override { return Tag; }
+    virtual std::string Describe() override { return fmt::format( "[{}] purging empty riff records for [{}]", Tag, m_jamCID ); }
+    virtual bool Work( TaskQueue& currentTasks ) override;
+};
+
 
 // ---------------------------------------------------------------------------------------------------------------------
 struct GetRiffDataTask : Warehouse::INetworkTask
@@ -523,7 +543,7 @@ namespace tags {
     // version of upsert without inline transaction guard - so other functions can choose how to wrap or batch
     namespace details
     {
-        static void upsert_unguarded( const endlesss::types::RiffTag& tag )
+        static void upsert_unguarded( endlesss::types::RiffTag tag, Warehouse::TagUpdateCallback& tagUpdateCb )
         {
             int32_t orderingValue = tag.m_order;
 
@@ -543,44 +563,51 @@ namespace tags {
 
                 if ( bVerboseLog )
                 {
-                    blog::api( FMTX( "tag upsert [{}] with append-ordering value [{}]" ), tag.m_riff, orderingValue );
+                    blog::database( FMTX( "tag upsert [{}] with append-ordering value [{}]" ), tag.m_riff, orderingValue );
                 }
+
+                tag.m_order = orderingValue;
             }
             else
             {
                 if ( bVerboseLog )
                 {
-                    blog::api( FMTX( "tag upsert [{}] with specific ordering value [{}]" ), tag.m_riff, orderingValue );
+                    blog::database( FMTX( "tag upsert [{}] with specific ordering value [{}]" ), tag.m_riff, orderingValue );
                 }
             }
 
             static constexpr char _insertOrUpdateTagData[] = R"(
-            INSERT OR IGNORE INTO Tags( OwnerJamCID, riffCID, Ordering, Timestamp, Favour, Note ) VALUES( ?1, ?2, ?3, ?4, ?5, ?6 );
-            )";
+                INSERT INTO Tags( OwnerJamCID, riffCID, Ordering, Timestamp, Favour, Note ) VALUES( ?1, ?2, ?3, ?4, ?5, ?6 )
+                ON CONFLICT(riffCID) DO UPDATE SET
+                    Ordering = ?3, Timestamp = ?4, Favour = ?5, Note = ?6
+                )";
 
             Warehouse::SqlDB::query<_insertOrUpdateTagData>(
                 tag.m_jam.value(),
                 tag.m_riff.value(),
-                orderingValue,
+                tag.m_order,
                 tag.m_timestamp,
                 tag.m_favour,
                 tag.m_note
             );
+
+            if ( tagUpdateCb != nullptr )
+                tagUpdateCb( tag );
         }
     }
 
-    static void upsert( const endlesss::types::RiffTag& tag )
+    static void upsert( const endlesss::types::RiffTag& tag, Warehouse::TagUpdateCallback& tagUpdateCb )
     {
         Warehouse::SqlDB::TransactionGuard txn;
-        details::upsert_unguarded( tag );
+        details::upsert_unguarded( tag, tagUpdateCb );
     }
 
     // -----------------------------------------------------------------------------------------------------------------
-    static void remove( const endlesss::types::RiffTag& tag )
+    static void remove( const endlesss::types::RiffTag& tag, Warehouse::TagRemovedCallback& tagRemoveCb )
     {
         if ( bVerboseLog )
         {
-            blog::api( FMTX( "tag deletion [{}]" ), tag.m_riff );
+            blog::database( FMTX( "tag deletion [{}]" ), tag.m_riff );
         }
 
         static constexpr char _deleteTagData[] = R"(
@@ -588,6 +615,9 @@ namespace tags {
             )";
 
         Warehouse::SqlDB::query<_deleteTagData>( tag.m_riff.value() );
+
+        if ( tagRemoveCb != nullptr )
+            tagRemoveCb( tag.m_riff );
     }
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -627,7 +657,7 @@ namespace tags {
     static std::size_t forJam( const types::JamCouchID& jamCID, std::vector<types::RiffTag>& outputTags )
     {
         static constexpr char findAllTagsForJam[] = R"(
-            select OwnerJamCID, riffCID, Ordering, Timestamp, Favour, Note from Tags where OwnerJamCID is ?1 order by Ordering desc
+            select OwnerJamCID, riffCID, Ordering, Timestamp, Favour, Note from Tags where OwnerJamCID is ?1 order by Ordering asc
             )";
 
         auto query = Warehouse::SqlDB::query<findAllTagsForJam>( jamCID.value() );
@@ -654,13 +684,24 @@ namespace tags {
         return outputTags.size();
     }
 
-    void batchUpdate( const std::vector<endlesss::types::RiffTag>& inputTags )
+    // -----------------------------------------------------------------------------------------------------------------
+    static void batchUpdate( const std::vector<endlesss::types::RiffTag>& inputTags, Warehouse::TagUpdateCallback& tagUpdateCb )
     {
         Warehouse::SqlDB::TransactionGuard txn;
         for ( const auto& tag : inputTags )
         {
-            details::upsert_unguarded( tag );
+            details::upsert_unguarded( tag, tagUpdateCb );
         }
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    static void batchRemoveAll( const endlesss::types::JamCouchID& jamCID )
+    {
+        static constexpr char _deleteAllTags[] = R"(
+            delete from Tags where OwnerJamCID = ?1;
+            )";
+
+        Warehouse::SqlDB::query<_deleteAllTags>( jamCID.value() );
     }
 
 } // namespace tags
@@ -975,10 +1016,26 @@ void Warehouse::setCallbackContentsReport( const ContentsReportCallback& cb )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+void Warehouse::setCallbackTagUpdate( const TagUpdateCallback& cbUpdate, const TagBatchingCallback& cbBatch )
+{
+    std::scoped_lock<std::mutex> cbLock( m_cbMutex );
+    m_cbTagUpdate = cbUpdate;
+    m_cbTagBatching = cbBatch;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void Warehouse::setCallbackTagRemoved( const TagRemovedCallback& cb )
+{
+    std::scoped_lock<std::mutex> cbLock( m_cbMutex );
+    m_cbTagRemoved = cb;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::upsertSingleJamIDToName( const endlesss::types::JamCouchID& jamCID, const std::string& displayName )
 {
     static constexpr char _insertOrUpdateJamData[] = R"(
-        INSERT OR IGNORE INTO jams( JamCID, PublicName ) VALUES( ?1, ?2 );
+        INSERT INTO jams( JamCID, PublicName ) VALUES( ?1, ?2 )
+        ON CONFLICT(JamCID) DO UPDATE SET PublicName = ?2;
     )";
 
     Warehouse::SqlDB::query<_insertOrUpdateJamData>( jamCID.value(), displayName );
@@ -1019,12 +1076,12 @@ void Warehouse::addOrUpdateJamSnapshot( const types::JamCouchID& jamCouchID )
 {
     if ( jamCouchID.empty() )
     {
-        blog::error::api( "cannot add empty jam ID to warehouse" );
+        blog::error::database( "cannot add empty jam ID to warehouse" );
         return;
     }
     if ( !hasFullEndlesssNetworkAccess() )
     {
-        blog::error::api( "cannot call Warehouse::addOrUpdateJamSnapshot() with no active Endlesss network" );
+        blog::error::database( "cannot call Warehouse::addOrUpdateJamSnapshot() with no active Endlesss network" );
         return;
     }
 
@@ -1036,7 +1093,7 @@ void Warehouse::addJamSliceRequest( const types::JamCouchID& jamCouchID, const J
 {
     if ( jamCouchID.empty() )
     {
-        blog::error::api( "empty Jam ID passed to warehouse for slice request" );
+        blog::error::database( "empty Jam ID passed to warehouse for slice request" );
         return;
     }
 
@@ -1048,11 +1105,23 @@ void Warehouse::requestJamPurge( const types::JamCouchID& jamCouchID )
 {
     if ( jamCouchID.empty() )
     {
-        blog::error::api( "empty Jam ID passed to warehouse for purge" );
+        blog::error::database( "empty Jam ID passed to warehouse for purge" );
         return;
     }
 
     m_taskSchedule->m_taskQueue.enqueue( std::make_unique<JamPurgeTask>( jamCouchID ) );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void Warehouse::requestJamSyncAbort( const types::JamCouchID& jamCouchID )
+{
+    if ( jamCouchID.empty() )
+    {
+        blog::error::database( "empty Jam ID passed to warehouse for sync abort" );
+        return;
+    }
+
+    m_taskSchedule->m_taskQueue.enqueue( std::make_unique<JamSyncAbortTask>( jamCouchID ) );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1078,25 +1147,53 @@ bool Warehouse::fetchSingleRiffByID( const endlesss::types::RiffCouchID& riffID,
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+bool Warehouse::batchFindJamIDForStem( const endlesss::types::StemCouchIDs& stems, endlesss::types::JamCouchIDs& result )
+{
+    static constexpr char _ownerJamForStemID[] = R"(
+            select OwnerJamCID from stems where stemCID = ?1;
+        )";
+
+    endlesss::types::JamCouchID emptyResult;
+
+    Warehouse::SqlDB::TransactionGuard txn;
+    for ( const auto& stemID : stems )
+    {
+        auto query = Warehouse::SqlDB::query<_ownerJamForStemID>( stemID.value() );
+
+        std::string_view jamCID;
+        if ( query( jamCID ) )
+        {
+            result.emplace_back( jamCID );
+        }
+        else
+        {
+            result.emplace_back( emptyResult );
+        }
+    }
+
+    return !result.empty();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::upsertTag( const endlesss::types::RiffTag& tag )
 {
-    sql::tags::upsert( tag );
+    sql::tags::upsert( tag, m_cbTagUpdate );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::removeTag( const endlesss::types::RiffTag& tag )
 {
-    sql::tags::remove( tag );
+    sql::tags::remove( tag, m_cbTagRemoved );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-bool Warehouse::isRiffTagged( const endlesss::types::RiffCouchID& riffID, endlesss::types::RiffTag* tagOutput /*= nullptr */ )
+bool Warehouse::isRiffTagged( const endlesss::types::RiffCouchID& riffID, endlesss::types::RiffTag* tagOutput /*= nullptr */ ) const
 {
     return sql::tags::isRiffTagged( riffID, tagOutput );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-std::size_t Warehouse::fetchTagsForJam( const endlesss::types::JamCouchID& jamCID, std::vector<endlesss::types::RiffTag>& outputTags )
+std::size_t Warehouse::fetchTagsForJam( const endlesss::types::JamCouchID& jamCID, std::vector<endlesss::types::RiffTag>& outputTags ) const
 {
     return sql::tags::forJam( jamCID, outputTags );
 }
@@ -1104,8 +1201,21 @@ std::size_t Warehouse::fetchTagsForJam( const endlesss::types::JamCouchID& jamCI
 // ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::batchUpdateTags( const std::vector<endlesss::types::RiffTag>& inputTags )
 {
-    sql::tags::batchUpdate( inputTags );
+    blog::database( FMTX( "tags : batch updating {} items" ), inputTags.size() );
+    m_cbTagBatching( true );
+    sql::tags::batchUpdate( inputTags, m_cbTagUpdate );
+    m_cbTagBatching( false );
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+void Warehouse::batchRemoveAllTags( const endlesss::types::JamCouchID& jamCID )
+{
+    blog::database( FMTX( "tags : removing all tags for {}" ), jamCID );
+    m_cbTagBatching( true );
+    sql::tags::batchRemoveAll( jamCID );
+    m_cbTagBatching( false );
+}
+
 
 // ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::workerTogglePause()
@@ -1185,7 +1295,7 @@ void Warehouse::threadWorker()
                 m_cbWorkUpdate( true, nextTask->Describe() );
 
             const auto taskDescription = nextTask->Describe();
-            blog::api( taskDescription );
+            blog::database( taskDescription );
             {
                 base::instr::ScopedEvent se( "TASK", nextTask->getTag(), base::instr::PresetColour::Indigo );
 
@@ -1208,6 +1318,33 @@ void Warehouse::threadWorker()
         {
             const bool hasEndlesssNetwork = hasFullEndlesssNetworkAccess();
 
+            // fill in empty stems
+            if ( hasEndlesssNetwork )
+            {
+                base::instr::ScopedEvent se( "FILL", "Stems", base::instr::PresetColour::Orange );
+
+                types::JamCouchID owningJamCID;
+                types::StemCouchID emptyStemCID;
+                if ( sql::stems::findUnpopulated( owningJamCID, emptyStemCID ) )
+                {
+                    if ( m_cbWorkUpdate )
+                        m_cbWorkUpdate( true, "Finding unpopulated stems..." );
+
+                    // how about some stems?
+                    std::vector<types::StemCouchID> emptyStems;
+                    if ( sql::stems::findUnpopulatedBatch( owningJamCID, 40, emptyStems ) )
+                    {
+                        incrementChangeIndexForJam( owningJamCID );
+
+                        // stem me up
+                        m_taskSchedule->m_taskQueue.enqueue( std::make_unique<GetStemData>( *m_networkConfiguration, owningJamCID, emptyStems ) );
+                        tryEnqueueReport( false );
+
+                        scrapingIsRunning = true;
+                        continue;
+                    }
+                }
+            }
             // scour for empty riffs
             if ( hasEndlesssNetwork )
             {
@@ -1220,10 +1357,12 @@ void Warehouse::threadWorker()
                     if ( m_cbWorkUpdate )
                         m_cbWorkUpdate( true, "Finding unpopulated riffs..." );
 
-                    // try find more in that same jam so we can batch effectively
+                    // can we find some juicy new riffs?
                     std::vector<types::RiffCouchID> emptyRiffs;
                     if ( sql::riffs::findUnpopulatedBatch( owningJamCID, 40, emptyRiffs ) )
                     {
+                        incrementChangeIndexForJam( owningJamCID );
+
                         // off to riff town
                         m_taskSchedule->m_taskQueue.enqueue( std::make_unique<GetRiffDataTask>( *m_networkConfiguration, owningJamCID, emptyRiffs ) );
                         tryEnqueueReport( false );
@@ -1233,35 +1372,11 @@ void Warehouse::threadWorker()
                     }
                     else
                     {
-                        blog::error::api( "we found one empty riff ({}, in jam {}) but failed during batch?", emptyRiffCID, owningJamCID );
+                        blog::error::database( "we found one empty riff ({}, in jam {}) but failed during batch?", emptyRiffCID, owningJamCID );
                     }
                 }
             }
-            // .. and then stems
-            if ( hasEndlesssNetwork )
-            {
-                base::instr::ScopedEvent se( "FILL", "Stems", base::instr::PresetColour::Orange );
 
-                types::JamCouchID owningJamCID;
-                types::StemCouchID emptyStemCID;
-                if ( sql::stems::findUnpopulated( owningJamCID, emptyStemCID ) )
-                {
-                    if ( m_cbWorkUpdate )
-                        m_cbWorkUpdate( true, "Finding unpopulated stems..." );
-
-                    // no riffs oh no how about some stems
-                    std::vector<types::StemCouchID> emptyStems;
-                    if ( sql::stems::findUnpopulatedBatch( owningJamCID, 40, emptyStems ) )
-                    {
-                        // stem me up
-                        m_taskSchedule->m_taskQueue.enqueue( std::make_unique<GetStemData>( *m_networkConfiguration, owningJamCID, emptyStems ) );
-                        tryEnqueueReport( false );
-
-                        scrapingIsRunning = true;
-                        continue;
-                    }
-                }
-            }
 
             // if we were running scraping tasks and we just finished, kick off a final report generation
             if ( scrapingIsRunning )
@@ -1280,19 +1395,43 @@ void Warehouse::threadWorker()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+Warehouse::ChangeIndex Warehouse::getChangeIndexForJam( const endlesss::types::JamCouchID& jamID ) const
+{
+    const auto cIt = m_changeIndexMap.find( jamID );
+    if ( cIt == m_changeIndexMap.end() )
+        return ChangeIndex::invalid();
+
+    return cIt->second;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void Warehouse::incrementChangeIndexForJam( const ::endlesss::types::JamCouchID& jamID )
+{
+    const auto cIt = m_changeIndexMap.find( jamID );
+    if ( cIt == m_changeIndexMap.end() )
+    {
+        m_changeIndexMap.emplace( jamID, ChangeIndex::defaultValue() );
+    }
+    else
+    {
+        m_changeIndexMap[jamID] = ChangeIndex( cIt->second.get() + 1 );
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::event_RiffTagAction( const events::RiffTagAction* eventData )
 {
     switch ( eventData->m_action )
     {
         case events::RiffTagAction::Action::Upsert:
         {
-            sql::tags::upsert( eventData->m_tag );
+            sql::tags::upsert( eventData->m_tag, m_cbTagUpdate );
         }
         break;
 
         case events::RiffTagAction::Action::Remove:
         {
-            sql::tags::remove( eventData->m_tag );
+            sql::tags::remove( eventData->m_tag, m_cbTagRemoved );
         }
         break;
 
@@ -1305,12 +1444,12 @@ void Warehouse::event_RiffTagAction( const events::RiffTagAction* eventData )
 // ---------------------------------------------------------------------------------------------------------------------
 bool JamSnapshotTask::Work( TaskQueue& currentTasks )
 {
-    blog::api( "[{}] requesting full riff manifest", Tag );
+    blog::database( "[{}] requesting full riff manifest", Tag );
 
     endlesss::api::JamFullSnapshot jamSnapshot;
     if ( !jamSnapshot.fetch( m_netConfig, m_jamCID ) )
     {
-        blog::error::api( "[{}] Failed to fetch snapshot for jam [{}]", Tag, m_jamCID );
+        blog::error::database( "[{}] Failed to fetch snapshot for jam [{}]", Tag, m_jamCID );
         return false;
     }
 
@@ -1335,7 +1474,7 @@ bool JamSnapshotTask::Work( TaskQueue& currentTasks )
 
     const auto countAfterTx = sql::riffs::countRiffsInJam( m_jamCID );
 
-    blog::api( "[{}] {} online, added {} to Db", Tag, jamSnapshot.rows.size(), countAfterTx - countBeforeTx );
+    blog::database( "[{}] {} online, added {} to Db", Tag, jamSnapshot.rows.size(), countAfterTx - countBeforeTx );
     return true;
 }
 
@@ -1365,21 +1504,32 @@ bool JamPurgeTask::Work( TaskQueue& currentTasks )
         Warehouse::SqlDB::query<deleteStems>( m_jamCID.value() );
     }
 
-    blog::api( "[{}] wiped [{}] from Db", Tag, m_jamCID.value() );
+    blog::database( "[{}] wiped [{}] from Db", Tag, m_jamCID.value() );
     return true;
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+bool JamSyncAbortTask::Work( TaskQueue& currentTasks )
+{
+    static constexpr char deleteEmptyRiffs[] = R"(
+        delete from riffs where OwnerJamCID = ?1 and Riffs.CreationTime is null;
+    )";
+
+    Warehouse::SqlDB::query<deleteEmptyRiffs>( m_jamCID.value() );
+
+    return true;
+}
 
 // ---------------------------------------------------------------------------------------------------------------------
 bool GetRiffDataTask::Work( TaskQueue& currentTasks )
 {
-    blog::api( "[{}] collecting riff data ..", Tag );
+    blog::database( "[{}] collecting riff data ..", Tag );
 
     // grab all the riff data
     endlesss::api::RiffDetails riffDetails;
     if ( !riffDetails.fetchBatch( m_netConfig, m_jamCID, m_riffCIDs ) )
     {
-        blog::error::api( "[{}] Failed to fetch riff details from jam [{}]", Tag, m_jamCID );
+        blog::error::database( "[{}] Failed to fetch riff details from jam [{}]", Tag, m_jamCID );
         return false;
     }
 
@@ -1404,14 +1554,14 @@ bool GetRiffDataTask::Work( TaskQueue& currentTasks )
             }
         }
     }
-    blog::api( "[{}] validating {} stems ..", Tag, stemsToValidate.size() );
+    blog::database( "[{}] validating {} stems ..", Tag, stemsToValidate.size() );
 
     // collect the type data for all the stems; there is a strange situation where some stem IDs turn out to
     // be .. chat messages? so we need to remove those early on
     endlesss::api::StemTypeCheck stemValidation;
     if ( !stemValidation.fetchBatch( m_netConfig, m_jamCID, stemsToValidate ) )
     {
-        blog::error::api( "[{}] Failed to validate stem details [{}]", Tag );
+        blog::error::database( "[{}] Failed to validate stem details [{}]", Tag );
         return false;
     }
     // re-use the hash set, add in any stems that are found to be problematic
@@ -1422,7 +1572,7 @@ bool GetRiffDataTask::Work( TaskQueue& currentTasks )
         if ( !stemCheck.error.empty() )
         {
             uniqueStemCIDs.emplace( stemCheck.key );
-            blog::api( "[{}] Found stem with a retreival error ({}), ignoring ID [{}]", Tag, stemCheck.error, stemCheck.key );
+            blog::database( "[{}] Found stem with a retreival error ({}), ignoring ID [{}]", Tag, stemCheck.error, stemCheck.key );
 
             sql::ledger::storeStemNote(
                 stemCheck.key,
@@ -1436,7 +1586,7 @@ bool GetRiffDataTask::Work( TaskQueue& currentTasks )
         if ( stemCheck.value.deleted || stemCheck.doc.app_version == 0 )
         {
             uniqueStemCIDs.emplace( stemCheck.key );
-            blog::api( "[{}] Found stem that was deleted ({}), ignoring ID [{}]", Tag, stemCheck.error, stemCheck.key );
+            blog::database( "[{}] Found stem that was deleted ({}), ignoring ID [{}]", Tag, stemCheck.error, stemCheck.key );
 
             sql::ledger::storeStemNote(
                 stemCheck.key,
@@ -1450,7 +1600,7 @@ bool GetRiffDataTask::Work( TaskQueue& currentTasks )
         if ( stemCheck.doc.type != "Loop" )
         {
             uniqueStemCIDs.emplace( stemCheck.doc._id );
-            blog::api( "[{}] Found stem that isn't a stem ({}), ignoring ID [{}]", Tag, stemCheck.doc.type, stemCheck.doc._id );
+            blog::database( "[{}] Found stem that isn't a stem ({}), ignoring ID [{}]", Tag, stemCheck.doc.type, stemCheck.doc._id );
 
             sql::ledger::storeStemNote(
                 stemCheck.doc._id,
@@ -1464,7 +1614,7 @@ bool GetRiffDataTask::Work( TaskQueue& currentTasks )
              stemCheck.doc.cdn_attachments.flacAudio.endpoint.empty() )
         {
             uniqueStemCIDs.emplace( stemCheck.doc._id );
-            blog::api( "[{}] Found stem that is damaged, ignoring ID [{}]", Tag, stemCheck.doc._id );
+            blog::database( "[{}] Found stem that is damaged, ignoring ID [{}]", Tag, stemCheck.doc._id );
 
             sql::ledger::storeStemNote(
                 stemCheck.doc._id,
@@ -1501,7 +1651,7 @@ bool GetRiffDataTask::Work( TaskQueue& currentTasks )
         INSERT OR IGNORE INTO stems( stemCID, OwnerJamCID ) VALUES( ?1, ?2 );
     )";
 
-    blog::api( "[{}] inserting {} rows of riff detail", Tag, riffDetails.rows.size() );
+    blog::database( "[{}] inserting {} rows of riff detail", Tag, riffDetails.rows.size() );
 
     Warehouse::SqlDB::TransactionGuard txn;
     for ( const auto& netRiffData : riffDetails.rows )
@@ -1518,7 +1668,7 @@ bool GetRiffDataTask::Work( TaskQueue& currentTasks )
             auto stemIter = uniqueStemCIDs.find( stemCID );
             if ( stemIter != uniqueStemCIDs.end() )
             {
-                blog::api( "[{}] Removing stem {} from [{}] as it was marked as invalid", Tag, stemI, riffData.couchID );
+                blog::database( "[{}] Removing stem {} from [{}] as it was marked as invalid", Tag, stemI, riffData.couchID );
 
                 riffData.stemsOn[stemI] = false;
                 riffData.stems[stemI] = endlesss::types::StemCouchID{ "" };
@@ -1561,12 +1711,12 @@ bool GetRiffDataTask::Work( TaskQueue& currentTasks )
 // ---------------------------------------------------------------------------------------------------------------------
 bool GetStemData::Work( TaskQueue& currentTasks )
 {
-    blog::api( "[{}] collecting stem data ..", Tag );
+    blog::database( "[{}] collecting stem data ..", Tag );
 
     endlesss::api::StemDetails stemDetails;
     if ( !stemDetails.fetchBatch( m_netConfig, m_jamCID, m_stemCIDs ) )
     {
-        blog::error::api( "[{}] Failed to fetch stem details from jam [{}]", Tag, m_jamCID );
+        blog::error::database( "[{}] Failed to fetch stem details from jam [{}]", Tag, m_jamCID );
         return false;
     }
 
@@ -1590,7 +1740,7 @@ bool GetStemData::Work( TaskQueue& currentTasks )
                          WHERE stemCID=?1
     )";
 
-    blog::api( "[{}] inserting {} rows of stem detail", Tag, stemDetails.rows.size() );
+    blog::database( "[{}] inserting {} rows of stem detail", Tag, stemDetails.rows.size() );
 
     Warehouse::SqlDB::TransactionGuard txn;
     for ( const auto& stemData : stemDetails.rows )
@@ -1744,52 +1894,96 @@ bool ContentsReportTask::Work( TaskQueue& currentTasks )
 {
     spacetime::ScopedTimer stemTiming( "ContentsReportTask::Work" );
 
-    // gather unified set of empty/not-empty counts from steams and riffs in a single blast
-    static constexpr char gatherPopulations[] = R"(
-    SELECT a.OwnerJamCID, a.FilledRiffs, a.EmptyRiffs, b.FilledStems, b.EmptyStems
-        FROM 
-        (
-            SELECT Riffs.OwnerJamCID,
-                count(case when Riffs.CreationTime is null then 1 end) as EmptyRiffs,
-                count(case when Riffs.CreationTime is not null then 1 end) as FilledRiffs
-            FROM Riffs
-            GROUP BY Riffs.OwnerJamCID
-        ) as a
-        JOIN
-        (
-            SELECT Stems.OwnerJamCID,
-                count(case when Stems.CreationTime is null then 1 end) as EmptyStems,
-                count(case when Stems.CreationTime is not null then 1 end) as FilledStems
-            FROM Stems
-            GROUP BY Stems.OwnerJamCID
-        ) as b
-        ON a.OwnerJamCID = b.OwnerJamCID
-    )";
-
     Warehouse::ContentsReport reportResult;
 
+    absl::flat_hash_set< std::string > uniqueJamIDs;
+    uniqueJamIDs.reserve( 64 );
 
-    auto query = Warehouse::SqlDB::query<gatherPopulations>();
-    
-    std::string_view jamCID;
-    int64_t totalPopulatedRiffs;
-    int64_t totalUnpopulatedRiffs;
-    int64_t totalPopulatedStems;
-    int64_t totalUnpopulatedStems;
-
-    while ( query( jamCID,
-                   totalPopulatedRiffs,
-                   totalUnpopulatedRiffs,
-                   totalPopulatedStems,
-                   totalUnpopulatedStems ) )
+    // when brand new jams arrive, they don't have any stem data initially so [gatherPopulations] returns nothing
+    // as the JOIN fails; however, to ensure we get the name of the jam into the contents report early so users don't
+    // wonder why it isn't there (before enough data is synced to magic up some empty stem entries), we first grab 
+    // a plain distinct set of jam IDs from the riff table and delete from it anything that [gatherPopulations] pulls in,
+    // leaving us with a hash set of jam IDs that have no synced data yet - which we can then emit as 0,0,0,0 in the report
     {
-        reportResult.m_jamCouchIDs.emplace_back( jamCID );
+        static constexpr char gatherUniqueJams[] = R"(
+        select distinct OwnerJamCID from Riffs
+        )";
 
-        reportResult.m_populatedRiffs.emplace_back( totalPopulatedRiffs );
-        reportResult.m_unpopulatedRiffs.emplace_back( totalUnpopulatedRiffs );
+        auto query = Warehouse::SqlDB::query<gatherUniqueJams>();
 
-        reportResult.m_populatedStems.emplace_back( totalPopulatedStems );
-        reportResult.m_unpopulatedStems.emplace_back( totalUnpopulatedStems );
+        std::string_view jamCID;
+        while ( query( jamCID ) )
+        {
+            uniqueJamIDs.emplace( jamCID );
+        }
+    }
+    {
+        // gather unified set of empty/not-empty counts from steams and riffs in a single blast
+        static constexpr char gatherPopulations[] = R"(
+        SELECT a.OwnerJamCID, a.FilledRiffs, a.EmptyRiffs, b.FilledStems, b.EmptyStems
+            FROM 
+            (
+                SELECT Riffs.OwnerJamCID,
+                    count(case when Riffs.CreationTime is null then 1 end) as EmptyRiffs,
+                    count(case when Riffs.CreationTime is not null then 1 end) as FilledRiffs
+                FROM Riffs
+                GROUP BY Riffs.OwnerJamCID
+            ) as a
+            JOIN
+            (
+                SELECT Stems.OwnerJamCID,
+                    count(case when Stems.CreationTime is null then 1 end) as EmptyStems,
+                    count(case when Stems.CreationTime is not null then 1 end) as FilledStems
+                FROM Stems
+                GROUP BY Stems.OwnerJamCID
+            ) as b
+            ON a.OwnerJamCID = b.OwnerJamCID
+        )";
+
+        auto query = Warehouse::SqlDB::query<gatherPopulations>();
+    
+        std::string_view jamCID;
+        int64_t totalPopulatedRiffs;
+        int64_t totalUnpopulatedRiffs;
+        int64_t totalPopulatedStems;
+        int64_t totalUnpopulatedStems;
+
+        while ( query( jamCID,
+                       totalPopulatedRiffs,
+                       totalUnpopulatedRiffs,
+                       totalPopulatedStems,
+                       totalUnpopulatedStems ) )
+        {
+            uniqueJamIDs.erase( jamCID );   // this jam has sync data, remove it from the unique list as we'll be emitting data for it normally
+
+            reportResult.m_jamCouchIDs.emplace_back( jamCID );
+
+            reportResult.m_populatedRiffs.emplace_back( totalPopulatedRiffs );
+            reportResult.m_unpopulatedRiffs.emplace_back( totalUnpopulatedRiffs );
+
+            reportResult.m_populatedStems.emplace_back( totalPopulatedStems );
+            reportResult.m_unpopulatedStems.emplace_back( totalUnpopulatedStems );
+
+            reportResult.m_awaitingInitialSync.emplace_back( false );
+        }
+    }
+
+    // all remaining unique jam IDs haven't even had a single round of data sync yet but we want to show
+    // the user we're going to consider them soon
+    if ( !uniqueJamIDs.empty() )
+    {
+        for ( const auto& unSyncJam : uniqueJamIDs )
+        {
+            reportResult.m_jamCouchIDs.emplace_back( unSyncJam );
+
+            reportResult.m_populatedRiffs.emplace_back( 0 );
+            reportResult.m_unpopulatedRiffs.emplace_back( 0 );
+
+            reportResult.m_populatedStems.emplace_back( 0 );
+            reportResult.m_unpopulatedStems.emplace_back( 0 );
+
+            reportResult.m_awaitingInitialSync.emplace_back( true );
+        }
     }
 
     if ( m_reportCallback )
