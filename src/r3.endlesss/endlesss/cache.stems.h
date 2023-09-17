@@ -29,9 +29,9 @@ struct Stems
         Version2        // stems are now organised per-jam-ID, still partitioned by initial stem ID inside each sub-folder
     };
     // get path root relative to the ouroveon cache/common path
-    static ouro_nodiscard fs::path getCachePathRoot( CacheVersion cv );
+    ouro_nodiscard static fs::path getCachePathRoot( CacheVersion cv );
 
-    static ouro_nodiscard fs::path getCachePathForStemData(
+    ouro_nodiscard static fs::path getCachePathForStemData(
         const fs::path& cacheRoot,
         const endlesss::types::JamCouchID& jamCID,
         const endlesss::types::StemCouchID& stemCID
