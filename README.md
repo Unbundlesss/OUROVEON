@@ -1,23 +1,73 @@
 ![](doc/ouroveon_vec.svg)
 
-Experimental audio projects built to interact with data from multiplayer music collaboration app [Endlesss](https://endlesss.fm). **OUROVEON** is a set of interconnected apps, slowly being built from modular components around an evolving "Endlesss SDK"; one part a learning exercise in audio coding and one part laboratory for ideas that build upon Endlesss' particular data model.
+Experimental audio projects built to interact with data from multiplayer music collaboration app [Endlesss](https://endlesss.fm). **OUROVEON** is a set of interconnected apps, built from modular components around an evolving, homebrew "Endlesss SDK" (as an official SDK does not exist). One part a learning exercise in lower-level audio coding and one part laboratory for ideas that build upon Endlesss' particular data model.
 
-NB. These are experimental toys, not finished products (yet), so please set your expectations accordingly. That said, a lot of love, care and substantial real-world testing has been put into their development - just do be aware that functionality and UI is subject to change rapidly and randomly as the potentials are explored!
+Many months of tinkering, stressing and real-world testing have already gone into the **OUROVEON** suite but they should still be considered unfinished alpha/beta-grade products. UI and functionality may change rapidly without warning!
+
+**These tools and all code within are not affiliated with or endorsed by Endlesss Ltd. Use at your own risk.**
 
 <br>
 
-## PLATFORM SUPPORT & AVAILABILITY
+**OUROVEON** is written in C++20, built using [Premake](premake.github.io) and targets *Windows*, *MacOS 10.15+* (Universal arm64 + x86_64) and *Linux* (locally tested on x86_64 Ubuntu 23).
 
-**OUROVEON** is written in C++20, built using [Premake](premake.github.io) and targets *Windows*, *MacOS 10.15+* (Universal arm64 + x86_64) and *Linux*, although the latter is only being tested on *Ubuntu 21*. *Raspberry Pi 3+* is also hopefully possible.
+[Pre-built releases](https://github.com/Unbundlesss/OUROVEON/releases) are made available for **Windows** and **MacOS** (*signed, notarised and ready to run*)
 
-[Pre-built releases](https://github.com/Unbundlesss/OUROVEON/releases) are made available for **Windows** and **MacOS** (*signed + notarised*)
+<br>
 
-The apps are designed to be largely 'portable' and require minimal configuration, only storing data in the user's configuration directory (eg. `%APPDATA%\OUROVEON` on Windows) and a nominated data storage root.
+Shared Features
 
-At time of writing the only difference between the platforms is **VST support**, which is Windows-only presently. Cross-platform VST3 support is planned, ditto CLAP.
+ * $\textcolor{orange}{\textsf{Endlesss Power}}$ ~ The custom SDK provides comprehensive support for many facets of **Endlesss**' services, including
 
+   * Authenticated sign-in, or fallback to a limited API set using public endpoints
+   * Fetching all subscribed jams and metadata for a logged-in user
+   * Lossless mode (*2023*)
+   * Shared local stem cache, managed per-jam for easier auditing
+   * Offline cache of all known public jams, active users, jam names
+   * Deals with quirky and damaged Endlesss data, all the way back to the earliest jams in 2019
+   * Shared Riff feed parsing and riff launching
+   * Built in retry/adapt fixes for unstable networks or servers
+
+ * $\textcolor{orange}{\textsf{Audio Engine}}$
+
+   * Lean audio mixers built on [PortAudio](https://www.portaudio.com/)
+   * High-quality resampling using [r8brain](https://github.com/avaneev/r8brain-free-src)
+   * Beat-analysis and energy estimation, drives UI and OpenGL shader-based visualisers
+   * Support for FLAC and Ogg Vorbis source formats
+   * Support for FLAC and WAV output - 9 simultaneous, asynchronous streams (depending on your hardware)
+   * (*Windows Only*) VST effect hosting & automation
+   * (*Windows Only*) IPC exchange of mixer state, beats, energy, jammer names, etc
+
+ * $\textcolor{orange}{\textsf{UI Rendering}}$
+
+   * Cross-platform front-end using [GLFW](https://www.glfw.org/)
+   * Layout and controls running on [Dear ImGui](https://github.com/ocornut/imgui)
+
+<br>
 <hr>
 <br>
+
+# LORE
+
+### __Deluxe Jam Archeology__
+
+**Endlesss** is incredible for making a lot of music, quickly. It's *really terrible* at navigating back through that music, finding what you want and getting it exported. **LORE** was born to comprehensively solve these issues as well as offering an opportunity for long-term offline archival and storage of years' worth of music.
+
+![LORE UI gif](doc/080/lore_ui_1.gif)
+
+Features
+
+* $\textcolor{orange}{\textsf{Built For Scale}}$ ~ Download and synchronise even the largest (techno) jams on the platform. Navigating through 50,000+ riffs in LORE is a breeze, offering various data visualisation systems and username-searching.
+
+* $\textcolor{orange}{\textsf{Built For Speed}}$ ~ Rapid and durable even on older, limited hardware. Fully multithreaded.
+
+* $\textcolor{orange}{\textsf{Local Ownership}}$ ~ Download, explore, tag, export & archive your Endlesss music forever, even if the Endlesss cloud service disappears.
+
+* $\textcolor{orange}{\textsf{Song Sketching}}$ ~ Pick and instantly play any riff, build simple sequences with transition timing, create bookmarks to help plan future tracks and exports.
+
+* $\textcolor{orange}{\textsf{Open Data Formats}}$ ~ Everything is stored in easy-to-read `sqlite3` or JSON, trivially accessible or extended by other 3rd party tools.
+
+<br>
+<hr>
 <br>
 
 # BEAM
@@ -26,7 +76,9 @@ At time of writing the only difference between the platforms is **VST support**,
 
 *Get the very best out of your live Endlesss performances*
 
-![](doc/ui_beam_live1.gif)
+### NOTE: **BEAM** has not been actively developed recently as **LORE** has taken priority. It may end up being heavily refactored.
+
+![](doc/080/beam_ui_1.gif)
 
 _BEAM_ connects to a chosen jam, watches for changes, syncs live stems and produces a high-quality broadcastable mix with additional features like
 
@@ -34,7 +86,6 @@ _BEAM_ connects to a chosen jam, watches for changes, syncs live stems and produ
 * recording-to-disk of both raw (FLAC) multitrack 8-channel Endlesss feed as well as simultaneous final mix output through VST chain
 * "performance compression" mode for multitrack, where the primary changes and 'movement' from a jam session is streamed to disk, producing a focused, less-repetitive souvenir
 * native connection to Discord audio broadcast channels via a Bot interface
-* built-in VST 2.x hosting (on Windows) with configurable automation
 * offline per-stem beat-analysis
 * real-time export of live data for vizualisations in external tools, such as game engines or broadcast front-ends
 
@@ -42,44 +93,3 @@ _BEAM_ has so far broadcast over 50 hours of jam sessions without missing a beat
 
 The _BEAM_ live visualisation sync functionality was used along with the [NESTDROP](https://nestimmersion.ca/nestdrop.php) visualiser and the Unity 3D engine to broadcast [this hour-long jam](https://www.youtube.com/watch?v=cQ2DRpkBmyE)
 
-<br>
-<br>
-
-# LORE
-
-### __Offline Jam Exploration__
-
-*Jam data supremacy*
-
-![](doc/ui_lore_1.png)
-
-Browsing large jams in the Endlesss app is a challenge. _LORE_ exists to make discovering all the music hidden inside jams a delight. The largest jams on the platform (40,000+ riffs) can be visualised in their entireity with no lag even on very low-power GPU hardware.
-
-Robustly download jams of any size from any era (_LORE_ can patch and fix some of the more broken or weird data storage quirks from old versions of Endlesss), explore them interactively with super-fast preview playback and a full stem caching system. Visualise jam data in ways you've never tried before, understand the ebb and flow of jams, find your own riffs trivially (as well as the riffs of your friends)
-
-Featuring a simple riff sequencer and timing tool, _LORE_ is also the scaffolding to a future song arrangement editor and more comprehensive data archival methods.
-
-
-<br>
-<hr>
-<br>
-
-# SDK / APP FRAMEWORK
-
-Beyond standard shared components like UI, profiling and logging functionality, the application framework provides a handful of specialised components and utilities, such as
-
-* **Endlesss SDK** - a robust set of data types, audio processing, asynchronous network management as well as a toolbox of additional utilities (such as offline caching, an sqlite3-based jam archival database system)
-
-* **Discord Direct** - native low-level connection via the Discord bot interface to stream high-quality, stereo application audio out to a voice channel
-
-* **Signal Processing** - VST 2.x hosting, with VST3 to come; FFT and q_lib biquad filters
-
-
-
-<br>
-<hr>
-<br>
-
-## DOCUMENTATION
-
-User guides are slowly coming online in the /doc directory.
