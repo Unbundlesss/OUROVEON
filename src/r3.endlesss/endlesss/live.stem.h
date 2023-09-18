@@ -200,7 +200,7 @@ struct Stem
             return result;
 
         // buffer data
-        result += ( m_sampleCount * 2 ) * sizeof( float );
+        result += ( static_cast<std::size_t>(m_sampleCount) * 2 ) * sizeof( float );
 
         // add analysis chunk if it is ready
         if ( isAnalysisComplete() )

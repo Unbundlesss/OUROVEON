@@ -516,7 +516,7 @@ struct RiffTag
     endlesss::types::JamCouchID     m_jam;
     endlesss::types::RiffCouchID    m_riff;
     int32_t                         m_order = -1;       // <0 means "append; find the highest current order value and set this to that + N"
-    uint64_t                        m_timestamp;        // original timestamp of riff in jam
+    uint64_t                        m_timestamp = 0;    // original timestamp of riff in jam
     int32_t                         m_favour;
     std::string                     m_note;
 

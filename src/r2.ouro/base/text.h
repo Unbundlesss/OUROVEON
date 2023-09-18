@@ -70,6 +70,7 @@ inline void sanitiseNameForPath( const std::string_view source, std::string& des
         case '~':
         case '.':
             cp = replacementChar;
+            break;
 
         default:
             break;

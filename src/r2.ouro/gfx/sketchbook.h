@@ -130,7 +130,7 @@ struct GPUTask
         ImVec2          m_usageDimensionsVec2;
         ImVec2          m_usageUV;
 
-        ImTextureID     m_imTextureID;
+        ImTextureID     m_imTextureID = 0;
     };
 
     GPUTask( const uint32_t uploadID, SketchBufferPtr&& buffer )

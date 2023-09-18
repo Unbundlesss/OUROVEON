@@ -100,9 +100,9 @@ struct Jams
         ouro_nodiscard constexpr bool valid()   const { return m_valid; }
 
     private:
-        size_t  m_index;
+        size_t  m_index = 0;
         JamType m_type;
-        bool    m_valid;
+        bool    m_valid = false;
     };
 
 

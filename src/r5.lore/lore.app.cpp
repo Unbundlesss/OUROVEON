@@ -2285,7 +2285,7 @@ int LoreApp::EntrypointOuro()
                 // compute the progression (bar/percentage through riff) of playback based on the current sample, embed in Exchange
                 endlesss::live::RiffProgression playbackProgression;
 
-                const auto timingData = currentRiff->getTimingDetails();
+                const auto& timingData = currentRiff->getTimingDetails();
                 timingData.ComputeProgressionAtSample(
                     (uint64_t)mixPreview.getTimeInfoPtr()->samplePos,
                     playbackProgression );
@@ -3168,7 +3168,7 @@ int LoreApp::EntrypointOuro()
                                                 std::string resolvedName;
                                                 const auto lookupResult = lookupNameForJam( loadedState.jamID, resolvedName );
 
-                                                const auto mismatchedJamTag = fmt::format( FMTX( "The selected file contains tags for [{}] - please load that jam first if you want to import tags for it" ), resolvedName );
+                                                std::string mismatchedJamTag = fmt::format( FMTX( "The selected file contains tags for [{}] - please load that jam first if you want to import tags for it" ), resolvedName );
 
                                                 activateModalPopup( "Failed to Load Tags", [this, errorText = std::move(mismatchedJamTag)](const char* title)
                                                     {
@@ -3266,7 +3266,7 @@ int LoreApp::EntrypointOuro()
 
                         ImGui::PushStyleVar( ImGuiStyleVar_ItemSpacing, { 4.0f, 0.0f } );
 
-                        if ( ImGui::BeginTable( "##riff_tag_table", 5,
+                        if ( ImGui::BeginTable( "##riff_tag_table", 6,
                             ImGuiTableFlags_ScrollY |
                             ImGuiTableFlags_Borders |
                             ImGuiTableFlags_RowBg   |
@@ -3276,6 +3276,7 @@ int LoreApp::EntrypointOuro()
 
                             ImGui::TableSetupColumn( "Play",                    ImGuiTableColumnFlags_WidthFixed,   48.0f );
                             ImGui::TableSetupColumn( "Notes",                   ImGuiTableColumnFlags_WidthStretch, 0.5f  );
+                            ImGui::TableSetupColumn( "Time",                    ImGuiTableColumnFlags_WidthFixed,   32.0f );
                             ImGui::TableSetupColumn( "Find",                    ImGuiTableColumnFlags_WidthFixed,   32.0f );
                             ImGui::TableSetupColumn( " " ICON_FA_FLOPPY_DISK,   ImGuiTableColumnFlags_WidthFixed,   32.0f );
                             ImGui::TableSetupColumn( "Order",                   ImGuiTableColumnFlags_WidthFixed,   70.0f );
@@ -3337,11 +3338,28 @@ int LoreApp::EntrypointOuro()
                                 }
 
                                 ImGui::TableNextColumn();
-                                ImGui::AlignTextToFramePadding();
-                                const bool bTextAccept = ImGui::InputText( "###note", &riffTag.m_note, ImGuiInputTextFlags_EnterReturnsTrue );
-                                if ( bTextAccept || ImGui::IsItemDeactivatedAfterEdit() )
                                 {
-                                    getEventBusClient().Send< ::events::RiffTagAction >( riffTag, ::events::RiffTagAction::Action::Upsert );
+                                    ImGui::AlignTextToFramePadding();
+                                    ImGui::SetNextItemWidth( ImGui::GetContentRegionAvail().x );
+                                    const bool bTextAccept = ImGui::InputText( "###note", &riffTag.m_note, ImGuiInputTextFlags_EnterReturnsTrue );
+                                    if ( bTextAccept || ImGui::IsItemDeactivatedAfterEdit() )
+                                    {
+                                        getEventBusClient().Send< ::events::RiffTagAction >( riffTag, ::events::RiffTagAction::Action::Upsert );
+                                    }
+                                }
+
+                                ImGui::TableNextColumn();
+                                {
+                                    ImGui::Dummy( { 0, 0 } );
+                                    ImGui::SameLine( 0, 8.0f );
+                                    // double-wrap tooltip so we only do the (non trivial) time conversion / string build on hover
+                                    ImGui::TextDisabled( ICON_FA_CLOCK );
+                                    if ( ImGui::IsItemHovered( ImGuiHoveredFlags_DelayNormal ) )
+                                    {
+                                        const auto shareTimeUnix = spacetime::InSeconds( std::chrono::seconds{ riffTag.m_timestamp } );
+                                        const auto cacheTimeDelta = spacetime::calculateDeltaFromNow( shareTimeUnix ).asPastTenseString( 3 );
+                                        ImGui::CompactTooltip( fmt::format( FMTX("{}\n{}"), spacetime::datestampStringFromUnix( shareTimeUnix ), cacheTimeDelta ).c_str() );
+                                    }
                                 }
 
                                 ImGui::TableNextColumn();

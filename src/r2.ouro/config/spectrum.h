@@ -39,7 +39,7 @@ OURO_CONFIG( Spectrum )
     // convert value to decibels and normalise between the current min/max levels
     ouro_nodiscard inline float headroomNormaliseDb( float linearValue ) const
     {
-        const double headroom   = maxDb - minDb;
+        const double headroom   = static_cast<double>(maxDb) - static_cast<double>(minDb);
 
         // convert to dB to help normalise the range
         double fftDb = cycfi::q::lin_to_db( linearValue ).rep;

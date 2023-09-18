@@ -287,7 +287,7 @@ inline static bool deserializeJson(
 // leanest parse possible, just the number of results that would have been returned
 struct TotalRowsOnly
 {
-    uint32_t                    total_rows;
+    uint32_t                    total_rows = 0;
 
     template<class Archive>
     inline void serialize( Archive& archive )
@@ -304,7 +304,7 @@ struct TotalRowsOnly
 template< typename _rowType >
 struct ResultRowHeader
 {
-    uint32_t                    total_rows;
+    uint32_t                    total_rows = 0;
     std::vector< _rowType >     rows;
 
     template<class Archive>

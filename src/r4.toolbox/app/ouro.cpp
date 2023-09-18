@@ -231,8 +231,8 @@ int OuroApp::EntrypointGUI()
     std::string popupErrorMessage;
 
 
-
     bool successfulBreakFromLoop = false;
+    bool endlesssAuthExpired = false;
 
     // configuration preflight
     while ( beginInterfaceLayout( CoreGUI::VF_WithStatusBar ) )
@@ -461,7 +461,6 @@ int OuroApp::EntrypointGUI()
                     // check in on our configured access to Endlesss' services
 
                     static bool endlesssWorkUnauthorised = false;
-                    bool endlesssAuthExpired = false;
                     {
                         m_mdFrontEnd->titleText( "Endlesss Accesss" );
                         ImGui::Indent( perBlockIndent );
@@ -599,7 +598,8 @@ int OuroApp::EntrypointGUI()
                         else
                         {
                             // if not yet setup, configure the network for full authenticated access
-                            if ( m_networkConfiguration->hasNoAccessSet() )
+                            if ( !m_networkConfiguration->hasAccess( endlesss::api::NetConfiguration::Access::Authenticated ) &&
+                                 !endlesssAuth.password.empty() )
                             {
                                 m_networkConfiguration->initWithAuthentication( m_appEventBus, m_configEndlesssAPI, endlesssAuth );
                             }
@@ -920,7 +920,11 @@ int OuroApp::EntrypointGUI()
     // stuff (so we can still pull stems from the CDN on demand, for example)
     if ( m_networkConfiguration->hasNoAccessSet() )
     {
-        m_networkConfiguration->initWithoutAuthentication( m_appEventBus, m_configEndlesssAPI );
+        blog::app( FMTX( "configuring network before launch ..." ) );
+        if ( !endlesssAuthExpired )
+            m_networkConfiguration->initWithAuthentication( m_appEventBus, m_configEndlesssAPI, endlesssAuth );
+        else
+            m_networkConfiguration->initWithoutAuthentication( m_appEventBus, m_configEndlesssAPI );
     }
 
     // save any config data blocks

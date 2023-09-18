@@ -88,6 +88,19 @@ void NetConfiguration::postInit()
     // preflights
     ABSL_ASSERT( !m_api.certBundleRelative.empty() );
 
+    const auto nameForAccess = [this]()
+        {
+            switch ( m_access )
+            {
+            default:
+            case Access::None:          return "None";
+            case Access::Public:        return "Public";
+            case Access::Authenticated: return "Authenticated";
+            }
+        };
+
+    blog::api( FMTX( "NetConfiguration::postInit() with Access::{} user:{}" ), nameForAccess(), m_auth.user_id );
+
     // log out httplib features we've compiled in, for our own references' sake
     blog::api( FMTX( "[httplib] compression {}, engines compiled : {}{}" ),
         m_api.connectionCompressionSupport ? "enabled" : "disabled",
