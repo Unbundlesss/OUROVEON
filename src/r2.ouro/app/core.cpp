@@ -242,6 +242,7 @@ int Core::Run()
         m_appEventBusClient = base::EventBusClient( m_appEventBus );
 
         // register basic event IDs
+        APP_EVENT_REGISTER( AddToastNotification );
         APP_EVENT_REGISTER_SPECIFIC( OperationComplete, 16 * 1024 );
         APP_EVENT_REGISTER( PanicStop );
 
@@ -601,6 +602,84 @@ void CoreGUI::checkLayoutConfig()
     }
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+void CoreGUI::event_AddToastNotification( const events::AddToastNotification* eventData )
+{
+    colour::Preset toastShade = colour::shades::callout;
+    switch ( eventData->m_type )
+    {
+        default:
+        case events::AddToastNotification::Type::Info:
+            break;
+
+        case events::AddToastNotification::Type::Error:
+            toastShade = colour::shades::errors;
+            break;
+    }
+
+    // TODO drive the timing values from data
+    m_toasts.emplace_back( std::make_unique<Toast>( m_toastCreationID ++, toastShade, eventData->m_title, eventData->m_contents, 0.25f, 3.0f ) );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void CoreGUI::updateToasts()
+{
+    const float deltaTime = ImGui::GetIO().DeltaTime;
+
+    Toasts survivingToasts;
+    survivingToasts.reserve( m_toasts.size() );
+
+    for ( auto& toast : m_toasts )
+    {
+        const bool bActive = toast->update( deltaTime );
+        if ( bActive )
+        {
+            survivingToasts.emplace_back( std::move( toast ) );
+        }
+    }
+
+    m_toasts = std::move( survivingToasts );
+
+    static constexpr float cToastPaddingX = 20.0f;
+    static constexpr float cToastPaddingY = 10.0f;
+    static constexpr float cToastViewPadY = 30.0f;
+
+    const auto& viewportSize = ImGui::GetMainViewport()->Size;
+    float toastHeightUse = viewportSize.y - cToastViewPadY;
+
+
+    ImGui::PushID( "toasts" );
+    for ( const auto& toast : m_toasts )
+    {
+        ImGui::PushStyleColor( ImGuiCol_PopupBg, toast->m_shade.dark( toast->m_phaseT ) );
+        ImGui::SetNextWindowSize( ImVec2( 450.0f, 80.0f ), ImGuiCond_Always );
+        ImGui::SetNextWindowPos( ImVec2( viewportSize.x - cToastPaddingX, toastHeightUse - (toast->m_phaseT * 10.0f) ), ImGuiCond_Always, ImVec2( 1.0f, 1.0f ) );
+        if ( ImGui::Begin(
+            toast->m_creationID.c_str(),
+            nullptr,
+            ImGuiWindowFlags_Tooltip |
+            ImGuiWindowFlags_NoMove |
+            ImGuiWindowFlags_NoTitleBar |
+            ImGuiWindowFlags_NoResize |
+            ImGuiWindowFlags_NoSavedSettings |
+            ImGuiWindowFlags_NoDecoration |
+            ImGuiWindowFlags_NoInputs |
+            ImGuiWindowFlags_NoNav |
+            ImGuiWindowFlags_NoBringToFrontOnFocus |
+            ImGuiWindowFlags_NoFocusOnAppearing |
+            ImGuiWindowFlags_NoDocking ) )
+        {
+            ImGui::TextWrapped( toast->m_title.c_str() );
+            ImGui::SeparatorBreak();
+            ImGui::TextWrapped( toast->m_content.c_str() );
+
+            toastHeightUse -= ImGui::GetWindowHeight() + cToastPaddingY;
+        }
+        ImGui::End();
+        ImGui::PopStyleColor();
+    }
+    ImGui::PopID();
+}
 
 // ---------------------------------------------------------------------------------------------------------------------
 int CoreGUI::Entrypoint()
@@ -621,6 +700,11 @@ int CoreGUI::Entrypoint()
             blog::error::core( FMTX( "app::module::Frontend unable to start : {}" ), feStatus.ToString() );
             return -2;
         }
+    }
+
+    {
+        base::EventBusClient m_eventBusClient( m_appEventBus );
+        APP_EVENT_BIND_TO( AddToastNotification );
     }
 
     // check in on the layout breadcrumb file, see if we need to force a layout reset
@@ -654,6 +738,17 @@ int CoreGUI::Entrypoint()
             {
                 ImGui::MenuItem( developerFlag.first.c_str(), "", developerFlag.second );
             }
+#if OURO_DEBUG
+            ImGui::Separator();
+            if ( ImGui::MenuItem( "Test Toast (info)" ) )
+            {
+                m_appEventBus->send<::events::AddToastNotification>( ::events::AddToastNotification::Type::Info, "Test Toast Information", "Toast notification test contents\nMultiple lines\n" ICON_FA_SNOWMAN );
+            }
+            if ( ImGui::MenuItem( "Test Toast (error)" ) )
+            {
+                m_appEventBus->send<::events::AddToastNotification>( ::events::AddToastNotification::Type::Error, "Test Toast Error", "Oh no, something has gone badly wrong. Oh no. Oh brother." );
+            }
+#endif // OURO_DEBUG
             ImGui::EndMenu();
         }
     });
@@ -667,6 +762,11 @@ int CoreGUI::Entrypoint()
 
     // run the app main loop
     int appResult = EntrypointGUI();
+
+    {
+        base::EventBusClient m_eventBusClient( m_appEventBus );
+        APP_EVENT_UNBIND( AddToastNotification );
+    }
 
     // unwind started services
     m_mdFrontEnd->destroy();
@@ -701,7 +801,6 @@ bool CoreGUI::beginInterfaceLayout( const ViewportFlags viewportFlags )
     // tick the presentation layer, begin a new imgui Frame
     if ( m_mdFrontEnd->appTick() )
         return false;
-
 
     // inject dock space if we're expecting to lay the imgui out with docking
     if ( hasViewportFlag( viewportFlags, VF_WithDocking ) )
@@ -893,6 +992,9 @@ void CoreGUI::finishInterfaceLayoutAndRender()
         ImGui::OpenPopup( modalToPop.c_str() );
     }
     m_modalsWaiting.clear();
+
+    // update and display any toast notifications
+    updateToasts();
 
     ImGui::PopFont();
 

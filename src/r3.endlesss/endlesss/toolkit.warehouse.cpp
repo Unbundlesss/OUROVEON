@@ -1305,6 +1305,11 @@ void Warehouse::threadWorker()
                     if ( m_cbWorkUpdate )
                         m_cbWorkUpdate( false, "Paused due to task error" );
 
+                    m_eventBusClient.Send<::events::AddToastNotification>(
+                        ::events::AddToastNotification::Type::Error,
+                        "Warehouse Update Halted",
+                        fmt::format( FMTX("Task [{}] failed"), nextTask->getTag() ) );
+
                     m_workerThreadPaused = true;
                     continue;
                 }
@@ -1343,6 +1348,10 @@ void Warehouse::threadWorker()
                         scrapingIsRunning = true;
                         continue;
                     }
+                    else
+                    {
+                        blog::error::database( FMTX( "stems::findUnpopulatedBatch() failed" ) );
+                    }
                 }
             }
             // scour for empty riffs
@@ -1372,7 +1381,13 @@ void Warehouse::threadWorker()
                     }
                     else
                     {
-                        blog::error::database( "we found one empty riff ({}, in jam {}) but failed during batch?", emptyRiffCID, owningJamCID );
+                        const std::string errorReport = fmt::format( FMTX( "we found one empty riff ({}, in jam {}) but failed during batch?" ), emptyRiffCID, owningJamCID );
+                        blog::error::database( FMTX("Riff Sync Error : {}"), errorReport );
+
+                        m_eventBusClient.Send<::events::AddToastNotification>(
+                            ::events::AddToastNotification::Type::Error,
+                            "Warehouse Riff Sync Error",
+                            errorReport );
                     }
                 }
             }

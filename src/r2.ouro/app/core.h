@@ -10,6 +10,7 @@
 #pragma once
 
 #include "base/eventbus.h"
+#include "colour/preset.h"
 
 #include "spacetime/moment.h"
 
@@ -460,11 +461,92 @@ protected:
 
 private:
 
+    struct Toast
+    {
+        DECLARE_NO_COPY_NO_MOVE( Toast );
+
+        enum class Phase
+        {
+            Arrive,
+            Hold,
+            Depart,
+        };
+
+        Toast() = delete;
+        Toast( int32_t creationID, const colour::Preset& shade, std::string title, std::string content, float transitionTime, float holdTime )
+            : m_phase( Phase::Arrive )
+            , m_shade( shade )
+            , m_title( std::move(title) )
+            , m_content( std::move(content) )
+            , m_creationID( fmt::format( FMTX( "toast_{}" ), creationID ) )
+            , m_transitionTime( transitionTime )
+            , m_holdTime( holdTime )
+            , m_phaseT( 0 )
+        {}
+
+        Phase               m_phase = Phase::Arrive;
+        colour::Preset      m_shade;
+        std::string         m_title;
+        std::string         m_content;
+
+        std::string         m_creationID;
+        float               m_transitionTime = 0;
+        float               m_holdTime = 0;
+        float               m_phaseT = 0;
+
+        bool update( float deltaTime )
+        {
+            switch ( m_phase )
+            {
+                case Phase::Arrive:
+                {
+                    m_phaseT += deltaTime * ( 1.0f / m_transitionTime );
+                    if ( m_phaseT >= 1.0f )
+                        m_phase = Phase::Hold;
+                    m_phaseT = std::min( m_phaseT, 1.0f );
+                }
+                break;
+
+                case Phase::Hold:
+                {
+                    m_holdTime -= deltaTime;
+                    if ( m_holdTime <= 0 )
+                        m_phase = Phase::Depart;
+                }
+                break;
+
+                case Phase::Depart:
+                {
+                    m_phaseT -= deltaTime * ( 1.0f / m_transitionTime );
+                    m_phaseT = std::max( m_phaseT, 0.0f );
+                    if ( m_phaseT <= 0.0f )
+                        return false;
+                }
+                break;
+
+                default:
+                    ABSL_ASSERT( 0 );
+                    break;
+            }
+            return true;
+        }
+    };
+    using Toasts = std::vector< std::unique_ptr< Toast > >;
+
+
     using DeveloperFlagRegistry = absl::flat_hash_map< std::string, bool* >;
 
     void imguiModalAboutBox( const char* title );
 
     void checkLayoutConfig();
+
+    void event_AddToastNotification( const events::AddToastNotification* eventData );
+    void updateToasts();
+
+    base::EventListenerID   m_eventLID_AddToastNotification = base::EventListenerID::invalid();
+
+    int32_t                 m_toastCreationID = 0;      // unique ID for each toast we enqueue
+    Toasts                  m_toasts;
 
     DeveloperFlagRegistry   m_developerMenuRegistry;
 

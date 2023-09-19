@@ -107,6 +107,7 @@ struct shades
 {
     // from various https://coolors.co/palettes/trending
     // clang-format off
+    //                                    light     neutral   dark
     static constexpr Preset blue        { "2b75b7", "00408f", "092867" };
     static constexpr Preset blue_gray   { "c2dfe3", "9db4c0", "5c6b73" };
     static constexpr Preset toast       { "e0c092", "b88563", "91554a" };
@@ -116,14 +117,14 @@ struct shades
     static constexpr Preset orange      { "f4aa41", "e68127", "e25d26" };
     static constexpr Preset pink        { "ffb3c6", "ff8fab", "fb6f92" };
     static constexpr Preset slate       { "9a8c98", "4a4e69", "22223b" };
-    static constexpr Preset white       { "e2e2e2", "f2f2f2", "ffffff" };
+    static constexpr Preset white       { "ffffff", "f2f2f2", "e2e2e2" };
     static constexpr Preset black       { "000000", "000000", "000000" };
 
     static constexpr Preset errors      { "c9184a", "f53923", "800f2f" };
-    static constexpr Preset callout     { "467f8e", "56b8d0", "c0faff" };
+    static constexpr Preset callout     { "c0faff", "56b8d0", "467f8e" };
 
-    static constexpr Preset tag_lvl_1   { "9d4edd", "c77dff", "e0aaff" };
-    static constexpr Preset tag_lvl_2   { "cc1e6f", "f72585", "f44292" };
+    static constexpr Preset tag_lvl_1   { "e0aaff", "c77dff", "9d4edd" };
+    static constexpr Preset tag_lvl_2   { "f44292", "f72585", "cc1e6f" };
     // clang-format on
 };
 

@@ -1853,22 +1853,19 @@ protected:
 
     struct MigrationState
     {
-        using recursive_directory_iterator = std::filesystem::recursive_directory_iterator;
-        using iterator_instance = std::unique_ptr< recursive_directory_iterator >;
+        using recursive_iterator = fs::recursive_directory_iterator;
 
         MigrationState( const fs::path& cacheCommonRootPath )
             : m_cacheRoot( cacheCommonRootPath )
             , m_rootPathVersion1( cacheCommonRootPath / endlesss::cache::Stems::getCachePathRoot( endlesss::cache::Stems::CacheVersion::Version1 ) )
             , m_rootPathVersion2( cacheCommonRootPath / endlesss::cache::Stems::getCachePathRoot( endlesss::cache::Stems::CacheVersion::Version2 ) )
         {
-            if ( fs::exists( m_rootPathVersion1 ) )
-                m_iterator = std::make_unique< recursive_directory_iterator >( m_rootPathVersion1 );
         }
 
         fs::path            m_cacheRoot;
         fs::path            m_rootPathVersion1;
         fs::path            m_rootPathVersion2;
-        iterator_instance   m_iterator;
+        recursive_iterator  m_iterator;
 
         std::vector< fs::path >         m_resolverOriginalFiles;
         endlesss::types::StemCouchIDs   m_resolverInputs;
@@ -1907,7 +1904,11 @@ protected:
                 {
                     ImGui::Scoped::ToggleButton tbl( state.m_running, true );
                     if ( ImGui::Button( "Run Migration", buttonSize ) )
+                    {
                         state.m_running = !state.m_running;
+                        state.m_filesExamined = 0;
+                        state.m_iterator = MigrationState::recursive_iterator( state.m_rootPathVersion1, std::filesystem::directory_options::skip_permission_denied );
+                    }
                 }
                 ImGui::Text( "Stems Examined : %u", state.m_filesExamined );
                 ImGui::Text( "Stems Migrated : %u", state.m_filesMigrated );
@@ -1931,30 +1932,46 @@ protected:
                     state.m_resolverOutputs.clear();
 
                     int32_t runs = 8;
-                    for ( const auto& dirEntry : *state.m_iterator )
+                    try
                     {
-                        if ( dirEntry.is_directory() )
-                            continue;
-
-                        if ( runs <= 0 )
-                            break;
-                        runs--;
-
-                        const std::string filename = dirEntry.path().stem().string();
-                        if ( filename.size() > 10 && 
-                             filename[0] == 's' &&
-                             filename[1] == 't' &&
-                             filename[2] == 'e' &&
-                             filename[3] == 'm' )
+                        std::error_code osError;
+                        auto i = fs::begin(state.m_iterator);
+                        for (; i != fs::end(state.m_iterator); i = i.increment(osError))
                         {
-                            const auto stemID = filename.substr( 5 );
-                            state.m_resolverInputs.emplace_back( stemID );
-                            state.m_resolverOriginalFiles.emplace_back( dirEntry.path() );
-
-                            state.m_filesExamined++;
+                            if ( osError )
+                                break;
+                            
+                            if ( i->is_directory() )
+                                continue;
+                            
+                            if ( runs <= 0 )
+                                break;
+                            runs--;
+                            
+                            const std::string filename = i->path().stem().string();
+                            if ( filename.size() > 10 &&
+                                filename[0] == 's' &&
+                                filename[1] == 't' &&
+                                filename[2] == 'e' &&
+                                filename[3] == 'm' )
+                            {
+                                const auto stemID = filename.substr( 5 );
+                                state.m_resolverInputs.emplace_back( stemID );
+                                state.m_resolverOriginalFiles.emplace_back( i->path() );
+                                
+                                state.m_filesExamined++;
+                            }
                         }
+                        bool bHitEnd = i == fs::end(state.m_iterator);
+                        if ( bHitEnd )
+                            state.m_running = false;
                     }
-
+                    catch ( std::exception& cEx )
+                    {
+                        blog::cache( FMTX( "stopping cache walk on exception : {}" ), cEx.what() );
+                        state.m_running = false;
+                    }
+                    
                     if ( state.m_resolverInputs.empty() )
                     {
                         state.m_running = false;

@@ -1082,6 +1082,13 @@ void OuroApp::event_ExportRiff( const events::ExportRiff* eventData )
 
         blog::core( FMTX("   {}"), utf8path );
     }
+
+    // show toast to signal export is finished
+    {
+        m_appEventBus->send<::events::AddToastNotification>( ::events::AddToastNotification::Type::Info,
+            ICON_FA_FLOPPY_DISK " Riff Exported",
+            eventData->m_riff->m_uiDetails );
+    }
 }
 
 } // namespace app
