@@ -350,7 +350,7 @@ void Jams::postProcessNewData()
     for ( const auto jamType : cEachJamType )
     {
         const std::vector< Data >* dataArray = getArrayPtrForType( jamType );
-        assert( dataArray );
+        ABSL_ASSERT( dataArray );
 
         const size_t jamTypeIndex = (size_t)jamType;
 

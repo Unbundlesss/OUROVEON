@@ -86,7 +86,7 @@ RiffComplete::RiffComplete( const endlesss::api::pull::LatestRiffInJam& riffDeta
                     break;
                 }
             }
-            assert( foundMatchingStem );
+            ABSL_ASSERT( foundMatchingStem );
         }
         else
         {

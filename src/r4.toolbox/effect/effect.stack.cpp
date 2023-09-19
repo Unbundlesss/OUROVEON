@@ -635,7 +635,7 @@ void EffectStack::ParameterSet::syncToDataBus( const data::DataBus& bus, vst::In
 {
     for ( const auto& pb : bindings )
     {
-        assert( pb.bus >= 0 && pb.bus < data::DataBus::cBusCount );
+        ABSL_ASSERT( pb.bus >= 0 && pb.bus < data::DataBus::cBusCount );
 
         const float value = bus.m_busOutputs[pb.bus];
 

@@ -1451,7 +1451,7 @@ void Warehouse::event_RiffTagAction( const events::RiffTagAction* eventData )
         break;
 
         default:
-            ABSL_ASSERT( 0 );
+            ABSL_ASSERT( false );
             break;
     }
 }

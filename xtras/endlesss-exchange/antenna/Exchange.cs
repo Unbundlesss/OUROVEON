@@ -8,9 +8,11 @@ namespace antenna
     // based on ouroveon\src\r1.endlesss\endlesss\toolkit.exchange.h
     // must be exactly synchronised
     //
-    [Serializable, StructLayout( LayoutKind.Sequential )]
+    [Serializable, StructLayout( LayoutKind.Sequential, CharSet = CharSet.Ansi ) ]
     public struct EndlesssExchangeData
     {
+        public UInt32   exchangeDataVersion { get; set; }
+
         public UInt32   dataflags { get; set; }
         public UInt32   dataWriteCounter { get; }
 
@@ -27,16 +29,26 @@ namespace antenna
         public UInt32   riffBeatSegmentActive { get; }
 
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
-        public float[]  stemPulse;
+        public float[]  stemBeat;
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
-        public float[]  stemEnergy;
+        public float[]  stemWave;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
+        public float[]  stemWaveLF;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
+        public float[]  stemWaveHF;
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
         public float[]  stemGain;
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
         public UInt32[] stemColour;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
+        public bool[]   stemAnalysed;
+
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
+        public float[]  scopeData;
 
         public float    consensusBeat;
 
+        public float    riffPlaybackProgress;
         public float    riffTransition;
 
         public UInt32   jammerNameValidBits;

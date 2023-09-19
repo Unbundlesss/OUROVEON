@@ -52,7 +52,7 @@ struct RiffCacheLRU
 
         for ( auto idx = 0; idx < m_used; idx++ )
         {
-            assert( m_cache[idx] != nullptr );
+            ABSL_ASSERT( m_cache[idx] != nullptr );
 
             m_age[idx] ++;
 
@@ -106,7 +106,7 @@ struct RiffCacheLRU
             // age as we go
             m_age[idx] ++;
         }
-        assert( oldestIndex >= 0 );
+        ABSL_ASSERT( oldestIndex >= 0 );
 
         m_cache[oldestIndex] = riffPtr;
         m_age[oldestIndex] = 0;

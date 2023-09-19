@@ -506,11 +506,10 @@ void Core::emitAndClearExchangeData()
 #if OURO_EXCHANGE_IPC
     if ( m_endlesssExchangeIPC.canWrite() )
         m_endlesssExchangeIPC.writeType( m_endlesssExchange );
-
-    m_endlesssExchange.m_dataWriteCounter = m_endlesssExchangeWriteCounter++;
 #endif // OURO_EXCHANGE_IPC
 
     m_endlesssExchange.clear();
+    m_endlesssExchange.m_dataWriteCounter = m_endlesssExchangeWriteCounter++;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1255,7 +1254,7 @@ void CoreGUI::registerRenderCallback( const RenderPoint rp, const RenderInjectio
     case ICoreCustomRendering::RenderPoint::PreImgui:  m_preImguiRenderCallbacks.push_back( callback );  break;
     case ICoreCustomRendering::RenderPoint::PostImgui: m_postImguiRenderCallbacks.push_back( callback ); break;
     default:
-        ABSL_ASSERT( 0 );
+        ABSL_ASSERT( false );
     }
 }
 

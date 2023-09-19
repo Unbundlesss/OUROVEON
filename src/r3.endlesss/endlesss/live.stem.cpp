@@ -887,7 +887,7 @@ Stem::RawAudioMemory::~RawAudioMemory()
 // ---------------------------------------------------------------------------------------------------------------------
 void Stem::RawAudioMemory::allocate( size_t newSize )
 {
-    assert( m_rawReceived == 0 );
+    ABSL_ASSERT( m_rawReceived == 0 );
 
     if ( m_rawAudio == nullptr )
         mem::free16( m_rawAudio );

@@ -28,7 +28,7 @@ struct HashWrapper
         // we produce a secondary 32-bit hash for UI usage (and to help avoid double-zero results, 
         // which we use as 'invalid' even though technically it's a valid hash value)
         id32 = base::reduce64To32( id );
-        assert( id != 0 && id32 != 0 ); // TBD 
+        ABSL_ASSERT( id != 0 && id32 != 0 ); // TBD 
     }
     constexpr HashWrapper( const HashWrapper& rhs ) : id( rhs.id ), id32( rhs.id32) {}
 

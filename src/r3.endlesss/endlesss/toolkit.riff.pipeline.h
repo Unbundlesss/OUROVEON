@@ -25,18 +25,18 @@ struct Pipeline
     {
         Request() = default;
         Request( const endlesss::types::RiffIdentity& riff, const base::OperationID& opID )
-            : m_riff( riff )
-            , m_operationID( opID )
+            : m_operationID( opID )
+            , m_riff( riff )
         {}
         Request( const endlesss::types::RiffIdentity& riff, const endlesss::types::RiffPlaybackPermutation& permutation, const base::OperationID& opID )
-            : m_riff( riff )
+            : m_operationID( opID )
+            , m_riff( riff )
             , m_playback( permutation )
-            , m_operationID( opID )
         {}
         Request( const endlesss::types::RiffIdentity& riff, const endlesss::types::RiffPlaybackPermutationOpt& permutationOpt, const base::OperationID& opID )
-            : m_riff( riff )
+            : m_operationID( opID )
+            , m_riff( riff )
             , m_playback( permutationOpt )
-            , m_operationID( opID )
         {}
 
         base::OperationID                               m_operationID;  // opID to broadcast once loaded and any callbacks dispatched

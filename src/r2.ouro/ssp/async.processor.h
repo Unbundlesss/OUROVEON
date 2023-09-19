@@ -42,7 +42,7 @@ struct AsyncBufferProcessor
 
     inline void launchProcessorThread()
     {
-        assert( m_processorThread == nullptr );
+        ABSL_ASSERT( m_processorThread == nullptr );
 
         // launch background thread
         m_processorThreadRun = true;
@@ -138,7 +138,7 @@ private:
 
         blog::core( "[{}] processor thread launched", m_identifier );
 
-        assert( m_reservePage != nullptr );
+        ABSL_ASSERT( m_reservePage != nullptr );
         for ( ;; )
         {
             std::unique_lock<std::mutex> lock( m_processorMutex );

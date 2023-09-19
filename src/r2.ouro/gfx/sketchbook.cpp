@@ -21,7 +21,7 @@ SketchBuffer::SketchBuffer( std::weak_ptr< Sketchbook > sketchbook, const Dimens
     , m_sketchbook( std::move( sketchbook ) )
 {
     auto mgr = m_sketchbook.lock();
-    assert( mgr != nullptr );
+    ABSL_ASSERT( mgr != nullptr );
     if ( mgr != nullptr )
         m_buffer = mgr->borrow( dimensions );
 }
@@ -36,7 +36,7 @@ SketchBuffer::~SketchBuffer()
     {
         // this indicates we have objects holding onto buffers beyond Sketchbook shut-down, which is not valid;
         // check that client code is correctly terminated in the right order
-        assert( 0 );
+        ABSL_ASSERT( false );
     }
     m_buffer = nullptr;
 }
@@ -64,7 +64,7 @@ SketchUpload::~SketchUpload()
     {
         // as with SketchBuffer, we are expecting the issuing Sketchbook to remain valid
         // for longer than these distributed tokens. if the lock() fails, the link has expired
-        assert( 0 );
+        ABSL_ASSERT( false );
     }
 }
 
@@ -82,12 +82,14 @@ Sketchbook::~Sketchbook()
     // detonate lifecycle hook
     m_lifecycle = nullptr;
 
-    std::scoped_lock<std::mutex> bufferLock( m_bufferPoolMutex );
-    for ( base::U32Buffer* buf : m_bufferPool )
     {
-        delete buf;
+        std::scoped_lock<std::mutex> bufferLock( m_bufferPoolMutex );
+        for ( base::U32Buffer* buf : m_bufferPool )
+        {
+            delete buf;
+        }
+        m_bufferPool.clear();
     }
-    m_bufferPool.clear();
 }
 
 

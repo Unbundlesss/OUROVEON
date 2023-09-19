@@ -164,7 +164,7 @@ struct OpusStream::StreamInstance : public AsyncBufferProcessorIQ16
 
             remainingSamples -= OpusStream::cFrameSize;
         }
-        assert( remainingSamples == 0 );
+        ABSL_ASSERT( remainingSamples == 0 );
 
 
         packetDataInstance->m_averagePacketSize = ( totalPacketSizes / totalPackets );

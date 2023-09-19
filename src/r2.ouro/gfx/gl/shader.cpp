@@ -36,10 +36,17 @@ std::string glGetErrorLog( GLuint glID )
     glGetShaderiv( glID, GL_INFO_LOG_LENGTH, &logLength );
     if ( logLength > 0 )
     {
-        GLchar* log = (GLchar*)calloc( logLength + 1, 1 );
-        glGetShaderInfoLog( glID, logLength, &logLength, log );
-        capturedLog = log;
-        free( log );
+        GLchar* log = (GLchar*)calloc( static_cast<std::size_t>(logLength) + 1, 1 );
+        if ( log != nullptr )
+        {
+            glGetShaderInfoLog( glID, logLength, &logLength, log );
+            capturedLog = log;
+            free( log );
+        }
+        else
+        {
+            capturedLog = "[error extracting log]";
+        }
     }
 
     return capturedLog;
@@ -184,6 +191,7 @@ absl::Status Shader::validate() const
 // ---------------------------------------------------------------------------------------------------------------------
 ScopedUseShader::ScopedUseShader( const ShaderInstance& shaderToSet )
     : m_shaderInUse( shaderToSet )
+    , m_previousHandle( 0 )
 {
     const auto handle = shaderToSet->getHandle();
     if ( handle != 0 )

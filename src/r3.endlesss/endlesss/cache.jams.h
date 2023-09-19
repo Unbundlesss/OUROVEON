@@ -193,7 +193,7 @@ struct Jams
         const size_t typeAsIndex = (size_t)type;
 
         const std::vector< Data >* dataArray = getArrayPtrForType( type );
-        assert( dataArray != nullptr );
+        ABSL_ASSERT( dataArray != nullptr );
         if ( dataArray == nullptr )
             return;
 

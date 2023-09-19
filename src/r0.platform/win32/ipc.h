@@ -10,7 +10,7 @@
 #pragma once
 
 #if OURO_PLATFORM_WIN
-
+#pragma optimize("", off)
 namespace win32 {
 
 namespace details {

@@ -206,7 +206,7 @@ void Audio::ProcessMixCommandsOnMixThread()
         {
             case MixThreadCommand::Invalid:
             default:
-                assert( 0 );
+                ABSL_ASSERT( false );
                 break;
 
             case MixThreadCommand::SetMixerFunction:
@@ -274,7 +274,7 @@ void Audio::ProcessMixCommandsOnMixThread()
 // ---------------------------------------------------------------------------------------------------------------------
 int Audio::PortAudioCallbackInternal( void* outputBuffer, unsigned long framesPerBuffer, const PaStreamCallbackTimeInfo* timeInfo )
 {
-    assert( m_mixerBuffers );
+    ABSL_ASSERT( m_mixerBuffers );
     ProcessMixCommandsOnMixThread();
 
     m_state.mark( ExposedState::ExecutionStage::Start );
@@ -394,12 +394,12 @@ int Audio::PortAudioCallbackInternal( void* outputBuffer, unsigned long framesPe
 // ---------------------------------------------------------------------------------------------------------------------
 bool Audio::beginRecording( const fs::path& outputPath, const std::string& filePrefix )
 {
-    assert( !isRecording() );
+    ABSL_ASSERT( !isRecording() );
 
     auto outputFilename = fs::absolute( outputPath / fmt::format( "{}_finalmix.flac", filePrefix ) ).string();
     blog::core( "Opening FLAC final-mix output '{}'", outputFilename );
 
-    assert( m_currentRecorderProcessor == nullptr );
+    ABSL_ASSERT( m_currentRecorderProcessor == nullptr );
     m_currentRecorderProcessor = ssp::FLACWriter::Create( outputFilename, getSampleRate(), 1.0f );
     if ( m_currentRecorderProcessor )
     {
@@ -412,7 +412,7 @@ bool Audio::beginRecording( const fs::path& outputPath, const std::string& fileP
 // ---------------------------------------------------------------------------------------------------------------------
 void Audio::stopRecording()
 {
-    assert( isRecording() );
+    ABSL_ASSERT( isRecording() );
     blockUntil( 
         detachSampleProcessor( m_currentRecorderProcessor->getInstanceID() ) );
     m_currentRecorderProcessor.reset();

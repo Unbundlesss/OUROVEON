@@ -705,7 +705,7 @@ protected:
                                m_warehouseContentsReportJamTimestamp[rhsIdx];
 
                     default:
-                        ABSL_ASSERT( 0 );
+                        ABSL_ASSERT( false );
                         return 0;
                 }
             });
@@ -2127,8 +2127,8 @@ int LoreApp::EntrypointOuro()
         }
     }
 
-    m_uxSharedRiffView  = std::make_unique<ux::SharedRiffView>( m_networkConfiguration, std::move( getEventBusClient() ) );
-    m_uxTagLine         = std::make_unique<ux::TagLine>( std::move( getEventBusClient() ) );
+    m_uxSharedRiffView  = std::make_unique<ux::SharedRiffView>( m_networkConfiguration, getEventBusClient() );
+    m_uxTagLine         = std::make_unique<ux::TagLine>( getEventBusClient() );
 
     m_jamTaggingSaveLoadDir = m_storagePaths->outputApp;
 
@@ -2682,7 +2682,7 @@ int LoreApp::EntrypointOuro()
                                         break;
                                     }
                                     default:
-                                        ABSL_ASSERT( 0 );
+                                        ABSL_ASSERT( false );
                                         break;
                                 }
                             }

@@ -256,7 +256,7 @@ std::vector<fs::path> exportRiff(
                     case AudioFormat::FLAC: return ssp::FLACWriter::Create( stemPath, exportSampleRate, 60.0f );
                     case AudioFormat::WAV:  return ssp::WAVWriter::Create( stemPath, exportSampleRate, 60 );
                     default:
-                        ABSL_ASSERT( 0 );
+                        ABSL_ASSERT( false );
                         break;
                 }
             }

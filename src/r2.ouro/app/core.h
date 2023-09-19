@@ -267,7 +267,7 @@ public:
             case config::IPathProvider::PathFor::SharedData:    return m_sharedDataPath;
             case config::IPathProvider::PathFor::PerAppConfig:  return m_appConfigPath;
         }
-        ABSL_ASSERT( 0 );
+        ABSL_ASSERT( false );
         return {};
     }
 
@@ -525,7 +525,7 @@ private:
                 break;
 
                 default:
-                    ABSL_ASSERT( 0 );
+                    ABSL_ASSERT( false );
                     break;
             }
             return true;

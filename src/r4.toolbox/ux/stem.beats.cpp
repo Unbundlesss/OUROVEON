@@ -16,9 +16,6 @@ namespace ux {
 
 void StemBeats( const char* label, const endlesss::toolkit::Exchange& data, const float beatIndicatorSize, const bool monochrome )
 {
-    ImGuiIO& io = ImGui::GetIO();
-    ImGuiStyle& style = ImGui::GetStyle();
-
     const ImVec2 panelSize = ImGui::GetContentRegionAvail();
     const ImVec2 pos = ImGui::GetCursorScreenPos() + ImVec2( 0, ( panelSize.y * 0.5f ) - ( beatIndicatorSize * 0.5f ) );
 

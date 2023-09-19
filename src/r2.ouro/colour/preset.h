@@ -73,7 +73,7 @@ private:
         if ( c >= 'A' && c <= 'F' )
             return c - 'A' + 10;
 
-        ABSL_ASSERT( 0 );
+        ABSL_ASSERT( false );
         return 0;
     }
 

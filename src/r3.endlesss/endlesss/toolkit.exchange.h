@@ -41,8 +41,8 @@ struct Exchange
 
 
 
-    static constexpr size_t MaxJamName              = 32;   // who knows
-    static constexpr size_t MaxJammerName           = 32;   // no idea, probably less; also .. utf8??
+    static constexpr size_t MaxJamName              = 32;   // who knows (32b, for alignment)
+    static constexpr size_t MaxJammerName           = 32;   // 16 characters max, afaik (32b, for alignment)
 
     static constexpr size_t ScopeBucketCount        = 8;    // frequency buckets storage
     static constexpr uint32_t ExchangeDataVersion   = 2;    // basic magic version number to help hosts to
@@ -91,7 +91,7 @@ struct Exchange
     float       m_stemWaveHF[8];                // [ P ] high-frequency components, like the above
     float       m_stemGain[8];                  // [ P ] 0..1 linear gain values per stem
     uint32_t    m_stemColour[8];                // [ P ] original instrument colours from Endlesss
-    bool        m_stemAnalysed[8];              // [ P ] true if the stem has been analysed yet; this can take a moment as stems are streamed in and is done in a background thread
+    uint32_t    m_stemAnalysed[8];              // [ P ] true if the stem has been analysed yet; this can take a moment as stems are streamed in and is done in a background thread
                                                 //       if false, the various beat signals etc above will be empty
 
     float       m_scope[ScopeBucketCount];      // [  S] frequency band scope data from final audio-out fft, 0 being lowest frequency band

@@ -266,7 +266,7 @@ Instance::Instance( const char* pluginPath, const float sampleRate, const uint32
     m_data->m_sampleRate                = sampleRate;
     m_data->m_maximumBlockSize          = maximumBlockSize;
 
-    assert( unifiedTime != nullptr );
+    ABSL_ASSERT( unifiedTime != nullptr );
     m_data->m_unifiedTimeInfo           = unifiedTime;
     m_data->m_vstTimeInfo.sampleRate    = sampleRate;
     m_data->m_vstTimeSampleRateRcp      = 1.0 / sampleRate;
@@ -313,7 +313,7 @@ VstIntPtr __cdecl Instance::Data::vstAudioMasterCallback( AEffect* effect, VstIn
             Instance::Data* localData = (Instance::Data*)effect->user;
             if ( localData )
             {
-                assert( localData->m_unifiedTimeInfo != nullptr );
+                ABSL_ASSERT( localData->m_unifiedTimeInfo != nullptr );
                 const auto& unifiedTime = *localData->m_unifiedTimeInfo;
                       auto& vstTime     =  localData->m_vstTimeInfo;
 
@@ -435,7 +435,7 @@ LRESULT WINAPI Instance::Data::vstMsgProc( HWND hWnd, UINT msg, WPARAM wParam, L
         case WM_CREATE:
         {
             vstData = (Instance::Data*)((LPCREATESTRUCT)lParam)->lpCreateParams;
-            assert( vstData != nullptr );
+            ABSL_ASSERT( vstData != nullptr );
             ::SetWindowLongPtr( hWnd, GWLP_USERDATA, (LONG_PTR) vstData );
 
             vstData->m_vstEditorState = Instance::Data::EditorState::Open;
@@ -445,7 +445,7 @@ LRESULT WINAPI Instance::Data::vstMsgProc( HWND hWnd, UINT msg, WPARAM wParam, L
 
         case WM_DESTROY:
         {
-            assert( vstData != nullptr );
+            ABSL_ASSERT( vstData != nullptr );
             vstData->handleHostWindowClosing();
         }
         break;

@@ -575,7 +575,7 @@ void Preview::update(
     // compute where we are (roughly) for the UI
     if ( m_riffCurrent )
     {
-        const auto timingData = m_riffCurrent->getTimingDetails();
+        const auto& timingData = m_riffCurrent->getTimingDetails();
         timingData.ComputeProgressionAtSample(
             m_riffPlaybackSample,
             m_playbackProgression );
@@ -919,7 +919,7 @@ bool Preview::beginRecording( const fs::path& outputPath, const std::string& fil
         }
         else
         {
-            ABSL_ASSERT( 0 );
+            ABSL_ASSERT( false );
         }
     }
 
@@ -934,7 +934,7 @@ bool Preview::beginRecording( const fs::path& outputPath, const std::string& fil
 void Preview::stopRecording()
 {
     // can't stop what hasn't started
-    assert( isRecording() );
+    ABSL_ASSERT( isRecording() );
     if ( !isRecording() )
         return;
 

@@ -192,7 +192,7 @@ struct Bot::State
         });
 
 
-        assert( m_opusStreamProcessorID == ssp::StreamProcessorInstanceID::invalid() );
+        ABSL_ASSERT( m_opusStreamProcessorID == ssp::StreamProcessorInstanceID::invalid() );
         m_opusStreamProcessorID = m_opusStreamProcessor->getInstanceID();
         m_appCoreServices.getAudioModule()->attachSampleProcessor( m_opusStreamProcessor );
     }

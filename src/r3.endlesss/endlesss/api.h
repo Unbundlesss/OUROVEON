@@ -84,7 +84,7 @@ public:
                                                m_access == Access::Authenticated;
             case Access::Authenticated: return m_access == Access::Authenticated;
         }
-        ABSL_ASSERT( 0 );
+        ABSL_ASSERT( false );
         return false;
     }
 

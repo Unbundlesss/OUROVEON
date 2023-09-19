@@ -113,26 +113,24 @@ private:
     std::string             m_appName;
 
     fs::path                m_imguiLayoutDefaultPath;
-    char*                   m_imguiLayoutIni;
+    char*                   m_imguiLayoutIni = nullptr;
 
-    GLFWwindow*             m_glfwWindow;
+    GLFWwindow*             m_glfwWindow = nullptr;
     DisplayScale            m_displayScale;
-    bool                    m_isBorderless;
+    bool                    m_isBorderless = true;
 
     WindowGeometry          m_currentWindowGeometry;
     int32_t                 m_windowGeometryChangedDelay;   // used to delay writing out changes to size/pos to gather up 
                                                             // sequential changes and avoid hammering the disk
 
-    ImFont*                 m_fontFixed;
-    ImFont*                 m_fixedSmaller;
-    ImFont*                 m_fixedLarger;
-    ImFont*                 m_fontMedium;
-    ImFont*                 m_fontLogo;
-    ImFont*                 m_fontBanner;
+    ImFont*                 m_fontFixed = nullptr;
+    ImFont*                 m_fixedSmaller = nullptr;
+    ImFont*                 m_fontMedium = nullptr;
+    ImFont*                 m_fontLogo = nullptr;
 
     ImGui::MarkdownConfig   m_markdownConfig;
 
-    bool                    m_quitRequested;
+    bool                    m_quitRequested = false;
 };
 
 } // namespace module

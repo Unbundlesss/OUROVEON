@@ -382,7 +382,7 @@ struct RiffPlaybackAbstraction
                 return m_layerSoloIndex != -1;
         }
 
-        ABSL_ASSERT( 0 );
+        ABSL_ASSERT( false );
         return false;
     }
 
@@ -405,7 +405,7 @@ struct RiffPlaybackAbstraction
                 return true;
         }
 
-        ABSL_ASSERT( 0 );
+        ABSL_ASSERT( false );
         return false;
     }
 
