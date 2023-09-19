@@ -509,7 +509,9 @@ void Core::emitAndClearExchangeData()
 #endif // OURO_EXCHANGE_IPC
 
     m_endlesssExchange.clear();
+#if OURO_EXCHANGE_IPC
     m_endlesssExchange.m_dataWriteCounter = m_endlesssExchangeWriteCounter++;
+#endif // OURO_EXCHANGE_IPC
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

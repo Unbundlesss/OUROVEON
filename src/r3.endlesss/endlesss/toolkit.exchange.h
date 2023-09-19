@@ -14,6 +14,9 @@ namespace live { struct Riff; using RiffPtr = std::shared_ptr<Riff>; struct Riff
 namespace toolkit {
 
 // ---------------------------------------------------------------------------------------------------------------------
+// data block used to share the current state of ouroveon mixers live with other apps; designed to be readible from other
+// languages such as C#, uses 4-byte alignment
+//
 struct Exchange
 {
     // fill in the riff-level Exchange details from a live pointer (or mark us as "not live" if the pointer is null)
