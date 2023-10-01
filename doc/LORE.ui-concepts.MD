@@ -8,7 +8,7 @@ There are a few different parts servicing that mission:
 
 <hr>
 
-#### $\textcolor{orange}{\textsf{Playback}}$ 
+$\textcolor{orange}{\textsf{Playback}}$ 
 
 ![populated UI](/doc/lore-081/window-playback.png)
 
@@ -16,7 +16,7 @@ This group of windows are concerned with controlling the playback and export of 
 
 <hr>
 
-#### $\textcolor{orange}{\textsf{Data Warehouse}}$ 
+$\textcolor{orange}{\textsf{Data Warehouse}}$ 
 
 When you want to explore a jam, you first add it to the **Warehouse**. This process involves **LORE** downloading all the structural data for the jam from the Endlesss servers, piece by piece -- *which can take a while for big jams!* -- and store it in a database on your PC. 
 
@@ -34,7 +34,7 @@ If you wish to examine the internals, the database lives at `\cache\common\wareh
 
 <hr>
 
-#### $\textcolor{orange}{\textsf{Jam View}}$ 
+$\textcolor{orange}{\textsf{Jam View}}$ 
 
 Making use of all that data in the **Warehouse**, the $\textcolor{orange}{\textsf{Jam View}}$ can display a configurable and interactive visualisation of an entire jam, regardless of the number of riffs. This view has been tested with the largest jams on the platform, over 50,000 riffs.
 
@@ -54,7 +54,7 @@ Switching to the second page of the window allows you to modify the layout & cho
 
 <hr>
 
-#### $\textcolor{orange}{\textsf{Shared Riffs}}$ 
+$\textcolor{orange}{\textsf{Shared Riffs}}$ 
 
 ![jam viewer](/doc/lore-081/window-shared-riffs.png)
 
