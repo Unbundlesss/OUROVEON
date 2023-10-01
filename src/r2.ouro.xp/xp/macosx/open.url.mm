@@ -1,6 +1,15 @@
 
 #import <Cocoa/Cocoa.h>
 
+// maybe?
+// NSArray *fileURLs = [NSArray arrayWithObjects:fileURL1, /* ... */ nil];
+// [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs:fileURLs];
+
+// NSString* path = @"/Users/user/Downloads/my file"
+// NSArray *fileURLs = [NSArray arrayWithObjects:[NSURL fileURLWithPath:path], nil];
+// [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs:fileURLs];
+
+
 int xpOpenURL(const char *url)
 {
     @autoreleasepool {
