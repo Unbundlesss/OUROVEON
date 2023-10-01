@@ -4,6 +4,10 @@ Experimental audio projects built to interact with data from multiplayer music c
 
 Many months of tinkering, stressing and real-world testing have already gone into the **OUROVEON** suite but they should still be considered unfinished alpha/beta-grade products. UI and functionality may change rapidly without warning!
 
+They are mature enough to have been used to help create published albums, such as [This Twilight Garden](https://oddstar.bandcamp.com/album/this-twilight-garden-live-looping-sessions-volume-1) by [oddSTAR](https://endlesss.fm/oddstar) as well as the less-polished-but-certainly-still-technically-music [Horse Science Sessions](http://ishanisv.org/hs/).
+
+<br>
+
 **These tools and all code within are not affiliated with or endorsed by Endlesss Ltd. Use at your own risk.**
 
 <br>
@@ -19,12 +23,11 @@ Shared Features
  * $\textcolor{orange}{\textsf{Endlesss Power}}$ ~ The custom SDK provides comprehensive support for many facets of **Endlesss**' services, including
 
    * Authenticated sign-in, or fallback to a limited API set using public endpoints
-   * Fetching all subscribed jams and metadata for a logged-in user
-   * Lossless mode (*2023*)
-   * Shared local stem cache, managed per-jam for easier auditing
-   * Offline cache of all known public jams, active users, jam names
+   * Support for Endlesss' lossless mode (as of v0.8.0)
+   * Comprehensive jam browser, offering a users' subscribed jams, solo jam, all current publics and a huge archive of previous open/public jams
+   * *Shared Riff* feed parsing
+   * Audio data from Endlesss is stored as-is in a trivially auditable offline stem cache for fast playback and archival
    * Deals with quirky and damaged Endlesss data, all the way back to the earliest jams in 2019
-   * Shared Riff feed parsing and riff launching
    * Built in retry/adapt fixes for unstable networks or servers
 
  * $\textcolor{orange}{\textsf{Audio Engine}}$
@@ -50,7 +53,9 @@ Shared Features
 
 ### __Deluxe Jam Archeology__
 
-**Endlesss** is incredible for making a lot of music, quickly. It's *really terrible* at navigating back through that music, finding what you want and getting it exported. **LORE** was born to comprehensively solve these issues as well as offering an opportunity for long-term offline archival and storage of years' worth of music.
+**Endlesss** is incredible for making a lot of music, quickly. It's *really terrible* at navigating back through that music, finding what you want and getting it exported for use elsewhere. **LORE** was born to comprehensively solve these issues as well as offering an opportunity for long-term offline archival with easy storage & browsing of years' worth of music.
+
+Documentation available [here](/doc/LORE.MD)
 
 ![LORE UI gif](doc/080/lore_ui_1.gif)
 
