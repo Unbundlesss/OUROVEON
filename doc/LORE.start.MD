@@ -39,7 +39,7 @@ The first time you run **LORE** you will be asked to choose a folder to use as y
 
 ![initial setup screen](/doc/lore-081/initial-setup.png)
 
-If the directory specified does not exist, click $\textcolor{orange}{\textsf{[Create Directory]}}$ to make it. Once it exists, you can click $\textcolor{orange}{\textsf{[Validate \& Save]}}$ to accept those settings and progress.
+If the directory specified does not exist, click $\textcolor{orange}{\textsf{[Create Directory]}}$ to make it. Once it exists, you can click $\textcolor{orange}{\textsf{[Validate and Save]}}$ to accept those settings and progress.
 
 #### Audio Engine & Authentication
 
