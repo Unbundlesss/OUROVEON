@@ -33,3 +33,7 @@ If you decide you don't want to wait, you can click the 🚫 button and the down
 #### Re-Syncing
 
 Click 🔁 to get **LORE** to fetch the latest data for the jam from Endlesss. If new riffs and stems are found, the download process will begin as before.
+
+#### Viewing
+
+Click the button in the first column to load the chosen jam in the $\textcolor{orange}{\textsf{Jam View}}$ - note that you cannot view a jam while it is being synchronised, this button will be disabled.
