@@ -117,6 +117,24 @@ void NetConfiguration::postInit()
     );
 }
 
+
+// ---------------------------------------------------------------------------------------------------------------------
+void NetConfiguration::enableFullNetworkDiagnostics()
+{
+    blog::app( FMTX( "NetConfiguration::enableFullNetworkDiagnostics()" ) );
+
+    m_api.debugVerboseNetDataCapture = true;
+    m_api.debugVerboseNetLog = true;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void NetConfiguration::enableStemVersionBypass()
+{
+    blog::app( FMTX( "NetConfiguration::enableStemVersionBypass()" ) );
+
+    m_api.allowStemsWithoutVersionData = true;
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 std::string NetConfiguration::generateRandomLoadBalancerCookie() const
 {

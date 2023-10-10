@@ -19,7 +19,6 @@
 #include "endlesss/live.riff.cache.h"
 #include "endlesss/live.stem.h"
 #include "endlesss/toolkit.exchange.h"
-#include "endlesss/toolkit.jam.meta.h"
 #include "endlesss/toolkit.jam.sentinel.h"
 #include "endlesss/toolkit.population.h"
 #include "endlesss/toolkit.riff.export.h"

@@ -1175,6 +1175,53 @@ bool Warehouse::batchFindJamIDForStem( const endlesss::types::StemCouchIDs& stem
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+bool Warehouse::fetchAllStemsForJam( const types::JamCouchID& jamCouchID, endlesss::types::StemCouchIDs& result ) const
+{
+    // try and get a count so we can prime the output
+    int64_t stemCount = 0;
+    {
+        static constexpr char _countStemsInJam[] = R"(
+            select count(*) from stems where OwnerJamCID = ?1;
+        )";
+
+        auto query = Warehouse::SqlDB::query<_countStemsInJam>( jamCouchID.value() );
+        if ( !query( stemCount ) )
+        {
+            blog::database( FMTX( "unable to get stem count from jam [{}]" ), jamCouchID );
+        }
+    }
+    
+    // reset and prepare if we can
+    result.clear();
+    if ( stemCount > 0 )
+        result.reserve( stemCount );
+
+    // pull all stem IDs out
+    {
+        static constexpr char _allStemsInJam[] = R"(
+            select StemCID from stems where OwnerJamCID = ?1;
+        )";
+
+        auto query = Warehouse::SqlDB::query<_allStemsInJam>( jamCouchID.value() );
+
+        std::string_view stemCID;
+
+        while ( query( stemCID ) )
+        {
+            result.emplace_back( endlesss::types::StemCouchID( stemCID ) );
+        }
+    }
+
+    return !result.empty();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+bool Warehouse::fetchSingleStemByID( const types::StemCouchID& stemCouchID, endlesss::types::Stem& result ) const
+{
+    return sql::stems::getSingleStemByID( stemCouchID, result );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::upsertTag( const endlesss::types::RiffTag& tag )
 {
     sql::tags::upsert( tag, m_cbTagUpdate );
@@ -1597,8 +1644,13 @@ bool GetRiffDataTask::Work( TaskQueue& currentTasks )
             continue;
         }
 
+
+        // check for invalid app version - this is usually a red flag for invalid stems but on very old jams this
+        // was the norm - there is a config flag that allows these to pass and be synced
+        const bool ignoreForMissingAppData = ( stemCheck.doc.app_version == 0 && m_netConfig.api().allowStemsWithoutVersionData == false );
+
         // stem was destroyed?
-        if ( stemCheck.value.deleted || stemCheck.doc.app_version == 0 )
+        if ( stemCheck.value.deleted || ignoreForMissingAppData )
         {
             uniqueStemCIDs.emplace( stemCheck.key );
             blog::database( "[{}] Found stem that was deleted ({}), ignoring ID [{}]", Tag, stemCheck.error, stemCheck.key );

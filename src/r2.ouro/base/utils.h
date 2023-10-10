@@ -43,13 +43,22 @@ inline void free16( void* ptr )
 namespace base {
 
 // ---------------------------------------------------------------------------------------------------------------------
-template<class Container, class F>
-auto erase_where( Container& c, F&& f )
+template<class TContainer, class F>
+auto erase_where( TContainer& c, F&& f )
 {
     return c.erase( std::remove_if( c.begin(),
         c.end(),
         std::forward<F>( f ) ),
         c.end() );
+}
+
+template <typename TVectorElement>
+void vector_move( std::vector<TVectorElement>& v, std::size_t oldIndex, std::size_t newIndex )
+{
+    if ( oldIndex > newIndex )
+        std::rotate( v.rend() - oldIndex - 1, v.rend() - oldIndex, v.rend() - newIndex );
+    else
+        std::rotate( v.begin() + oldIndex, v.begin() + oldIndex + 1, v.begin() + newIndex + 1 );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

@@ -776,12 +776,12 @@ int CoreGUI::Entrypoint()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void CoreGUI::activateModalPopup( const char* label, const ModalPopupExecutor& executor )
+void CoreGUI::activateModalPopup( const char* label, ModalPopupExecutor&& executor )
 {
     blog::core( FMTX( "activating modal [{}]" ), label );
 
     m_modalsWaiting.emplace_back( label );
-    m_modalsActive.emplace_back( label, executor );
+    m_modalsActive.emplace_back( label, std::move( executor ) );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

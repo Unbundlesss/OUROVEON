@@ -186,7 +186,10 @@ void TagLine::State::imgui( const endlesss::toolkit::Warehouse& warehouse, endle
 
                 ImGui::Dummy( ImVec2( 0, alignVertical ) );
                 ImGui::TextUnformatted( currentRiff->m_uiDetails );
-                ImGui::Text( "%s | %s", currentRiff->m_uiTimestamp.c_str(), riffTimeDelta.asPastTenseString( 3 ).c_str() );
+                ImGui::Text( "v.%u | %s | %s",
+                    currentRiff->m_riffData.riff.appVersion,
+                    currentRiff->m_uiTimestamp.c_str(),
+                    riffTimeDelta.asPastTenseString( 3 ).c_str() );
             }
             ImGui::EndChild();
         }

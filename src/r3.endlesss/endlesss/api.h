@@ -71,6 +71,13 @@ public:
     // writable temp location for verbose/debug logging if enabled
     void setVerboseCaptureOutputPath( const fs::path& captureDir ) { m_verboseOutputDir = captureDir; }
 
+    
+    // modify loaded config::endlesss::rAPI data with advanced option toggles
+    // call after init()
+    void enableFullNetworkDiagnostics();
+    void enableStemVersionBypass();
+
+
     ouro_nodiscard constexpr const config::endlesss::rAPI& api()  const { ABSL_ASSERT( hasAccess( Access::Public ) );        return m_api;  }
     ouro_nodiscard constexpr const config::endlesss::Auth& auth() const { ABSL_ASSERT( hasAccess( Access::Authenticated ) ); return m_auth; }
 

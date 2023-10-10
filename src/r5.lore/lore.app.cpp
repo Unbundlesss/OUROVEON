@@ -31,6 +31,7 @@ namespace stdp = std::placeholders;
 
 #include "ux/diskrecorder.h"
 #include "ux/jams.browser.h"
+#include "ux/jam.precache.h"
 #include "ux/stem.beats.h"
 #include "ux/stem.analysis.h"
 #include "ux/shared.riffs.view.h"
@@ -1400,6 +1401,30 @@ protected:
     }                                           m_jamTagging;
     bool                                        m_jamTaggingInBatch = false;
 
+    // optional operation to perform to rearrange jam tag vector in UI cycle
+    struct JamTagVectorOp
+    {
+        enum class Op
+        {
+            Exchange,
+            Move1After2,
+            Move1Before2,
+        };
+
+        JamTagVectorOp() = delete;
+        JamTagVectorOp( const Op op, int32_t index1, int32_t index2 )
+            : m_op( op )
+            , m_index1( index1 )
+            , m_index2( index2 )
+        {}
+
+        Op          m_op;
+        int32_t     m_index1;
+        int32_t     m_index2;
+    };
+    using JamTagVectorOpToDo = std::optional< JamTagVectorOp >;
+
+
     endlesss::types::RiffCouchID                m_jamTaggingCurrentlyHovered;
 
     fs::path                                    m_jamTaggingSaveLoadDir;
@@ -1875,17 +1900,13 @@ protected:
         uint32_t            m_filesExamined = 0;
         uint32_t            m_filesMigrated = 0;
     };
-    std::unique_ptr<MigrationState>     m_cacheMigrationState;
 
-    void doStemCacheMigrationPopup( const char* title )
+    void doStemCacheMigrationPopup( const char* title, MigrationState& state )
     {
         const ImVec2 buttonSize( 240.0f, 32.0f );
 
         const ImVec2 configWindowSize( 600.0f, 320.0f );
         ImGui::SetNextWindowContentSize( configWindowSize );
-
-        ABSL_ASSERT( m_cacheMigrationState != nullptr );
-        MigrationState& state = *m_cacheMigrationState;
 
         if ( ImGui::BeginPopupModal( title, nullptr, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize ) )
         {
@@ -2030,7 +2051,6 @@ protected:
                 ImGui::Scoped::Disabled sd( state.m_running );
                 if ( ImGui::Button( "Close", buttonSize ) )
                 {
-                    m_cacheMigrationState.reset();
                     ImGui::CloseCurrentPopup();
                 }
             }
@@ -2054,10 +2074,11 @@ int LoreApp::EntrypointOuro()
         {
             if ( ImGui::MenuItem( "Migration..." ) )
             {
-                m_cacheMigrationState = std::make_unique<MigrationState>( m_storagePaths->cacheCommon );
-                activateModalPopup( "Stem Cache Migration", [this]( const char* title )
+                activateModalPopup( "Stem Cache Migration", [
+                    this,
+                    state = std::make_shared<MigrationState>( m_storagePaths->cacheCommon ) ]( const char* title ) mutable
                 {
-                    doStemCacheMigrationPopup( title );
+                    doStemCacheMigrationPopup( title, *state );
                 });
             }
         });
@@ -3296,14 +3317,17 @@ int LoreApp::EntrypointOuro()
                             ImGui::TableSetupColumn( "Time",                    ImGuiTableColumnFlags_WidthFixed,   32.0f );
                             ImGui::TableSetupColumn( "Find",                    ImGuiTableColumnFlags_WidthFixed,   32.0f );
                             ImGui::TableSetupColumn( " " ICON_FA_FLOPPY_DISK,   ImGuiTableColumnFlags_WidthFixed,   32.0f );
-                            ImGui::TableSetupColumn( "Order",                   ImGuiTableColumnFlags_WidthFixed,   70.0f );
+                            ImGui::TableSetupColumn( "Order",                   ImGuiTableColumnFlags_WidthFixed,   86.0f );
                             ImGui::TableHeadersRow();
 
                             m_jamTaggingCurrentlyHovered = {};
 
-                            std::size_t riffEntry = 0;
-                            const std::size_t tagCount = m_jamTagging.tagVector.size();
-                            std::optional< std::pair< std::size_t, std::size_t > > tagSwapToDo = std::nullopt;
+                            int32_t riffEntry = 0;
+                            const int32_t tagCount = static_cast<int32_t>(m_jamTagging.tagVector.size());
+
+                            // optional operation to carry out on tag data after we've done iterating it, triggered by
+                            // some kind of user interaction (like hitting up/down buttons, drag/dropping etc)
+                            JamTagVectorOpToDo tagOperationToDo = std::nullopt;
 
                             for ( auto& riffTag : m_jamTagging.tagVector )
                             {
@@ -3398,18 +3422,97 @@ int LoreApp::EntrypointOuro()
                                 ImGui::TableNextColumn();
                                 ImGui::AlignTextToFramePadding();
                                 {
-                                    ImGui::Scoped::Enabled disabledButton( riffEntry > 0 );
-                                    if ( ImGui::Button( ICON_FA_ARROW_UP, buttonSizeMidTable ) )
+                                    static const char* cDragPayloadType = "dnd.TaggedRiff";
+
+                                    bool bAllowDragTargetAbove = true;
+                                    bool bAllowDragTargetBelow = true;
+                                    bool bDragOperationRunning = false;
+
+                                    // check on the current drag state - we choose to allow dragging for each row based on 
+                                    // if the result would be valid - eg. don't bother dragging onto the initial drag source
+                                    const ImGuiPayload* dragPayloadPeek = ImGui::GetDragDropPayload();
+                                    if ( dragPayloadPeek && dragPayloadPeek->IsDataType( cDragPayloadType ) )
                                     {
-                                        tagSwapToDo = { riffEntry, riffEntry - 1 };
+                                        ABSL_ASSERT( dragPayloadPeek->DataSize == sizeof( int32_t ) );
+                                        const int32_t draggedFromRiffIndex = *(const int32_t*)dragPayloadPeek->Data;
+
+                                        bDragOperationRunning = true;
+
+                                        // don't drag onto ourself
+                                        if ( draggedFromRiffIndex == riffEntry )
+                                        {
+                                            bAllowDragTargetAbove = false;
+                                            bAllowDragTargetBelow = false;
+                                        }
+                                        // dont bother reordering onto our original position either
+                                        if ( riffEntry + 1 == draggedFromRiffIndex )
+                                        {
+                                            bAllowDragTargetBelow = false;
+                                        }
+                                        if ( riffEntry - 1 == draggedFromRiffIndex )
+                                        {
+                                            bAllowDragTargetAbove = false;
+                                        }
                                     }
-                                }
-                                ImGui::SameLine( 0, 2.0f );
-                                {
-                                    ImGui::Scoped::Enabled disabledButton( riffEntry < tagCount - 1 );
-                                    if ( ImGui::Button( ICON_FA_ARROW_DOWN, buttonSizeMidTable ) )
+
+                                    // add an ordering button to shift the riff up or down in the list; this also wires in
+                                    // the drag-drop logic to hide/colour buttons during drag procedures .. it's a little convoluted in there
+                                    const auto AddOrderingButton = [&](
+                                        const char* label,
+                                        const bool exchangeEnableLogic,
+                                        const int32_t exchangeIndex,
+                                        const bool dragEnableLogic,
+                                        const JamTagVectorOp::Op dragOp )
+                                        {
+                                            {
+                                                // don't show buttons that aren't useful drag targets when we're dragging
+                                                const bool bHideButtonDuringDragWithoutTarget = bDragOperationRunning && !dragEnableLogic;
+
+                                                // disable the button for exchanging if the exchange wouldn't be valid .. UNLESS we're dragging!
+                                                ImGui::Scoped::Enabled enabledButton( bDragOperationRunning || exchangeEnableLogic );
+                                                ImGui::Scoped::ColourButton colourButton( colour::shades::pink, dragEnableLogic&& bDragOperationRunning );
+
+                                                // just stick in an empty dummy space if we're not showing the button
+                                                if ( bHideButtonDuringDragWithoutTarget )
+                                                {
+                                                    ImGui::Dummy( buttonSizeMidTable );
+                                                }
+                                                // and show the button but disable its actual click logic if we're dragging
+                                                else if ( ImGui::Button( label, buttonSizeMidTable ) && !bDragOperationRunning )
+                                                {
+                                                    tagOperationToDo = JamTagVectorOp( JamTagVectorOp::Op::Exchange, riffEntry, exchangeIndex );
+                                                }
+                                            }
+                                            // deal with creating a move operation on drop
+                                            if ( dragEnableLogic && ImGui::BeginDragDropTarget() )
+                                            {
+                                                if ( const ImGuiPayload* payload = ImGui::AcceptDragDropPayload( cDragPayloadType ) )
+                                                {
+                                                    ABSL_ASSERT( payload->DataSize == sizeof( int32_t ) );
+                                                    const int32_t draggedFromRiffIndex = *(const int32_t*)payload->Data;
+
+                                                    tagOperationToDo = JamTagVectorOp( dragOp, draggedFromRiffIndex, riffEntry );
+                                                }
+                                                ImGui::EndDragDropTarget();
+                                            }
+                                        };
+
+                                    AddOrderingButton( ICON_FA_ARROW_UP,    riffEntry > 0,              riffEntry - 1, bAllowDragTargetAbove, JamTagVectorOp::Op::Move1Before2 );
+                                    ImGui::SameLine( 0, 2.0f );
+                                    AddOrderingButton( ICON_FA_ARROW_DOWN,  riffEntry < tagCount - 1,   riffEntry + 1, bAllowDragTargetBelow, JamTagVectorOp::Op::Move1After2 );
+
+                                    ImGui::SameLine( 0, 4.0f );
+
+                                    // grip button to start dragging this row elsewhere in the list
+                                    if ( !bDragOperationRunning )
                                     {
-                                        tagSwapToDo = { riffEntry, riffEntry + 1 };
+                                        ImGui::Button( ICON_FA_GRIP_VERTICAL );
+                                        if ( ImGui::BeginDragDropSource( ImGuiDragDropFlags_None ) )
+                                        {
+                                            ImGui::SetDragDropPayload( cDragPayloadType, &riffEntry, sizeof( int32_t ) );
+                                            ImGui::TextUnformatted( riffTag.m_note );
+                                            ImGui::EndDragDropSource();
+                                        }
                                     }
                                 }
 
@@ -3417,13 +3520,28 @@ int LoreApp::EntrypointOuro()
                                 riffEntry++;
                             }
 
-                            if ( tagSwapToDo.has_value() )
+                            // act upon a request to move/exchange values in the array now we've done iterating
+                            if ( tagOperationToDo.has_value() )
                             {
-                                // flip the requested pair in the array
-                                std::swap(
-                                    m_jamTagging.tagVector[tagSwapToDo.value().first],
-                                    m_jamTagging.tagVector[tagSwapToDo.value().second]
-                                );
+                                switch ( tagOperationToDo->m_op )
+                                {
+                                    case JamTagVectorOp::Op::Exchange:
+                                    {
+                                        // flip the requested pair in the array
+                                        std::swap(
+                                            m_jamTagging.tagVector[tagOperationToDo->m_index1],
+                                            m_jamTagging.tagVector[tagOperationToDo->m_index2]
+                                        );
+                                    }
+                                    break;
+
+                                    case JamTagVectorOp::Op::Move1Before2:
+                                    case JamTagVectorOp::Op::Move1After2:
+                                    {
+                                        base::vector_move( m_jamTagging.tagVector, tagOperationToDo->m_index1, tagOperationToDo->m_index2 );
+                                    }
+                                    break;
+                                }
 
                                 // re-index everything
                                 for ( int32_t newIndex = 0; newIndex < static_cast<int32_t>(m_jamTagging.tagVector.size() ); newIndex++ )
@@ -3432,7 +3550,7 @@ int LoreApp::EntrypointOuro()
                                 // batch update all the tags so the ordering is synchronised
                                 m_warehouse->batchUpdateTags( m_jamTagging.tagVector );
 
-                                tagSwapToDo = std::nullopt;
+                                tagOperationToDo = std::nullopt;
                             }
 
                             ImGui::EndTable();
@@ -3529,7 +3647,7 @@ int LoreApp::EntrypointOuro()
                     const auto TextColourDownloading  = ImGui::GetStyleColorVec4( ImGuiCol_CheckMark );
                     const auto TextColourDownloadable = ImGui::GetStyleColorVec4( ImGuiCol_PlotHistogram );
 
-                    const auto columnCount = (warehouseView == WarehouseView::Default) ? 5 : 4;
+                    const auto columnCount = (warehouseView == WarehouseView::Default) ? 5 : 3;
 
                     if ( ImGui::BeginTable( "##warehouse_table", columnCount,
                                 ImGuiTableFlags_ScrollY         |
@@ -3550,8 +3668,7 @@ int LoreApp::EntrypointOuro()
                         else
                         {
                             ImGui::TableSetupColumn( "Jam Name",    ImGuiTableColumnFlags_WidthFixed, 360.0f );
-                            ImGui::TableSetupColumn( "Riffs",       ImGuiTableColumnFlags_WidthFixed, 120.0f );
-                            ImGui::TableSetupColumn( "Stems",       ImGuiTableColumnFlags_WidthFixed, 120.0f );
+                            ImGui::TableSetupColumn( "Tools",       ImGuiTableColumnFlags_WidthFixed, 270.0f );
                             ImGui::TableSetupColumn( "Wipe",        ImGuiTableColumnFlags_WidthFixed, 32.0f  );
 
                         }
@@ -3648,10 +3765,15 @@ int LoreApp::EntrypointOuro()
                                 ImGui::TableNextColumn();
                             }
 
-                            ImGui::Dummy( ImVec2( 0.0f, 1.0f ) );
+                            // -----------------------------------------------------------------------------------------
+                            // default      : riff count
+                            // maintenance  : tool rack
+                            //
+                            ImGui::AlignTextToFramePadding();
+                            if ( warehouseView == WarehouseView::Default )
                             {
                                 ImGui::Text( "%" PRIi64, populated );
-                            
+
                                 if ( unpopulated > 0 )
                                 {
                                     ImGui::SameLine( 0, 0 );
@@ -3663,30 +3785,50 @@ int LoreApp::EntrypointOuro()
                                     ImGui::TextColored( TextColourDownloadable, " (" ICON_FA_ARROW_UP "%i)", knownCachedRiffCount - populated );
                                 }
                             }
-                            ImGui::TableNextColumn();
-
-                            ImGui::Dummy( ImVec2( 0.0f, 1.0f ) );
+                            else
                             {
-                                const auto unpopulated = m_warehouseContentsReport.m_unpopulatedStems[jI];
-                                const auto populated   = m_warehouseContentsReport.m_populatedStems[jI];
+                                if ( ImGui::Button( ICON_FA_LIST_CHECK " Precache ..." ) )
+                                {
+                                    // create and launch the precache tool w. attached state
+                                    activateModalPopup( "Precache All Stems", [
+                                        this,
+                                        &riffFetchProvider,
+                                        state = std::make_shared<ux::JamPrecacheState>( m_warehouseContentsReport.m_jamCouchIDs[jI] ) ](const char* title) mutable
+                                    {
+                                        ux::modalJamPrecache( title, *state, *m_warehouse, riffFetchProvider, getTaskExecutor() );
+                                    });
+                                }
+                                ImGui::CompactTooltip( "Open a utility that allows you to download all stems for this jam,\nallowing for fully offline browsing and archival" );
+                            }
 
-                                if ( unpopulated > 0 )
-                                    ImGui::Text( "%" PRIi64 " (+%" PRIi64 ")", populated, unpopulated );
-                                else
-                                    ImGui::Text( "%" PRIi64, populated);
+                            if ( warehouseView == WarehouseView::Default )
+                            {
+                                ImGui::TableNextColumn();
+                                ImGui::AlignTextToFramePadding();
+                                {
+                                    const auto unpopulated = m_warehouseContentsReport.m_unpopulatedStems[jI];
+                                    const auto populated = m_warehouseContentsReport.m_populatedStems[jI];
+
+                                    if ( unpopulated > 0 )
+                                        ImGui::Text( "%" PRIi64 " (+%" PRIi64 ")", populated, unpopulated );
+                                    else
+                                        ImGui::Text( "%" PRIi64, populated );
+                                }
                             }
 
                             if ( warehouseView == WarehouseView::Maintenance )
                             {
                                 ImGui::TableNextColumn();
+                                ImGui::AlignTextToFramePadding();
 
                                 // trashing a jam even in sync should be fine, given the way the warehouse works and
                                 // sequences operations. a purge will remove and future scanning for empty riffs & stems
                                 ImGui::Scoped::ColourButton cb( colour::shades::errors, colour::shades::white );
-                                if ( ImGui::PrecisionButton( ICON_FA_TRASH_CAN, buttonSizeMidTable ) )
+                                if ( ImGui::Button( ICON_FA_TRASH_CAN, buttonSizeMidTable ) )
                                 {
                                     m_warehouse->requestJamPurge( m_warehouseContentsReport.m_jamCouchIDs[jI] );
                                 }
+                                ImGui::CompactTooltip( "Request a deletion of the jam and all associated data" );
                             }
                             ImGui::PopID();
                         }

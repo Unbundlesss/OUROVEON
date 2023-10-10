@@ -337,7 +337,7 @@ struct CoreGUI : Core,
 
     // push a popup label to execute in the edges of the main loop, with [executor] being called to actually display
     // whatever popup window you have in mind.
-    void activateModalPopup( const char* label, const ModalPopupExecutor& executor );
+    void activateModalPopup( const char* label, ModalPopupExecutor&& executor );
 
     // submit an ImGui file dialog instance for display as part of the main loop; we can only have one live at once
     ouro_nodiscard bool activateFileDialog( FileDialogInst&& dialogInstance, const FileDialogCallback& onOK )

@@ -34,6 +34,13 @@
 
 namespace app {
 
+// double-clicking on the OUROVEON logo shows a few extra secret options 
+struct AdvancedOptionsBlock
+{
+    bool    bShow = false;
+    bool    bEnableNetworkLogging = false;
+    bool    bEnableStemVersioningBypass = false;
+};
 
 // ---------------------------------------------------------------------------------------------------------------------
 // endlesss::live::RiffFetchServices
@@ -54,6 +61,8 @@ int OuroApp::EntrypointGUI()
     static constexpr std::array< uint32_t,    6 > cBufferSizeValues {      0 ,     64 ,    256 ,    512 ,   1024 ,   2048  };
     static constexpr std::array< const char*, 6 > cVibeRenderLabels {   "512",  "1024",  "2048",  "4096" };
     static constexpr std::array< uint32_t,    6 > cVibeRenderValues {    512 ,   1024 ,   2048 ,   4096  };
+
+    AdvancedOptionsBlock advancedOptionsBlock;
 
     // fetch any customised stem export spec
     const auto exportLoadResult = config::load( *this, m_configExportOutput );
@@ -258,7 +267,7 @@ int OuroApp::EntrypointGUI()
 
         const float  configWindowColumn1 = 500.0f;
         const float  configWindowColumn2 = 500.0f;
-        const ImVec2 configWindowSize = ImVec2( configWindowColumn1 + configWindowColumn2, 650.0f );
+        const ImVec2 configWindowSize = ImVec2( configWindowColumn1 + configWindowColumn2, 660.0f );
         const ImVec2 viewportWorkSize = ImGui::GetMainViewport()->GetCenter();
 
         ImGui::SetNextWindowPos( viewportWorkSize - ( configWindowSize * 0.5f ) - ImVec2(0, 50.0f) );
@@ -289,11 +298,22 @@ int OuroApp::EntrypointGUI()
                     ImGui::Spacing();
                     ImGui::Spacing();
 
-                    ImGui::PushFont( m_mdFrontEnd->getFont( app::module::Frontend::FontChoice::LargeLogo ) );
-                    ImGui::PushStyleColor( ImGuiCol_Text, ImGui::GetColorU32( ImGuiCol_NavHighlight ) );
-                    ImGui::TextUnformatted( "OUROVEON ");
-                    ImGui::PopStyleColor();
-                    ImGui::PopFont();
+                    if ( advancedOptionsBlock.bShow )
+                    {
+                        ImGui::Checkbox( " Enable Network Diagnostics", &advancedOptionsBlock.bEnableNetworkLogging );
+                        ImGui::Checkbox( " Bypass Stem Version Validation", &advancedOptionsBlock.bEnableStemVersioningBypass );
+                    }
+                    else
+                    {
+                        ImGui::PushFont( m_mdFrontEnd->getFont( app::module::Frontend::FontChoice::LargeLogo ) );
+                        ImGui::PushStyleColor( ImGuiCol_Text, ImGui::GetColorU32( ImGuiCol_NavHighlight ) );
+                        ImGui::TextUnformatted( "OUROVEON " );
+                        if ( ImGui::IsMouseDoubleClicked( ImGuiMouseButton_Left ) )
+                            advancedOptionsBlock.bShow = true;
+
+                        ImGui::PopStyleColor();
+                        ImGui::PopFont();
+                    }
 
                     ImGui::Spacing();
                     ImGui::Spacing();
@@ -925,6 +945,14 @@ int OuroApp::EntrypointGUI()
             m_networkConfiguration->initWithAuthentication( m_appEventBus, m_configEndlesssAPI, endlesssAuth );
         else
             m_networkConfiguration->initWithoutAuthentication( m_appEventBus, m_configEndlesssAPI );
+    }
+
+    if ( advancedOptionsBlock.bShow )
+    {
+        if ( advancedOptionsBlock.bEnableNetworkLogging )
+            m_networkConfiguration->enableFullNetworkDiagnostics();
+        if ( advancedOptionsBlock.bEnableStemVersioningBypass )
+            m_networkConfiguration->enableStemVersionBypass();
     }
 
     // save any config data blocks

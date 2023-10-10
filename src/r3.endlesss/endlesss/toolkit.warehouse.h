@@ -154,6 +154,12 @@ struct Warehouse
     // given N stems, return a matching vector of origin jam IDs for each; if no jam ID can be determined, an empty ID is stored
     bool batchFindJamIDForStem( const endlesss::types::StemCouchIDs& stems, endlesss::types::JamCouchIDs& result );
 
+    // populate the output vector with every stem associated with a jam (for example, for precatching them all into the cache)
+    bool fetchAllStemsForJam( const types::JamCouchID& jamCouchID, endlesss::types::StemCouchIDs& result ) const;
+
+    // resolve a single stem data block from the database, if we can find it; returns false if we didn't
+    bool fetchSingleStemByID( const types::StemCouchID& stemCouchID, endlesss::types::Stem& result ) const;
+
 
     // -----------------------------------------------------------------------------------------------------------------
     // Tags

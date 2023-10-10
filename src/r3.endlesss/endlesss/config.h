@@ -132,6 +132,11 @@ OURO_CONFIG( rAPI )
     // if true, stream all http response body text out to files before they are deserialised. will fill up your drive.
     bool                    debugVerboseNetDataCapture = false;
 
+    // by default we identify 'broken' stems from old jams as they lack application version tags - however, even older stems
+    // (ie. mid/early 2019) are valid but also lack this metadata. turning this on will let you sync very old jams by ignoring
+    // this change in data layout
+    bool                    allowStemsWithoutVersionData = false;
+
 
     template<class Archive>
     void serialize( Archive& archive )

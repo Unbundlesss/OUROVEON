@@ -580,13 +580,21 @@ Frontend::WindowGeometry Frontend::getWindowGeometry() const
 // ---------------------------------------------------------------------------------------------------------------------
 void Frontend::updateAndSaveFrontendConfig()
 {
+    // 0 size usually indicates a minimization, ignore it
+    if ( m_currentWindowGeometry.m_width == 0 ||
+        m_currentWindowGeometry.m_height == 0 )
+    {
+        blog::core( FMTX( "window minimized, ignoring change ..." ) );
+        return;
+    }
+
     m_feConfigCopy.appWidth         = m_currentWindowGeometry.m_width;
     m_feConfigCopy.appHeight        = m_currentWindowGeometry.m_height;
     m_feConfigCopy.appPositionX     = m_currentWindowGeometry.m_positionX;
     m_feConfigCopy.appPositionY     = m_currentWindowGeometry.m_positionY;
     m_feConfigCopy.appPositionValid = true;
 
-    blog::core( "window moved/resized [{}, {}] [{} x {}], saving changes ...",
+    blog::core( FMTX( "window moved/resized [{}, {}] [{} x {}], saving changes ..." ),
         m_feConfigCopy.appPositionX,
         m_feConfigCopy.appPositionY,
         m_feConfigCopy.appWidth,

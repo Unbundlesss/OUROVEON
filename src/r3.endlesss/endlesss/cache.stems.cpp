@@ -34,6 +34,8 @@ fs::path Stems::getCachePathRoot( CacheVersion cv )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// IMPORTANT : changing this logic will invalidate existing stem caches
+//
 fs::path Stems::getCachePathForStemData(
     const fs::path& cacheRoot,
     const endlesss::types::JamCouchID& jamCID,
@@ -190,8 +192,6 @@ void Stems::lockAndPrune( const bool verbose, const uint32_t generationsToKeep )
 
 // ---------------------------------------------------------------------------------------------------------------------
 // produce a path to store the stem 
-// 
-// NB changing this may invalidate existing stem caches
 //
 fs::path Stems::getCachePathForStem( const endlesss::types::Stem& stemData ) const
 {
