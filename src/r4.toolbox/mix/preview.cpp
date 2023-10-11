@@ -442,6 +442,11 @@ void Preview::update(
         // reset computed riff playback variables
         m_playbackProgression.reset();
 
+        // force playback cursor back to the start while we have nothing to play; this means that 
+        // the first riff enqueued to play after we've been idle will start from scratch rather
+        // than just wherever the playback head had wandered onto in the background
+        m_riffPlaybackSample = 0;
+
         return;
     }
 
