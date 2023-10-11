@@ -254,13 +254,7 @@ void JamPrecacheState::imgui(
 
     ImGui::SeparatorBreak();
 
-    const auto panelRegionAvail = ImGui::GetContentRegionAvail();
-    {
-        ImGui::Dummy({ 0, panelRegionAvail.y - buttonSize.y - 6.0f });
-    }
-    ImGui::Dummy( { 0,0 } );
-    ImGui::SameLine( 0, panelRegionAvail.x - buttonSize.x - 6.0f );
-    if ( ImGui::Button( "Close", buttonSize ) )
+    if ( ImGui::BottomRightAlignedButton( "Close", buttonSize ) )
     {
         taskExecutor.wait_for_all();
         ImGui::CloseCurrentPopup();

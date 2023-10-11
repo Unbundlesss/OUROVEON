@@ -49,7 +49,7 @@ namespace ux {
 
         bool                            m_enableSiphonMode = false;
 
-        int32_t                         m_maximumDownloadsInFlight = 10;
+        int32_t                         m_maximumDownloadsInFlight = 4;
 
         State                           m_state = State::Intro;
         std::size_t                     m_currentStemIndex = 0;

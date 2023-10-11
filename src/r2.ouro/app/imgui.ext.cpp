@@ -188,6 +188,18 @@ bool ImTextureFromFile( const char* filename, ImTexture& texture, bool clampToEd
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+bool BottomRightAlignedButton( const char* label, const ImVec2& size)
+{
+    const auto panelRegionAvail = ImGui::GetContentRegionAvail();
+    {
+        ImGui::Dummy( { 0, panelRegionAvail.y - size.y - 6.0f } );
+    }
+    ImGui::Dummy( { 0,0 } );
+    ImGui::SameLine( 0, panelRegionAvail.x - size.x - 6.0f );
+    return ImGui::Button( label, size );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 void BeginDisabledControls( const bool isDisabled )
 {
     if ( isDisabled )

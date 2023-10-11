@@ -32,6 +32,7 @@ namespace stdp = std::placeholders;
 #include "ux/diskrecorder.h"
 #include "ux/jams.browser.h"
 #include "ux/jam.precache.h"
+#include "ux/jam.validate.h"
 #include "ux/stem.beats.h"
 #include "ux/stem.analysis.h"
 #include "ux/shared.riffs.view.h"
@@ -1428,6 +1429,7 @@ protected:
     endlesss::types::RiffCouchID                m_jamTaggingCurrentlyHovered;
 
     fs::path                                    m_jamTaggingSaveLoadDir;
+    std::string                                 m_jamTagExportPrefix;
 
     base::EventListenerID                       m_eventLID_RequestNavigationToRiff  = base::EventListenerID::invalid();
 
@@ -2226,7 +2228,7 @@ int LoreApp::EntrypointOuro()
     m_riffExportPipeline = std::make_unique< endlesss::toolkit::Pipeline >(
         m_appEventBus,
         riffFetchProvider,
-        16,
+        0, // no internal cache - we don't want riffs saved as we can modify jam/riff descriptions during batch exports which would then be ignored
         [this]( const endlesss::types::RiffIdentity& request, endlesss::types::RiffComplete& result ) -> bool
         {
             // most requests can be serviced direct from the DB
@@ -3032,6 +3034,7 @@ int LoreApp::EntrypointOuro()
             if ( ImGui::Begin( tagView.generateTitle().c_str() ) )
             {
                 static ImVec2 buttonSizeTools( 200.0, 30.0f );
+                static ImVec2 buttonSizeHeader( 200.0, ImGui::GetTextLineHeight() + (GImGui->Style.FramePadding.y * 2.0f) + 1.0f );
 
                 tagView.checkForImGuiTabSwitch();
 
@@ -3049,9 +3052,9 @@ int LoreApp::EntrypointOuro()
                 else
                 {
                     ABSL_ASSERT( m_jamTagging.jamID == m_currentViewedJam );
-                    if ( ImGui::BeginChild( "tag-title-align", ImVec2( -(buttonSizeTools.x + GImGui->Style.WindowPadding.x), buttonSizeTools.y ) ) )
+                    if ( ImGui::BeginChild( "tag-title-align", ImVec2( -( (buttonSizeHeader.x * 2.0f) + GImGui->Style.WindowPadding.x), buttonSizeHeader.y ) ) )
                     {
-                        ImGui::Dummy( ImVec2( 0, (buttonSizeTools.y * 0.5f) - (ImGui::GetTextLineHeight() * 0.5f) ) );
+                        ImGui::AlignTextToFramePadding();
                         ImGui::TextUnformatted( "Tagged Riffs in " );
                         ImGui::SameLine( 0, 0 );
                         ImGui::TextColored( colour::shades::toast.light(), m_currentViewedJamName.c_str() );
@@ -3275,18 +3278,54 @@ int LoreApp::EntrypointOuro()
                     }
                     else
                     {
+                        // trim out any foolish characters from the export path string
+                        struct TextFilters
+                        {
+                            static int FilterForFilename(ImGuiInputTextCallbackData* data)
+                            {
+                                // 0..9
+                                if ( data->EventChar >= 48 && data->EventChar <= 57 )
+                                    return 0;
+                                // A..Z
+                                if ( data->EventChar >= 65 && data->EventChar <= 90 )
+                                    return 0;
+                                // a..z
+                                if ( data->EventChar >= 97 && data->EventChar <= 122 )
+                                    return 0;
+                                // _ or space
+                                if ( data->EventChar == 95 && data->EventChar == 32 )
+                                    return 0;
+
+                                return 1;
+                            }
+                        };
+
+                        // trigger an export of all the tagged riffs by slinging them into the export pipeline
                         ImGui::SameLine();
-                        if ( ImGui::Button( ICON_FA_FLOPPY_DISK " Export All Tagged", buttonSizeTools ) )
+                        if ( ImGui::Button( ICON_FA_FLOPPY_DISK " Export All Tagged", buttonSizeHeader ) )
                         {
                             for ( const auto& riffTag : m_jamTagging.tagVector )
                             {
                                 endlesss::types::IdentityCustomNaming customNaming;
                                 customNaming.m_riffDescription = fmt::format( FMTX( "tag{:03}_f{}_" ), riffTag.m_order, riffTag.m_favour );
 
+                                if ( !m_jamTagExportPrefix.empty() )
+                                    customNaming.m_jamDescription = m_jamTagExportPrefix;
+
                                 enqueueRiffForExport( { riffTag.m_jam, riffTag.m_riff, std::move( customNaming ) } );
                             }
                         }
-
+                        // add option for additional subdirectory inserted between jam and riff stack when exporting
+                        ImGui::SameLine();
+                        ImGui::AlignTextToFramePadding();
+                        ImGui::TextUnformatted( "into" );
+                        ImGui::SameLine();
+                        ImGui::TextDisabled( "[?]" );
+                        ImGui::SameLine();
+                        ImGui::CompactTooltip( "(optional) Additional export subdirectory name used during export" );
+                        ImGui::SameLine();
+                        ImGui::SetNextItemWidth( buttonSizeHeader.x * 0.6f );
+                        ImGui::InputText( "##custom_name", &m_jamTagExportPrefix, ImGuiInputTextFlags_CallbackCharFilter, TextFilters::FilterForFilename );
                         ImGui::SeparatorBreak();
                         ImGui::Spacing();
                         ImGui::Spacing();
@@ -3795,7 +3834,7 @@ int LoreApp::EntrypointOuro()
                                     activateModalPopup( popupLabel, [
                                         this,
                                         &riffFetchProvider,
-                                        state = std::make_shared<ux::JamPrecacheState>( m_warehouseContentsReport.m_jamCouchIDs[jI] ) ](const char* title) mutable
+                                        state = std::make_shared<ux::JamPrecacheState>( m_warehouseContentsReport.m_jamCouchIDs[jI] ) ](const char* title)
                                     {
                                         ux::modalJamPrecache( title, *state, *m_warehouse, riffFetchProvider, getTaskExecutor() );
                                     });
@@ -3805,6 +3844,16 @@ int LoreApp::EntrypointOuro()
                                 ImGui::SameLine();
                                 if ( ImGui::Button( " " ICON_FA_MAGNIFYING_GLASS_PLUS " Validate ") )
                                 {
+                                    const auto popupLabel = fmt::format( FMTX( "Validation : {}###validate_modal" ), m_warehouseContentsReportJamTitles[jI] );
+
+                                    // create and launch the precache tool w. attached state
+                                    activateModalPopup( popupLabel, [
+                                        this,
+                                        netCfg = getNetworkConfiguration(),
+                                        state = std::make_shared<ux::JamValidateState>( m_warehouseContentsReport.m_jamCouchIDs[jI] )](const char* title)
+                                    {
+                                        ux::modalJamValidate( title, *state, *m_warehouse, netCfg, getTaskExecutor() );
+                                    });
                                 }
                                 ImGui::CompactTooltip( "Display tools for validating the data in the warehouse against the Endlesss server" );
                             }

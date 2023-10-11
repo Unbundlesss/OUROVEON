@@ -220,8 +220,16 @@ void Pipeline::pipelineThread()
 {
     OuroveonThreadScope ots( OURO_THREAD_PREFIX "Riff-Pipeline" );
 
-    ABSL_ASSERT( m_cacheSize > 0 );
-    endlesss::live::RiffCacheLRU liveRiffMiniCache( m_cacheSize );
+    std::unique_ptr< endlesss::live::RiffCacheLRU > liveRiffMiniCache;
+
+    if ( m_cacheSize > 0 )
+    {
+        liveRiffMiniCache = std::make_unique< endlesss::live::RiffCacheLRU >( m_cacheSize );
+    }
+    else
+    {
+        blog::api( FMTX( "pipeline started with no internal cache" ) );
+    }
 
     Request riffRequest;
 
@@ -266,7 +274,7 @@ void Pipeline::pipelineThread()
                 endlesss::live::RiffPtr riffToPlay;
 
                 // rummage through our little local cache of live riff instances to see if we can re-use one
-                if ( !liveRiffMiniCache.search( riffRequest.m_riff.getRiffID(), riffToPlay ) )
+                if ( liveRiffMiniCache == nullptr || liveRiffMiniCache->search( riffRequest.m_riff.getRiffID(), riffToPlay ) == false )
                 {
                     endlesss::types::RiffComplete riffComplete;
                     if ( m_resolver( riffRequest.m_riff, riffComplete ) )
@@ -275,7 +283,8 @@ void Pipeline::pipelineThread()
                         riffToPlay->fetch( m_riffFetchProvider );
 
                         // stash new riff in cache
-                        liveRiffMiniCache.store( riffToPlay );
+                        if ( liveRiffMiniCache != nullptr )
+                            liveRiffMiniCache->store( riffToPlay );
                     }
                     else
                     {
