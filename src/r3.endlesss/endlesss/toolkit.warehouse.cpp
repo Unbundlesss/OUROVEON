@@ -1199,7 +1199,7 @@ bool Warehouse::fetchAllStemsForJam( const types::JamCouchID& jamCouchID, endles
     // pull all stem IDs out
     {
         static constexpr char _allStemsInJam[] = R"(
-            select StemCID from stems where OwnerJamCID = ?1;
+            select StemCID from stems where OwnerJamCID = ?1 order by CreationTime asc;
         )";
 
         auto query = Warehouse::SqlDB::query<_allStemsInJam>( jamCouchID.value() );
@@ -1219,6 +1219,49 @@ bool Warehouse::fetchAllStemsForJam( const types::JamCouchID& jamCouchID, endles
 bool Warehouse::fetchSingleStemByID( const types::StemCouchID& stemCouchID, endlesss::types::Stem& result ) const
 {
     return sql::stems::getSingleStemByID( stemCouchID, result );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// this isn't really for normal use. potentially this could return 100k+ stem IDs on a decently populated warehouse
+//
+bool Warehouse::fetchAllStems( endlesss::types::StemCouchIDs& result ) const
+{
+    // try and get a count so we can prime the output
+    int64_t stemCount = 0;
+    {
+        static constexpr char _countAllStems[] = R"(
+            select count(*) from stems;
+        )";
+
+        auto query = Warehouse::SqlDB::query<_countAllStems>();
+        if ( !query( stemCount ) )
+        {
+            blog::database( FMTX( "unable to get stem count for entire database" ) );
+        }
+    }
+
+    // reset and prepare if we can
+    result.clear();
+    if ( stemCount > 0 )
+        result.reserve( stemCount );
+
+    // pull all stem IDs out
+    {
+        static constexpr char _allStems[] = R"(
+            select StemCID from stems;
+        )";
+
+        auto query = Warehouse::SqlDB::query<_allStems>();
+
+        std::string_view stemCID;
+
+        while ( query( stemCID ) )
+        {
+            result.emplace_back( endlesss::types::StemCouchID( stemCID ) );
+        }
+    }
+
+    return !result.empty();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

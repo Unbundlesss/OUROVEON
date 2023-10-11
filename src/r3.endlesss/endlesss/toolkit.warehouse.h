@@ -160,6 +160,9 @@ struct Warehouse
     // resolve a single stem data block from the database, if we can find it; returns false if we didn't
     bool fetchSingleStemByID( const types::StemCouchID& stemCouchID, endlesss::types::Stem& result ) const;
 
+    // do you want all the stems? all of them? damn son alright
+    bool fetchAllStems( endlesss::types::StemCouchIDs& result ) const;
+
 
     // -----------------------------------------------------------------------------------------------------------------
     // Tags

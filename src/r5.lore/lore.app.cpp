@@ -3787,10 +3787,12 @@ int LoreApp::EntrypointOuro()
                             }
                             else
                             {
-                                if ( ImGui::Button( ICON_FA_LIST_CHECK " Precache ..." ) )
+                                if ( ImGui::Button( " " ICON_FA_LIST_CHECK " Precache ") )
                                 {
+                                    const auto popupLabel = fmt::format( FMTX( "Precache All Stems : {}###precache_modal" ), m_warehouseContentsReportJamTitles[jI] );
+
                                     // create and launch the precache tool w. attached state
-                                    activateModalPopup( "Precache All Stems", [
+                                    activateModalPopup( popupLabel, [
                                         this,
                                         &riffFetchProvider,
                                         state = std::make_shared<ux::JamPrecacheState>( m_warehouseContentsReport.m_jamCouchIDs[jI] ) ](const char* title) mutable
@@ -3799,6 +3801,12 @@ int LoreApp::EntrypointOuro()
                                     });
                                 }
                                 ImGui::CompactTooltip( "Open a utility that allows you to download all stems for this jam,\nallowing for fully offline browsing and archival" );
+
+                                ImGui::SameLine();
+                                if ( ImGui::Button( " " ICON_FA_MAGNIFYING_GLASS_PLUS " Validate ") )
+                                {
+                                }
+                                ImGui::CompactTooltip( "Display tools for validating the data in the warehouse against the Endlesss server" );
                             }
 
                             if ( warehouseView == WarehouseView::Default )
