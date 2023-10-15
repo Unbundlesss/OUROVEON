@@ -3815,6 +3815,9 @@ int LoreApp::EntrypointOuro()
                             }
                             else
                             {
+                                // disable these tools if we're syncing, just to be safe
+                                ImGui::Scoped::Disabled sd( bIsJamInFlux );
+
                                 if ( ImGui::Button( ICON_FA_BOX ) )
                                 {
                                     // pick a place to write exports
