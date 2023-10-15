@@ -141,18 +141,32 @@ struct Warehouse
 
 
     // -----------------------------------------------------------------------------------------------------------------
+    // Jam Export
+
+    void requestJamExport( const types::JamCouchID& jamCouchID, const fs::path exportPath );
+
+
+    // -----------------------------------------------------------------------------------------------------------------
     // Riff Resolution
 
     // instead of hitting the Endlesss network, the warehouse may be able to fill in all the data required to 
     // bring a riff online; returns true if that was the case
-    bool fetchSingleRiffByID( const endlesss::types::RiffCouchID& riffID, endlesss::types::RiffComplete& result );
+    bool fetchSingleRiffByID( const endlesss::types::RiffCouchID& riffID, endlesss::types::RiffComplete& result ) const;
+
+    // change a specific stem entry in a riff, also creating an empty stem record if one doesn't exist;
+    // used to modify existing riff structures if we find invalid mismatches from the server data
+    bool patchRiffStemRecord(
+        const types::JamCouchID& jamCouchID,
+        const endlesss::types::RiffCouchID& riffID,
+        const int32_t stemIndex,    // 0-base stem index to modify
+        const endlesss::types::StemCouchID& newStemID );
 
 
     // -----------------------------------------------------------------------------------------------------------------
     // Stem Operations
 
     // given N stems, return a matching vector of origin jam IDs for each; if no jam ID can be determined, an empty ID is stored
-    bool batchFindJamIDForStem( const endlesss::types::StemCouchIDs& stems, endlesss::types::JamCouchIDs& result );
+    bool batchFindJamIDForStem( const endlesss::types::StemCouchIDs& stems, endlesss::types::JamCouchIDs& result ) const;
 
     // populate the output vector with every stem associated with a jam (for example, for precatching them all into the cache)
     bool fetchAllStemsForJam( const types::JamCouchID& jamCouchID, endlesss::types::StemCouchIDs& result ) const;

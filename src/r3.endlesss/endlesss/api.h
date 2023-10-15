@@ -959,6 +959,10 @@ struct BandPermalinkMeta
                    , CEREAL_NVP( band_name )
             );
         }
+
+        // run regex to pull the full id from "/jam/<full id>/join" in the path
+        // returns true if this succeeded
+        bool extractLongJamIDFromPath( std::string& outResult );
     };
 
     std::string result;
@@ -1074,6 +1078,67 @@ private:
     // both fetch/fetchSpecific use the same basic processing, just a different initial call
     bool commonRequest( const NetConfiguration& ncfg, const std::string& requestUrl, const std::string& requestContext );
 };
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+// given the long-form jam ID (eg. "487dd4be90b25fe7ea018e10d87ce251aeb41a35f781199cc0820fdab568b59c") this will use the 
+// public api to fetch a page of the riff data down to the point of being able to validate stem IDs and higher structure
+// (as opposed to going through the couchbase API route)
+//
+struct RiffStructureValidation
+{
+    struct Rifff
+    {
+        // borrow our structure from the couchbase side
+        using RifffState = ResultRiffDocument::State;
+
+        std::string             _id;            // riff couch ID
+        RifffState              state;
+        std::vector< ResultStemDocument >
+                                loops;
+
+        template<class Archive>
+        inline void serialize( Archive& archive )
+        {
+            archive( CEREAL_NVP( _id )
+                   , CEREAL_NVP( state )
+                   , CEREAL_NVP( loops )
+            );
+        }
+    };
+
+    struct Data
+    {
+        std::string             legacy_id;     // band#### name, just for debugging/checking
+        std::string             name;          // most up-to-date public name
+        std::vector< Rifff >    rifffs;
+
+        template<class Archive>
+        inline void serialize( Archive& archive )
+        {
+            archive( CEREAL_NVP( legacy_id )
+                   , CEREAL_NVP( name )
+                   , CEREAL_NVP( rifffs )
+            );
+        }
+    };
+
+    bool        ok;
+    Data        data;
+    std::string message;
+
+    template<class Archive>
+    inline void serialize( Archive& archive )
+    {
+        archive( CEREAL_NVP( ok )
+               , CEREAL_NVP( data )
+               , CEREAL_OPTIONAL_NVP( message ) // valid if ok==false
+        );
+    }
+
+    bool fetch( const NetConfiguration& ncfg, const std::string& jamLongID, int32_t pageNumber, int32_t pageSize );
+};
+
 
 namespace pull {
 

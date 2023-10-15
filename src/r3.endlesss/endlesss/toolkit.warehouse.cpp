@@ -155,6 +155,24 @@ struct JamSyncAbortTask : Warehouse::ITask
     virtual bool Work( TaskQueue& currentTasks ) override;
 };
 
+// ---------------------------------------------------------------------------------------------------------------------
+struct JamExportTask : Warehouse::ITask
+{
+    static constexpr char Tag[] = "EXPORT";
+
+    JamExportTask( const types::JamCouchID& jamCID, const fs::path& exportPath )
+        : Warehouse::ITask()
+        , m_jamCID( jamCID )
+        , m_exportPath( exportPath )
+    {}
+
+    types::JamCouchID   m_jamCID;
+    fs::path            m_exportPath;
+
+    virtual const char* getTag() override { return Tag; }
+    virtual std::string Describe() override { return fmt::format( "[{}] exporting to disk", Tag ); }
+    virtual bool Work( TaskQueue& currentTasks ) override;
+};
 
 // ---------------------------------------------------------------------------------------------------------------------
 struct GetRiffDataTask : Warehouse::INetworkTask
@@ -1125,7 +1143,19 @@ void Warehouse::requestJamSyncAbort( const types::JamCouchID& jamCouchID )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-bool Warehouse::fetchSingleRiffByID( const endlesss::types::RiffCouchID& riffID, endlesss::types::RiffComplete& result )
+void Warehouse::requestJamExport( const types::JamCouchID& jamCouchID, const fs::path exportPath )
+{
+    if ( jamCouchID.empty() )
+    {
+        blog::error::database( "empty Jam ID passed to warehouse for export" );
+        return;
+    }
+
+    m_taskSchedule->m_taskQueue.enqueue( std::make_unique<JamExportTask>( jamCouchID, exportPath ) );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+bool Warehouse::fetchSingleRiffByID( const endlesss::types::RiffCouchID& riffID, endlesss::types::RiffComplete& result ) const
 {
     if ( !sql::riffs::getSingleByID( riffID, result.riff ) )
         return false;
@@ -1147,7 +1177,49 @@ bool Warehouse::fetchSingleRiffByID( const endlesss::types::RiffCouchID& riffID,
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-bool Warehouse::batchFindJamIDForStem( const endlesss::types::StemCouchIDs& stems, endlesss::types::JamCouchIDs& result )
+bool Warehouse::patchRiffStemRecord(
+    const types::JamCouchID& jamCouchID,
+    const endlesss::types::RiffCouchID& riffID,
+    const int32_t stemIndex,
+    const endlesss::types::StemCouchID& newStemID )
+{
+    // welcome to goofy town
+    static constexpr char updateRiffStem1[] = R"( UPDATE riffs SET StemCID_1=?2 WHERE riffCID=?1 )";
+    static constexpr char updateRiffStem2[] = R"( UPDATE riffs SET StemCID_2=?2 WHERE riffCID=?1 )";
+    static constexpr char updateRiffStem3[] = R"( UPDATE riffs SET StemCID_3=?2 WHERE riffCID=?1 )";
+    static constexpr char updateRiffStem4[] = R"( UPDATE riffs SET StemCID_4=?2 WHERE riffCID=?1 )";
+    static constexpr char updateRiffStem5[] = R"( UPDATE riffs SET StemCID_5=?2 WHERE riffCID=?1 )";
+    static constexpr char updateRiffStem6[] = R"( UPDATE riffs SET StemCID_6=?2 WHERE riffCID=?1 )";
+    static constexpr char updateRiffStem7[] = R"( UPDATE riffs SET StemCID_7=?2 WHERE riffCID=?1 )";
+    static constexpr char updateRiffStem8[] = R"( UPDATE riffs SET StemCID_8=?2 WHERE riffCID=?1 )";
+
+    switch ( stemIndex )
+    {
+        case 0: Warehouse::SqlDB::query<updateRiffStem1>( riffID.value(), newStemID.value() ); break;
+        case 1: Warehouse::SqlDB::query<updateRiffStem2>( riffID.value(), newStemID.value() ); break;
+        case 2: Warehouse::SqlDB::query<updateRiffStem3>( riffID.value(), newStemID.value() ); break;
+        case 3: Warehouse::SqlDB::query<updateRiffStem4>( riffID.value(), newStemID.value() ); break;
+        case 4: Warehouse::SqlDB::query<updateRiffStem5>( riffID.value(), newStemID.value() ); break;
+        case 5: Warehouse::SqlDB::query<updateRiffStem6>( riffID.value(), newStemID.value() ); break;
+        case 6: Warehouse::SqlDB::query<updateRiffStem7>( riffID.value(), newStemID.value() ); break;
+        case 7: Warehouse::SqlDB::query<updateRiffStem8>( riffID.value(), newStemID.value() ); break;
+
+        default:
+            blog::error::database( FMTX( "patchRiffStemRecord on index {} is invalid" ), stemIndex );
+            return false;
+    }
+
+    // add new stem entry to get filled in (assuming it doesn't exist already)
+    static constexpr char insertOrIgnoreNewStemSkeleton[] = R"(
+        INSERT OR IGNORE INTO stems( stemCID, OwnerJamCID ) VALUES( ?1, ?2 );
+    )";
+
+    Warehouse::SqlDB::query<insertOrIgnoreNewStemSkeleton>( newStemID.value(), jamCouchID.value() );
+    return true;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+bool Warehouse::batchFindJamIDForStem( const endlesss::types::StemCouchIDs& stems, endlesss::types::JamCouchIDs& result ) const
 {
     static constexpr char _ownerJamForStemID[] = R"(
             select OwnerJamCID from stems where stemCID = ?1;
@@ -1621,6 +1693,13 @@ bool JamSyncAbortTask::Work( TaskQueue& currentTasks )
     )";
 
     Warehouse::SqlDB::query<deleteEmptyRiffs>( m_jamCID.value() );
+
+    return true;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+bool JamExportTask::Work( TaskQueue& currentTasks )
+{
 
     return true;
 }

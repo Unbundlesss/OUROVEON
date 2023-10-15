@@ -1818,20 +1818,9 @@ protected:
                 {
                     if ( bandPermalink.errors.empty() )
                     {
-                        // "/jam/296a74e8a64d254c0df007dda8a205d08e63915959ac5e912bdb8dde7077c638/join"
-                        //       ^->                                                          <-^
-                        //
-                        static constexpr auto cRegexTakeLongFormJamID = "jam/([^/]+)/join";
-
-                        std::regex regexLongForm( cRegexTakeLongFormJamID );
-
-                        const auto& pathExtraction = bandPermalink.data.path;
-                        std::smatch m;
-                        if ( !pathExtraction.empty() && std::regex_search( pathExtraction, m, regexLongForm ) )
+                        std::string extendedID;
+                        if ( bandPermalink.data.extractLongJamIDFromPath( extendedID ) )
                         {
-                            // cut the big ID oot
-                            const std::string extendedID = m[1].str();
-
                             endlesss::api::BandNameFromExtendedID bandNameFromExtended;
                             if ( bandNameFromExtended.fetch( *netCfg, extendedID ) && bandNameFromExtended.ok )
                             {
@@ -1858,7 +1847,7 @@ protected:
                         }
                         else
                         {
-                            blog::error::api( FMTX( "name resolution failure, long-form ID not recognised [{}]" ), pathExtraction );
+                            blog::error::api( FMTX( "name resolution failure, long-form ID not recognised [{}]" ), bandPermalink.data.path );
                         }
                     }
                     else

@@ -507,6 +507,26 @@ bool BandPermalinkMeta::fetch( const NetConfiguration& ncfg, const endlesss::typ
     return deserializeJson< BandPermalinkMeta >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ), "band_permalink_meta" );
 }
 
+bool BandPermalinkMeta::Data::extractLongJamIDFromPath( std::string& outResult )
+{
+    // "/jam/296a74e8a64d254c0df007dda8a205d08e63915959ac5e912bdb8dde7077c638/join"
+    //       ^->                                                          <-^
+    //
+    static constexpr auto cRegexTakeLongFormJamID = "jam/([^/]+)/join";
+
+    std::regex regexLongForm( cRegexTakeLongFormJamID );
+
+    const auto& pathExtraction = this->path;
+    std::smatch m;
+    if ( !pathExtraction.empty() && std::regex_search( pathExtraction, m, regexLongForm ) )
+    {
+        // cut the big ID oot
+        outResult = m[1].str();
+        return true;
+    }
+    return false;
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 bool BandNameFromExtendedID::fetch( const NetConfiguration& ncfg, const std::string& jamLongID )
 {
@@ -647,6 +667,19 @@ bool SharedRiffsByUser::commonRequest( const NetConfiguration& ncfg, const std::
 
     #undef CHECK_CHAR
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+bool RiffStructureValidation::fetch( const NetConfiguration& ncfg, const std::string& jamLongID, int32_t pageNumber, int32_t pageSize )
+{
+    auto client = createEndlesssHttpClient( ncfg, UserAgent::WebWithoutAuth );
+
+    auto res = ncfg.attempt( [&]() -> httplib::Result {
+        return client->Get( fmt::format( "/jam/{}/rifffs?pageNo={}&pageSize={}", jamLongID, pageNumber, pageSize ).c_str() );
+        } );
+
+    return deserializeJson< RiffStructureValidation >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamLongID ), "public_riff_structure" );
+}
+
 
 } // namespace remote
 } // namespace endlesss
