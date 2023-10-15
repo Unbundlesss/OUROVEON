@@ -2,7 +2,7 @@
 //  |       |   |   |   __ \       |   |   |    ___|       |    |  |
 //  |   -   |   |   |      <   -   |   |   |    ___|   -   |       |
 //  |_______|_______|___|__|_______|\_____/|_______|_______|__|____|
-//  ishani.org 2022              e.t.c.                  MIT License
+//  \\ harry denholm \\ ishani            ishani.org/shelf/ouroveon/
 //
 // a tool for generating 'page' management with ImGui - the notion we use for having a single tab panel have multiple
 // switchable views / pages. this little macro nightmare wraps up the safely-typed per-page IDs, a "move to next"

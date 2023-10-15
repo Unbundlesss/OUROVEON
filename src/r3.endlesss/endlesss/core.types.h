@@ -2,7 +2,7 @@
 //  |       |   |   |   __ \       |   |   |    ___|       |    |  |
 //  |   -   |   |   |      <   -   |   |   |    ___|   -   |       |
 //  |_______|_______|___|__|_______|\_____/|_______|_______|__|____|
-//  ishani.org 2022              e.t.c.                  MIT License
+//  \\ harry denholm \\ ishani            ishani.org/shelf/ouroveon/
 //
 //  raw basic types for key elements like Riffs and Stems providing common intermediary for systems
 //  that want to consume data without needing to know where it came from (eg. network pull, or database query, or )

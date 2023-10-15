@@ -2,7 +2,7 @@
 //  |       |   |   |   __ \       |   |   |    ___|       |    |  |
 //  |   -   |   |   |      <   -   |   |   |    ___|   -   |       |
 //  |_______|_______|___|__|_______|\_____/|_______|_______|__|____|
-//  ishani.org 2022              e.t.c.                  MIT License
+//  \\ harry denholm \\ ishani            ishani.org/shelf/ouroveon/
 //
 //  event bus is a simple, multithread-friendly way for app systems to exchange generic messages
 //

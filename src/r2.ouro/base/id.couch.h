@@ -2,7 +2,7 @@
 //  |       |   |   |   __ \       |   |   |    ___|       |    |  |
 //  |   -   |   |   |      <   -   |   |   |    ___|   -   |       |
 //  |_______|_______|___|__|_______|\_____/|_______|_______|__|____|
-//  ishani.org 2022              e.t.c.                  MIT License
+//  \\ harry denholm \\ ishani            ishani.org/shelf/ouroveon/
 //
 //  a strongly typed wrapper Couch UID values; it helps to distinguish when a function
 //  expects a "Jam ID" string vs a "Riff ID" string, despite them looking alike; this 

@@ -2,7 +2,7 @@
 //  |       |   |   |   __ \       |   |   |    ___|       |    |  |
 //  |   -   |   |   |      <   -   |   |   |    ___|   -   |       |
 //  |_______|_______|___|__|_______|\_____/|_______|_______|__|____|
-//  ishani.org 2022              e.t.c.                  MIT License
+//  \\ harry denholm \\ ishani            ishani.org/shelf/ouroveon/
 //
 //  a buffer manager built to help sample processors offload more expensive encoding/compression tasks
 //  to a background worker thread; samples are added via appendStereoSamples() until the active buffer is expended, 
