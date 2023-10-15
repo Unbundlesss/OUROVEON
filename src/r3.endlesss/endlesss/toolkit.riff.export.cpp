@@ -37,51 +37,6 @@ inline void tokenReplacement( std::string& source, const std::string& find, cons
     }
 }
 
-// ---------------------------------------------------------------------------------------------------------------------
-// given a jam or riff name, try and remove anything too problematic for creating a file/directory using it 
-//
-inline void sanitiseNameForPath( const std::string_view source, std::string& dest, const char32_t replacementChar = '_' )
-{
-    dest.clear();
-    dest.reserve( source.length() );
-
-    const char* w = source.data();
-    const char* sourceEnd = w + source.length();
-
-    // decode the source as a UTF8 stream to preserve any interesting, valid characters
-    while ( w != sourceEnd )
-    {
-        char32_t cp = utf8::next( w, sourceEnd );
-        
-        // blitz control characters
-        if ( cp >= 0x00 && cp <= 0x1f )
-            cp = replacementChar;
-        if ( cp >= 0x80 && cp <= 0x9f )
-            cp = replacementChar;
-
-        // strip out problematic pathname characters
-        switch ( cp )
-        {
-            case '/':
-            case '?':
-            case '<':
-            case '>':
-            case '\\':
-            case ':':
-            case '*':
-            case '|':
-            case '\"':
-            case '~':
-            case '.':
-                cp = replacementChar;
-
-            default:
-                break;
-        }
-
-        utf8::append( cp, dest );
-    }
-}
 
 // ---------------------------------------------------------------------------------------------------------------------
 std::vector<fs::path> exportRiff(
@@ -100,8 +55,8 @@ std::vector<fs::path> exportRiff(
     // jam level tokens
     {
         std::string jamNameSanitised, jamDescriptionSanitised;
-        sanitiseNameForPath( currentRiff->m_riffData.jam.displayName, jamNameSanitised );
-        sanitiseNameForPath( currentRiff->m_riffData.jam.description, jamDescriptionSanitised );
+        base::sanitiseNameForPath( currentRiff->m_riffData.jam.displayName, jamNameSanitised );
+        base::sanitiseNameForPath( currentRiff->m_riffData.jam.description, jamDescriptionSanitised );
 
         // ensure we have some kind of jam name, just in case - this should not happen though, so assert and trace
         ABSL_ASSERT( !jamNameSanitised.empty() );
@@ -123,7 +78,7 @@ std::vector<fs::path> exportRiff(
     // riff level
     {
         std::string riffDescriptionSanitised;
-        sanitiseNameForPath( currentRiff->m_riffData.riff.description, riffDescriptionSanitised );
+        base::sanitiseNameForPath( currentRiff->m_riffData.riff.description, riffDescriptionSanitised );
 
         const auto riffTimestampZoned = date::make_zoned(
             date::current_zone(),

@@ -212,6 +212,7 @@ group "r0-data"
 
 include "premake-inc/r0-data-sqlite3.lua"
 include "premake-inc/r0-data-sodium.lua"
+include "premake-inc/r0-data-rapidyaml.lua"
 
 group ""
 group "r0-dsp"

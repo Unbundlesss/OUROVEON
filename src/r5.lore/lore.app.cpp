@@ -3815,6 +3815,34 @@ int LoreApp::EntrypointOuro()
                             }
                             else
                             {
+                                if ( ImGui::Button( ICON_FA_BOX ) )
+                                {
+                                    // pick a place to write exports
+                                    const fs::path exportPath = m_storagePaths->outputApp / "database_exports";
+
+                                    // make sure it exists, pop an error if that fails
+                                    const auto exportPathStatus = filesys::ensureDirectoryExists( exportPath );
+                                    if ( !exportPathStatus.ok() )
+                                    {
+                                        activateModalPopup( "Enable to create output directory", [this]( const char* title )
+                                            {
+                                                static constexpr auto cExportError = "Was unable to create database export directory, cannot save to disk";
+                                                modalBasicErrorPopup( title, cExportError );
+                                            });
+                                    }
+                                    else
+                                    {
+                                        // tell warehouse to spool the database records out to disk
+                                        m_warehouse->requestJamExport(
+                                            m_warehouseContentsReport.m_jamCouchIDs[jI],
+                                            exportPath,
+                                            m_warehouseContentsReportJamTitles[jI]
+                                        );
+                                    }
+                                }
+                                ImGui::CompactTooltip( "Begin an export process to archive this jam's database records to a file on disk" );
+
+                                ImGui::SameLine();
                                 if ( ImGui::Button( " " ICON_FA_LIST_CHECK " Precache ") )
                                 {
                                     const auto popupLabel = fmt::format( FMTX( "Precache All Stems : {}###precache_modal" ), m_warehouseContentsReportJamTitles[jI] );

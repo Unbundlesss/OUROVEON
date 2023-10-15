@@ -143,7 +143,7 @@ struct Warehouse
     // -----------------------------------------------------------------------------------------------------------------
     // Jam Export
 
-    void requestJamExport( const types::JamCouchID& jamCouchID, const fs::path exportPath );
+    void requestJamExport( const types::JamCouchID& jamCouchID, const fs::path exportFolder, std::string_view jamTitle );
 
 
     // -----------------------------------------------------------------------------------------------------------------

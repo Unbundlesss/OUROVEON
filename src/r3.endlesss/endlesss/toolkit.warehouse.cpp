@@ -10,16 +10,21 @@
 #include "pch.h"
 #include "base/instrumentation.h"
 #include "base/text.h"
+#include "base/text.transform.h"
 #include "math/rng.h"
 #include "spacetime/chronicle.h"
 
+#include "app/module.frontend.fonts.h"
+
 #include "endlesss/core.types.h"
+#include "endlesss/core.constants.h"
 #include "endlesss/cache.jams.h"
 #include "endlesss/toolkit.warehouse.h"
 #include "endlesss/api.h"
 
 #include "app/core.h"
 
+#include <codecvt>
 
 namespace endlesss {
 namespace toolkit {
@@ -55,12 +60,12 @@ struct Warehouse::INetworkTask : Warehouse::ITask
     {}
     ~INetworkTask() {}
 
-    virtual bool usesNetwork() const override { return true; }
+    bool usesNetwork() const override { return true; }
     const api::NetConfiguration& m_netConfig;
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-struct ContentsReportTask : Warehouse::ITask
+struct ContentsReportTask final : Warehouse::ITask
 {
     static constexpr char Tag[] = "CONTENTS";
 
@@ -71,13 +76,13 @@ struct ContentsReportTask : Warehouse::ITask
 
     Warehouse::ContentsReportCallback m_reportCallback;
 
-    virtual const char* getTag() override { return Tag; }
-    virtual std::string Describe() override { return fmt::format( "[{}] creating database contents report", Tag ); }
-    virtual bool Work( TaskQueue& currentTasks ) override;
+    const char* getTag() override { return Tag; }
+    std::string Describe() override { return fmt::format( "[{}] creating database contents report", Tag ); }
+    bool Work( TaskQueue& currentTasks ) override;
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-struct JamSliceTask : Warehouse::ITask
+struct JamSliceTask final : Warehouse::ITask
 {
     static constexpr char Tag[] = "JAMSLICE";
 
@@ -90,13 +95,13 @@ struct JamSliceTask : Warehouse::ITask
     types::JamCouchID               m_jamCID;
     Warehouse::JamSliceCallback     m_reportCallback;
 
-    virtual const char* getTag() override { return Tag; }
-    virtual std::string Describe() override { return fmt::format( "[{}] extracting jam data for [{}]", Tag, m_jamCID.value() ); }
-    virtual bool Work( TaskQueue& currentTasks ) override;
+    const char* getTag() override { return Tag; }
+    std::string Describe() override { return fmt::format( "[{}] extracting jam data for [{}]", Tag, m_jamCID.value() ); }
+    bool Work( TaskQueue& currentTasks ) override;
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-struct JamSnapshotTask : Warehouse::INetworkTask
+struct JamSnapshotTask final : Warehouse::INetworkTask
 {
     static constexpr char Tag[] = "SNAPSHOT";
 
@@ -106,17 +111,17 @@ struct JamSnapshotTask : Warehouse::INetworkTask
     {}
 
     // always trigger a contents update after snapping a new jam
-    virtual bool forceContentReport() const override { return true; }
+    bool forceContentReport() const override { return true; }
 
     types::JamCouchID m_jamCID;
 
-    virtual const char* getTag() override { return Tag; }
-    virtual std::string Describe() override { return fmt::format( "[{}] fetching Jam snapshot of [{}]", Tag, m_jamCID ); }
-    virtual bool Work( TaskQueue& currentTasks ) override;
+    const char* getTag() override { return Tag; }
+    std::string Describe() override { return fmt::format( "[{}] fetching Jam snapshot of [{}]", Tag, m_jamCID ); }
+    bool Work( TaskQueue& currentTasks ) override;
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-struct JamPurgeTask : Warehouse::ITask
+struct JamPurgeTask final : Warehouse::ITask
 {
     static constexpr char Tag[] = "PURGE";
 
@@ -126,17 +131,17 @@ struct JamPurgeTask : Warehouse::ITask
     {}
 
     // always trigger a contents update after wiping out data
-    virtual bool forceContentReport() const override { return true; }
+    bool forceContentReport() const override { return true; }
 
     types::JamCouchID m_jamCID;
 
-    virtual const char* getTag() override { return Tag; }
-    virtual std::string Describe() override { return fmt::format( "[{}] deleting all records for [{}]", Tag, m_jamCID ); }
-    virtual bool Work( TaskQueue& currentTasks ) override;
+    const char* getTag() override { return Tag; }
+    std::string Describe() override { return fmt::format( "[{}] deleting all records for [{}]", Tag, m_jamCID ); }
+    bool Work( TaskQueue& currentTasks ) override;
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-struct JamSyncAbortTask : Warehouse::ITask
+struct JamSyncAbortTask final : Warehouse::ITask
 {
     static constexpr char Tag[] = "SYNC-ABORT";
 
@@ -146,36 +151,40 @@ struct JamSyncAbortTask : Warehouse::ITask
     {}
 
     // always trigger a contents update after wiping out data
-    virtual bool forceContentReport() const override { return true; }
+    bool forceContentReport() const override { return true; }
 
     types::JamCouchID m_jamCID;
 
-    virtual const char* getTag() override { return Tag; }
-    virtual std::string Describe() override { return fmt::format( "[{}] purging empty riff records for [{}]", Tag, m_jamCID ); }
-    virtual bool Work( TaskQueue& currentTasks ) override;
+    const char* getTag() override { return Tag; }
+    std::string Describe() override { return fmt::format( "[{}] purging empty riff records for [{}]", Tag, m_jamCID ); }
+    bool Work( TaskQueue& currentTasks ) override;
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-struct JamExportTask : Warehouse::ITask
+struct JamExportTask final : Warehouse::ITask
 {
     static constexpr char Tag[] = "EXPORT";
 
-    JamExportTask( const types::JamCouchID& jamCID, const fs::path& exportPath )
+    JamExportTask( base::EventBusClient& eventBus, const types::JamCouchID& jamCID, const fs::path& exportFolder, std::string_view jamName )
         : Warehouse::ITask()
+        , m_eventBusClient( eventBus )
         , m_jamCID( jamCID )
-        , m_exportPath( exportPath )
+        , m_exportFolder( exportFolder )
+        , m_jamName( jamName )
     {}
 
-    types::JamCouchID   m_jamCID;
-    fs::path            m_exportPath;
+    base::EventBusClient    m_eventBusClient;
+    types::JamCouchID       m_jamCID;
+    fs::path                m_exportFolder;
+    std::string             m_jamName;
 
-    virtual const char* getTag() override { return Tag; }
-    virtual std::string Describe() override { return fmt::format( "[{}] exporting to disk", Tag ); }
-    virtual bool Work( TaskQueue& currentTasks ) override;
+    const char* getTag() override { return Tag; }
+    std::string Describe() override { return fmt::format( "[{}] exporting jam to disk", Tag ); }
+    bool Work( TaskQueue& currentTasks ) override;
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-struct GetRiffDataTask : Warehouse::INetworkTask
+struct GetRiffDataTask final : Warehouse::INetworkTask
 {
     static constexpr char Tag[] = "RIFFDATA";
 
@@ -188,13 +197,13 @@ struct GetRiffDataTask : Warehouse::INetworkTask
     types::JamCouchID                 m_jamCID;
     std::vector< types::RiffCouchID > m_riffCIDs;
 
-    virtual const char* getTag() override { return Tag; }
-    virtual std::string Describe() override { return fmt::format( "[{}] pulling {} riff details", Tag, m_riffCIDs.size() ); }
-    virtual bool Work( TaskQueue& currentTasks ) override;
+    const char* getTag() override { return Tag; }
+    std::string Describe() override { return fmt::format( "[{}] pulling {} riff details", Tag, m_riffCIDs.size() ); }
+    bool Work( TaskQueue& currentTasks ) override;
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-struct GetStemData : Warehouse::INetworkTask
+struct GetStemData final : Warehouse::INetworkTask
 {
     static constexpr char Tag[] = "STEMDATA";
 
@@ -207,9 +216,9 @@ struct GetStemData : Warehouse::INetworkTask
     types::JamCouchID                 m_jamCID;
     std::vector< types::StemCouchID > m_stemCIDs;
 
-    virtual const char* getTag() override { return Tag; }
-    virtual std::string Describe() override { return fmt::format( "[{}] pulling {} stem details", Tag, m_stemCIDs.size() ); }
-    virtual bool Work( TaskQueue& currentTasks ) override;
+    const char* getTag() override { return Tag; }
+    std::string Describe() override { return fmt::format( "[{}] pulling {} stem details", Tag, m_stemCIDs.size() ); }
+    bool Work( TaskQueue& currentTasks ) override;
 };
 
 
@@ -1143,7 +1152,7 @@ void Warehouse::requestJamSyncAbort( const types::JamCouchID& jamCouchID )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void Warehouse::requestJamExport( const types::JamCouchID& jamCouchID, const fs::path exportPath )
+void Warehouse::requestJamExport( const types::JamCouchID& jamCouchID, const fs::path exportFolder, std::string_view jamTitle )
 {
     if ( jamCouchID.empty() )
     {
@@ -1151,7 +1160,7 @@ void Warehouse::requestJamExport( const types::JamCouchID& jamCouchID, const fs:
         return;
     }
 
-    m_taskSchedule->m_taskQueue.enqueue( std::make_unique<JamExportTask>( jamCouchID, exportPath ) );
+    m_taskSchedule->m_taskQueue.enqueue( std::make_unique<JamExportTask>( m_eventBusClient, jamCouchID, exportFolder, jamTitle ) );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1700,6 +1709,132 @@ bool JamSyncAbortTask::Work( TaskQueue& currentTasks )
 // ---------------------------------------------------------------------------------------------------------------------
 bool JamExportTask::Work( TaskQueue& currentTasks )
 {
+    std::string sanitisedJamName;
+    {
+        base::sanitiseNameForPath( m_jamName, sanitisedJamName, '_', false );
+        sanitisedJamName = "lore_export." + base::StrToLwrExt( sanitisedJamName ) + ".yaml";
+    }
+    const fs::path finalOutputFile = m_exportFolder / sanitisedJamName;
+    blog::database( FMTX( "Export process for [{}] to [{}]" ), m_jamName, finalOutputFile.string() );
+
+    std::ofstream yamlOutput;
+    {
+        yamlOutput.open( finalOutputFile );
+    }
+    {
+        yamlOutput << "export_time_unix: " << spacetime::getUnixTimeNow().count() << std::endl;
+        yamlOutput << "export_ouroveon_version: \"" << OURO_FRAMEWORK_VERSION << "\"" << std::endl;
+        yamlOutput << "jam_name: \"" << m_jamName << "\"" << std::endl;
+        yamlOutput << "jam_couch_id: \"" << m_jamCID.value() << "\"" << std::endl;
+    }
+    {
+        // get a list of all the riff IDs for this jam, we decode each one in turn
+        static constexpr char getAllRiffIDs[] = R"( select RiffCID from riffs where OwnerJamCID = ?1 order by CreationTime asc; )";
+        auto query = Warehouse::SqlDB::query<getAllRiffIDs>( m_jamCID.value() );
+
+        std::string_view riffCID;
+
+        std::string riffEntryLine;
+
+        yamlOutput << "# riffs schema" << std::endl;
+        yamlOutput << "# couch ID, user, creation unix time, root index, root name, scale index, scale name, BPS, BPM, bar length, 8x [ stem couch ID, stem gain, stem enabled ], app version" << std::endl;
+        yamlOutput << "riffs:" << std::endl;
+        while ( query( riffCID ) )
+        {
+            // decode an ID into a riff data block
+            const endlesss::types::RiffCouchID riffCouchID( riffCID );
+            endlesss::types::Riff riffData;
+
+            if ( sql::riffs::getSingleByID( riffCouchID, riffData ) )
+            {
+                riffEntryLine = fmt::format( FMTX( " \"{}\": [\"{}\", {}, {}, \"{}\", {}, \"{}\", {}, {}, {}, {}, " ),
+                    riffData.couchID,
+                    riffData.user,
+                    riffData.creationTimeUnix,
+                    riffData.root,
+                    endlesss::constants::cRootNames[riffData.root],
+                    riffData.scale,
+                    endlesss::constants::cScaleNamesFilenameSanitize[riffData.scale],
+                    riffData.BPS,
+                    riffData.BPMrnd,
+                    riffData.barLength,
+                    riffData.appVersion );
+
+                for ( int32_t stemI = 0; stemI < 8; stemI++ )
+                {
+                    riffEntryLine += fmt::format( FMTX( "[\"{}\", {}, {}], " ),
+                        riffData.stems[stemI],
+                        riffData.gains[stemI],
+                        riffData.stemsOn[stemI] );
+                }
+
+                yamlOutput << riffEntryLine << riffData.magnitude << " ]" << std::endl;
+            }
+            else
+            {
+                m_eventBusClient.Send<::events::AddToastNotification>( ::events::AddToastNotification::Type::Error,
+                    ICON_FA_BOX " Jam Export Error",
+                    fmt::format( FMTX( "Unable to decode [R:{}] from database" ), riffCID ) );
+            }
+        }
+    }
+    {
+        // similar process for the stems
+        static constexpr char getAllStemsIDs[] = R"( select StemCID from stems where OwnerJamCID = ?1 order by CreationTime asc; )";
+        auto query = Warehouse::SqlDB::query<getAllStemsIDs>( m_jamCID.value() );
+
+        std::string_view stemCID;
+
+        std::string stemEntryLine;
+
+        yamlOutput << "# stems schema" << std::endl;
+        yamlOutput << "# couch ID, file endpoint, file bucket, file key, file MIME, file length in bytes, sample rate, creation unix time, preset, user, colour hex, BPS, BPM, legnth 16ths, original pitch, bar length, drum, note, bass, mic" << std::endl;
+        yamlOutput << "stems:" << std::endl;
+        while ( query( stemCID ) )
+        {
+            // decode an ID into a stem data block
+            const endlesss::types::StemCouchID stemCouchID( stemCID );
+            endlesss::types::Stem stemData;
+
+            if ( sql::stems::getSingleStemByID( stemCouchID, stemData ) )
+            {
+                stemEntryLine = fmt::format( FMTX( " \"{}\": [\"{}\", \"{}\", \"{}\", \"{}\", {}, {}, {}, \"{}\", \"{}\", \"{}\", {}, {}, {}, {}, {}, {}, {}, {}, {}]" ),
+                    stemData.couchID,
+                    stemData.fileEndpoint,
+                    stemData.fileBucket,
+                    stemData.fileKey,
+                    stemData.fileMIME,
+                    stemData.fileLengthBytes,
+                    stemData.sampleRate,
+                    stemData.creationTimeUnix,
+                    stemData.preset,
+                    stemData.user,
+                    stemData.colour,
+                    stemData.BPS,
+                    stemData.BPMrnd,
+                    stemData.length16s,
+                    stemData.originalPitch,
+                    stemData.barLength,
+                    stemData.isDrum,
+                    stemData.isNote,
+                    stemData.isBass,
+                    stemData.isMic
+                );
+
+                yamlOutput << stemEntryLine << std::endl;
+            }
+            else
+            {
+                m_eventBusClient.Send<::events::AddToastNotification>( ::events::AddToastNotification::Type::Error,
+                    ICON_FA_BOX " Jam Export Error",
+                    fmt::format( FMTX( "Unable to decode [S:{}] from database" ), stemCID ) );
+            }
+        }
+    }
+
+    m_eventBusClient.Send<::events::AddToastNotification>( ::events::AddToastNotification::Type::Info,
+        ICON_FA_BOX " Jam Export Success",
+        fmt::format( FMTX( "Written to {}" ), sanitisedJamName ) );
 
     return true;
 }

@@ -36,7 +36,7 @@ inline void trim( std::string& str, const std::string& trimChars )
 } 
 
 // ---------------------------------------------------------------------------------------------------------------------
-inline void sanitiseNameForPath( const std::string_view source, std::string& dest, const char32_t replacementChar = '_' )
+inline void sanitiseNameForPath( const std::string_view source, std::string& dest, const char32_t replacementChar = '_', bool allowWhitespace = true )
 {
     dest.clear();
     dest.reserve( source.length() );
@@ -74,6 +74,21 @@ inline void sanitiseNameForPath( const std::string_view source, std::string& des
 
         default:
             break;
+        }
+
+        if ( !allowWhitespace )
+        {
+            switch ( cp )
+            {
+            case ' ':
+            case '\t':
+            case '\n':
+                cp = replacementChar;
+                break;
+
+            default:
+                break;
+            }
         }
 
         utf8::append( cp, dest );
