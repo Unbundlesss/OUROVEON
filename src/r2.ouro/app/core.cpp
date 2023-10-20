@@ -1262,7 +1262,7 @@ void CoreGUI::registerRenderCallback( const RenderPoint rp, const RenderInjectio
 
 void CoreGUI::imguiModalAboutBox( const char* title )
 {
-    const ImVec2 configWindowSize = ImVec2( 720.0f, 670.0f );
+    const ImVec2 configWindowSize = ImVec2( 720.0f, 690.0f );
     ImGui::SetNextWindowContentSize( configWindowSize );
 
     ImGui::PushStyleColor( ImGuiCol_PopupBg, ImGui::GetStyleColorVec4( ImGuiCol_ChildBg ) );
@@ -1287,9 +1287,12 @@ ___
 
   * [firephly](https://endlesss.fm/firephly) and [oddSTAR](https://endlesss.fm/oddstar) for going so far as to make entire tracks using early versions
 
+  * [littlewing](https://linktr.ee/littlewingart) for their foresight and efforts to keep records of early Endlesss jams; the archive would be much smaller without their help
+
   * For taking time to test, use and feedback on the tools ...
-    * [afta8](https://endlesss.fm/afta8)
+    * [Afta8](https://endlesss.fm/afta8)
     * [dsorce](https://endlesss.fm/dsorce)
+    * dgQwerty
     * [loop](https://endlesss.fm/loop)
     * [ludi](https://endlesss.fm/ludi)
     * [lwlkc](https://endlesss.fm/lwlkc)

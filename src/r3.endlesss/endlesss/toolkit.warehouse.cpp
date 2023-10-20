@@ -1712,7 +1712,7 @@ bool JamExportTask::Work( TaskQueue& currentTasks )
     std::string sanitisedJamName;
     {
         base::sanitiseNameForPath( m_jamName, sanitisedJamName, '_', false );
-        sanitisedJamName = "lore_export." + base::StrToLwrExt( sanitisedJamName ) + ".yaml";
+        sanitisedJamName = "ldx." + m_jamCID.value() + "." + base::StrToLwrExt(sanitisedJamName) + ".yaml";
     }
     const fs::path finalOutputFile = m_exportFolder / sanitisedJamName;
     blog::database( FMTX( "Export process for [{}] to [{}]" ), m_jamName, finalOutputFile.string() );
@@ -1901,13 +1901,28 @@ bool GetRiffDataTask::Work( TaskQueue& currentTasks )
             continue;
         }
 
+        // does this have vintage attachment data? if so, allow the fact it might be also missing an app version tag
+        const bool bThisIsAnOldButValidStem = !stemCheck.doc._attachments.oggAudio.content_type.empty();
 
         // check for invalid app version - this is usually a red flag for invalid stems but on very old jams this
         // was the norm - there is a config flag that allows these to pass and be synced
-        const bool ignoreForMissingAppData = ( stemCheck.doc.app_version == 0 && m_netConfig.api().allowStemsWithoutVersionData == false );
+        const bool ignoreForMissingAppData = ( stemCheck.doc.app_version == 0 && bThisIsAnOldButValidStem == false );
 
+        // stem is lacking app versioning (and isn't just old)
+        if ( ignoreForMissingAppData )
+        {
+            uniqueStemCIDs.emplace( stemCheck.key );
+            blog::database( "[{}] Found stem without app version ({}), ignoring ID [{}]", Tag, stemCheck.doc._attachments.oggAudio.digest, stemCheck.key );
+
+            sql::ledger::storeStemNote(
+                stemCheck.key,
+                sql::ledger::StemLedgerType::REMOVED_ID,
+                fmt::format( "[{}]", stemCheck.error ) );
+
+            continue;
+        }
         // stem was destroyed?
-        if ( stemCheck.value.deleted || ignoreForMissingAppData )
+        if ( stemCheck.value.deleted )
         {
             uniqueStemCIDs.emplace( stemCheck.key );
             blog::database( "[{}] Found stem that was deleted ({}), ignoring ID [{}]", Tag, stemCheck.error, stemCheck.key );

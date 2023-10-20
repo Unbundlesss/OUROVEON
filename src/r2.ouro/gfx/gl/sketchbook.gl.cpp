@@ -16,7 +16,7 @@
 
 // ---------------------------------------------------------------------------------------------------------------------
 // specific version of the GPU task that logs our GL texture handle
-struct GPUTaskGL : public gfx::GPUTask
+struct GPUTaskGL final : public gfx::GPUTask
 {
     GPUTaskGL( const uint32_t uploadID, gfx::SketchBufferPtr&& buffer )
         : GPUTask( uploadID, std::move( buffer ) )

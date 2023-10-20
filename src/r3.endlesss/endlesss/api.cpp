@@ -127,13 +127,6 @@ void NetConfiguration::enableFullNetworkDiagnostics()
     m_api.debugVerboseNetLog = true;
 }
 
-// ---------------------------------------------------------------------------------------------------------------------
-void NetConfiguration::enableStemVersionBypass()
-{
-    blog::app( FMTX( "NetConfiguration::enableStemVersionBypass()" ) );
-
-    m_api.allowStemsWithoutVersionData = true;
-}
 
 // ---------------------------------------------------------------------------------------------------------------------
 std::string NetConfiguration::generateRandomLoadBalancerCookie() const

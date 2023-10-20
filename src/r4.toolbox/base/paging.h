@@ -63,7 +63,7 @@ private:
 #define DEFINE_PAGE_MANAGER( _stateType, _publicName, _internalName, _statesFunc )                                  \
         struct _stateType                                                                                           \
         {                                                                                                           \
-            struct LocalStateID : public base::detail::PageID {};                                                   \
+            struct LocalStateID final : public base::detail::PageID {};                                             \
                                                                                                                     \
             constexpr _stateType() : Value( getFirst() ) {}                                                         \
             constexpr _stateType( const LocalStateID& v ) : Value(v) {}                                             \

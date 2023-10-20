@@ -11,20 +11,240 @@
 
 #include "ux/jams.browser.h"
 
-#include "endlesss/cache.jams.h"
+#include "base/text.h"
+#include "base/text.transform.h"
+
+#include "app/core.h"
 #include "app/imgui.ext.h"
 #include "app/module.frontend.fonts.h"
+
+#include "endlesss/cache.jams.h"
+#include "endlesss/config.h"
+
+#include "ux/user.selector.h"
 
 
 namespace ux {
 
-void modalUniversalJamBrowser( 
+// ---------------------------------------------------------------------------------------------------------------------
+struct UniversalJamBrowserState
+{
+    using DiveUserContributions = absl::flat_hash_map< endlesss::types::JamCouchID, uint32_t >;
+
+    struct ValidationState
+    {
+        enum class Mode
+        {
+            NotValidated,
+            Validated,
+            FailedToValidate
+        }               m_mode = Mode::NotValidated;
+        std::string     m_data;
+        std::string     m_lastMsg;
+
+        void restart( const std::string& data )
+        {
+            m_mode = Mode::NotValidated;
+            m_data = data;
+            m_lastMsg.clear();
+        }
+    };
+
+    UniversalJamBrowserState() = default;
+
+
+    void populationLoad( const config::IPathProvider& pathProvider )
+    {
+        m_diveProcessing = true;
+
+        m_populationDataLoadResult = config::load( pathProvider, m_populationData );
+
+        if ( hasPopulationData() )
+        {
+            // clear out and reserve some space
+            m_diveUserContributions.clear();
+            m_diveJamIDs.clear();
+            m_diveJamNames.clear();
+            m_diveUserRiffCounts.clear();
+            m_diveUserPercentage.clear();
+            {
+                const auto reserveSize = m_populationData.jampop.size();
+                m_diveUserContributions.reserve( reserveSize );
+                m_diveJamIDs.reserve( reserveSize );
+                m_diveJamNames.reserve( reserveSize );
+                m_diveUserRiffCounts.reserve( reserveSize );
+                m_diveUserPercentage.reserve( reserveSize );
+            }
+
+            const std::string& userSearch = m_diveUser.getUsername();
+
+            for ( const auto& jamPair : m_populationData.jampop )
+            {
+                for ( const auto& userRiffPair : jamPair.second.user_and_riff_count )
+                {
+                    if ( userRiffPair.first == userSearch )
+                    {
+                        const float riffCountF = static_cast<float>( jamPair.second.riff_scanned );
+                        const float userCountF = static_cast<float>( userRiffPair.second );
+
+                        const float userPercentage = ( 100.0f / riffCountF ) * userCountF;
+
+                        m_diveUserContributions.emplace( jamPair.first, userRiffPair.second );
+                        m_diveJamIDs.emplace_back( jamPair.first );
+                        m_diveJamNames.emplace_back( jamPair.second.jam_name );
+                        m_diveUserRiffCounts.emplace_back( userRiffPair.second );
+                        m_diveUserPercentage.emplace_back( userPercentage );
+                    }
+                }
+            }
+
+            // build index arrays to then presort on the various data we have to offer
+            {
+                m_diveIndexSortedByName.clear();
+                m_diveIndexSortedByRiff.clear();
+                m_diveIndexSortedByContrib.clear();
+
+                const auto reserveSize = m_diveJamIDs.size();
+                m_diveIndexSortedByName.reserve( reserveSize );
+                m_diveIndexSortedByRiff.reserve( reserveSize );
+                m_diveIndexSortedByContrib.reserve( reserveSize );
+            }
+            for ( size_t idx = 0; idx < m_diveJamIDs.size(); idx++ )
+            {
+                m_diveIndexSortedByName.push_back( idx );
+                m_diveIndexSortedByRiff.push_back( idx );
+                m_diveIndexSortedByContrib.push_back( idx );
+            }
+
+            // sort the indices by the data in question
+            std::sort( m_diveIndexSortedByName.begin(), m_diveIndexSortedByName.end(),
+                [&]( const size_t lhs, const size_t rhs ) -> bool
+                {
+                    return base::StrToLwrExt( m_diveJamNames[lhs] ) < base::StrToLwrExt( m_diveJamNames[rhs] );
+                });
+            std::sort( m_diveIndexSortedByRiff.begin(), m_diveIndexSortedByRiff.end(),
+                [&]( const size_t lhs, const size_t rhs ) -> bool
+                {
+                    return m_diveUserRiffCounts[lhs] > m_diveUserRiffCounts[rhs];
+                });
+            std::sort( m_diveIndexSortedByContrib.begin(), m_diveIndexSortedByContrib.end(),
+                [&]( const size_t lhs, const size_t rhs ) -> bool
+                {
+                    return m_diveUserPercentage[ lhs ] > m_diveUserPercentage[ rhs ];
+                });
+        }
+
+        m_diveConfigureInitialSort = true;
+        m_diveProcessing = false;
+    }
+
+    bool hasPopulationData() const { return m_populationDataLoadResult == config::LoadResult::Success; }
+
+
+    void commonValidationImgui( ValidationState& validationState, const std::string& currentData )
+    {
+        // if ID changes, restart validation process
+        if ( validationState.m_data != currentData )
+        {
+            validationState.restart( currentData );
+        }
+        switch ( validationState.m_mode )
+        {
+        case UniversalJamBrowserState::ValidationState::Mode::NotValidated:
+        {
+            ImGui::SameLine( 0, 32.0f );
+            ImGui::TextColored( colour::shades::callout.neutral(), ICON_FA_CIRCLE_INFO " Awaiting Validation" );
+        }
+        break;
+
+        case UniversalJamBrowserState::ValidationState::Mode::Validated:
+        {
+            ImGui::SameLine( 0, 32.0f );
+            ImGui::TextColored( colour::shades::green.light(), ICON_FA_CIRCLE_CHECK " Access Validated OK" );
+        }
+        break;
+
+        case UniversalJamBrowserState::ValidationState::Mode::FailedToValidate:
+        {
+            ImGui::SameLine( 0, 32.0f );
+            ImGui::TextColored( colour::shades::errors.light(), ICON_FA_TRIANGLE_EXCLAMATION " Not Available" );
+        }
+        break;
+        }
+
+        ImGui::Spacing();
+    }
+
+    enum CustomMode
+    {
+        PersonalJam,
+        InternalBandID,
+        ExternalInviteCode,
+    }                                           m_addCustomMode;
+    std::string                                 m_customBandID;
+    std::string                                 m_customInviteCode;
+
+    ValidationState                             m_customBandIDValidation;
+    ValidationState                             m_customInviteCodeValidation;
+
+
+    ImGui::ux::UserSelector                     m_diveUser;
+    std::atomic_bool                            m_diveProcessing = false;
+
+    config::endlesss::PopulationPublics         m_populationData;
+    config::LoadResult                          m_populationDataLoadResult;
+
+    // data pages for the examined deep dive user
+    DiveUserContributions                       m_diveUserContributions;
+    std::vector< endlesss::types::JamCouchID >  m_diveJamIDs;
+    std::vector< std::string >                  m_diveJamNames;
+    std::vector< uint32_t >                     m_diveUserRiffCounts;
+    std::vector< float >                        m_diveUserPercentage;
+    std::vector< std::size_t >                  m_diveIndexSortedByName;
+    std::vector< std::size_t >                  m_diveIndexSortedByRiff;
+    std::vector< std::size_t >                  m_diveIndexSortedByContrib;
+    bool                                        m_diveConfigureInitialSort = true; // setup imgui table sort on first time through post-examine
+};
+
+// ---------------------------------------------------------------------------------------------------------------------
+UniversalJamBrowserBehaviour::UniversalJamBrowserBehaviour()
+    : m_state( std::make_unique< UniversalJamBrowserState >() )
+{
+
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+UniversalJamBrowserBehaviour::~UniversalJamBrowserBehaviour()
+{}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void modalUniversalJamBrowser(
     const char* title,
     const endlesss::cache::Jams& jamCache,
     const UniversalJamBrowserBehaviour& behaviour,
-    endlesss::api::NetConfiguration::Shared netConfig )
+    app::ICoreServices& coreServices )
 {
+    ABSL_ASSERT( behaviour.m_state != nullptr );
+    UniversalJamBrowserState& browserState = *behaviour.m_state;
+
+    // fill in username if it's empty and we have one
+    if ( browserState.m_diveUser.isEmpty() )
+    {
+        auto netCfg = coreServices.getNetworkConfiguration();
+        if ( netCfg->hasAccess( endlesss::api::NetConfiguration::Access::Authenticated ) )
+        {
+            browserState.m_diveUser.setUsername( netCfg->auth().user_id );
+        }
+    }
+
     using namespace endlesss::cache;
+
+    enum class ExtraPanels
+    {
+        None,
+        DeepDive,
+        CustomID
+    };
 
     static constexpr std::array< Jams::JamType, Jams::cJamTypeCount > jamTypeTabs = {
         Jams::JamType::UserSubscribed,
@@ -45,7 +265,7 @@ void modalUniversalJamBrowser(
         "Latest Riff",
     };
 
-    const ImVec2 configWindowSize = ImVec2( 820.0f, 460.0f );
+    const ImVec2 configWindowSize = ImVec2( 900.0f, 465.0f );
     ImGui::SetNextWindowContentSize( configWindowSize );
 
     const ImVec4 colourJamDisabled = GImGui->Style.Colors[ImGuiCol_TextDisabled];
@@ -54,6 +274,8 @@ void modalUniversalJamBrowser(
 
     if ( ImGui::BeginPopupModal( title, nullptr, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize ) )
     {
+        const ImVec2 buttonSize( 220.0f, 32.0f );
+
         static ImGuiTextFilter jamNameFilter;
         static int32_t jamSortOption = Jams::eIterateSortByTime;
 
@@ -131,7 +353,7 @@ void modalUniversalJamBrowser(
         ImGui::Spacing();
         
         Jams::JamType activeType = Jams::JamType::UserSubscribed;
-        bool bShowCustomPanel = false;
+        ExtraPanels currentPanel = ExtraPanels::None;
 
         if ( ImGui::BeginTabBar( "##jamTypeTab", ImGuiTabBarFlags_None ) )
         {
@@ -143,9 +365,14 @@ void modalUniversalJamBrowser(
                     ImGui::EndTabItem();
                 }
             }
+            if ( ImGui::BeginTabItem( " Deep Dive " ) )
+            {
+                currentPanel = ExtraPanels::DeepDive;
+                ImGui::EndTabItem();
+            }
             if ( ImGui::BeginTabItem( " Custom ") )
             {
-                bShowCustomPanel = true;
+                currentPanel = ExtraPanels::CustomID;
                 ImGui::EndTabItem();
             }
 
@@ -155,7 +382,7 @@ void modalUniversalJamBrowser(
         const ImVec2 panelRegionAvailable = ImGui::GetContentRegionAvail();
         const ImVec2 panelRegionFill( panelRegionAvailable.x, panelRegionAvailable.y - 35.0f );
 
-        if ( !bShowCustomPanel )
+        if ( currentPanel == ExtraPanels::None )
         {
             if ( ImGui::BeginTable(
                 "##jamTable",
@@ -177,21 +404,138 @@ void modalUniversalJamBrowser(
                 ImGui::EndTable();
             }
         }
-        else
+        else if ( currentPanel == ExtraPanels::DeepDive )
         {
             if ( ImGui::BeginChild( "###customPanel", panelRegionFill ) )
             {
-                static constexpr auto c_validationRequiredMessage = "validate access before adding";
-                enum
-                {
-                    PersonalJam,
-                    CustomID
-                };
-                static std::string customJamName;
-                static std::string customJamValidation = c_validationRequiredMessage;
-                static int32_t customOption = 0;
+                ImGui::Spacing();
+                ImGui::Spacing();
 
-                const bool bHasFullAccess = netConfig->hasAccess( endlesss::api::NetConfiguration::Access::Authenticated );
+                ImGui::TextWrapped( ICON_FA_BINOCULARS " Deep Dive searches an extensive dataset covering all known public jams and shows which ones the given user has participated in, how many riffs are known about, etc.\n\nNote this data is generated offline (as it takes a while) and therefore is not always up-to-date. Consider it a guide to help dig through the top-level jam data for your hidden riff memories." );
+                ImGui::Spacing();
+                {
+                    browserState.m_diveUser.imgui(
+                        "username",
+                        coreServices.getEndlesssPopulation(),
+                        ImGui::ux::UserSelector::cDefaultWidthForUserSize );
+
+                    ImGui::SameLine();
+                    if ( ImGui::Button( " Examine Username " ) )
+                    {
+                        coreServices.getTaskExecutor().silent_async( [&]()
+                            {
+                                browserState.populationLoad( coreServices );
+                            });
+                    }
+
+                    if ( browserState.m_diveProcessing )
+                    {
+                        ImGui::SameLine();
+                        ImGui::AlignTextToFramePadding();
+                        ImGui::Spinner( "##syncing", true, ImGui::GetTextLineHeight() * 0.3f, 3.0f, 0.0f, ImGui::GetColorU32( ImGuiCol_Text ) );
+                    }
+                    else
+                    {
+                        if ( browserState.hasPopulationData() )
+                        {
+                            const ImVec2 subRegionAvailable = ImGui::GetContentRegionAvail();
+                            const ImVec2 subRegionFill( subRegionAvailable.x, subRegionAvailable.y - 10.0f );
+
+                            if ( ImGui::BeginTable(
+                                "##ddJamTable",
+                                3,
+                                ImGuiTableFlags_Sortable       |
+                                ImGuiTableFlags_ScrollY        |
+                                ImGuiTableFlags_Borders        |
+                                ImGuiTableFlags_RowBg          |
+                                ImGuiTableFlags_NoSavedSettings,
+                                subRegionFill ) )
+                            {
+                                ImGui::TableSetupColumn( "Name" );
+                                ImGui::TableSetupColumn( "Riffs", ImGuiTableColumnFlags_WidthFixed, 80.0f );
+                                ImGui::TableSetupColumn( "Of Total", ImGuiTableColumnFlags_WidthFixed, 110.0f );
+                                ImGui::TableSetupScrollFreeze( 0, 1 );  // top row always visible
+                                ImGui::TableHeadersRow();
+
+                                // plug in default sort
+                                if ( browserState.m_diveConfigureInitialSort )
+                                {
+                                    ImGui::TableSetColumnSortDirection( 1, 1, false );
+                                    browserState.m_diveConfigureInitialSort = false;
+                                }
+                                const ImGuiTableSortSpecs* sortingSpec = ImGui::TableGetSortSpecs();
+
+                                const std::size_t totalDiveJams = browserState.m_diveJamIDs.size();
+                                for ( std::size_t index = 0; index < totalDiveJams; index++ )
+                                {
+                                    // default to plain index but usually we have a sort index from the table columns
+                                    std::size_t sortedIndex = index;
+                                    if ( sortingSpec != nullptr && sortingSpec->SpecsCount == 1 )
+                                    {
+                                        // handle sort direction by inverting lookup index
+                                        std::size_t sortIndexDirection = index;
+                                        if ( sortingSpec->Specs[0].SortDirection == 2 )
+                                        {
+                                            sortIndexDirection = ( totalDiveJams - 1 ) - index;
+                                        }
+
+                                        switch ( sortingSpec->Specs[0].ColumnIndex )
+                                        {
+                                            default:
+                                                ABSL_ASSERT( 0 );
+                                            case 0: sortedIndex = browserState.m_diveIndexSortedByName[sortIndexDirection]; break;
+                                            case 1: sortedIndex = browserState.m_diveIndexSortedByRiff[sortIndexDirection]; break;
+                                            case 2: sortedIndex = browserState.m_diveIndexSortedByContrib[sortIndexDirection]; break;
+                                        }
+                                    }
+
+                                    const auto& jamID        = browserState.m_diveJamIDs[sortedIndex];
+                                    const auto& jamName      = browserState.m_diveJamNames[sortedIndex];
+                                    const uint32_t userRiffs = browserState.m_diveUserRiffCounts[sortedIndex];
+                                    const float userPct      = browserState.m_diveUserPercentage[sortedIndex];
+
+                                    const bool showAsDisabled = (behaviour.fnIsDisabled && behaviour.fnIsDisabled( jamID ));
+
+                                    ImGui::TableNextColumn();
+
+                                    if ( showAsDisabled )
+                                    {
+                                        ImGui::PushStyleColor( ImGuiCol_Text, colourJamDisabled );
+                                        ImGui::TextUnformatted( jamName );
+                                        ImGui::PopStyleColor();
+                                    }
+                                    else
+                                    {
+                                        if ( ImGui::Selectable( jamName.c_str() ) )
+                                        {
+                                            if ( behaviour.fnOnSelected )
+                                                behaviour.fnOnSelected( jamID );
+
+                                            // #HDD TODO make closing-on-selection optional?
+                                            shouldClosePopup = true;
+                                        }
+                                    }
+
+                                    ImGui::TableNextColumn();
+                                    ImGui::Text( "%u", userRiffs );
+
+                                    ImGui::TableNextColumn();
+                                    ImGui::Text( "%.3f %%", userPct );
+                                }
+                                ImGui::EndTable();
+                            }
+                        }
+                    }
+                }
+                ImGui::Spacing();
+            }
+            ImGui::EndChild();
+        }
+        else if ( currentPanel == ExtraPanels::CustomID )
+        {
+            if ( ImGui::BeginChild( "###customPanel", panelRegionFill ) )
+            {
+                const bool bHasFullAccess = coreServices.getNetworkConfiguration()->hasAccess( endlesss::api::NetConfiguration::Access::Authenticated );
 
                 ImGui::Spacing();
                 ImGui::Spacing();
@@ -202,25 +546,35 @@ void modalUniversalJamBrowser(
                 }
                 else
                 {
-                    const ImVec2 buttonSize( 200.0f, 32.0f );
-
-                    ImGui::RadioButton( "Personal Jam", &customOption, PersonalJam );
-                    ImGui::RadioButton( "Custom Jam ID", &customOption, CustomID );
-                    ImGui::SeparatorBreak();
-
-                    switch ( customOption )
+                    int32_t currentCustomMode = browserState.m_addCustomMode;
                     {
-                        case PersonalJam:
+                        ImGui::RadioButton( "Personal Jam", &currentCustomMode, UniversalJamBrowserState::PersonalJam );
+                        ImGui::RadioButton( "Internal Band ID", &currentCustomMode, UniversalJamBrowserState::InternalBandID );
+                        ImGui::RadioButton( "External Invite Code", &currentCustomMode, UniversalJamBrowserState::ExternalInviteCode );
+                        ImGui::SeparatorBreak();
+                    }
+                    browserState.m_addCustomMode = (UniversalJamBrowserState::CustomMode)currentCustomMode;
+
+                    switch ( currentCustomMode )
+                    {
+                        // ---------------------------------------------------------------------------------------------
+                        case UniversalJamBrowserState::PersonalJam:
                         {
+                            ImGui::TextWrapped( "This is your Solo / private jam. Add and enjoy." );
+                            ImGui::Spacing();
+                            ImGui::Spacing();
+
                             if ( bHasFullAccess )
                             {
-                                ImGui::Text( "Jam ID '%s'", netConfig->auth().user_id.c_str() );
+                                const auto currentUser = coreServices.getNetworkConfiguration()->auth().user_id;
+
+                                ImGui::Text( "Jam ID '%s'", currentUser.c_str() );
                                 ImGui::Spacing();
 
                                 if ( ImGui::Button( "Add", buttonSize ) )
                                 {
                                     if ( behaviour.fnOnSelected )
-                                        behaviour.fnOnSelected( endlesss::types::JamCouchID( netConfig->auth().user_id ) );
+                                        behaviour.fnOnSelected( endlesss::types::JamCouchID( currentUser ) );
 
                                     shouldClosePopup = true;
                                 }
@@ -228,43 +582,124 @@ void modalUniversalJamBrowser(
                         }
                         break;
 
-                        case CustomID:
+                        // ---------------------------------------------------------------------------------------------
+                        case UniversalJamBrowserState::InternalBandID:
                         {
-                            ImGui::SetNextItemWidth( buttonSize.x );
-                            if ( ImGui::InputText( "Jam ID", &customJamName ) )
-                            {
-                                customJamValidation = c_validationRequiredMessage;
-                            }
-                            if ( !customJamValidation.empty() )
-                            {
-                                ImGui::SameLine( 0, 16.0f );
-                                ImGui::TextColored( ImGui::GetErrorTextColour(), ICON_FA_TRIANGLE_EXCLAMATION " %s", customJamValidation.c_str() );
-                            }
+                            auto& validationState = browserState.m_customBandIDValidation;
+
+                            ImGui::TextWrapped( "Add a jam given the internal database ID; this looks like 'band' followed by a series of hex digits, eg. " );
+                            ImGui::TextColored( colour::shades::toast.light(), "band52a81b5ecd" );
+                            ImGui::Spacing();
                             ImGui::Spacing();
 
-                            ImGui::Scoped::Disabled sd( customJamName.empty() );
-                            if ( ImGui::Button( "Validate", buttonSize ) )
+                            ImGui::SetNextItemWidth( buttonSize.x );
+                            if ( ImGui::InputText( "Jam ID", &browserState.m_customBandID ) )
                             {
-                                // test-run access to whatever they're asking for to avoid adding garbage to the warehouse
-                                endlesss::api::JamLatestState testPermissions;
-                                if ( testPermissions.fetch( *netConfig, endlesss::types::JamCouchID( customJamName ) ) )
+                                // trim whitespace on entry
+                                base::trim( browserState.m_customBandID, " " );
+                            }
+                            
+                            browserState.commonValidationImgui( validationState, browserState.m_customBandID );
+
+                            const endlesss::types::JamCouchID jamToValidate( validationState.m_data );
+
+                            {
+                                ImGui::Scoped::Disabled sd( validationState.m_data.empty() );
+                                if ( ImGui::Button( "Validate", buttonSize ) )
                                 {
-                                    customJamValidation.clear();
-                                }
-                                else
-                                {
-                                    customJamValidation = "failed to validate jam access";
+                                    // test-run access to whatever they're asking for to avoid adding garbage to the warehouse
+                                    // and then also drag the name back to display, help people know what they're about to get
+                                    endlesss::api::JamLatestState testPermissions;
+                                    endlesss::api::BandPermalinkMeta jamMeta;
+                                    if ( testPermissions.fetch( *coreServices.getNetworkConfiguration(), jamToValidate ) &&
+                                         jamMeta.fetch( *coreServices.getNetworkConfiguration(), jamToValidate ) )
+                                    {
+                                        validationState.m_lastMsg = fmt::format( FMTX("\"{}\" can be synced"), jamMeta.data.band_name );
+                                        validationState.m_mode = UniversalJamBrowserState::ValidationState::Mode::Validated;
+                                    }
+                                    else
+                                    {
+                                        validationState.m_lastMsg = "Failed to fetch jam metadata, cannot sync.";
+                                        validationState.m_mode = UniversalJamBrowserState::ValidationState::Mode::FailedToValidate;
+                                    }
                                 }
                             }
 
-                            // if validation has no error message, continue
-                            ImGui::Scoped::Enabled se( customJamValidation.empty() );
-                            if ( ImGui::Button( "Add", buttonSize ) )
+                            // show any status messages
+                            if ( !validationState.m_lastMsg.empty() )
                             {
-                                if ( behaviour.fnOnSelected )
-                                    behaviour.fnOnSelected( endlesss::types::JamCouchID( customJamName ) );
+                                ImGui::Spacing();
+                                ImGui::SeparatorBreak();
+                                ImGui::TextUnformatted( validationState.m_lastMsg );
+                                ImGui::Spacing();
+                            }
 
-                                shouldClosePopup = true;
+                            if ( validationState.m_mode == UniversalJamBrowserState::ValidationState::Mode::Validated )
+                            {
+                                if ( ImGui::Button( "Add", buttonSize ) )
+                                {
+                                    if ( behaviour.fnOnSelected )
+                                        behaviour.fnOnSelected( jamToValidate );
+
+                                    shouldClosePopup = true;
+                                }
+                            }
+                        }
+                        break;
+
+                        // ---------------------------------------------------------------------------------------------
+                        case UniversalJamBrowserState::ExternalInviteCode:
+                        {
+                            auto& validationState = browserState.m_customInviteCodeValidation;
+
+                            ImGui::TextWrapped( "Resolve an invite code to an internal band ID.\nInvite codes are the long string of hex between /jam/ and /join in (eg.)\n" );
+                            ImGui::TextColored( colour::shades::toast.light(), "https://endlesss.fm/jam/7ac545ceaf413321133cf06a735a5cc3a48d7f9234bbf84dcdd808027d5d9b78/join" );
+                            ImGui::TextWrapped( "\nPast just the code on its own, so in this case that would be" );
+                            ImGui::TextColored( colour::shades::toast.light(), "7ac545ceaf413321133cf06a735a5cc3a48d7f9234bbf84dcdd808027d5d9b78" );
+                            ImGui::TextWrapped( "\nOnce resolved, we will switch to the \"Internal Band ID\" page to Validate and add the result.");
+                            ImGui::Spacing();
+                            ImGui::Spacing();
+
+                            ImGui::SetNextItemWidth( buttonSize.x * 2.5f );
+                            if ( ImGui::InputText( "Invite Code", &browserState.m_customInviteCode ) )
+                            {
+                                // trim whitespace on entry
+                                base::trim( browserState.m_customInviteCode, " " );
+                            }
+
+                            browserState.commonValidationImgui( validationState, browserState.m_customInviteCode );
+
+                            {
+                                ImGui::Scoped::Disabled sd( validationState.m_data.empty() );
+                                if ( ImGui::Button( "Resolve", buttonSize ) )
+                                {
+                                    endlesss::api::BandNameFromExtendedID bandNameResolve;
+                                    if ( bandNameResolve.fetch( *coreServices.getNetworkConfiguration(), validationState.m_data ) )
+                                    {
+                                        // clear the request now we're done with it
+                                        browserState.m_customInviteCode.clear();
+                                        validationState.m_lastMsg.clear();
+                                        validationState.m_mode = UniversalJamBrowserState::ValidationState::Mode::Validated;
+
+                                        // switch back to the jam ID validation phase / add mode
+                                        browserState.m_customBandID = bandNameResolve.data.legacy_id;
+                                        browserState.m_customBandIDValidation.restart( bandNameResolve.data.legacy_id );
+                                        browserState.m_addCustomMode = UniversalJamBrowserState::InternalBandID;
+                                    }
+                                    else
+                                    {
+                                        validationState.m_lastMsg = fmt::format( FMTX("Failed to resolve invite code ({})"), bandNameResolve.message );
+                                        validationState.m_mode = UniversalJamBrowserState::ValidationState::Mode::FailedToValidate;
+                                    }
+                                }
+                            }
+                            // show any status messages
+                            if ( !validationState.m_lastMsg.empty() )
+                            {
+                                ImGui::Spacing();
+                                ImGui::SeparatorBreak();
+                                ImGui::TextUnformatted( validationState.m_lastMsg );
+                                ImGui::Spacing();
                             }
                         }
                         break;
@@ -284,5 +719,6 @@ void modalUniversalJamBrowser(
     }
     ImGui::PopStyleColor();
 }
+
 
 } // namespace ux

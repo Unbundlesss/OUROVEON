@@ -134,6 +134,13 @@ namespace fs = std::filesystem;
 #include "fmt/chrono.h"
 #include "fmt/xchar.h"
 
+// disable log colouring on Mac, never seems to work
+#if OURO_PLATFORM_OSX
+#define OURO_ENABLE_COLOURED_LOGGING    0
+#else
+#define OURO_ENABLE_COLOURED_LOGGING    1
+#endif 
+
 // we want the power of {fmt}'s formatting but with a bit of boilerplate to establish common
 // colours and output formatting per subsystem; this exposes an arbitrarily coloured blog::<system> and blog::error::<system>
 // that standardize on the column prefixes and other details whilst otherwise behaving exactly like fmt::print
@@ -175,20 +182,28 @@ namespace detail {
             outputBuffer.try_reserve( bufferSize );
             outputBuffer.clear();
 
+#if OURO_ENABLE_COLOURED_LOGGING
             outputBuffer.append( foreground1.begin(), foreground1.end() );
+#endif // OURO_ENABLE_COLOURED_LOGGING
 
             outputBuffer.append( prefix );
 
+#if OURO_ENABLE_COLOURED_LOGGING
             fmt::detail::reset_color( outputBuffer );
+#endif // OURO_ENABLE_COLOURED_LOGGING
 
             outputBuffer.append( midsep );
 
+#if OURO_ENABLE_COLOURED_LOGGING
             outputBuffer.append( foreground2.begin(), foreground2.end() );
+#endif // OURO_ENABLE_COLOURED_LOGGING
 
             outputBuffer.append( formatBuffer );
             outputBuffer.append( suffix );
 
+#if OURO_ENABLE_COLOURED_LOGGING
             fmt::detail::reset_color( outputBuffer );
+#endif // OURO_ENABLE_COLOURED_LOGGING
             outputBuffer.push_back( '\0' );
         }
 

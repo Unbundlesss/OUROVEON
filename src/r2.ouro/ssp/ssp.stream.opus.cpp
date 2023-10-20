@@ -56,7 +56,7 @@ OpusPacketData::~OpusPacketData()
 
 // ---------------------------------------------------------------------------------------------------------------------
 // 
-struct OpusStream::StreamInstance : public AsyncBufferProcessorIQ16
+struct OpusStream::StreamInstance final : public AsyncBufferProcessorIQ16
 {
     StreamInstance()
         : AsyncBufferProcessorIQ16( OpusStream::cFrameSize * OpusStream::cBufferedFrames, "OPUS" )

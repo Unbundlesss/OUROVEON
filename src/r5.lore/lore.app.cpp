@@ -418,7 +418,7 @@ struct JamVisualisation
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-struct LoreApp : public app::OuroApp
+struct LoreApp final : public app::OuroApp
 {
     LoreApp()
         : app::OuroApp()
@@ -3640,9 +3640,9 @@ int LoreApp::EntrypointOuro()
                                 warehouseJamBrowser.m_warehouseJamIDs = m_warehouseContentsReportJamIDs;
                             }
                             // launch modal browser
-                            activateModalPopup( "Select Jam To Sync", [&, netCfg = getNetworkConfiguration()]( const char* title )
+                            activateModalPopup( "Select Jam To Sync", [&, this]( const char* title )
                             {
-                                ux::modalUniversalJamBrowser( title, m_jamLibrary, warehouseJamBrowser, netCfg );
+                                ux::modalUniversalJamBrowser( title, m_jamLibrary, warehouseJamBrowser, *this );
                             });
                         }
                         ImGui::EndDisabledControls( !warehouseHasEndlesssAccess );

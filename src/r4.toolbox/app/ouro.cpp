@@ -39,7 +39,6 @@ struct AdvancedOptionsBlock
 {
     bool    bShow = false;
     bool    bEnableNetworkLogging = false;
-    bool    bEnableStemVersioningBypass = false;
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -300,8 +299,8 @@ int OuroApp::EntrypointGUI()
 
                     if ( advancedOptionsBlock.bShow )
                     {
+                        ImGui::TextUnformatted( "Advanced Toggles" );
                         ImGui::Checkbox( " Enable Network Diagnostics", &advancedOptionsBlock.bEnableNetworkLogging );
-                        ImGui::Checkbox( " Bypass Stem Version Validation", &advancedOptionsBlock.bEnableStemVersioningBypass );
                     }
                     else
                     {
@@ -951,8 +950,6 @@ int OuroApp::EntrypointGUI()
     {
         if ( advancedOptionsBlock.bEnableNetworkLogging )
             m_networkConfiguration->enableFullNetworkDiagnostics();
-        if ( advancedOptionsBlock.bEnableStemVersioningBypass )
-            m_networkConfiguration->enableStemVersionBypass();
     }
 
     // save any config data blocks

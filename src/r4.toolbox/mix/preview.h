@@ -181,7 +181,7 @@ protected:
         BeginRecording,
         StopRecording,
     };
-    struct EngineCommandData : public base::BasicCommandType<EngineCommand> { using BasicCommandType::BasicCommandType; };
+    struct EngineCommandData final : public base::BasicCommandType<EngineCommand> { using BasicCommandType::BasicCommandType; };
     using CommandQueue = mcc::ReaderWriterQueue<EngineCommandData>;
 
     CommandQueue                    m_commandQueue;

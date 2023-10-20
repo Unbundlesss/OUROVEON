@@ -90,17 +90,17 @@ struct CoreStart
 };
 
 // some access to Core app instances without having to hand over everything
-struct ICoreServices
+struct ICoreServices : public config::IPathProvider
 {
     virtual ~ICoreServices() {}
 
-    virtual app::AudioModule&                           getAudioModule() = 0;
-    virtual app::MidiModule&                            getMidiModule() = 0;
-    virtual endlesss::api::NetConfiguration::Shared&    getNetworkConfiguration() = 0;
-    virtual const endlesss::toolkit::Exchange&          getEndlesssExchange() const = 0;
-    virtual const endlesss::toolkit::PopulationQuery&   getEndlesssPopulation() const = 0;
-    virtual tf::Executor&                               getTaskExecutor() = 0;
-    virtual sol::state_view&                            getLuaState() = 0;
+    virtual app::AudioModule&                               getAudioModule() = 0;
+    virtual app::MidiModule&                                getMidiModule() = 0;
+    virtual endlesss::api::NetConfiguration::Shared&        getNetworkConfiguration() = 0;
+    virtual const endlesss::toolkit::Exchange&              getEndlesssExchange() const = 0;
+    virtual const endlesss::toolkit::PopulationQuery&       getEndlesssPopulation() const = 0;
+    virtual tf::Executor&                                   getTaskExecutor() = 0;
+    virtual sol::state_view&                                getLuaState() = 0;
 };
 
 // exposure of custom render injection callbacks as interface
@@ -123,7 +123,6 @@ struct ICoreCustomRendering
 // application base class that implements basic services for headless use
 //
 struct Core : CoreStart,
-              config::IPathProvider,
               ICoreServices
 {
     DECLARE_NO_COPY( Core );

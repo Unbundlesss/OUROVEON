@@ -450,6 +450,45 @@ struct TypeCheckDocument
         }
     } cdn_attachments;
 
+
+    // for OLLLD riffs - we're talking mid-to-late 2019 here - the stem format was slightly different
+    // and lacked one of the signifiers we use to identify a workable data packet - the app data version
+    // in this case we also optionally decode this extra _attachments block and use that to see if we're
+    // working with old-school data
+    // 
+    // "_attachments": {
+    //     "oggAudio": {
+    //         "content_type": "audio/ogg",
+    //         "revpos" : 1,
+    //         "digest" : "md5-WZH7j+Na2MzTchCuQlfodA==",
+    //         "length" : 37747,
+    //         "stub" : true
+    //     }
+    // }
+    struct OldAttachments
+    {
+        struct OldOggAudio
+        {
+            std::string     content_type;
+            std::string     digest;
+
+            template<class Archive>
+            inline void serialize( Archive& archive )
+            {
+                archive( CEREAL_OPTIONAL_NVP( content_type )
+                    , CEREAL_OPTIONAL_NVP( digest )
+                );
+            }
+        } oggAudio;
+
+        template<class Archive>
+        inline void serialize( Archive& archive )
+        {
+            archive( CEREAL_OPTIONAL_NVP( oggAudio )
+            );
+        }
+    } _attachments;
+
     std::string                 type;
     int32_t                     app_version = 0;
 
@@ -460,6 +499,7 @@ struct TypeCheckDocument
                , CEREAL_NVP( type )
                , CEREAL_OPTIONAL_NVP( cdn_attachments )
                , CEREAL_OPTIONAL_NVP( app_version )
+               , CEREAL_OPTIONAL_NVP( _attachments )
         );
     }
 };
@@ -586,7 +626,7 @@ struct ResultStemDocument
 {
     struct CDNAttachments
     {
-        struct OGGAudio : public IStemAudioFormat
+        struct OGGAudio final : public IStemAudioFormat
         {
             std::string     bucket;                 // in old jams, this could be set (eg. would be "ndls-att0")
             std::string     endpoint;               // eg. "ndls-att0.fra1.digitaloceanspaces.com", 
@@ -659,7 +699,7 @@ struct ResultStemDocument
             }
         } oggAudio;
 
-        struct FLACAudio : public IStemAudioFormat
+        struct FLACAudio final : public IStemAudioFormat
         {
             std::string     endpoint;               // eg. "endlesss-dev.fra1.digitaloceanspaces.com", 
             std::string     hash;                   // no idea 
@@ -710,6 +750,7 @@ struct ResultStemDocument
         }
 
     } cdn_attachments;
+
 
     endlesss::types::StemCouchID
                             _id;    // couch uid
@@ -807,25 +848,25 @@ struct JamChanges
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-struct JamLatestState : public ResultRowHeader<ResultRiffAndStemIDs>
+struct JamLatestState final : public ResultRowHeader<ResultRiffAndStemIDs>
 {
     bool fetch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID );
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-struct JamFullSnapshot : public ResultRowHeader<ResultRiffAndStemIDs>
+struct JamFullSnapshot final : public ResultRowHeader<ResultRiffAndStemIDs>
 {
     bool fetch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID );
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-struct JamRiffCount : public TotalRowsOnly
+struct JamRiffCount final : public TotalRowsOnly
 {
     bool fetch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID );
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-struct RiffDetails : public ResultRowHeader<ResultDocsHeader<ResultRiffDocument, endlesss::types::RiffCouchID>>
+struct RiffDetails final : public ResultRowHeader<ResultDocsHeader<ResultRiffDocument, endlesss::types::RiffCouchID>>
 {
     bool fetch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID, const endlesss::types::RiffCouchID& riffDocumentID );
     bool fetchBatch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID, const std::vector< endlesss::types::RiffCouchID >& riffDocumentIDs );
@@ -833,13 +874,13 @@ struct RiffDetails : public ResultRowHeader<ResultDocsHeader<ResultRiffDocument,
 
 // ---------------------------------------------------------------------------------------------------------------------
 // 'safe' handling for wonky stem data - parses minimal data set and all keys are basically optional
-struct StemTypeCheck : public ResultRowHeader<ResultDocsSafeHeader<TypeCheckDocument, endlesss::types::StemCouchID>>
+struct StemTypeCheck final : public ResultRowHeader<ResultDocsSafeHeader<TypeCheckDocument, endlesss::types::StemCouchID>>
 {
     bool fetchBatch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID, const std::vector< endlesss::types::StemCouchID >& stemDocumentIDs );
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-struct StemDetails : public ResultRowHeader<ResultDocsHeader<ResultStemDocument, endlesss::types::StemCouchID>>
+struct StemDetails final : public ResultRowHeader<ResultDocsHeader<ResultStemDocument, endlesss::types::StemCouchID>>
 {
     bool fetchBatch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID, const std::vector< endlesss::types::StemCouchID >& stemDocumentIDs );
 };

@@ -9,6 +9,8 @@
 
 #include "pch.h"
 
+#include "base/text.transform.h"
+
 #include "spacetime/chronicle.h"
 #include "spacetime/moment.h"
 
@@ -360,28 +362,28 @@ void Jams::postProcessNewData()
             m_idxSortedByName[jamTypeIndex].push_back( idx );
             m_idxSortedByRiffs[jamTypeIndex].push_back( idx );
 
-            std::sort( m_idxSortedByTime[jamTypeIndex].begin(), m_idxSortedByTime[jamTypeIndex].end(),
-                [dataArray]( const size_t lhs, const size_t rhs ) -> bool
-                {
-                    // newest first
-                    return dataArray->at(lhs).m_timestampOrdering > dataArray->at(rhs).m_timestampOrdering;
-                });
-
-            std::sort( m_idxSortedByName[jamTypeIndex].begin(), m_idxSortedByName[jamTypeIndex].end(),
-                [dataArray]( const size_t lhs, const size_t rhs ) -> bool
-                {
-                    return dataArray->at( lhs ).m_displayName < dataArray->at( rhs ).m_displayName;
-                });
-
-            std::sort( m_idxSortedByRiffs[jamTypeIndex].begin(), m_idxSortedByRiffs[jamTypeIndex].end(),
-                [dataArray]( const size_t lhs, const size_t rhs ) -> bool
-                {
-                    // largest first
-                    return dataArray->at(lhs).m_riffCount > dataArray->at(rhs).m_riffCount;
-                });
-
             m_jamCouchIDToJamIndexMap.try_emplace( dataArray->at(idx).m_jamCID, CacheIndex( jamType, idx ) );
         }
+
+        std::sort( m_idxSortedByTime[jamTypeIndex].begin(), m_idxSortedByTime[jamTypeIndex].end(),
+            [dataArray]( const size_t lhs, const size_t rhs ) -> bool
+            {
+                // newest first
+                return dataArray->at(lhs).m_timestampOrdering > dataArray->at(rhs).m_timestampOrdering;
+            });
+
+        std::sort( m_idxSortedByName[jamTypeIndex].begin(), m_idxSortedByName[jamTypeIndex].end(),
+            [dataArray]( const size_t lhs, const size_t rhs ) -> bool
+            {
+                return base::StrToLwrExt( dataArray->at( lhs ).m_displayName ) < base::StrToLwrExt( dataArray->at( rhs ).m_displayName );
+            });
+
+        std::sort( m_idxSortedByRiffs[jamTypeIndex].begin(), m_idxSortedByRiffs[jamTypeIndex].end(),
+            [dataArray]( const size_t lhs, const size_t rhs ) -> bool
+            {
+                // largest first
+                return dataArray->at(lhs).m_riffCount > dataArray->at(rhs).m_riffCount;
+            });
     }
 
     {

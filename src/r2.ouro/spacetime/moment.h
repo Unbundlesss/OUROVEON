@@ -69,7 +69,7 @@ private:
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-struct ScopedTimer : public Moment
+struct ScopedTimer final : public Moment
 {
     ScopedTimer( const char* context )
         : Moment()

@@ -19,7 +19,7 @@ namespace base {
     template < typename TObject, typename... Args >
     std::shared_ptr< TObject > protected_make_shared( Args&&... args )
     {
-        struct helper : public TObject
+        struct helper final : public TObject
         {
             explicit helper( Args&&... args )
                 : TObject( std::forward< Args >( args )... )
@@ -33,7 +33,7 @@ namespace base {
     template< typename TObject, typename... Args >
     std::unique_ptr< TObject > protected_make_unique( Args&&... args )
     {
-        struct helper : public TObject
+        struct helper final : public TObject
         {
             explicit helper( Args&&... args )
                 : TObject( std::forward< Args >( args )... )

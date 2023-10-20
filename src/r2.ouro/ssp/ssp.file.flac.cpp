@@ -26,8 +26,8 @@
 namespace ssp {
 
 // represents the live FLAC output stream with our own pre-buffering / float-to-int conversion stage infront
-struct FLACWriter::StreamInstance : public FLAC::Encoder::File,
-                                    public AsyncBufferProcessorIQ24
+struct FLACWriter::StreamInstance final : public FLAC::Encoder::File,
+                                          public AsyncBufferProcessorIQ24
 {
     // FLAC::Encoder::File
     virtual void progress_callback(
