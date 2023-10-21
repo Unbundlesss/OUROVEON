@@ -8,7 +8,7 @@ The playback system is built out of 3 windows - audio engine control, riff playb
 
 At the top you can adjust the master output volume, mute the audio output and panic-stop all current playback and sequencing operations. 
 
-The two **Disk Recorder** buttons let you begin immediately writing the audio stream out to disk. **`Final Mix`** writes out the same data that it being played out of the audio device. **`8-Track`** starts one file per channel, writing out the unmixed stem data to each. 
+The two **Disk Recorder** buttons let you begin immediately writing the audio stream out to disk. **`Final Mix`** writes out the same data that is being played out of the audio device. **`8-Track`** starts one file per channel, writing out the unmixed stem data to each. 
 
 <br>
 
