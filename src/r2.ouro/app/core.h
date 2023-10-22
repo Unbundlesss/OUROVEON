@@ -536,12 +536,16 @@ private:
     using DeveloperFlagRegistry = absl::flat_hash_map< std::string, bool* >;
 
     void imguiModalAboutBox( const char* title );
+    void imguiModalBasicErrorPopup( const char* title, std::string_view errorMessage );
 
     void checkLayoutConfig();
+
+    void event_AddErrorPopup( const events::AddErrorPopup* eventData );
 
     void event_AddToastNotification( const events::AddToastNotification* eventData );
     void updateToasts();
 
+    base::EventListenerID   m_eventLID_AddErrorPopup = base::EventListenerID::invalid();
     base::EventListenerID   m_eventLID_AddToastNotification = base::EventListenerID::invalid();
 
     int32_t                 m_toastCreationID = 0;      // unique ID for each toast we enqueue

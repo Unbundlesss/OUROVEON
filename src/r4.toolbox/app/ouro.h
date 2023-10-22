@@ -73,6 +73,11 @@ protected:
     tf::Taskflow                            m_stemCachePruneTask;
     std::optional< tf::Future<void> >       m_stemCachePruneFuture = std::nullopt;
 
+    // -------------
+
+    // instance of the endlesss data warehouse, holding all locally synced jam/riff/stem data
+    endlesss::toolkit::Warehouse::Instance  m_warehouse;
+
 
     // -------------
 

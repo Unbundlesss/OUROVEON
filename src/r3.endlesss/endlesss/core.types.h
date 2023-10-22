@@ -560,6 +560,25 @@ struct IJamNameCacheServices
 
 
 // ---------------------------------------------------------------------------------------------------------------------
+// enqueue an error popup
+
+CREATE_EVENT_BEGIN( AddErrorPopup )
+
+AddErrorPopup() = delete;
+
+AddErrorPopup( std::string_view title, std::string_view contents )
+    : m_title( title )
+    , m_contents( contents )
+{
+}
+
+std::string m_title;
+std::string m_contents;
+
+CREATE_EVENT_END()
+
+
+// ---------------------------------------------------------------------------------------------------------------------
 // enqueue a toast notification
 
 CREATE_EVENT_BEGIN( AddToastNotification )
@@ -584,6 +603,7 @@ std::string m_title;
 std::string m_contents;
 
 CREATE_EVENT_END()
+
 
 // ---------------------------------------------------------------------------------------------------------------------
 // ask for the given riff to be enqueued for playback as and when possible

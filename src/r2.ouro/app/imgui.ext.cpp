@@ -383,6 +383,20 @@ void CenteredColouredText( const ImVec4& col, const char* text )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+bool BeginFixedCenteredWindow( const char* label, const ImVec2& fixedSize, const ImVec2& positionOffset )
+{
+    const ImVec2 viewportWorkSize = ImGui::GetMainViewport()->GetCenter();
+
+    ImGui::SetNextWindowPos( viewportWorkSize - (fixedSize * 0.5f) - positionOffset );
+    ImGui::SetNextWindowContentSize( fixedSize );
+
+    return ImGui::Begin( label, nullptr,
+        ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoCollapse );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 void RightAlignSameLine( float objectSize )
 {
     ImGui::Dummy( ImVec2( ImGui::GetContentRegionAvail().x - objectSize, 0.0f ) );

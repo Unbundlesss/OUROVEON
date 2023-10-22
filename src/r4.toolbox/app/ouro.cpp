@@ -32,6 +32,8 @@
 #include "platform_folders.h"
 #include "xp/open.url.h"
 
+using namespace std::chrono_literals;
+
 namespace app {
 
 // double-clicking on the OUROVEON logo shows a few extra secret options 
@@ -267,15 +269,8 @@ int OuroApp::EntrypointGUI()
         const float  configWindowColumn1 = 500.0f;
         const float  configWindowColumn2 = 500.0f;
         const ImVec2 configWindowSize = ImVec2( configWindowColumn1 + configWindowColumn2, 660.0f );
-        const ImVec2 viewportWorkSize = ImGui::GetMainViewport()->GetCenter();
 
-        ImGui::SetNextWindowPos( viewportWorkSize - ( configWindowSize * 0.5f ) - ImVec2(0, 50.0f) );
-        ImGui::SetNextWindowContentSize( configWindowSize );
-
-        ImGui::Begin( "Framework Preflight | Version " OURO_FRAMEWORK_VERSION, nullptr,
-            ImGuiWindowFlags_NoResize           |
-            ImGuiWindowFlags_NoSavedSettings    |
-            ImGuiWindowFlags_NoCollapse );
+        if ( ImGui::BeginFixedCenteredWindow( "Framework Preflight | Version " OURO_FRAMEWORK_VERSION, configWindowSize, ImVec2( 0, 50.0f ) ) )
         {
             constexpr float perColumnIndent = 5.0f;
             constexpr float perBlockIndent = 10.0f;
@@ -899,12 +894,7 @@ int OuroApp::EntrypointGUI()
                     ImGui::SameLine();
                     if ( ImGui::Button( bootProcessUnfinished ? progressionInhibitionReason.c_str() : ICON_FA_CIRCLE_CHECK " Accept & Continue", buttonSize ) )
                     {
-                        ImGui::Spacing();
-                        ImGui::TextUnformatted( "Please wait, loading session..." );
-
-                        const auto audioInitStatus = m_mdAudio->initOutput( audioConfig, audioSpectrumConfig );
-                        if ( audioInitStatus.ok() )
-                            successfulBreakFromLoop = true;
+                        successfulBreakFromLoop = true;
                     }
                 }
                 ImGui::EndDisabledControls( bootProcessUnfinished );
@@ -972,16 +962,6 @@ int OuroApp::EntrypointGUI()
     if ( m_mdFrontEnd->wasQuitRequested() )
         return 0;
 
-    // boot stem cache now we have paths & audio configured
-    const auto stemCacheStatus = m_stemCache.initialise( m_storagePaths->cacheCommon, m_mdAudio->getSampleRate() );
-    if ( !stemCacheStatus.ok() )
-    {
-        blog::error::cfg( "Unable to initialise stem cache; {}", stemCacheStatus.ToString() );
-        return -1;
-    }
-    m_stemCacheLastPruneCheck.setToFuture( c_stemCachePruneCheckDuration );
-    m_stemCachePruneTask.emplace( [this]() { m_stemCache.lockAndPrune( false ); } );
-
 
     // unplug status bar bits
     unregisterStatusBarBlock( sbbTimeStatusLeftID );
@@ -1008,6 +988,101 @@ int OuroApp::EntrypointGUI()
         }
     }
 
+    // kick post-configuration session tasks, run off main thread so we don't stall the whole UI
+    auto sessionStartFuture = m_taskExecutor.async( "init_session", [this, &audioConfig, &audioSpectrumConfig]() -> absl::Status
+        {
+            const auto audioInitStatus = m_mdAudio->initOutput( audioConfig, audioSpectrumConfig );
+            if ( !audioInitStatus.ok() )
+            {
+                return audioInitStatus;
+            }
+
+            // boot stem cache now we have paths & audio configured
+            const auto stemCacheStatus = m_stemCache.initialise( m_storagePaths->cacheCommon, m_mdAudio->getSampleRate() );
+            if ( !stemCacheStatus.ok() )
+            {
+                return stemCacheStatus;
+            }
+            m_stemCacheLastPruneCheck.setToFuture( c_stemCachePruneCheckDuration );
+            m_stemCachePruneTask.emplace( [this]() { m_stemCache.lockAndPrune( false ); } );
+
+            {
+                m_warehouse = std::make_unique<endlesss::toolkit::Warehouse>(
+                    m_storagePaths.value(),
+                    m_networkConfiguration,
+                    m_appEventBus );
+
+                m_warehouse->upsertJamDictionaryFromCache( m_jamLibrary );             // update warehouse list of jam IDs -> names from the current cache
+            }
+
+            return absl::OkStatus();
+        });
+
+    // run a short "please wait" UI loop while we let the above async task complete
+    bool bRunSessionWaitLoop = true;
+    absl::Status sessionWaitResult = absl::OkStatus();
+    while ( bRunSessionWaitLoop && beginInterfaceLayout( CoreGUI::VF_WithStatusBar ) )
+    {
+        const ImVec2 startupMessageSize     = ImVec2( 220.0f, 40.0f );
+        const ImVec2 errorWindowSize        = ImVec2( 400.0f, 160.0f );
+        const char* startupTitle            = ICON_FA_POWER_OFF " Creating Session###startup";
+
+
+        if ( sessionStartFuture.valid() )
+        {
+            if ( sessionStartFuture.wait_for( 8ms ) != std::future_status::ready )
+            {
+                if ( ImGui::BeginFixedCenteredWindow( startupTitle, startupMessageSize ) )
+                {
+                    ImGui::Spinner( "##waiting", true, ImGui::GetTextLineHeight() * 0.3f, 3.0f, 0.0f, ImGui::GetColorU32( ImGuiCol_Text ) );
+                    ImGui::SameLine( 0, 16.0f );
+                    ImGui::TextUnformatted( "Please wait ..." );
+                }
+                ImGui::End();
+            }
+            else
+            {
+                sessionWaitResult = sessionStartFuture.get();
+            }
+        }
+        else
+        {
+            if ( sessionWaitResult.ok() )
+            {
+                // show last message before (possibly) blocking code in EntrypointOuro(), eventually passing
+                // control over to the normal UI cycle in the app
+                if ( ImGui::BeginFixedCenteredWindow( startupTitle, startupMessageSize ) )
+                {
+                    ImGui::TextUnformatted( "Booting ..." );
+                }
+                ImGui::End();
+
+                bRunSessionWaitLoop = false;
+            }
+            else
+            {
+                if ( ImGui::BeginFixedCenteredWindow( "Error", errorWindowSize ) )
+                {
+                    ImGui::TextColored( colour::shades::errors.light(), "Session Startup Failed" );
+                    ImGui::TextWrapped( sessionWaitResult.ToString().c_str() );
+                    ImGui::Separator();
+                    if ( ImGui::Button( "  Quit  " ) )
+                    {
+                        bRunSessionWaitLoop = false;
+                    }
+                }
+                ImGui::End();
+            }
+        }
+
+        // dispatch the UI for rendering
+        finishInterfaceLayoutAndRender();
+    };
+
+    if ( !sessionWaitResult.ok() )
+        return -1;
+
+    // all done, pass control over to next level
     int appResult = EntrypointOuro();
 
     // unhook events

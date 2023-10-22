@@ -25,6 +25,8 @@ namespace toolkit {
 //
 struct Warehouse
 {
+    using Instance = std::unique_ptr< Warehouse >;
+
     struct _change_index {};
     using ChangeIndex = base::id::Simple<_change_index, uint32_t, 1, 0>;
 

@@ -242,6 +242,7 @@ int Core::Run()
         m_appEventBusClient = base::EventBusClient( m_appEventBus );
 
         // register basic event IDs
+        APP_EVENT_REGISTER( AddErrorPopup );
         APP_EVENT_REGISTER( AddToastNotification );
         APP_EVENT_REGISTER_SPECIFIC( OperationComplete, 16 * 1024 );
         APP_EVENT_REGISTER( PanicStop );
@@ -604,6 +605,15 @@ void CoreGUI::checkLayoutConfig()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+void CoreGUI::event_AddErrorPopup( const events::AddErrorPopup* eventData )
+{
+    activateModalPopup( eventData->m_title, [this, contents = eventData->m_contents]( const char* title )
+        {
+            imguiModalBasicErrorPopup( title, contents );
+        });
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 void CoreGUI::event_AddToastNotification( const events::AddToastNotification* eventData )
 {
     colour::Preset toastShade = colour::shades::callout;
@@ -683,6 +693,33 @@ void CoreGUI::updateToasts()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+void CoreGUI::imguiModalBasicErrorPopup( const char* title, std::string_view errorMessage )
+{
+    const ImVec2 configWindowSize = ImVec2( 600.0f, 150.0f );
+    ImGui::SetNextWindowContentSize( configWindowSize );
+
+    if ( ImGui::BeginPopupModal( title, nullptr, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize ) )
+    {
+        const ImVec2 buttonSize( 240.0f, 32.0f );
+
+        ImGui::TextWrapped( errorMessage.data() );
+
+        ImGui::SeparatorBreak();
+
+        const auto panelRegionAvail = ImGui::GetContentRegionAvail();
+        {
+            const float alignButtonsToBase = panelRegionAvail.y - (buttonSize.y + 6.0f);
+            ImGui::Dummy( ImVec2( 0, alignButtonsToBase ) );
+        }
+
+        if ( ImGui::Button( "Close", buttonSize ) )
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 int CoreGUI::Entrypoint()
 {
     const auto feLoad = config::load( *this, m_configFrontend );
@@ -705,6 +742,7 @@ int CoreGUI::Entrypoint()
 
     {
         base::EventBusClient m_eventBusClient( m_appEventBus );
+        APP_EVENT_BIND_TO( AddErrorPopup );
         APP_EVENT_BIND_TO( AddToastNotification );
     }
 
@@ -749,6 +787,11 @@ int CoreGUI::Entrypoint()
             {
                 m_appEventBus->send<::events::AddToastNotification>( ::events::AddToastNotification::Type::Error, "Test Toast Error", "Oh no, something has gone badly wrong. Oh no. Oh brother." );
             }
+            ImGui::Separator();
+            if ( ImGui::MenuItem( "Test Error Pop" ) )
+            {
+                m_appEventBus->send<::events::AddErrorPopup>( "Test Error Popup", "Here's my error message, something broke, oh boy." );
+            }
 #endif // OURO_DEBUG
             ImGui::EndMenu();
         }
@@ -767,6 +810,7 @@ int CoreGUI::Entrypoint()
     {
         base::EventBusClient m_eventBusClient( m_appEventBus );
         APP_EVENT_UNBIND( AddToastNotification );
+        APP_EVENT_UNBIND( AddErrorPopup );
     }
 
     // unwind started services
@@ -1272,10 +1316,7 @@ void CoreGUI::imguiModalAboutBox( const char* title )
     {
         static constexpr auto markdownText = R"(# OUROVEON
 
-Developed by Harry Denholm / ishani
-[https://github.com/Unbundlesss/OUROVEON/](https://github.com/Unbundlesss/OUROVEON/)
-
-___
+Developed by Harry Denholm / ishani @ [ishani.org/shelf/ouroveon/](https://ishani.org/shelf/ouroveon/)
 
 Built with many wonderful [3rd party components](https://github.com/Unbundlesss/OUROVEON/blob/main/LIBS.md)
 
@@ -1290,7 +1331,7 @@ ___
   * [littlewing](https://linktr.ee/littlewingart) for their foresight and efforts to keep records of early Endlesss jams; the archive would be much smaller without their help
 
   * For taking time to test, use and feedback on the tools ...
-    * [Afta8](https://endlesss.fm/afta8)
+    * [afta8](https://endlesss.fm/afta8)
     * [dsorce](https://endlesss.fm/dsorce)
     * dgQwerty
     * [loop](https://endlesss.fm/loop)

@@ -8,9 +8,11 @@
 //
 
 #include "pch.h"
+#include "base/fio.h"
 #include "base/instrumentation.h"
 #include "base/text.h"
 #include "base/text.transform.h"
+
 #include "math/rng.h"
 #include "spacetime/chronicle.h"
 
@@ -24,7 +26,6 @@
 
 #include "app/core.h"
 
-#include <codecvt>
 
 namespace endlesss {
 namespace toolkit {
@@ -180,6 +181,25 @@ struct JamExportTask final : Warehouse::ITask
 
     const char* getTag() override { return Tag; }
     std::string Describe() override { return fmt::format( "[{}] exporting jam to disk", Tag ); }
+    bool Work( TaskQueue& currentTasks ) override;
+};
+
+// ---------------------------------------------------------------------------------------------------------------------
+struct JamImportTask final : Warehouse::ITask
+{
+    static constexpr char Tag[] = "IMPORT";
+
+    JamImportTask( base::EventBusClient& eventBus, const fs::path& fileToImport )
+        : Warehouse::ITask()
+        , m_eventBusClient( eventBus )
+        , m_fileToImport( fileToImport )
+    {}
+
+    base::EventBusClient    m_eventBusClient;
+    fs::path                m_fileToImport;
+
+    const char* getTag() override { return Tag; }
+    std::string Describe() override { return fmt::format( "[{}] importing jam from disk", Tag ); }
     bool Work( TaskQueue& currentTasks ) override;
 };
 
@@ -1707,6 +1727,9 @@ bool JamSyncAbortTask::Work( TaskQueue& currentTasks )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// ref https://randomascii.wordpress.com/2012/03/08/float-precisionfrom-zero-to-100-digits-2/
+//     https://gcc.gnu.org/onlinedocs/gcc/Hex-Floats.html
+//
 bool JamExportTask::Work( TaskQueue& currentTasks )
 {
     std::string sanitisedJamName;
@@ -1737,7 +1760,7 @@ bool JamExportTask::Work( TaskQueue& currentTasks )
         std::string riffEntryLine;
 
         yamlOutput << "# riffs schema" << std::endl;
-        yamlOutput << "# couch ID, user, creation unix time, root index, root name, scale index, scale name, BPS, BPM, bar length, 8x [ stem couch ID, stem gain, stem enabled ], app version" << std::endl;
+        yamlOutput << "# couch ID, user, creation unix time, root index, root name, scale index, scale name, BPS (float), BPS (hex float), BPM (float), BPM (hex float), bar length, 8x [ stem couch ID, stem gain (float), stem gain (hex float), stem enabled ], app version" << std::endl;
         yamlOutput << "riffs:" << std::endl;
         while ( query( riffCID ) )
         {
@@ -1747,7 +1770,7 @@ bool JamExportTask::Work( TaskQueue& currentTasks )
 
             if ( sql::riffs::getSingleByID( riffCouchID, riffData ) )
             {
-                riffEntryLine = fmt::format( FMTX( " \"{}\": [\"{}\", {}, {}, \"{}\", {}, \"{}\", {}, {}, {}, {}, " ),
+                riffEntryLine = fmt::format( FMTX( " \"{}\": [\"{}\", {}, {}, \"{}\", {}, \"{}\", {:.9g}, \"{:a}\", {:.9g}, \"{:a}\", {}, {}, " ),
                     riffData.couchID,
                     riffData.user,
                     riffData.creationTimeUnix,
@@ -1756,19 +1779,22 @@ bool JamExportTask::Work( TaskQueue& currentTasks )
                     riffData.scale,
                     endlesss::constants::cScaleNamesFilenameSanitize[riffData.scale],
                     riffData.BPS,
+                    riffData.BPS,
+                    riffData.BPMrnd,
                     riffData.BPMrnd,
                     riffData.barLength,
                     riffData.appVersion );
 
                 for ( int32_t stemI = 0; stemI < 8; stemI++ )
                 {
-                    riffEntryLine += fmt::format( FMTX( "[\"{}\", {}, {}], " ),
+                    riffEntryLine += fmt::format( FMTX( "[\"{}\", {:.9g}, \"{:a}\", {}], " ),
                         riffData.stems[stemI],
+                        riffData.gains[stemI],
                         riffData.gains[stemI],
                         riffData.stemsOn[stemI] );
                 }
 
-                yamlOutput << riffEntryLine << riffData.magnitude << " ]" << std::endl;
+                yamlOutput << riffEntryLine << std::setprecision( 9 ) << riffData.magnitude << " ]" << std::endl;
             }
             else
             {
@@ -1788,7 +1814,7 @@ bool JamExportTask::Work( TaskQueue& currentTasks )
         std::string stemEntryLine;
 
         yamlOutput << "# stems schema" << std::endl;
-        yamlOutput << "# couch ID, file endpoint, file bucket, file key, file MIME, file length in bytes, sample rate, creation unix time, preset, user, colour hex, BPS, BPM, legnth 16ths, original pitch, bar length, drum, note, bass, mic" << std::endl;
+        yamlOutput << "# couch ID, file endpoint, file bucket, file key, file MIME, file length in bytes, sample rate, creation unix time, preset, user, colour hex, BPS (float), BPS (hex float), BPM (float), BPM (hex float), length 16ths, original pitch, bar length, is-drum, is-note, is-bass, is-mic" << std::endl;
         yamlOutput << "stems:" << std::endl;
         while ( query( stemCID ) )
         {
@@ -1798,7 +1824,7 @@ bool JamExportTask::Work( TaskQueue& currentTasks )
 
             if ( sql::stems::getSingleStemByID( stemCouchID, stemData ) )
             {
-                stemEntryLine = fmt::format( FMTX( " \"{}\": [\"{}\", \"{}\", \"{}\", \"{}\", {}, {}, {}, \"{}\", \"{}\", \"{}\", {}, {}, {}, {}, {}, {}, {}, {}, {}]" ),
+                stemEntryLine = fmt::format( FMTX( " \"{}\": [\"{}\", \"{}\", \"{}\", \"{}\", {}, {}, {}, \"{}\", \"{}\", \"{}\", {:.9g}, \"{:a}\", {:.9g}, \"{:a}\", {}, {}, {}, {}, {}, {}, {}]" ),
                     stemData.couchID,
                     stemData.fileEndpoint,
                     stemData.fileBucket,
@@ -1811,6 +1837,8 @@ bool JamExportTask::Work( TaskQueue& currentTasks )
                     stemData.user,
                     stemData.colour,
                     stemData.BPS,
+                    stemData.BPS,
+                    stemData.BPMrnd,
                     stemData.BPMrnd,
                     stemData.length16s,
                     stemData.originalPitch,
@@ -1835,6 +1863,14 @@ bool JamExportTask::Work( TaskQueue& currentTasks )
     m_eventBusClient.Send<::events::AddToastNotification>( ::events::AddToastNotification::Type::Info,
         ICON_FA_BOX " Jam Export Success",
         fmt::format( FMTX( "Written to {}" ), sanitisedJamName ) );
+
+    return true;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+bool JamImportTask::Work( TaskQueue& currentTasks )
+{
+    auto loadStatus = base::readTextFile( m_fileToImport );
 
     return true;
 }

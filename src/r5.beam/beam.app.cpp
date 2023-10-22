@@ -14,6 +14,7 @@
 #include "ux/diskrecorder.h"
 #include "ux/jams.browser.h"
 #include "ux/stem.beats.h"
+#include "ux/riff.tagline.h"
 
 #include "ssp/ssp.file.flac.h"
 
@@ -900,62 +901,12 @@ void MixEngine::update(
 
 
 
-
-namespace Providers {
-
-// ---------------------------------------------------------------------------------------------------------------------
-struct RiffPercentage : public data::Provider
-{
-    static constexpr size_t UniqueID         = PROVIDER_ID( 'R', 'I', 'F', '%' );
-    static constexpr const char* VisibleName = "Riff %";
-
-    const MixEngine*    m_mixer;
-
-    RiffPercentage( const MixEngine* mixerInst )
-        : m_mixer( mixerInst )
-    {}
-
-    virtual AbilityFlags flags() const override { return kUsesRemapping; }
-
-    virtual float generate( const Input& input ) override
-    {
-        return (float)m_mixer->m_playbackProgression.m_playbackPercentage;
-    }
-};
-
-// ---------------------------------------------------------------------------------------------------------------------
-struct MixTransition : public data::Provider
-{
-    static constexpr size_t UniqueID         = PROVIDER_ID( 'M', 'X', 'T', 'R' );
-    static constexpr const char* VisibleName = "Transit";
-
-    const MixEngine*    m_mixer;
-
-    MixTransition( const MixEngine* mixerInst )
-        : m_mixer( mixerInst )
-    {}
-
-    virtual AbilityFlags flags() const override { return kUsesRemapping; }
-
-    virtual float generate( const Input& input ) override
-    {
-        return (float)m_mixer->m_transitionValue;
-    }
-};
-
-
-} // namespace Providers
-
 // ---------------------------------------------------------------------------------------------------------------------
 struct BeamApp : public app::OuroApp
 {
     BeamApp()
         : app::OuroApp()
     {
-#if OURO_FEATURE_VST24
-        data::providers::registerDefaults( m_dataBus.m_providerFactory, m_dataBus.m_providerNames );
-#endif // OURO_FEATURE_VST24
-
         m_discordBotUI = std::make_unique<discord::BotWithUI>( *this );
     }
 
@@ -976,8 +927,9 @@ protected:
 
     MixEngine::RepComConfiguration          m_repComConfig;
 
+    std::unique_ptr< ux::TagLine >          m_uxTagLine;
+
 #if OURO_FEATURE_VST24
-    data::DataBus                           m_dataBus;
     std::unique_ptr< effect::EffectStack >  m_effectStack;
 #endif // OURO_FEATURE_VST24
 
@@ -998,27 +950,12 @@ int BeamApp::EntrypointOuro()
     m_mdAudio->blockUntil( m_mdAudio->installMixer( &mixEngine ) );
 
 #if OURO_FEATURE_VST24
-    // custom databus providers
-    {
-        data::providers::registerProvider< Providers::RiffPercentage >(
-            m_dataBus.m_providerFactory,
-            m_dataBus.m_providerNames,
-            [&]() { return new Providers::RiffPercentage( &mixEngine ); } );
-
-        data::providers::registerProvider< Providers::MixTransition >(
-            m_dataBus.m_providerFactory,
-            m_dataBus.m_providerNames,
-            [&]() { return new Providers::MixTransition( &mixEngine ); } );
-    }
-
-    // load last databus setup
-    m_dataBus.load( m_appConfigPath );
-
     // VSTs for audio engine
     m_effectStack = std::make_unique<effect::EffectStack>( m_mdAudio.get(), &mixEngine.m_unifiedTimeInfo, "beam" );
     m_effectStack->load( m_appConfigPath );
 #endif // OURO_FEATURE_VST24
 
+    m_uxTagLine = std::make_unique<ux::TagLine>( getEventBusClient() );
 
     // == SNOOP ========================================================================================================
 
@@ -1113,17 +1050,11 @@ int BeamApp::EntrypointOuro()
         }
 
 #if OURO_FEATURE_VST24
-
-        m_dataBus.update();
-        m_dataBus.imgui();
-
         {
             ImGui::Begin( "Effects" );
-            m_effectStack->syncToDataBus( m_dataBus );
-            m_effectStack->imgui( *this, &m_dataBus );
+            m_effectStack->imgui( *this );
             ImGui::End();
         }
-
 #endif // OURO_FEATURE_VST24
 
         m_discordBotUI->imgui( *this );
@@ -1358,19 +1289,31 @@ int BeamApp::EntrypointOuro()
 
             if ( currentRiffPtr != nullptr )
             {
+                const ImVec2 verticalSpacer( 0.0f, 16.0f );
+
+                ImGui::Dummy( verticalSpacer );
+                if ( ImGui::BeginChild( "beat-box", ImVec2(0, 32.0f) ) )
                 {
-                    ImGui::Spacing();
-                    ImGui::Spacing();
-                    ImGui::Spacing();
+                    ux::StemBeats( "##stem_beat", m_endlesssExchange, 18.0f, false );
+                }
+                ImGui::EndChild();
+                ImGui::Dummy( verticalSpacer );
+                {
                     ImGui::BeatSegments( "##beats", m_endlesssExchange.m_riffBeatSegmentCount, m_endlesssExchange.m_riffBeatSegmentActive );
                     ImGui::Spacing();
                 }
                 {
                     ImGui::ProgressBar( (float)mixEngine.m_playbackProgression.m_playbackPercentage, ImVec2( -1, 3.0f ), "" );
-                    ImGui::BeatSegments( "##bars_play", currentRiff->m_timingDetails.m_barCount, mixEngine.m_playbackProgression.m_playbackBar, 3.0f, ImGui::GetColorU32( ImGuiCol_PlotHistogram ) );
+                    ImGui::BeatSegments(
+                        "##bars_play",
+                        currentRiff->m_timingDetails.m_barCount,
+                        mixEngine.m_playbackProgression.m_playbackBar,
+                        -1,
+                        3.0f,
+                        ImGui::GetColorU32( ImGuiCol_PlotHistogram ) );
 
                     if ( mixEngine.isRepComEnabled() &&
-                        mixEngine.isRecording() )
+                         mixEngine.isRecording() )
                     {
                         ImGui::Spacing();
                         ImGui::BeatSegments( "##bars_sync", currentRiff->m_timingDetails.m_barCount, mixEngine.getBarPausedOn(), 3.0f, ImGui::GetColorU32( ImGuiCol_HeaderActive ) );
@@ -1380,13 +1323,19 @@ int BeamApp::EntrypointOuro()
                     }
                     ImGui::Spacing();
                 }
+                ImGui::Dummy( verticalSpacer );
+                {
+                    m_uxTagLine->imgui( *m_warehouse, currentRiffPtr );
+                }
 
-                if ( ImGui::BeginTable( "##stem_stack", 9, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg ) )
+                ImGui::Dummy( verticalSpacer );
+                if ( ImGui::BeginTable( "##stem_stack", 10, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg ) )
                 {
                     ImGui::PushStyleColor( ImGuiCol_Text, ImGui::GetStyleColorVec4( ImGuiCol_ResizeGripHovered ) );
                     ImGui::TableSetupColumn( "User",    ImGuiTableColumnFlags_WidthFixed, 140.0f );
                     ImGui::TableSetupColumn( "Instr",   ImGuiTableColumnFlags_WidthFixed, 60.0f  );
                     ImGui::TableSetupColumn( "Preset",  ImGuiTableColumnFlags_WidthFixed, 140.0f );
+                    ImGui::TableSetupColumn( "Format",  ImGuiTableColumnFlags_WidthFixed, 70.0f );
                     ImGui::TableSetupColumn( "Gain",    ImGuiTableColumnFlags_WidthFixed, 45.0f  );
                     ImGui::TableSetupColumn( "Speed",   ImGuiTableColumnFlags_WidthFixed, 45.0f  );
                     ImGui::TableSetupColumn( "Rep",     ImGuiTableColumnFlags_WidthFixed, 30.0f  );
@@ -1411,6 +1360,7 @@ int BeamApp::EntrypointOuro()
                             ImGui::TableNextColumn(); ImGui::TextUnformatted( "" );
                             ImGui::TableNextColumn(); ImGui::TextUnformatted( "" );
                             ImGui::TableNextColumn(); ImGui::TextUnformatted( "" );
+                            ImGui::TableNextColumn(); ImGui::TextUnformatted( "" );
                         }
                         else
                         {
@@ -1419,6 +1369,22 @@ int BeamApp::EntrypointOuro()
                             ImGui::TableNextColumn(); ImGui::TextUnformatted( stem->m_data.user.c_str() );
                             ImGui::TableNextColumn(); ImGui::TextUnformatted( stem->m_data.getInstrumentName() );
                             ImGui::TableNextColumn(); ImGui::TextUnformatted( stem->m_data.preset.c_str() );
+                            ImGui::TableNextColumn();
+                            switch ( stem->getCompressionFormat() )
+                            {
+                                case endlesss::live::Stem::Compression::Unknown:
+                                    break;
+                                case endlesss::live::Stem::Compression::OggVorbis:
+                                    ImGui::PushStyleColor( ImGuiCol_Text, colour::shades::blue_gray.neutralU32() );
+                                    ImGui::TextUnformatted( ICON_FA_CIRCLE " OggV" );
+                                    ImGui::PopStyleColor();
+                                    break;
+                                case endlesss::live::Stem::Compression::FLAC:
+                                    ImGui::PushStyleColor( ImGuiCol_Text, colour::shades::sea_green.darkU32() );
+                                    ImGui::TextUnformatted( ICON_FA_CIRCLE_UP " FLAC" );
+                                    ImGui::PopStyleColor();
+                                    break;
+                            }
                             ImGui::TableNextColumn(); ImGui::Text( "%.2f",  m_endlesssExchange.m_stemGain[sI] );
                             ImGui::TableNextColumn(); ImGui::Text( "%.2f",  currentRiff->m_stemTimeScales[sI] );
                             ImGui::TableNextColumn(); ImGui::Text( "%ix",   currentRiff->m_stemRepetitions[sI] );
@@ -1429,10 +1395,6 @@ int BeamApp::EntrypointOuro()
                     }
 
                     ImGui::EndTable();
-
-                    ImGui::Dummy( ImVec2( 0.0f, 12.0f ) );
-                    ux::StemBeats( "##stem_beat", m_endlesssExchange, 18.0f, false );
-
                 }
             }
             ImGui::End();
@@ -1446,13 +1408,14 @@ int BeamApp::EntrypointOuro()
         finishInterfaceLayoutAndRender();
     }
 
+    m_uxTagLine.reset();
+
     m_discordBotUI.reset();
 
     m_mdAudio->blockUntil( m_mdAudio->installMixer( nullptr ) );
     m_mdAudio->blockUntil( m_mdAudio->effectClearAll() );
 
 #if OURO_FEATURE_VST24
-    m_dataBus.save( m_appConfigPath );
     m_effectStack->save( m_appConfigPath );
 #endif // OURO_FEATURE_VST24
 

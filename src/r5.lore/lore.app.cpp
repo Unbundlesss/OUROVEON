@@ -720,7 +720,6 @@ protected:
         generateWarehouseContentsSortOrder();
     }
 
-    std::unique_ptr< endlesss::toolkit::Warehouse > m_warehouse;
 
     std::string                                     m_warehouseWorkState;
     bool                                            m_warehouseWorkUnderway = false;
@@ -1573,31 +1572,6 @@ protected:
     }
 
 
-    void modalBasicErrorPopup( const char* title, std::string_view errorMessage )
-    {
-        const ImVec2 configWindowSize = ImVec2( 600.0f, 150.0f );
-        ImGui::SetNextWindowContentSize( configWindowSize );
-
-        if ( ImGui::BeginPopupModal( title, nullptr, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize ) )
-        {
-            const ImVec2 buttonSize( 240.0f, 32.0f );
-
-            ImGui::TextWrapped( errorMessage.data() );
-
-            ImGui::SeparatorBreak();
-
-            const auto panelRegionAvail = ImGui::GetContentRegionAvail();
-            {
-                const float alignButtonsToBase = panelRegionAvail.y - (buttonSize.y + 6.0f);
-                ImGui::Dummy( ImVec2( 0, alignButtonsToBase ) );
-            }
-
-            if ( ImGui::Button( "Close", buttonSize ) )
-                ImGui::CloseCurrentPopup();
-
-            ImGui::EndPopup();
-        }
-    }
 
     void event_RequestNavigationToRiff( const events::RequestNavigationToRiff* eventData )
     {
@@ -1607,11 +1581,10 @@ protected:
         // can't navigate to a in-flux jam, bail out early with a message
         if ( isJamBeingSynced( jamToNavigateTo ) )
         {
-            activateModalPopup( "Cannot View Jam", [this]( const char* title )
-                {
-                    static constexpr auto cJamViewError = "Cannot view this jam currently, it is being synchronised. Try again later.";
-                    modalBasicErrorPopup( title, cJamViewError );
-                });
+            m_appEventBus->send<::events::AddErrorPopup>(
+                "Cannot View Jam",
+                "Cannot view this jam currently, it is being synchronised. Try again later."
+            );
 
             return;
         }
@@ -2074,13 +2047,7 @@ int LoreApp::EntrypointOuro()
             }
         });
 
-    // create warehouse instance to manage ambient downloading
-    m_warehouse = std::make_unique<endlesss::toolkit::Warehouse>(
-        m_storagePaths.value(),
-        m_networkConfiguration,
-        m_appEventBus );
 
-    m_warehouse->upsertJamDictionaryFromCache( m_jamLibrary );             // update warehouse list of jam IDs -> names from the current cache
     m_warehouse->extractJamDictionary( m_jamHistoricalFromWarehouse );     // pull full list of jam IDs -> names from warehouse as "historical" list
     
     m_warehouse->setCallbackWorkReport( std::bind( &LoreApp::handleWarehouseWorkUpdate, this, stdp::_1, stdp::_2 ) );
@@ -2881,11 +2848,10 @@ int LoreApp::EntrypointOuro()
                                         }
                                         else
                                         {
-                                            activateModalPopup( "Unable to find rifff", [this]( const char* title )
-                                            {
-                                                static constexpr auto cRiffSearchError = "Could not navigate to riff; you may need to synchronise this jam to ensure it has the latest data available.";
-                                                modalBasicErrorPopup( title, cRiffSearchError );
-                                            });
+                                            m_appEventBus->send<::events::AddErrorPopup>(
+                                                "Unable to find rifff",
+                                                "Could not navigate to riff; you may need to synchronise this jam to ensure it has the latest data available."
+                                            );
                                         }
 
                                         m_currentViewedJamScrollToRiff = std::nullopt;
@@ -3131,11 +3097,10 @@ int LoreApp::EntrypointOuro()
                                             {
                                                 blog::error::app( "tag save failed; cannot write to [{}] | {}", fullPathToWriteTo.string(), cEx.what() );
 
-                                                activateModalPopup( "Failed to Save Tags", [this]( const char* title )
-                                                    {
-                                                        static constexpr auto cTagSaveError = "Failed to write tags data to disk.\nEnsure file is not read-only or in use by another application.";
-                                                        modalBasicErrorPopup( title, cTagSaveError );
-                                                    } );
+                                                m_appEventBus->send<::events::AddErrorPopup>(
+                                                    "Failed to Save Tags",
+                                                    "Failed to write tags data to disk.\nEnsure file is not read-only or in use by another application."
+                                                );
                                             }
                                         } );
                                 }
@@ -3198,12 +3163,10 @@ int LoreApp::EntrypointOuro()
                                                 std::string resolvedName;
                                                 const auto lookupResult = lookupNameForJam( loadedState.jamID, resolvedName );
 
-                                                std::string mismatchedJamTag = fmt::format( FMTX( "The selected file contains tags for [{}] - please load that jam first if you want to import tags for it" ), resolvedName );
-
-                                                activateModalPopup( "Failed to Load Tags", [this, errorText = std::move(mismatchedJamTag)](const char* title)
-                                                    {
-                                                        modalBasicErrorPopup( title, errorText );
-                                                    });
+                                                m_appEventBus->send<::events::AddErrorPopup>(
+                                                    "Failed to Load Tags",
+                                                    fmt::format( FMTX( "The selected file contains tags for [{}] - please load that jam first if you want to import tags for it" ), resolvedName )
+                                                );
                                             }
                                             else
                                             {
@@ -3241,11 +3204,10 @@ int LoreApp::EntrypointOuro()
                                         {
                                             blog::error::app( "tag load failed; cannot load from [{}] | {}", fullPathToReadFrom.string(), cEx.what() );
 
-                                            activateModalPopup( "Failed to Load Tags", [this]( const char* title )
-                                                {
-                                                    static constexpr auto cTagLoadError = "Failed to load tags data to disk.\nFile may be corrupt or otherwise unreadable. Send it to ishani for analysis!";
-                                                    modalBasicErrorPopup( title, cTagLoadError );
-                                                });
+                                            m_appEventBus->send<::events::AddErrorPopup>(
+                                                "Failed to Load Tags",
+                                                "Failed to load tags data to disk.\nFile may be corrupt or otherwise unreadable. Send it to ishani for analysis!"
+                                            );
                                         }
 
                                     });
@@ -3827,11 +3789,10 @@ int LoreApp::EntrypointOuro()
                                     const auto exportPathStatus = filesys::ensureDirectoryExists( exportPath );
                                     if ( !exportPathStatus.ok() )
                                     {
-                                        activateModalPopup( "Enable to create output directory", [this]( const char* title )
-                                            {
-                                                static constexpr auto cExportError = "Was unable to create database export directory, cannot save to disk";
-                                                modalBasicErrorPopup( title, cExportError );
-                                            });
+                                        m_appEventBus->send<::events::AddErrorPopup>(
+                                            "Enable to create output directory",
+                                            "Was unable to create database export directory, cannot save to disk"
+                                        );
                                     }
                                     else
                                     {

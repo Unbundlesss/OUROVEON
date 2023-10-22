@@ -165,6 +165,7 @@ bool ClickableText( const char* label );
 void CenteredText( const char* text );
 void CenteredColouredText( const ImVec4& col, const char* text );
 
+bool BeginFixedCenteredWindow( const char* label, const ImVec2& fixedSize, const ImVec2& positionOffset = ImVec2(0,0) );
 
 void RightAlignSameLine( float objectSize );
 
