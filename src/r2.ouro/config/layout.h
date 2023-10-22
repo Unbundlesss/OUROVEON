@@ -22,9 +22,10 @@ OURO_CONFIG( Layout )
     // if we make changes to imgui components or layout infra that would invalidate a saved layout.ini, 
     // incrementing this revision will cause the app to load from the bundled default layout automatically on startup
     // 
-    // v4 | 0.8.0 changes, 20230917
+    // v4 | 0.8.0 changes       | 20230917
+    // v5 | 0.8.1 BEAM update   | 20231022
     //
-    static constexpr uint32_t CurrentGuiMasterRevision = 4;
+    static constexpr uint32_t CurrentGuiMasterRevision = 5;
 
     uint32_t        guiMasterRevision = 0;
 
