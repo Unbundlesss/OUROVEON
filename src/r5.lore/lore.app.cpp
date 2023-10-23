@@ -780,7 +780,7 @@ protected:
         int32_t     m_height = 0;
     };
 
-    gfx::Sketchbook     m_sketchbook;
+    std::unique_ptr< gfx::Sketchbook >    m_sketchbook;
 
     void syncJamViewLayoutAndAsyncRendering( const ImVec2& dimensions, const int32_t browserHeight )
     {
@@ -1728,7 +1728,7 @@ protected:
             {
                 m_jamSliceSketch = std::make_unique<JamSliceSketch>();
                 m_jamSliceSketch->prepare( std::move( m_jamSlice ) );
-                m_jamSliceSketch->raster( m_sketchbook, m_jamVisualisation, m_jamViewDimensions, m_jamViewBrowserHeight );
+                m_jamSliceSketch->raster( *m_sketchbook, m_jamVisualisation, m_jamViewDimensions, m_jamViewBrowserHeight );
 
                 m_jamSliceRenderState = JamSliceRenderState::Ready;
             }
@@ -1742,7 +1742,7 @@ protected:
             {
                 if ( m_jamSliceRenderChangePendingTimer.hasPassed() )
                 {
-                    m_jamSliceSketch->raster( m_sketchbook, m_jamVisualisation, m_jamViewDimensions, m_jamViewBrowserHeight );
+                    m_jamSliceSketch->raster( *m_sketchbook, m_jamVisualisation, m_jamViewDimensions, m_jamViewBrowserHeight );
                     m_jamSliceRenderState = JamSliceRenderState::Ready;
                 }
             }
@@ -2024,6 +2024,8 @@ int LoreApp::EntrypointOuro()
         }
     }
 
+    m_sketchbook = std::make_unique<gfx::Sketchbook>();
+
     m_uxSharedRiffView  = std::make_unique<ux::SharedRiffView>( m_networkConfiguration, getEventBusClient() );
     m_uxTagLine         = std::make_unique<ux::TagLine>( getEventBusClient() );
 
@@ -2132,7 +2134,7 @@ int LoreApp::EntrypointOuro()
         app::CoreGUI::VF_WithStatusBar ) ) )
     {
         // run jam slice computation that needs to run on the main thread
-        m_sketchbook.processPendingUploads();
+        m_sketchbook->processPendingUploads();
 
         // tidy up any messages from our riff-sync background thread
         synchroniseRiffWork();
@@ -3759,6 +3761,13 @@ int LoreApp::EntrypointOuro()
     // unplug from warehouse
     unregisterStatusBarBlock( sbbWarehouseID );
     m_warehouse->clearAllCallbacks();
+
+    // shut down the GPU rendering sketchbook
+    {
+        m_jamSlice.reset();
+        m_jamSliceSketch.reset();
+        m_sketchbook.reset();
+    }
 
     m_riffPipeline.reset();
 

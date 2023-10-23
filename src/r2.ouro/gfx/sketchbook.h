@@ -12,7 +12,7 @@
 #include "base/construction.h"
 #include "buffer/buffer.2d.h"
 
-#ifdef _DEBUG
+#if 0
 #define OURO_SKETCH_VERBOSE(...)         blog::gfx( __VA_ARGS__ )
 #else
 #define OURO_SKETCH_VERBOSE(...)         

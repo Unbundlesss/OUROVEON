@@ -1005,6 +1005,8 @@ Warehouse::Warehouse( const app::StoragePaths& storagePaths, api::NetConfigurati
     , m_eventBusClient( eventBus )
     , m_workerThreadPaused( false )
 {
+    blog::database( FMTX("sqlite version {}"), SQLITE_VERSION );
+
     m_taskSchedule = std::make_unique<TaskSchedule>();
 
     m_databaseFile = ( storagePaths.cacheCommon / "warehouse.db3" ).string();
