@@ -3,6 +3,8 @@
 #include "base/utils.h"
 #include "math/rng.h"
 #include "buffer/mix.h"
+#include "mix/common.h"
+
 #include "spacetime/moment.h"
 
 #include "app/module.audio.h"
@@ -35,7 +37,8 @@ using namespace std::chrono_literals;
 
 // ---------------------------------------------------------------------------------------------------------------------
 struct MixEngine : public app::module::MixerInterface, 
-                   public rec::IRecordable
+                   public rec::IRecordable,
+                   public mix::RiffMixerBase
 {
     using AudioBuffer = app::module::Audio::OutputBuffer;
     using AudioSignal = app::module::Audio::OutputSignal;
@@ -141,14 +144,6 @@ struct MixEngine : public app::module::MixerInterface,
     using CommandQueue  = mcc::ReaderWriterQueue<EngineCommandData>;
     using RiffQueue     = mcc::ReaderWriterQueue<endlesss::live::RiffPtr>;
 
-    uint32_t                    m_audioBufferSize;
-    uint32_t                    m_audioSampleRate;
-
-
-    std::array< float*, 8 >     m_mixChannelLeft;
-    std::array< float*, 8 >     m_mixChannelRight;
-
-    app::AudioPlaybackTimeInfo  m_unifiedTimeInfo;
 
     uint64_t                    m_samplePosition;
 
@@ -171,8 +166,9 @@ struct MixEngine : public app::module::MixerInterface,
     ProgressionConfiguration    m_progression;
 
 
-    MixEngine( const app::AudioModule& audioEngine )
-        : m_samplePosition( 0 )
+    MixEngine( const int32_t maxBufferSize, const int32_t sampleRate, base::EventBusClient& eventBusClient )
+        : RiffMixerBase( maxBufferSize, sampleRate, eventBusClient )
+        , m_samplePosition( 0 )
         , m_riffCurrent( nullptr )
         , m_riffNext( nullptr )
         , m_transitionValue( 0 )
@@ -188,27 +184,10 @@ struct MixEngine : public app::module::MixerInterface,
         , m_repcomSampleEnd( cSampleCountMax )
         , m_repcomState( RepComState::Unpaused )
     {
-        memset( &m_unifiedTimeInfo, 0, sizeof( m_unifiedTimeInfo ) );
-
-        m_audioBufferSize = audioEngine->getMaximumBufferSize();
-        m_audioSampleRate = audioEngine->getSampleRate();
-
-        for ( size_t mI = 0; mI < 8; mI++ )
-        {
-            m_mixChannelLeft[mI]  = mem::alloc16<float>( m_audioBufferSize );
-            m_mixChannelRight[mI] = mem::alloc16<float>( m_audioBufferSize );
-        }
     }
 
     virtual ~MixEngine()
     {
-        for ( float* channel : m_mixChannelLeft )
-            mem::free16( channel );
-        m_mixChannelLeft.fill( nullptr );
-
-        for ( float* channel : m_mixChannelRight )
-            mem::free16( channel );
-        m_mixChannelRight.fill( nullptr );
     }
 
     inline void addNextRiff( const endlesss::live::RiffPtr& nextRiff )
@@ -315,50 +294,9 @@ struct MixEngine : public app::module::MixerInterface,
 
     void mainThreadUpdate( const float dT, endlesss::toolkit::Exchange& beatEx )
     {
-        for ( auto& sb : m_stemBeats )
-            sb.update( dT, m_stemBeatRate );
-
-        m_stemBeatConsensus += (-0.1f - m_stemBeatConsensus) * (dT * m_stemBeatRate);
-        m_stemBeatConsensus = std::clamp( m_stemBeatConsensus, 0.0f, 1.0f );
-
-        beatEx.m_consensusBeat = m_stemBeatConsensus;
-        for ( auto stemI = 0U; stemI < 8; stemI++ )
-        {
-            beatEx.m_stemBeat[stemI]  = m_stemBeats[stemI].m_pulse;
-            beatEx.m_stemWave[stemI] = m_stemEnergy[stemI];
-        }
-
         for ( auto layer = 0U; layer < 8; layer++ )
             m_multiTrackOutputsToDestroyOnMainThread[layer].reset();
     }
-
-    struct StemBeats
-    {
-        std::vector< float >    m_hits;
-        float                   m_pulse;
-
-        inline void update( float dT, const float beatRate )
-        {
-            std::vector< float > newHits;
-            if ( m_pulse == 1.0f )
-                newHits.push_back( 0.0f );
-
-            for ( auto i = 0; i < m_hits.size(); i++ )
-            {
-                const float c = m_hits[i] + dT;
-                if ( c < 1.0f )
-                    newHits.push_back( c );
-            }
-            m_hits = std::move( newHits );
-
-            m_pulse += ( -0.1f - m_pulse ) * ( dT * beatRate );
-            m_pulse = std::clamp( m_pulse, 0.0f, 1.0f );
-        }
-    };
-
-    std::array< StemBeats, 8 >  m_stemBeats;
-    float                       m_stemBeatConsensus;
-    std::array< float, 8 >      m_stemEnergy;
 
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -474,7 +412,9 @@ void MixEngine::update(
     const uint64_t      samplePosition )
 {
     m_samplePosition = samplePosition;
-    m_unifiedTimeInfo.samplePos = (double)samplePosition;
+    m_timeInfo.samplePos = (double)samplePosition;
+
+    stemAmalgamUpdate();
 
     const double linearTimeStep = (double)samplesToWrite / (double)m_audioSampleRate;
 
@@ -653,9 +593,9 @@ void MixEngine::update(
 
 
     // update vst time structure with latest state
-    m_unifiedTimeInfo.tempo              = currentRiff->m_timingDetails.m_bpm;
-    m_unifiedTimeInfo.timeSigNumerator   = currentRiff->m_timingDetails.m_quarterBeats;
-    m_unifiedTimeInfo.timeSigDenominator = 4;
+    m_timeInfo.tempo              = currentRiff->m_timingDetails.m_bpm;
+    m_timeInfo.timeSigNumerator   = currentRiff->m_timingDetails.m_quarterBeats;
+    m_timeInfo.timeSigDenominator = 4;
 
 
     std::array< bool,  16 >         stemHasBeat;
@@ -831,13 +771,19 @@ void MixEngine::update(
             finalSampleIdx %= sampleCount;
 
 
-            // #TODO replace with new system
             if ( stemInst->isAnalysisComplete() )
             {
                 const auto& stemAnalysis = stemInst->getAnalysisData();
 
-                stemHasBeat[stemI] |= stemAnalysis.queryBeatAtSample( finalSampleIdx );
-                //stemEnergy[stemI] = std::max( stemEnergy[stemI], stemAnalysis.m_peak[finalSampleIdx] );
+                const float stemWave = stemAnalysis.getWaveF( finalSampleIdx );
+                const float stemBeat = stemAnalysis.getBeatF( finalSampleIdx );
+                const float stemLow  = stemAnalysis.getLowFreqF( finalSampleIdx );
+                const float stemHigh = stemAnalysis.getHighFreqF( finalSampleIdx );
+
+                m_stemDataAmalgam.m_wave[stemI] = std::max( m_stemDataAmalgam.m_wave[stemI], stemWave );
+                m_stemDataAmalgam.m_beat[stemI] = std::max( m_stemDataAmalgam.m_beat[stemI], stemBeat );
+                m_stemDataAmalgam.m_low[stemI]  = std::max( m_stemDataAmalgam.m_low[stemI],  stemLow  );
+                m_stemDataAmalgam.m_high[stemI] = std::max( m_stemDataAmalgam.m_high[stemI], stemHigh );
             }
 
             m_mixChannelLeft[stemI][sI]  = stemInst->m_channel[0][finalSampleIdx] * stemGain;
@@ -880,21 +826,7 @@ void MixEngine::update(
         }
     }
 
-    // #TODO replace with new system
-    int32_t simultaneousBeats = 0;
-    for ( auto stemI = 0U; stemI < 8; stemI++ )
-    {
-        if ( stemHasBeat[stemI] )
-        {
-            m_stemBeats[stemI].m_pulse = 1.0f;
-            simultaneousBeats++;
-        }
-
-        m_stemEnergy[stemI] = stemEnergy[stemI];
-    }
-    if ( simultaneousBeats >= 3 )
-        m_stemBeatConsensus = 1.0f;
-
+    m_stemDataAmalgamSamplesUsed += samplesToWrite;
 
     commit( outputBuffer, outputSignal, samplesToWrite );
 }
@@ -946,12 +878,12 @@ int BeamApp::EntrypointOuro()
 
 
     // create and install the mixer engine
-    MixEngine mixEngine( m_mdAudio );
+    MixEngine mixEngine( m_mdAudio->getMaximumBufferSize(), m_mdAudio->getSampleRate(), m_appEventBusClient.value() );
     m_mdAudio->blockUntil( m_mdAudio->installMixer( &mixEngine ) );
 
 #if OURO_FEATURE_VST24
     // VSTs for audio engine
-    m_effectStack = std::make_unique<effect::EffectStack>( m_mdAudio.get(), &mixEngine.m_unifiedTimeInfo, "beam" );
+    m_effectStack = std::make_unique<effect::EffectStack>( m_mdAudio.get(), mixEngine.getTimeInfoPtr(), "beam" );
     m_effectStack->load( m_appConfigPath );
 #endif // OURO_FEATURE_VST24
 
@@ -1014,9 +946,6 @@ int BeamApp::EntrypointOuro()
         app::CoreGUI::VF_WithMainMenu  |
         app::CoreGUI::VF_WithStatusBar ) ) )
     {
-        // process and blank out Exchange data ready to re-write it
-        emitAndClearExchangeData();
-
         mixEngine.mainThreadUpdate( GImGui->IO.DeltaTime, m_endlesssExchange );
 
         // run modal jam browser window if it's open
@@ -1033,21 +962,32 @@ int BeamApp::EntrypointOuro()
         }
         else
         {
-            if ( !m_jamLibrary.loadDataForDatabaseID( m_trackedJamCouchID, trackedJamData ) )
+            std::string resolvedName;
+            const auto lookupResult = lookupNameForJam( m_trackedJamCouchID, resolvedName );
+
+            if ( lookupResult != endlesss::services::IJamNameCacheServices::LookupResult::NotFound )
             {
-                trackedJamData.m_displayName = "[ error ]";
+                trackedJamData.m_displayName = resolvedName;
+            }
+            else
+            {
+                trackedJamData.m_displayName = "[ name unknown ]";
             }
         }
 
         auto currentRiffPtr = mixEngine.m_riffCurrent;
 
-        // update exchange buffers 
         {
-            endlesss::toolkit::Exchange::copyDetailsFromRiff( m_endlesssExchange, currentRiffPtr, trackedJamData.m_displayName.c_str() );
+            // process and blank out Exchange data ready to re-write it
+            emitAndClearExchangeData();
 
-            m_endlesssExchange.m_riffBeatSegmentActive = mixEngine.m_playbackProgression.m_playbackBarSegment;
-            m_endlesssExchange.m_riffTransition        = mixEngine.m_transitionValue;
+            encodeExchangeData(
+                currentRiffPtr,
+                trackedJamData.m_displayName,
+                (uint64_t)mixEngine.getTimeInfoPtr()->samplePos,
+                nullptr );
         }
+
 
 #if OURO_FEATURE_VST24
         {
@@ -1106,6 +1046,7 @@ int BeamApp::EntrypointOuro()
                 {
                     ImGui::TextColored( 
                         isTracking ? ImGui::GetStyleColorVec4( ImGuiCol_PlotHistogram ) : ImGui::GetStyleColorVec4( ImGuiCol_SliderGrabActive ),
+                        "%s",
                         trackedJamData.m_displayName.c_str() );
 
                     ImGui::Spacing();

@@ -55,7 +55,8 @@ protected:
     //              the root storage path; once the app starts for real, this can be assumed to be valid
     std::optional< StoragePaths >           m_storagePaths = std::nullopt;
 
-    // -------------
+
+    // -----------------------------------------------------------------------------------------------------------------
 
     // stem cache maintenance; checks for memory pressure, triggers async prune operation to try and guide towards
     // chosen memory limit
@@ -73,13 +74,18 @@ protected:
     tf::Taskflow                            m_stemCachePruneTask;
     std::optional< tf::Future<void> >       m_stemCachePruneFuture = std::nullopt;
 
-    // -------------
+
+    // -----------------------------------------------------------------------------------------------------------------
 
     // instance of the endlesss data warehouse, holding all locally synced jam/riff/stem data
     endlesss::toolkit::Warehouse::Instance  m_warehouse;
 
+    // jam ID -> public name data that has been cached in the Warehouse database, used as secondary lookup
+    // for IDs that we don't recognise as the normal jam library might be missing jams the user has left etc
+    endlesss::types::JamIDToNameMap         m_jamHistoricalFromWarehouse;
 
-    // -------------
+
+    // -----------------------------------------------------------------------------------------------------------------
 
     void event_ExportRiff( const events::ExportRiff* eventData );
 
@@ -87,6 +93,22 @@ protected:
     config::endlesss::Export                m_configExportOutput;
 
     base::EventListenerID                   m_eventLID_ExportRiff = base::EventListenerID::invalid();
+
+
+    // ---------------------------------------------------------------------------------------------------------------------
+
+    using JamNameRemoteResolution       = std::pair< endlesss::types::JamCouchID, std::string >;
+    using JamNameRemoteFetchResultQueue = mcc::ConcurrentQueue< JamNameRemoteResolution >;
+
+    // take a band### id and go find a public name for it, via circuitous means
+    void event_RequestJamNameRemoteFetch( const events::RequestJamNameRemoteFetch* eventData );
+
+    // run on main thread to work with the results of async jam name resolution
+    void updateJamNameResolutionTasks( float deltaTime );
+
+    base::EventListenerID                   m_eventLID_RequestJamNameRemoteFetch = base::EventListenerID::invalid();
+    JamNameRemoteFetchResultQueue           m_jamNameRemoteFetchResultQueue;
+    float                                   m_jamNameRemoteFetchUpdateBroadcastTimer = 0;
 };
 
 } // namespace app

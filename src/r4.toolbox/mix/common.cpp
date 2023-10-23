@@ -12,6 +12,7 @@
 
 namespace mix {
 
+// ---------------------------------------------------------------------------------------------------------------------
 void RiffMixerBase::mixChannelsWriteSilence(
     const uint32_t offset, 
     const uint32_t samplesToWrite)
@@ -26,7 +27,8 @@ void RiffMixerBase::mixChannelsWriteSilence(
     }
 }
 
-void RiffMixerBase::mixChannelsToOutput( 
+// ---------------------------------------------------------------------------------------------------------------------
+void RiffMixerBase::mixChannelsToOutput(
     const app::module::Audio::OutputBuffer& outputBuffer,
     const app::module::Audio::OutputSignal& outputSignal,
     const uint32_t samplesToWrite )
@@ -53,6 +55,30 @@ void RiffMixerBase::mixChannelsToOutput(
         outputBuffer.m_workingLR[0],
         outputBuffer.m_workingLR[1]
     );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void RiffMixerBase::stemAmalgamReset( const int32_t sampleRate )
+{
+    // work out the timing for resetting amalgams; roughly broadcast every 1/N seconds
+    m_stemDataAmalgam.reset();
+    m_stemDataAmalgamSamplesBeforeReset = (uint32_t)std::round( (double)sampleRate * (1.0 / 60.0) );
+    m_stemDataAmalgamSamplesUsed = 0;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void RiffMixerBase::stemAmalgamUpdate()
+{
+    // burned through enough samples to send out latest stem data block. chuck the current data on the bus
+    // NB/TODO doesn't deal with crossing this boundary inside the update (eg. if samplesToWrite is big, bigger than SamplesBeforeReset..)
+    // could do this at a higher level, break the render() into smaller samplesToWrite blocks to fit, probably overkill
+    if ( m_stemDataAmalgamSamplesUsed >= m_stemDataAmalgamSamplesBeforeReset )
+    {
+        m_eventBusClient.Send< ::events::StemDataAmalgamGenerated >( m_stemDataAmalgam );
+
+        m_stemDataAmalgam.reset();
+        m_stemDataAmalgamSamplesUsed = 0;
+    }
 }
 
 }

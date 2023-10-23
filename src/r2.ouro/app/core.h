@@ -18,6 +18,8 @@
 #include "config/performance.h"
 #include "config/frontend.h"
 
+#include "mix/stem.amalgam.h"
+
 #include "endlesss/all.h"
 
 
@@ -168,6 +170,12 @@ protected:
     }
 
 
+    void encodeExchangeData(
+        const endlesss::live::RiffPtr& riffInstance,
+        std::string_view jamName,
+        const uint64_t playbackSampleCount,
+        const endlesss::types::RiffPlaybackPermutation* permutation = nullptr );
+
     // call to transmit or broadcast the currently populated endlesss::Exchange block if such methods are enabled
     // followed by clearing it ready for re-populating
     void emitAndClearExchangeData();
@@ -208,8 +216,13 @@ protected:
     endlesss::toolkit::PopulationQuery      m_endlesssPopulation;
 
 
+    // stem amalgam processor that gets updates on stem playback and will smooth them into
+    // a data block ready for passing to endlesss::toolkit::Exchange
+    mix::StemDataProcessor                  m_stemDataProcessor;
+
     // standard state exchange data, filled when possible with the current playback state
     endlesss::toolkit::Exchange             m_endlesssExchange;
+
 
 #if OURO_EXCHANGE_IPC
     // constantly-updated globally-shared data block
@@ -302,6 +315,8 @@ struct CoreGUI : Core,
     using FileDialogInst            = std::unique_ptr<ImGuiFileDialog>;
     using FileDialogCallback        = std::function< void( ImGuiFileDialog& ) >;
 
+    using MainThreadCall            = std::function< void( float ) >;
+
 
     enum ViewportFlags
     {
@@ -329,6 +344,8 @@ struct CoreGUI : Core,
     UIInjectionHandle registerMainMenuEntry( const int32_t ordering, const std::string& menuName, const UIInjectionCallback& callback );
     bool unregisterMainMenuEntry( const UIInjectionHandle handle );
 
+    void registerMainThreadCall( std::string_view name, MainThreadCall func );
+    void unregisterMainThreadCall( std::string_view name );
 
     // ICoreCustomRendering
     void registerRenderCallback( const RenderPoint rp, const RenderInjectionCallback& callback ) override;
@@ -381,7 +398,7 @@ protected:
     using MenuMenuEntryList     = std::vector< MenuMenuEntry >;
 
     using CustomRenderCallbacks = std::vector< ICoreCustomRendering::RenderInjectionCallback >;
-
+    using MainThreadCalls       = absl::flat_hash_map< std::string, MainThreadCall >;
 
     // generic modal-popup tracking types to simplify client code opening and running dialog boxes
     using ModalPopupsWaiting    = std::vector< std::string >;
@@ -453,6 +470,9 @@ protected:
     CustomRenderCallbacks   m_preImguiRenderCallbacks;
     CustomRenderCallbacks   m_postImguiRenderCallbacks;
 
+    // list of functions to run on the main thread each tick
+    std::mutex              m_mainThreadCallsMutex;
+    MainThreadCalls         m_mainThreadCalls;
 
     // instance of the file picker imgui gizmo
     FileDialogInst          m_activeFileDialog;

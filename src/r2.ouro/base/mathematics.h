@@ -83,6 +83,16 @@ constexpr _T lerp( const _T& a, const _T& b, const float s )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+inline float cplerp( float a, float b, float t )
+{
+    float blend = -1.0f + (t * 2.0f);
+
+    float x = std::sqrt( 0.5f * (1.0f - blend) );
+
+    return (b * (1.0f - x)) + (a * x);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 constexpr float smoothstep( const float edge0, const float edge1, const float f )
 {
     const float t = std::clamp( (f - edge0) / (edge1 - edge0), 0.0f, 1.0f );

@@ -979,12 +979,12 @@ int OuroApp::EntrypointGUI()
     // events
     {
         APP_EVENT_REGISTER( ExportRiff );
-        APP_EVENT_REGISTER( StemDataAmalgamGenerated );
         APP_EVENT_REGISTER_SPECIFIC( MixerRiffChange, 16 * 4096 );
 
         {
             base::EventBusClient m_eventBusClient( m_appEventBus );
             APP_EVENT_BIND_TO( ExportRiff );
+            APP_EVENT_BIND_TO( RequestJamNameRemoteFetch );
         }
     }
 
@@ -1013,12 +1013,13 @@ int OuroApp::EntrypointGUI()
                     m_appEventBus );
 
                 m_warehouse->upsertJamDictionaryFromCache( m_jamLibrary );             // update warehouse list of jam IDs -> names from the current cache
+                m_warehouse->extractJamDictionary( m_jamHistoricalFromWarehouse );     // pull full list of jam IDs -> names from warehouse as "historical" list
             }
 
             return absl::OkStatus();
         });
 
-    // run a short "please wait" UI loop while we let the above async task complete
+    // run a short "please wait" UI loop while we let the above async task complete & display any errors found
     bool bRunSessionWaitLoop = true;
     absl::Status sessionWaitResult = absl::OkStatus();
     while ( bRunSessionWaitLoop && beginInterfaceLayout( CoreGUI::VF_WithStatusBar ) )
@@ -1082,12 +1083,15 @@ int OuroApp::EntrypointGUI()
     if ( !sessionWaitResult.ok() )
         return -1;
 
+    registerMainThreadCall( "name-resolution", [this]( float deltaTime ) { updateJamNameResolutionTasks( deltaTime ); } );
+
     // all done, pass control over to next level
     int appResult = EntrypointOuro();
 
     // unhook events
     {
         base::EventBusClient m_eventBusClient( m_appEventBus );
+        APP_EVENT_UNBIND( RequestJamNameRemoteFetch );
         APP_EVENT_UNBIND( ExportRiff );
     }
 
@@ -1131,6 +1135,14 @@ endlesss::services::IJamNameCacheServices::LookupResult OuroApp::lookupNameForJa
             result = nsIt->second.link_name;
         else
             result = nsIt->second.sync_name;
+        return LookupResult::FoundInArchives;
+    }
+
+    // check fall-back data source, the "historical" list from the Warehouse db
+    const auto historicalIt = m_jamHistoricalFromWarehouse.find( jamID );
+    if ( historicalIt != m_jamHistoricalFromWarehouse.end() )
+    {
+        result = historicalIt->second;
         return LookupResult::FoundInArchives;
     }
 
@@ -1188,6 +1200,89 @@ void OuroApp::event_ExportRiff( const events::ExportRiff* eventData )
         m_appEventBus->send<::events::AddToastNotification>( ::events::AddToastNotification::Type::Info,
             ICON_FA_FLOPPY_DISK " Riff Exported",
             eventData->m_riff->m_uiDetails );
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void OuroApp::event_RequestJamNameRemoteFetch( const events::RequestJamNameRemoteFetch* eventData )
+{
+    // kick a task that uses a few network calls to go from a band### id to a public name; this uses the permalink
+    // endpoint (to get the extended ID) and the public riff API with that ID to snag the names
+    getTaskExecutor().silent_async( [this, jamID = eventData->m_jamID, netCfg = getNetworkConfiguration()]()
+        {
+            blog::api( FMTX( "name resolution for {}" ), jamID );
+
+            // use the permalink query to fetch the original name and the full extended ID we can use to investigate further
+            endlesss::api::BandPermalinkMeta bandPermalink;
+            if ( bandPermalink.fetch( *netCfg, jamID ) )
+            {
+                if ( bandPermalink.errors.empty() )
+                {
+                    std::string extendedID;
+                    if ( bandPermalink.data.extractLongJamIDFromPath( extendedID ) )
+                    {
+                        endlesss::api::BandNameFromExtendedID bandNameFromExtended;
+                        if ( bandNameFromExtended.fetch( *netCfg, extendedID ) && bandNameFromExtended.ok )
+                        {
+                            // note any name updates, just for interest
+                            if ( bandNameFromExtended.data.name != bandPermalink.data.band_name )
+                            {
+                                blog::api( FMTX( "name resolution; update from original [{}] to [{}]" ),
+                                    bandPermalink.data.band_name,
+                                    bandNameFromExtended.data.name
+                                );
+                            }
+
+                            // .. for now, just log out the name we found, this will be processed on the main thread
+                            m_jamNameRemoteFetchResultQueue.enqueue(
+                                {
+                                    std::move( jamID ),
+                                    std::move( bandNameFromExtended.data.name )
+                                } );
+                        }
+                        else
+                        {
+                            blog::error::api( FMTX( "name resolution failure, BandNameFromExtendedID failed [{}]" ), bandNameFromExtended.message );
+                        }
+                    }
+                    else
+                    {
+                        blog::error::api( FMTX( "name resolution failure, long-form ID not recognised [{}]" ), bandPermalink.data.path );
+                    }
+                }
+                else
+                {
+                    blog::error::api( FMTX( "name resolution failure, {}" ), bandPermalink.errors.front() );
+                }
+            }
+        });
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void OuroApp::updateJamNameResolutionTasks( float deltaTime )
+{
+    // see if we have any outstanding new jam name resolution results
+    JamNameRemoteResolution jamNameRemoteResolution;
+    if ( m_jamNameRemoteFetchResultQueue.try_dequeue( jamNameRemoteResolution ) )
+    {
+        // plug this new resolved name directly back into the warehouse (upserting any existing ID)
+        m_warehouse->upsertSingleJamIDToName( jamNameRemoteResolution.first, jamNameRemoteResolution.second );
+
+        // and then also mirror it into the historical record we already pulled from the warehouse, so the data sets match
+        m_jamHistoricalFromWarehouse.emplace( jamNameRemoteResolution.first, std::move( jamNameRemoteResolution.second ) );
+        m_jamNameRemoteFetchUpdateBroadcastTimer = 1.0f;
+    }
+
+    // we add a degree of delay to sending update messages to try and cluster cache name updates
+    if ( m_jamNameRemoteFetchUpdateBroadcastTimer > 0 )
+    {
+        // only send when we cross or hit the 0 boundary this frame
+        m_jamNameRemoteFetchUpdateBroadcastTimer -= deltaTime;
+        if ( m_jamNameRemoteFetchUpdateBroadcastTimer <= 0 )
+        {
+            getEventBusClient().Send< ::events::NotifyJamNameCacheUpdated >( 0 );
+            m_jamNameRemoteFetchUpdateBroadcastTimer = 0;
+        }
     }
 }
 

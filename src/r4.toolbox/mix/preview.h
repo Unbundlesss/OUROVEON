@@ -155,9 +155,6 @@ protected:
     TxBlendInterpArray              m_txBlendInterp;
     uint32_t                        m_txBlendSamplesRemaining   = 0;
 
-    StemDataAmalgam                 m_stemDataAmalgam;
-    uint32_t                        m_stemDataAmalgamSamplesBeforeReset;
-    uint32_t                        m_stemDataAmalgamSamplesUsed;
 
     endlesss::live::RiffProgression m_playbackProgression;
 

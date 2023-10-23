@@ -1078,6 +1078,12 @@ void Warehouse::setCallbackTagRemoved( const TagRemovedCallback& cb )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+void Warehouse::requestContentsReport()
+{
+    m_taskSchedule->m_taskQueue.enqueue( std::make_unique<ContentsReportTask>( m_cbContentsReport ) );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::upsertSingleJamIDToName( const endlesss::types::JamCouchID& jamCID, const std::string& displayName )
 {
     static constexpr char _insertOrUpdateJamData[] = R"(
@@ -1431,7 +1437,7 @@ void Warehouse::threadWorker()
         workCyclesBeforeNewReport--;
         if ( workCyclesBeforeNewReport <= 0 || force )
         {
-            m_taskSchedule->m_taskQueue.enqueue( std::make_unique<ContentsReportTask>( m_cbContentsReport ) );
+            requestContentsReport();
             workCyclesBeforeNewReport = 3;
         }
     };

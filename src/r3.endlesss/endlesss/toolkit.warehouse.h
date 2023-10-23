@@ -113,6 +113,10 @@ struct Warehouse
     void setCallbackTagRemoved( const TagRemovedCallback& cb );
 
 
+    // manually enqueue a contents report event, refreshing anything that responds to that callback
+    void requestContentsReport();
+
+
     // -----------------------------------------------------------------------------------------------------------------
     // Jam Naming
 

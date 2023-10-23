@@ -57,11 +57,6 @@ Preview::Preview( const int32_t maxBufferSize, const int32_t sampleRate, base::E
     // precompute the lerp values for each blend sample in the buffer; based on constant-power fade through
     for ( std::size_t bI = 0; bI < txBlendBufferSize; bI++, blendValue += blendDelta * 2.0 )
         m_txBlendInterp[bI] = (float)std::sqrt( 0.5 * (1.0 - blendValue) );
-
-    // work out the timing for resetting amalgams; roughly broadcast every 1/N seconds
-    m_stemDataAmalgam.reset();
-    m_stemDataAmalgamSamplesBeforeReset = (uint32_t)std::round( (double)sampleRate * ( 1.0 / 60.0 ) );
-    m_stemDataAmalgamSamplesUsed = 0;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -77,17 +72,7 @@ void Preview::renderCurrentRiff(
     if ( samplesToWrite == 0 )
         return;
 
-    // burned through enough samples to send out latest stem data block. chuck the current data on the bus
-    // NB/TODO doesn't deal with crossing this boundary inside the update (eg. if samplesToWrite is big, bigger than SamplesBeforeReset..)
-    // could do this at a higher level, break the render() into smaller samplesToWrite blocks to fit, probably overkill
-    if ( m_stemDataAmalgamSamplesUsed >= m_stemDataAmalgamSamplesBeforeReset )
-    {
-        m_eventBusClient.Send< ::events::StemDataAmalgamGenerated >( m_stemDataAmalgam );
-
-        m_stemDataAmalgam.reset();
-        m_stemDataAmalgamSamplesUsed = 0;
-    }
-
+    stemAmalgamUpdate();
 
     std::array< float, 8 >                  stemTimeStretch;
     std::array< float, 8 >                  stemGains;

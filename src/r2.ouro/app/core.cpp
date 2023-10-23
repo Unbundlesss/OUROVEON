@@ -246,6 +246,7 @@ int Core::Run()
         APP_EVENT_REGISTER( AddToastNotification );
         APP_EVENT_REGISTER_SPECIFIC( OperationComplete, 16 * 1024 );
         APP_EVENT_REGISTER( PanicStop );
+        APP_EVENT_REGISTER( StemDataAmalgamGenerated );
 
         // MIDI event bus
         APP_EVENT_REGISTER( MidiEvent );
@@ -472,11 +473,28 @@ int Core::Run()
         }
     }
 
+    // plug in stem data event processor
+    {
+        const auto stemDataProcessorStatus = m_stemDataProcessor.connect( m_appEventBus );
+        if ( !stemDataProcessorStatus.ok() )
+        {
+            blog::error::core( FMTX( "unable to connect stem data processor ({})" ), stemDataProcessorStatus.ToString() );
+            return -2;
+        }
+    }
+
     // finish up any async tasks run during startup
     m_taskExecutor.wait_for_all();
 
+    // ---------------------------------
     // run the app main loop
     int appResult = Entrypoint();
+    // ---------------------------------
+
+    // unplug processor
+    {
+        std::ignore = m_stemDataProcessor.disconnect( m_appEventBus );
+    }
 
     // unwind started services
     m_mdMidi->destroy();
@@ -499,6 +517,59 @@ void Core::waitForConsoleKey()
     blog::core( FMTX( "[press any key]\n" ) );
     _getch();
 #endif
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void Core::encodeExchangeData(
+    const endlesss::live::RiffPtr& riffInstance,
+    std::string_view jamName,
+    const uint64_t playbackSampleCount,
+    const endlesss::types::RiffPlaybackPermutation* permutation )
+{
+    const auto currentRiff = riffInstance.get();
+
+    // update the Exchange data block; this also serves as a way to push sanitized beat / energy / playback 
+    // information around other parts of the app. this pulls data from a few different sources to try and 
+    // give a solid, accurate overview of what is coming out of the audio engine at this instant
+    {
+        // take basic riff & stem data from the Riff instance (even if it's null)
+        endlesss::toolkit::Exchange::copyDetailsFromRiff( m_endlesssExchange, riffInstance, jamName.data() );
+
+        if ( currentRiff != nullptr )
+        {
+            // copy in the current stem energy/pulse data that may have arrived from the mix
+            m_stemDataProcessor.copyToExchangeData( m_endlesssExchange );
+
+            // compute the progression (bar/percentage through riff) of playback based on the current sample, embed in Exchange
+            endlesss::live::RiffProgression playbackProgression;
+
+            const auto& timingData = currentRiff->getTimingDetails();
+            timingData.ComputeProgressionAtSample(
+                playbackSampleCount,
+                playbackProgression );
+
+            endlesss::toolkit::Exchange::copyDetailsFromProgression( m_endlesssExchange, playbackProgression );
+
+            // take a snapshot of the mixer layer gains and apply that to the exchange data so "stem gain" is 
+            // more representative of what's coming out of the audio pipeline
+            if ( permutation != nullptr )
+            {
+                const auto currentMixPermutation = *permutation;
+                for ( std::size_t i = 0; i < currentMixPermutation.m_layerGainMultiplier.size(); i++ )
+                    m_endlesssExchange.m_stemGain[i] *= currentMixPermutation.m_layerGainMultiplier[i];
+            }
+
+            // copy in the scope data
+            const dsp::Scope8::Result& scopeResult = m_mdAudio->getCurrentScopeResult();
+            static_assert(dsp::Scope8::FrequencyBucketCount == endlesss::toolkit::Exchange::ScopeBucketCount, "fft bucket count mismatch");
+            for ( std::size_t i = 0; i < endlesss::toolkit::Exchange::ScopeBucketCount; i++ )
+                m_endlesssExchange.m_scope[i] = scopeResult[i];
+
+            // mark exchange as having a full complement of data
+            m_endlesssExchange.m_dataflags |= endlesss::toolkit::Exchange::DataFlags_Playback;
+            m_endlesssExchange.m_dataflags |= endlesss::toolkit::Exchange::DataFlags_Scope;
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -846,6 +917,18 @@ bool CoreGUI::beginInterfaceLayout( const ViewportFlags viewportFlags )
     // tick the presentation layer, begin a new imgui Frame
     if ( m_mdFrontEnd->appTick() )
         return false;
+
+    // run main-thread callbacks & misc updates
+    {
+        const float deltaTime = ImGui::GetIO().DeltaTime;
+        std::scoped_lock<std::mutex> slm( m_mainThreadCallsMutex );
+        for ( auto& mtCall : m_mainThreadCalls )
+        {
+            mtCall.second( deltaTime );
+        }
+
+        m_stemDataProcessor.update( deltaTime, 0.35f );
+    }
 
     // inject dock space if we're expecting to lay the imgui out with docking
     if ( hasViewportFlag( viewportFlags, VF_WithDocking ) )
@@ -1292,6 +1375,19 @@ bool CoreGUI::unregisterMainMenuEntry( const UIInjectionHandle handle )
 {
     return false;
 }
+
+void CoreGUI::registerMainThreadCall( std::string_view name, MainThreadCall func )
+{
+    std::scoped_lock<std::mutex> slm( m_mainThreadCallsMutex );
+    m_mainThreadCalls.emplace( name, func );
+}
+
+void CoreGUI::unregisterMainThreadCall( std::string_view name )
+{
+    std::scoped_lock<std::mutex> slm( m_mainThreadCallsMutex );
+    m_mainThreadCalls.erase( name );
+}
+
 
 void CoreGUI::registerRenderCallback( const RenderPoint rp, const RenderInjectionCallback& callback )
 {

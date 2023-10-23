@@ -461,12 +461,7 @@ protected:
     std::unique_ptr< ux::TagLine >          m_uxTagLine;
 
 
-    // jam ID -> public name data that has been cached in the Warehouse database, used as secondary lookup
-    // for IDs that we don't recognise as the normal jam library might be missing jams the user has left etc
-    endlesss::types::JamIDToNameMap         m_jamHistoricalFromWarehouse;
 
-
-    mix::StemDataProcessor                  m_stemDataProcessor;
 
     bool                                    m_showStemAnalysis = false;
 
@@ -581,13 +576,19 @@ protected:
         }
     }
 
+    void event_NotifyJamNameCacheUpdated( const events::NotifyJamNameCacheUpdated* eventData )
+    {
+        m_warehouse->requestContentsReport();
+    }
+
+
     endlesss::types::RiffPlaybackAbstraction    m_riffPlaybackAbstraction;
 
     base::BiMap< base::OperationID, ImGuiID >   m_permutationOperationImGuiMap;
 
     base::EventListenerID                       m_eventLID_MixerRiffChange = base::EventListenerID::invalid();
     base::EventListenerID                       m_eventLID_OperationComplete = base::EventListenerID::invalid();
-
+    base::EventListenerID                       m_eventLID_NotifyJamNameCacheUpdated = base::EventListenerID::invalid();
 
 protected:
     endlesss::types::JamCouchID                 m_currentViewedJam;
@@ -648,7 +649,9 @@ protected:
                 return;
             }
 
-            // TODO: use the new jam name remote resolver to make async request for this
+            // failed to find anything in our local stores, go get an async request going to find the name from the servers
+            m_appEventBus->send< ::events::RequestJamNameRemoteFetch >( jamCouchID );
+
             m_warehouseContentsReportJamTitles.emplace_back( "[ Unknown ID ]" );
             m_warehouseContentsReportJamTitlesForSort.emplace_back( "[ unknown id ]" );
         };
@@ -1752,89 +1755,6 @@ protected:
     net::bond::RiffPushClient   m_rpClient;
 
 
-// ---------------------------------------------------------------------------------------------------------------------
-protected:
-
-    using JamNameRemoteResolution       = std::pair< endlesss::types::JamCouchID, std::string >;
-    using JamNameRemoteFetchResultQueue = mcc::ConcurrentQueue< JamNameRemoteResolution >;
-
-
-    // endlesss::services::IJamNameCacheServices
-    LookupResult lookupNameForJam( const endlesss::types::JamCouchID& jamID, std::string& result ) const override
-    {
-        // default to original resolve first; if it passes, just return out
-        LookupResult baseResult = OuroApp::lookupNameForJam( jamID, result );
-        if ( baseResult != LookupResult::NotFound )
-            return baseResult;
-
-        // check fall-back data source, the "historical" list from the Warehouse db
-        const auto historicalIt = m_jamHistoricalFromWarehouse.find( jamID );
-        if ( historicalIt != m_jamHistoricalFromWarehouse.end() )
-        {
-            result = historicalIt->second;
-            return LookupResult::FoundInArchives;
-        }
-
-        return LookupResult::NotFound;
-    }
-
-    // take a band### id and go find a public name for it, via circuitous means
-    void event_RequestJamNameRemoteFetch( const events::RequestJamNameRemoteFetch* eventData )
-    {
-        getTaskExecutor().silent_async( [this, jamID = eventData->m_jamID, netCfg = getNetworkConfiguration()]()
-            {
-                blog::api( FMTX( "name resolution for {}" ), jamID );
-
-                // use the permalink query to fetch the original name and the full extended ID we can use to investigate further
-                endlesss::api::BandPermalinkMeta bandPermalink;
-                if ( bandPermalink.fetch( *netCfg, jamID ) )
-                {
-                    if ( bandPermalink.errors.empty() )
-                    {
-                        std::string extendedID;
-                        if ( bandPermalink.data.extractLongJamIDFromPath( extendedID ) )
-                        {
-                            endlesss::api::BandNameFromExtendedID bandNameFromExtended;
-                            if ( bandNameFromExtended.fetch( *netCfg, extendedID ) && bandNameFromExtended.ok )
-                            {
-                                // note any name updates, just for interest
-                                if ( bandNameFromExtended.data.name != bandPermalink.data.band_name )
-                                {
-                                    blog::api( FMTX( "name resolution; update from original [{}] to [{}]" ),
-                                        bandPermalink.data.band_name,
-                                        bandNameFromExtended.data.name
-                                    );
-                                }
-
-                                // .. for now, just log out the name we found, this will be processed on the main thread
-                                m_jamNameRemoteFetchResultQueue.enqueue(
-                                    {
-                                        std::move( jamID ),
-                                        std::move( bandNameFromExtended.data.name )
-                                    } );
-                            }
-                            else
-                            {
-                                blog::error::api( FMTX( "name resolution failure, BandNameFromExtendedID failed [{}]" ), bandNameFromExtended.message );
-                            }
-                        }
-                        else
-                        {
-                            blog::error::api( FMTX( "name resolution failure, long-form ID not recognised [{}]" ), bandPermalink.data.path );
-                        }
-                    }
-                    else
-                    {
-                        blog::error::api( FMTX( "name resolution failure, {}" ), bandPermalink.errors.front() );
-                    }
-                }
-            });
-    }
-
-    base::EventListenerID           m_eventLID_RequestJamNameRemoteFetch = base::EventListenerID::invalid();
-    JamNameRemoteFetchResultQueue   m_jamNameRemoteFetchResultQueue;
-    float                           m_jamNameRemoteFetchUpdateBroadcastTimer = 0;
-
 
 // ---------------------------------------------------------------------------------------------------------------------
 // a dumb little utility for moving all the stems from a v1 cache to the new v2 format
@@ -2048,8 +1968,6 @@ int LoreApp::EntrypointOuro()
         });
 
 
-    m_warehouse->extractJamDictionary( m_jamHistoricalFromWarehouse );     // pull full list of jam IDs -> names from warehouse as "historical" list
-    
     m_warehouse->setCallbackWorkReport( std::bind( &LoreApp::handleWarehouseWorkUpdate, this, stdp::_1, stdp::_2 ) );
     m_warehouse->setCallbackContentsReport( std::bind( &LoreApp::handleWarehouseContentsReport, this, stdp::_1 ) );
 
@@ -2125,11 +2043,10 @@ int LoreApp::EntrypointOuro()
 
         APP_EVENT_BIND_TO( MixerRiffChange );
         APP_EVENT_BIND_TO( OperationComplete );
-        APP_EVENT_BIND_TO( RequestJamNameRemoteFetch );
+        APP_EVENT_BIND_TO( NotifyJamNameCacheUpdated );
         APP_EVENT_BIND_TO( RequestNavigationToRiff );
     }
 
-    checkedCoreCall( "add stem listener", [this] { return m_stemDataProcessor.connect( m_appEventBus ); } );
 
 
 #if OURO_FEATURE_VST24
@@ -2214,45 +2131,12 @@ int LoreApp::EntrypointOuro()
         app::CoreGUI::VF_WithMainMenu  |
         app::CoreGUI::VF_WithStatusBar ) ) )
     {
-        // process and blank out Exchange data ready to re-write it
-        emitAndClearExchangeData();
-
-
         // run jam slice computation that needs to run on the main thread
         m_sketchbook.processPendingUploads();
-
-        m_stemDataProcessor.update( GImGui->IO.DeltaTime, 0.35f );
 
         // tidy up any messages from our riff-sync background thread
         synchroniseRiffWork();
 
-
-        // async jam name resolution tasks
-        {
-            // see if we have any outstanding new jam name resolution results
-            JamNameRemoteResolution jamNameRemoteResolution;
-            if ( m_jamNameRemoteFetchResultQueue.try_dequeue( jamNameRemoteResolution ) )
-            {
-                // plug this new resolved name directly back into the warehouse (upserting any existing ID)
-                m_warehouse->upsertSingleJamIDToName( jamNameRemoteResolution.first, jamNameRemoteResolution.second );
-
-                // and then also mirror it into the historical record we already pulled from the warehouse, so the data sets match
-                m_jamHistoricalFromWarehouse.emplace( jamNameRemoteResolution.first, std::move( jamNameRemoteResolution.second ) );
-                m_jamNameRemoteFetchUpdateBroadcastTimer = 1.0f;
-            }
-
-            // we add a degree of delay to sending update messages to try and cluster cache name updates
-            if ( m_jamNameRemoteFetchUpdateBroadcastTimer > 0 )
-            {
-                // only send when we cross or hit the 0 boundary this frame
-                m_jamNameRemoteFetchUpdateBroadcastTimer -= GImGui->IO.DeltaTime;
-                if ( m_jamNameRemoteFetchUpdateBroadcastTimer <= 0 )
-                {
-                    getEventBusClient().Send< ::events::NotifyJamNameCacheUpdated >( 0 );
-                    m_jamNameRemoteFetchUpdateBroadcastTimer = 0;
-                }
-            }
-        }
 
 
         // for rendering state from the current riff;
@@ -2266,44 +2150,16 @@ int LoreApp::EntrypointOuro()
             ImGui::ux::StemAnalysis( currentRiffPtr, m_mdAudio->getSampleRate() );
         }
 
-        // update the Exchange data block; this also serves as a way to push sanitized beat / energy / playback 
-        // information around other parts of the app. this pulls data from a few different sources to try and 
-        // give a solid, accurate overview of what is coming out of the audio engine at this instant
         {
-            // take basic riff & stem data from the Riff instance
-            endlesss::toolkit::Exchange::copyDetailsFromRiff( m_endlesssExchange, currentRiffPtr, m_currentViewedJamName.c_str() );
+            // process and blank out Exchange data ready to re-write it
+            emitAndClearExchangeData();
 
-            if ( currentRiff != nullptr )
-            {
-                // copy in the current stem energy/pulse data that may have arrived from the mixer
-                m_stemDataProcessor.copyToExchangeData( m_endlesssExchange );
-
-                // compute the progression (bar/percentage through riff) of playback based on the current sample, embed in Exchange
-                endlesss::live::RiffProgression playbackProgression;
-
-                const auto& timingData = currentRiff->getTimingDetails();
-                timingData.ComputeProgressionAtSample(
-                    (uint64_t)mixPreview.getTimeInfoPtr()->samplePos,
-                    playbackProgression );
-
-                endlesss::toolkit::Exchange::copyDetailsFromProgression( m_endlesssExchange, playbackProgression );
-
-                // take a snapshot of the mixer layer gains and apply that to the exchange data so "stem gain" is 
-                // more representative of what's coming out of the audio pipeline
-                const auto currentMixPermutation = mixPreview.getCurrentPermutation();
-                for ( std::size_t i = 0; i < currentMixPermutation.m_layerGainMultiplier.size(); i++ )
-                    m_endlesssExchange.m_stemGain[i] *= currentMixPermutation.m_layerGainMultiplier[i];
-
-                // copy in the scope data
-                const dsp::Scope8::Result& scopeResult = m_mdAudio->getCurrentScopeResult();
-                static_assert(dsp::Scope8::FrequencyBucketCount == endlesss::toolkit::Exchange::ScopeBucketCount, "fft bucket count mismatch");
-                for ( std::size_t i = 0; i < endlesss::toolkit::Exchange::ScopeBucketCount; i++ )
-                    m_endlesssExchange.m_scope[i] = scopeResult[i];
-
-                // mark exchange as having a full complement of data
-                m_endlesssExchange.m_dataflags |= endlesss::toolkit::Exchange::DataFlags_Playback;
-                m_endlesssExchange.m_dataflags |= endlesss::toolkit::Exchange::DataFlags_Scope;
-            }
+            const auto currentPermutation = mixPreview.getCurrentPermutation();
+            encodeExchangeData(
+                currentRiffPtr,
+                m_currentViewedJamName.c_str(),
+                (uint64_t)mixPreview.getTimeInfoPtr()->samplePos,
+                &currentPermutation );
         }
 
 
@@ -3896,7 +3752,7 @@ int LoreApp::EntrypointOuro()
 
         APP_EVENT_UNBIND( MixerRiffChange );
         APP_EVENT_UNBIND( OperationComplete );
-        APP_EVENT_UNBIND( RequestJamNameRemoteFetch );
+        APP_EVENT_UNBIND( NotifyJamNameCacheUpdated );
         APP_EVENT_UNBIND( RequestNavigationToRiff );
     }
 
@@ -3924,7 +3780,6 @@ int LoreApp::EntrypointOuro()
     m_effectStack->save( m_appConfigPath );
     m_effectStack.reset();
 #endif // OURO_FEATURE_VST24
-
 
     return 0;
 }

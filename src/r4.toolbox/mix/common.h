@@ -12,6 +12,8 @@
 
 #include "app/module.audio.h"
 
+#include "mix/stem.amalgam.h"
+
 #include "endlesss/live.riff.h"
 
 
@@ -55,15 +57,19 @@ struct RiffMixerBase
         }
 
         m_audioSampleRateRecp = 1.0 / (double)m_audioSampleRate;
+
+        stemAmalgamReset( sampleRate );
     }
 
-    ~RiffMixerBase()
+    virtual ~RiffMixerBase()
     {
         for ( size_t mI = 0; mI < 8; mI++ )
         {
             mem::free16( m_mixChannelLeft[mI] );
             mem::free16( m_mixChannelRight[mI] );
         }
+        m_mixChannelLeft.fill( nullptr );
+        m_mixChannelRight.fill( nullptr );
     }
 
     ouro_nodiscard constexpr const app::AudioPlaybackTimeInfo* getTimeInfoPtr() const { return &m_timeInfo; }
@@ -80,6 +86,11 @@ protected:
         const app::module::Audio::OutputSignal& outputSignal,
         const uint32_t samplesToWrite );
 
+
+    void stemAmalgamReset( const int32_t sampleRate );
+    void stemAmalgamUpdate();
+
+
     int32_t                         m_audioMaxBufferSize    = 0;
     int32_t                         m_audioSampleRate       = 0;
     double                          m_audioSampleRateRecp   = 0;        // ( 1.0 / m_audioSampleRate )
@@ -88,6 +99,10 @@ protected:
     std::array< float*, 8 >         m_mixChannelRight;
 
     app::AudioPlaybackTimeInfo      m_timeInfo;
+
+    StemDataAmalgam                 m_stemDataAmalgam;
+    uint32_t                        m_stemDataAmalgamSamplesBeforeReset;
+    uint32_t                        m_stemDataAmalgamSamplesUsed;
 
     base::EventBusClient            m_eventBusClient;
 };
