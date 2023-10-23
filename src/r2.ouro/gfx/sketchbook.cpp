@@ -79,9 +79,13 @@ Sketchbook::Sketchbook()
 
 Sketchbook::~Sketchbook()
 {
+    // try and flush out and kill all remaining tasks, cleaning up buffers in the background
+    processPendingUploads(0);
+
     // detonate lifecycle hook
     m_lifecycle = nullptr;
 
+    // toss all our cpu buffers
     {
         std::scoped_lock<std::mutex> bufferLock( m_bufferPoolMutex );
         for ( base::U32Buffer* buf : m_bufferPool )
