@@ -1097,6 +1097,13 @@ int OuroApp::EntrypointGUI()
 
     // wrap up any dangling async work before teardown
     ensureStemCacheChecksComplete();
+    
+    // ensure executor is drained
+    m_taskExecutor.wait_for_all();
+
+    {
+        m_warehouse.reset();
+    }
 
     return appResult;
 }

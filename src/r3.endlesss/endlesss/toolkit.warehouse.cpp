@@ -1078,6 +1078,17 @@ void Warehouse::setCallbackTagRemoved( const TagRemovedCallback& cb )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+void Warehouse::clearAllCallbacks()
+{
+    std::scoped_lock<std::mutex> cbLock( m_cbMutex );
+    m_cbWorkUpdateToInstall = nullptr;
+    m_cbContentsReportToInstall = nullptr;
+    m_cbTagUpdate = nullptr;
+    m_cbTagBatching = nullptr;
+    m_cbTagRemoved = nullptr;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::requestContentsReport()
 {
     m_taskSchedule->m_taskQueue.enqueue( std::make_unique<ContentsReportTask>( m_cbContentsReport ) );

@@ -108,9 +108,10 @@ struct Warehouse
     void setCallbackWorkReport( const WorkUpdateCallback& cb );
     void setCallbackContentsReport( const ContentsReportCallback& cb );
 
-
     void setCallbackTagUpdate( const TagUpdateCallback& cbUpdate, const TagBatchingCallback& cbBatch );
     void setCallbackTagRemoved( const TagRemovedCallback& cb );
+
+    void clearAllCallbacks();
 
 
     // manually enqueue a contents report event, refreshing anything that responds to that callback

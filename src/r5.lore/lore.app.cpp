@@ -3756,7 +3756,9 @@ int LoreApp::EntrypointOuro()
         APP_EVENT_UNBIND( RequestNavigationToRiff );
     }
 
+    // unplug from warehouse
     unregisterStatusBarBlock( sbbWarehouseID );
+    m_warehouse->clearAllCallbacks();
 
     m_riffPipeline.reset();
 
