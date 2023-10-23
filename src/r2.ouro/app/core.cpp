@@ -108,6 +108,11 @@ void _discord_dpp_thread_exit()
     ouroveonThreadExit();
 }
 
+namespace dpp
+{
+    extern void delete_eventmap();
+}
+
 
 // ---------------------------------------------------------------------------------------------------------------------
 namespace app {
@@ -506,6 +511,9 @@ int Core::Run()
     }
 
     m_appEventBusClient = std::nullopt;
+
+    // HDD hack to stop D++ leaking global memory
+    dpp::delete_eventmap();
 
     return appResult;
 }

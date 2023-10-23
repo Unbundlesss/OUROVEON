@@ -263,7 +263,7 @@ void set_ts_not_null(const json* j, const char* keyname, time_t &v)
 	}
 }
 
-const std::map<std::string, dpp::events::event*> eventmap = {
+std::unordered_map<std::string, dpp::events::event*> eventmap = {
 	{ "__LOG__", new dpp::events::logger() },
 	{ "GUILD_CREATE", new dpp::events::guild_create() },
 	{ "GUILD_UPDATE", new dpp::events::guild_update() },
@@ -328,6 +328,18 @@ const std::map<std::string, dpp::events::event*> eventmap = {
 	{ "GUILD_SCHEDULED_EVENT_USER_ADD", new dpp::events::guild_scheduled_event_user_add() },
 	{ "GUILD_SCHEDULED_EVENT_USER_REMOVE", new dpp::events::guild_scheduled_event_user_remove() },
 };
+
+// #HDD added so we can clean up all those new() calls above and reduce noise in memory leak tracking
+void delete_eventmap()
+{
+    for ( auto& pair : eventmap )
+    {
+        delete pair.second;
+    }
+    {
+        auto killer = std::move( eventmap );
+    }
+}
 
 void discord_client::handle_event(const std::string &event, json &j, const std::string &raw)
 {

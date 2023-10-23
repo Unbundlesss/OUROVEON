@@ -68,6 +68,12 @@ struct Bot::State
 
     ~State()
     {
+        // try and auto-disconnect on close down
+        if ( m_voiceState != Bot::VoiceState::NotJoined )
+        {
+            leaveVoiceChannel();
+        }
+
         if ( m_opusStreamProcessorID != ssp::StreamProcessorInstanceID::invalid() )
         {
             m_appCoreServices.getAudioModule()->blockUntil(
