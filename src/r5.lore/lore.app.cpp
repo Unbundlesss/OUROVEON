@@ -3689,7 +3689,7 @@ int LoreApp::EntrypointOuro()
                                     activateModalPopup( popupLabel, [
                                         this,
                                         netCfg = getNetworkConfiguration(),
-                                        state = std::make_shared<ux::JamValidateState>( m_warehouseContentsReport.m_jamCouchIDs[jI] )](const char* title)
+                                        state = ux::createModelJamValidateState( m_warehouseContentsReport.m_jamCouchIDs[jI] )](const char* title)
                                     {
                                         ux::modalJamValidate( title, *state, *m_warehouse, netCfg, getTaskExecutor() );
                                     });
