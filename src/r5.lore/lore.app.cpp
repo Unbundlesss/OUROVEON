@@ -1827,7 +1827,7 @@ protected:
                 }
                 ImGui::SameLine( 0, 12.0f );
                 ImGui::AlignTextToFramePadding();
-                ImGui::TextColored( colour::shades::callout.neutral(), state.m_rootPathVersion1.string().c_str() );
+                ImGui::TextColored( colour::shades::callout.neutral(), "%s", state.m_rootPathVersion1.string().c_str() );
 
 
                 if ( state.m_running )
@@ -2868,7 +2868,7 @@ int LoreApp::EntrypointOuro()
                         ImGui::AlignTextToFramePadding();
                         ImGui::TextUnformatted( "Tagged Riffs in " );
                         ImGui::SameLine( 0, 0 );
-                        ImGui::TextColored( colour::shades::toast.light(), m_currentViewedJamName.c_str() );
+                        ImGui::TextColored( colour::shades::toast.light(), "%s", m_currentViewedJamName.c_str());
                     }
                     ImGui::EndChild();
 
@@ -3628,7 +3628,7 @@ int LoreApp::EntrypointOuro()
                                 else if ( knownCachedRiffCount > populated )
                                 {
                                     ImGui::SameLine( 0, 0 );
-                                    ImGui::TextColored( TextColourDownloadable, " (" ICON_FA_ARROW_UP "%i)", knownCachedRiffCount - populated );
+                                    ImGui::TextColored( TextColourDownloadable, " (" ICON_FA_ARROW_UP "%li)", knownCachedRiffCount - populated );
                                 }
                             }
                             else

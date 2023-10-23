@@ -263,7 +263,7 @@ void SharedRiffView::State::imgui(
                 else
                 {
                     if ( bCurrentDataSetIsForTheUsernameInThePicker )
-                        ImGui::Text( "%i riffs, synced %s", dataPtr->m_count, m_lastSyncTimestampString.c_str() );
+                        ImGui::Text( "%u riffs, synced %s", static_cast<uint32_t>( dataPtr->m_count ), m_lastSyncTimestampString.c_str() );
                     else
                         ImGui::TextColored( colour::shades::callout.neutral(), ICON_FA_CIRCLE_EXCLAMATION " showing data for user '%s', re-sync required", dataPtr->m_username.c_str() );
 
@@ -423,9 +423,9 @@ void SharedRiffView::State::imgui(
 
                                         // origin jam, potentially [username] personal / solo jam
                                         if ( bIsPrivate || bIsPersonal )
-                                            ImGui::TextColored( colour::shades::callout.neutral(), m_jamNameResolvedArray[entry].c_str() );
+                                            ImGui::TextColored( colour::shades::callout.neutral(), "%s", m_jamNameResolvedArray[entry].c_str());
                                         else
-                                            ImGui::TextUnformatted( m_jamNameResolvedArray[entry] );
+                                            ImGui::TextUnformatted( m_jamNameResolvedArray[entry]);
                                     }
                                 }
                                 ImGui::PopID();

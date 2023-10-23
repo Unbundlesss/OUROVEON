@@ -1065,7 +1065,7 @@ int OuroApp::EntrypointGUI()
                 if ( ImGui::BeginFixedCenteredWindow( "Error", errorWindowSize ) )
                 {
                     ImGui::TextColored( colour::shades::errors.light(), "Session Startup Failed" );
-                    ImGui::TextWrapped( sessionWaitResult.ToString().c_str() );
+                    ImGui::TextWrapped( "%s", sessionWaitResult.ToString().c_str() );
                     ImGui::Separator();
                     if ( ImGui::Button( "  Quit  " ) )
                     {

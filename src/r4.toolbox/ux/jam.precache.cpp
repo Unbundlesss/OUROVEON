@@ -101,7 +101,7 @@ void JamPrecacheState::imgui(
         // present the work to do, allow tuning of download limits
         case State::Preflight:
         {
-            ImGui::TextColored( colour::shades::callout.light(), "Total stems : %u", m_stemIDs.size() );
+            ImGui::TextColored( colour::shades::callout.light(), "Total stems : %u", static_cast<uint32_t>( m_stemIDs.size() ) );
             ImGui::Spacing();
             ImGui::TextWrapped( "Note that you may already have some of these stems in your cache - they will not be re-downloaded. Abort the download at any point by clicking [Close] - it may pause briefly to finish all active downloads." );
             ImGui::Spacing();
@@ -226,7 +226,7 @@ void JamPrecacheState::imgui(
                 std::chrono::minutes fullSyncMinutes = std::chrono::duration_cast<std::chrono::minutes>( perSyncMs );
 
                 ImGui::TextColored( colour::shades::toast.light(), "Estimated time remaining : ~%u minute(s) (~%.1f seconds per stem)",
-                    fullSyncMinutes.count(),
+                    static_cast<uint32_t>( fullSyncMinutes.count() ),
                     perSyncSecF
                     );
             }

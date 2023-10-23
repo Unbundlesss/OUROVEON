@@ -677,6 +677,7 @@ void Frontend::MarkdownFormalCallback( const ImGui::MarkdownFormatInfo& markdown
             }
             break;
         }
+
         case ImGui::MarkdownFormatType::LINK:
         {
             if ( start_ )
@@ -697,6 +698,9 @@ void Frontend::MarkdownFormalCallback( const ImGui::MarkdownFormatInfo& markdown
             }
             break;
         }
+
+        default:
+            break;
     }
 }
 

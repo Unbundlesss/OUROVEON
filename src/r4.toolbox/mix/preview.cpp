@@ -87,7 +87,7 @@ void Preview::renderCurrentRiff(
         stemTimeStretch[stemI]  = currentRiff->m_stemTimeScales[stemI];
         stemGains[stemI]        = currentRiff->m_stemGains[stemI] * m_permutationCurrent.m_layerGainMultiplier[stemI];
         stemPtr[stemI]          = currentRiff->m_stemPtrs[stemI];
-        stemAnalysed[stemI]     = ( stemPtr[stemI] != nullptr ) && stemPtr[stemI]->isAnalysisComplete();
+        stemAnalysed[stemI]     = ( stemPtr[stemI] != nullptr ) && ( stemPtr[stemI]->getAnalysisState() == endlesss::live::Stem::AnalysisState::AnalysisValid );
     }
 
     // keep note of where we are mixing in terms of the 0..N sample count of the current riff
@@ -260,6 +260,7 @@ void Preview::updatePermutations( const uint32_t samplesToWrite, const double ba
         double changeRate = 30.0f;
         switch ( m_permutationChangeRate )
         {
+            default: break;
             case PermutationChangeRate::Fast:    changeRate = 20.0; break;
             case PermutationChangeRate::Slow:    changeRate = 1.0;  break;
             case PermutationChangeRate::Glacial: changeRate = 0.5;  break;

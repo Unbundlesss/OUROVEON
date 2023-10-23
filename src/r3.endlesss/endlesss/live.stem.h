@@ -124,6 +124,13 @@ struct Stem
         Failed_CacheDirectory,      // failed to create or interact with the stem cache
     };
 
+    enum class AnalysisState
+    {
+        InProgress,                 // data is being processed in the background
+        AnalysisValid,              // analysis complete, valid data is available
+        AnalysisEmpty               // analysis complete, could not complete process (not enough samples, etc)
+    };
+
     // data used during stem processing; we keep a single one of these as a const singleton, shared between
     // all stem processing (so it includes no working buffers, etc)
     struct Processing
@@ -166,8 +173,8 @@ struct Stem
 
     // run analysis pass, producing things like onsets / peak-following / etc into the given result;
     // this result is passed as an argument so that we can also run this in debug tools to tune the processing
-    void analyse( const Processing& processing, StemAnalysisData& result ) const;
-    void analyse( const Processing& processing );   // convenience function that calls the above on current instance, also then toggling m_hasValidAnalysis
+    bool analyse( const Processing& processing, StemAnalysisData& result ) const;
+    bool analyse( const Processing& processing );   // convenience function that calls the above on current instance, also then toggling m_hasValidAnalysis
 
 
     // stem needs a copy of the analysis task future to ensure that in the unlikely case
@@ -203,16 +210,16 @@ struct Stem
         result += ( static_cast<std::size_t>(m_sampleCount) * 2 ) * sizeof( float );
 
         // add analysis chunk if it is ready
-        if ( isAnalysisComplete() )
+        if ( getAnalysisState() == AnalysisState::AnalysisValid )
         {
             result += m_analysisData.estimateMemoryUsageBytes();
         }
         return result;
     }
 
-    ouro_nodiscard inline bool isAnalysisComplete() const
+    ouro_nodiscard inline AnalysisState getAnalysisState() const
     {
-        return m_hasValidAnalysis;
+        return m_analysisState;
     }
 
     ouro_nodiscard constexpr const StemAnalysisData& getAnalysisData() const { return m_analysisData; }
@@ -245,7 +252,7 @@ private:
 
 
     std::shared_future<void>        m_analysisFuture;
-    std::atomic_bool                m_hasValidAnalysis; // set in async analysis if analysis data is to be trusted
+    std::atomic< AnalysisState >    m_analysisState; // set in async analysis if analysis data is to be trusted
 
     Compression                     m_compressionFormat = Compression::Unknown;
 

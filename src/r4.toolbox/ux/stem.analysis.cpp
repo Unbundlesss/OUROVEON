@@ -65,7 +65,7 @@ void StemAnalysis( endlesss::live::RiffPtr& liveRiff, const int32_t audioSampleR
         // load requested stem from riff
         const endlesss::live::Stem* liveStem = liveRiff->m_stemPtrs[state.m_stemIndex - 1];
         if ( liveStem == nullptr || 
-             liveStem->isAnalysisComplete() == false )
+             liveStem->getAnalysisState() != endlesss::live::Stem::AnalysisState::AnalysisValid )
         {
             ImGui::TextUnformatted( "Stem empty or analysis incomplete" );
             ImGui::End();

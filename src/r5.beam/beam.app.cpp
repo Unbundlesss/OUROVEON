@@ -771,7 +771,7 @@ void MixEngine::update(
             finalSampleIdx %= sampleCount;
 
 
-            if ( stemInst->isAnalysisComplete() )
+            if ( stemInst->getAnalysisState() == endlesss::live::Stem::AnalysisState::AnalysisValid )
             {
                 const auto& stemAnalysis = stemInst->getAnalysisData();
 

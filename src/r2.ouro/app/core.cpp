@@ -751,9 +751,9 @@ void CoreGUI::updateToasts()
             ImGuiWindowFlags_NoFocusOnAppearing |
             ImGuiWindowFlags_NoDocking ) )
         {
-            ImGui::TextWrapped( toast->m_title.c_str() );
+            ImGui::TextWrapped( "%s", toast->m_title.c_str());
             ImGui::SeparatorBreak();
-            ImGui::TextWrapped( toast->m_content.c_str() );
+            ImGui::TextWrapped( "%s", toast->m_content.c_str() );
 
             toastHeightUse -= ImGui::GetWindowHeight() + cToastPaddingY;
         }
@@ -773,8 +773,7 @@ void CoreGUI::imguiModalBasicErrorPopup( const char* title, std::string_view err
     {
         const ImVec2 buttonSize( 240.0f, 32.0f );
 
-        ImGui::TextWrapped( errorMessage.data() );
-
+        ImGui::TextWrapped( "%s", errorMessage.data());
         ImGui::SeparatorBreak();
 
         const auto panelRegionAvail = ImGui::GetContentRegionAvail();

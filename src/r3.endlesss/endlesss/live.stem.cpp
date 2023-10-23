@@ -81,7 +81,7 @@ Stem::Stem( const types::Stem& stemData, const uint32_t targetSampleRate )
     , m_state( State::Empty )
     , m_sampleRate( targetSampleRate )
     , m_sampleCount( 0 )
-    , m_hasValidAnalysis( false )
+    , m_analysisState( AnalysisState::InProgress )
 {
     m_channel.fill( nullptr );
 
@@ -725,7 +725,7 @@ void Stem::applyLoopSewingBlend()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void Stem::analyse( const Processing& processing, StemAnalysisData& result ) const
+bool Stem::analyse( const Processing& processing, StemAnalysisData& result ) const
 {
     using namespace dsp;
     using namespace cycfi::q::literals;
@@ -734,7 +734,7 @@ void Stem::analyse( const Processing& processing, StemAnalysisData& result ) con
     if ( m_sampleCount <= processing.m_fftWindowSize )
     {
         blog::stem( "bypassing stem processing, stem C:{} only has {} samples", m_data.couchID, m_sampleCount );
-        return;
+        return false;
     }
 
     // default spectrum data for normalising freq data; we could load this from disk potentially
@@ -858,13 +858,17 @@ void Stem::analyse( const Processing& processing, StemAnalysisData& result ) con
 
     mem::free16( fftOutHighBand );
     mem::free16( fftOutLowBand );
+
+    return true;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void Stem::analyse( const Processing& processing )
+bool Stem::analyse( const Processing& processing )
 {
-    analyse( processing, m_analysisData );
-    m_hasValidAnalysis = true;
+    const bool result = analyse( processing, m_analysisData );
+    m_analysisState = result ? AnalysisState::AnalysisValid : AnalysisState::AnalysisEmpty;
+
+    return result;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

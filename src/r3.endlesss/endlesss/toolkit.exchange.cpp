@@ -53,7 +53,7 @@ void Exchange::copyDetailsFromRiff( Exchange& data, const live::RiffPtr& riff, c
         {
             data.m_stemColour[sI]   = stem->m_colourU32;
             data.m_stemGain[sI]     = currentRiff->m_stemGains[sI];
-            data.m_stemAnalysed[sI] = stem->isAnalysisComplete() ? 1U : 0U;
+            data.m_stemAnalysed[sI] = ( stem->getAnalysisState() != live::Stem::AnalysisState::InProgress ) ? 1U : 0U;
 
             data.setJammerName( sI, stem->m_data.user.c_str() );
         }
