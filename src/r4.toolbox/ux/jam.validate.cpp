@@ -137,6 +137,10 @@ void JamValidateState::imgui(
 
             m_workFutureStatus = taskExecutor.async( [&]()
                 {
+                    // give servers more of a break if we get more initial failures
+                    const auto extraTimePadding = ((m_workRetries + 1) * 2) * 1s;
+                    std::this_thread::sleep_for( extraTimePadding + 500ms );
+
                     endlesss::api::RiffStructureValidation riffStructure;
                     if ( riffStructure.fetch( *netCfg, m_jamExtendedID, m_workIndex, 100 ) )
                     {
@@ -177,10 +181,6 @@ void JamValidateState::imgui(
 
                         m_riffsExamined += static_cast<uint32_t>( riffStructure.data.rifffs.size() );
 
-                        // give servers more of a break if we get more initial failures
-                        const auto extraTimePadding = ((m_workRetries + 1) * 2) * 250ms;
-                        std::this_thread::sleep_for( extraTimePadding + 200ms );
-
                         return absl::OkStatus();
                     }
                     return absl::AbortedError( "Failed to retrieve riff structure for iteration" );
@@ -207,7 +207,7 @@ void JamValidateState::imgui(
                 }
                 else if ( absl::IsAborted( workStatus ) )
                 {
-                    if ( m_workRetries >= 4 )
+                    if ( m_workRetries >= 5 )
                     {
                         m_state = State::Abandoned;
                     }
