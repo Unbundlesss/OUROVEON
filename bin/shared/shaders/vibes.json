@@ -7,7 +7,7 @@
                 {
                     "name": "render",
                     "fragment": "threads",
-                    "bufferInA": "final",
+                    "bufferInA": "work1",
                     "bufferOut": "final"
                 }
             ]
@@ -41,7 +41,7 @@
                     "bufferOut": "final",
                     "toggles" : [
                         { "name" : "Debug Display",
-                          "opts" : [ "PULSE", "ENERGY", "SCOPE", "GAIN", "BEAT", "UV" ], "default_value" : 0 }
+                          "opts" : [ "PULSE", "ENERGY", "SCOPE", "GAIN", "BEAT" ], "default_value" : 0 }
                     ]
                 }
             ]

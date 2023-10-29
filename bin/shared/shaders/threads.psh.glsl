@@ -16,7 +16,7 @@
 
 #define TOLERANCE       0.00001
 #define MAX_RAY_LENGTH  10.0
-#define MAX_RAY_MARCHES 60
+#define MAX_RAY_MARCHES 64
 #define NORM_OFF        0.001
 
 #define PATHA vec2(0.1147, 0.2093)
@@ -151,7 +151,7 @@ float softShadow(vec3 pos, vec3 ld, float ll, float mint, float k) {
 }
 
 vec3 render(vec3 ro, vec3 rd) {
-  vec3 lightPos = cam_path(ro.z+0.85);
+  vec3 lightPos = cam_path(ro.z+0.5);
   float alpha   = 0.05*TIME;
   
   int iter    = 0;
@@ -168,19 +168,19 @@ vec3 render(vec3 ro, vec3 rd) {
   vec3 nor    = normal(pos);
   vec3 refl   = reflect(rd, nor);
 
-  float tzp = 1.0 - pos.z;
-  vec4 audio1 = texture(iAudio, vec2(r, tzp));
-  vec4 audio2 = texture(iAudio, vec2(r, tzp * 0.95));
-  vec4 audio3 = texture(iAudio, vec2(r, tzp * 0.9));
+  float tzp =  ( clamp( t - 0.5, 0.0, MAX_RAY_LENGTH ) * 0.1 );
+  vec4 audio1 = texture(iAudio, vec2(r, tzp * (0.1 + r * 0.1) ) );
+  vec4 audio3 = texture(iAudio, vec2(r, 1.0 - tzp));
+  vec4 audio2 = texture(iAudio, vec2(r, 1.0 ));
 
-  float blendx = (audio1.x + audio2.x + audio3.x) * 0.3333;
-  float blendy = (audio1.y + audio2.y + audio3.y) * 0.3333;
+  float blendx = audio1.x;
+  float blendy = audio1.y;
 
 
   float ifade= 1.0-tanh_approx(1.25*float(iter)/float(MAX_RAY_MARCHES));
-  float aa   = 10.0*pos.z-6.0*TIME*fract(113.0*r) + (blendx * 5.4);
-  float band = smoothstep(0.9, 0.92, PCOS(aa+ blendy) );
-  vec3 hsv   = (vec3(fract(-0.25+0.25*r+0.025*pos.z), (1.0-ifade), mix(0.02 + iBeat.x * 2.8 * ifade, 1.0 + (blendy * 5.0 * ifade), band * blendy)));
+  float aa   = (blendx * blendx);// + (10.0*pos.z-6.0*TIME*fract(113.0*r)) + (audio2.x * ( r > 0.5 ? 1.0 : -2.0 ) );
+  float band = audio1.x + smoothstep(0.95, 1.0, blendx ) * 3.0;
+  vec3 hsv   = (vec3(fract(-0.25+0.15*r+0.025*pos.z), (1.0-ifade), mix(0.02 + (r * iBeat.x * iBeat.x * iBeat.x) * 2.8 * ifade, 1.0 + (blendy * 5.0 * ifade), band * blendy )));
   vec3 color = hsv2rgb(hsv);
 
   vec3 lv   = lightPos - pos;
@@ -195,13 +195,19 @@ vec3 render(vec3 ro, vec3 rd) {
   float l   = dif*sha;
 
   vec3 col = l*color + spe*sha;
+  col *= 0.8;
+
+
+  hsv.g = 1.0;
+  hsv.b = 3.0 * audio3.z * audio3.z * audio3.z;
+  col += hsv2rgb(hsv) * ( smoothstep(0.0, 0.3, l) );
 
   return col*ifade;
 }
 
 vec3 effect3d(vec2 p, vec2 q) {
   float z   = TIME;
-  g_rot     = ROT(0.25*TIME); 
+  g_rot     = ROT(0.3*TIME); 
   vec3 cam  = cam_path(z);
   vec3 dcam = dcam_path(z);
   vec3 ddcam= ddcam_path(z);
@@ -246,5 +252,10 @@ void main(void)
     vec4 resultColour;
     mainImage( resultColour, (sampleUV) * iResolution.xy );
 
-    glOutColour = vec4( ACESFilm(resultColour.rgb), 1.0 );
+    float grain = filmGrain( oUV, 1.0f, iTime ) * 24.0;
+
+    vec4 inputCol = texture(iInputBufferA, inputBufferUVMap(oUV));
+
+
+    glOutColour = vec4( ACESFilm( resultColour.rgb * (1.0 + grain) ) , 1.0 );
 }
