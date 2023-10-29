@@ -274,7 +274,7 @@ private:
     bool                                m_vstBypass = false;
 #endif // OURO_FEATURE_VST24
 
-    std::atomic<float>                  m_outputSignalGain  = 0.75f;        // gain control applied after merging stems, pre-VST
+    std::atomic<float>                  m_outputSignalGain  = cycfi::q::lin_float( { -6.0f } );        // gain control applied after merging stems, pre-VST
 
     MixerInterface*                     m_mixerInterface    = nullptr;
 

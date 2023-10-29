@@ -339,7 +339,7 @@ void modalUniversalJamBrowser(
         ImGui::SameLine();
         ImGui::TextUnformatted( "Name Filter" );
 
-        ImGui::SameLine( 0, 200.0f );
+        ImGui::SameLine( 0, 275.0f );
         ImGui::TextUnformatted( "Sort By " );
 
         ImGui::SameLine();

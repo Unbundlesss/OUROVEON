@@ -2178,7 +2178,7 @@ int LoreApp::EntrypointOuro()
                         0.0f,
                         1.0f,
                         2000.0f,
-                        0.75f,
+                        0.5f,
                         // custom tooltip showing dB instead of 0..1
                         []( const float percentage01, const float value ) -> std::string
                         {

@@ -18,6 +18,7 @@
 #include "app/core.h"
 
 #include "math/rng.h"
+#include "base/paging.h"
 #include "base/hashing.h"
 #include "base/text.h"
 
@@ -31,27 +32,16 @@
 
 #include "simplecpp.h"
 
-
 // ---------------------------------------------------------------------------------------------------------------------
-#define _VB_VIEW(_action)           \
-      _action(Shader)               \
+#define _VB_VIEW(_action)   \
+      _action(Shader)              \
       _action(Global)
-REFLECT_ENUM( VibesControl, uint32_t, _VB_VIEW );
 
-std::string generateVibesControlTitle( const VibesControl::Enum _vwv )
-{
-#define _ACTIVE_ICON(_ty)             _vwv == VibesControl::_ty ? ICON_FC_FILLED_SQUARE : ICON_FC_HOLLOW_SQUARE,
-#define _ICON_PRINT(_ty)             "{}"
-
-    return fmt::format( FMTX( ICON_FA_TV " Vibes Deck [" _VB_VIEW( _ICON_PRINT ) "]###vibes_control" ),
-        _VB_VIEW( _ACTIVE_ICON )
-        "" );
-
-#undef _ICON_PRINT
-#undef _ACTIVE_ICON
-}
+DEFINE_PAGE_MANAGER( VibesControl, ICON_FA_TV " Vibes Deck", "vibes_control", _VB_VIEW );
 
 #undef _VB_VIEW
+
+
 // ---------------------------------------------------------------------------------------------------------------------
 
 namespace vx {
@@ -558,7 +548,7 @@ struct Vibes::State
 
 
     VibePlan::UniquePtr             m_plan;
-    VibesControl::Enum              m_vibesControlMode = VibesControl::Shader;
+    VibesControl                    m_vibesControlMode;
 
     std::size_t                     m_selectionIndex = 0;
     std::string                     m_selectionPreview;
@@ -791,10 +781,12 @@ void Vibes::doImGui(
     do
     {
         // use a tab-switchable panel to present various vibe controls
-        // m_state won't exist if vibes plan failed to load, so default to something so the UI layout remains consistent
-        const auto viewTitle = generateVibesControlTitle( ( m_state != nullptr ) ? m_state->m_vibesControlMode : VibesControl::Shader );
-        if ( ImGui::Begin( viewTitle.c_str() ) )
+        static VibesControl vibeControl( VibesControl::Shader );
+
+        if ( ImGui::Begin( vibeControl.generateTitle().c_str() ) )
         {
+            vibeControl.checkForImGuiTabSwitch();
+
             // did Vibes stuff actually boot ok?
             if ( !isInitialised() )
             {
@@ -803,20 +795,13 @@ void Vibes::doImGui(
                 break;
             }
 
-            // process special key binds
-            if ( ImGui::IsWindowHovered( ImGuiHoveredFlags_RootAndChildWindows ) )
+            if ( vibeControl == VibesControl::Shader )
+                m_state->doImGuiCtrlShader();
+            else if ( vibeControl == VibesControl::Global )
+                m_state->doImGuiCtrlGlobal();
+            else
             {
-                // swap panel on [tab]
-                if ( ImGui::IsKeyPressedMap( ImGuiKey_Tab, false ) )
-                {
-                    m_state->m_vibesControlMode = VibesControl::getNextWrapped( m_state->m_vibesControlMode );
-                }
-            }
-
-            switch ( m_state->m_vibesControlMode )
-            {
-                case VibesControl::Shader:  m_state->doImGuiCtrlShader(); break;
-                case VibesControl::Global:  m_state->doImGuiCtrlGlobal(); break;
+                ABSL_ASSERT( 0 );
             }
         }
         ImGui::End();
