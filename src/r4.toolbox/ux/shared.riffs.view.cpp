@@ -268,7 +268,6 @@ void SharedRiffView::State::imgui(
                         ImGui::TextColored( colour::shades::callout.neutral(), ICON_FA_CIRCLE_EXCLAMATION " showing data for user '%s', re-sync required", dataPtr->m_username.c_str() );
 
                     // add button that brings any currently playing riff into view inside the table
-                    ImGui::SameLine( 0, 0 );
                     ImGui::RightAlignSameLine( 28.0f );
                     {
                         ImGui::Scoped::Enabled scrollButtonAvailable( m_currentlyPlayingSharedRiff );

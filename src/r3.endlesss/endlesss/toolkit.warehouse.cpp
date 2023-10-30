@@ -26,6 +26,8 @@
 
 #include "app/core.h"
 
+#include <rapidyaml/rapidyaml.hpp>
+
 
 namespace endlesss {
 namespace toolkit {
@@ -197,6 +199,9 @@ struct JamImportTask final : Warehouse::ITask
 
     base::EventBusClient    m_eventBusClient;
     fs::path                m_fileToImport;
+
+    // rebuild after add
+    bool forceContentReport() const override { return true; }
 
     const char* getTag() override { return Tag; }
     std::string Describe() override { return fmt::format( "[{}] importing jam from disk", Tag ); }
@@ -1203,6 +1208,12 @@ void Warehouse::requestJamExport( const types::JamCouchID& jamCouchID, const fs:
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+void Warehouse::requestJamImport( const fs::path pathToData )
+{
+    m_taskSchedule->m_taskQueue.enqueue( std::make_unique<JamImportTask>( m_eventBusClient, pathToData ) );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 bool Warehouse::fetchSingleRiffByID( const endlesss::types::RiffCouchID& riffID, endlesss::types::RiffComplete& result ) const
 {
     if ( !sql::riffs::getSingleByID( riffID, result.riff ) )
@@ -1886,12 +1897,333 @@ bool JamExportTask::Work( TaskQueue& currentTasks )
     return true;
 }
 
+struct HexFloat { float result; };
+
+template< typename _ValueType >
+absl::StatusOr<_ValueType> parseYamlValue( const ryml::Tree& tree, std::string_view keyContext, const c4::csubstr& nodeValue )
+{
+    const std::string_view nodeValueString{ nodeValue.begin(), nodeValue.size() };
+
+    // string_view should remain valid from the tree's copy of the input text
+    if constexpr ( std::is_same_v<_ValueType, std::string> )
+    {
+        return std::string( nodeValueString );
+    }
+    else if constexpr ( std::is_same_v<_ValueType, bool> )
+    {
+        if ( nodeValueString == "true" )
+        {
+            return true;
+        }
+        if ( nodeValueString == "false" )
+        {
+            return false;
+        }
+        return absl::UnknownError( fmt::format( FMTX( "boolean value [{}] unrecognised" ), nodeValueString ) );
+    }
+    // use fast_float conversion for double/float, double can be used for most integers we care about 
+    else if constexpr ( std::is_same_v<_ValueType, double> || std::is_same_v<_ValueType, float> )
+    {
+        _ValueType result;
+        auto [ptr, errorCode] = fast_float::from_chars( nodeValueString.data(), (&nodeValueString.back()) + 1, result );
+
+        if ( errorCode == std::errc() )
+        {
+            return result;
+        }
+        else
+        {
+            const int32_t errNumber = static_cast<int32_t>(errorCode);
+
+            return absl::Status(
+                absl::ErrnoToStatusCode( errNumber ),
+                fmt::format( FMTX( "Yaml [{}] failed to convert '{}' to number ({})" ), keyContext, nodeValueString, std::strerror( errNumber ) ) );
+        }
+    }
+    // HexFloat specialisation to use strtof() that can handle the standardised hex float format
+    else if constexpr ( std::is_same_v<_ValueType, HexFloat> )
+    {
+        if ( nodeValueString.size() < 3 || nodeValueString[0] != '0' || nodeValueString[1] != 'x' )
+        {
+            return absl::OutOfRangeError( fmt::format( FMTX( "Yaml [{}] invalid hex digit string [{}]" ), keyContext, nodeValueString ) );
+        }
+
+        HexFloat hf;
+        hf.result = std::strtof( nodeValueString.data(), nullptr );
+
+        return hf;
+    }
+    // anything else will stop compilation
+    else
+    {
+        static_assert("unknown type to parse from yaml");
+    }
+}
+
+template< typename _ValueType >
+absl::StatusOr<_ValueType> parseYamlValue( const ryml::Tree& tree, std::string_view keyName )
+{
+    auto nodeKey = ryml::csubstr( std::data( keyName ), std::size( keyName ) );
+
+    const auto nodeID = tree.find_child( tree.root_id(), nodeKey );
+    if ( nodeID == size_t( -1 ) )
+    {
+        return absl::InvalidArgumentError( fmt::format( FMTX( "requied key [{}] does not exist" ), keyName ) );
+    }
+
+    const auto nodeRef = tree[nodeKey];
+
+    if ( !nodeRef.valid() )
+    {
+        return absl::InvalidArgumentError( fmt::format( FMTX( "requied key [{}] was not valid" ), keyName ) );
+    }
+    if ( !nodeRef.has_val() )
+    {
+        return absl::InvalidArgumentError( fmt::format( FMTX( "requied key [{}] has no value" ), keyName ) );
+    }
+
+    return parseYamlValue<_ValueType>( tree, keyName, nodeRef.val() );
+}
+
+
 // ---------------------------------------------------------------------------------------------------------------------
 bool JamImportTask::Work( TaskQueue& currentTasks )
 {
     auto loadStatus = base::readTextFile( m_fileToImport );
 
+    auto handleFailure = [this]( const absl::Status& failureStatus ) -> bool
+        {
+            blog::error::database( FMTX( "Failed to import jam data from [{}]" ), m_fileToImport.string() );
+
+            m_eventBusClient.Send<::events::AddToastNotification>( ::events::AddToastNotification::Type::Error,
+                ICON_FA_BOX_OPEN " Jam Import Failed",
+                failureStatus.ToString() );
+
+            return true;
+        };
+
+    // helper for parsing a type from the yaml, bailing out in a standard way if it fails
+#define PARSE_AND_CHECK( _valueName, _valueType, ... )                              \
+    const auto _valueName = parseYamlValue<_valueType>( yamlTree, __VA_ARGS__ );    \
+    if ( !_valueName.ok() )                                                         \
+        return handleFailure( _valueName.status() );
+
+
+    if ( !loadStatus.ok() )
+    {
+        return handleFailure( loadStatus.status() );
+    }
+
+    ryml::Tree yamlTree;
+    ryml::Parser yamlParser;
+
+    std::string parseName = m_fileToImport.filename().string();
+
+    auto nameView = ryml::csubstr( std::data( parseName ), std::size( parseName ) );
+    auto bufferView = ryml::substr( std::data( loadStatus.value() ), std::size( loadStatus.value() ) );
+
+    yamlParser.parse_in_place( nameView, bufferView, &yamlTree );
+
+    // begin a single mass transaction for adding the whole jam
+    Warehouse::SqlDB::TransactionGuard txn;
+
+    // fetch required header entries that identify what we're about to load; any missing are considered import failures
+    PARSE_AND_CHECK( headerExportTimeUnix,  double,         "export_time_unix" );
+    PARSE_AND_CHECK( headerExportOuroVer,   std::string,    "export_ouroveon_version" );
+    PARSE_AND_CHECK( headerJamName,         std::string,    "jam_name" );
+    PARSE_AND_CHECK( headerJamCouchID,      std::string,    "jam_couch_id" );
+
+    {
+        const auto exportTimeUnix = spacetime::InSeconds( std::chrono::seconds( static_cast<uint64_t>( headerExportTimeUnix.value() ) ) );
+        const auto exportTimeDelta = spacetime::calculateDeltaFromNow( exportTimeUnix ).asPastTenseString( 3 );
+
+        blog::database( FMTX( "Importing [{}] {}" ), headerJamName.value(), headerJamCouchID.value() );
+        blog::database( FMTX( "Export data from v.{}; {}" ), headerExportOuroVer.value(), exportTimeDelta );
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    ryml::ConstNodeRef yamlRiffsList = yamlTree["riffs"];
+    for ( ryml::ConstNodeRef const& yamlRiff : yamlRiffsList.children() )
+    {
+        const auto riffID = std::string( yamlRiff.key().data(), yamlRiff.key().size() );
+
+        PARSE_AND_CHECK( rUser,         std::string,        "riff-user",    yamlRiff[0].val()  );
+        PARSE_AND_CHECK( rTimeUnix,     double,             "riff-ts",      yamlRiff[1].val()  );
+        PARSE_AND_CHECK( rRoot,         double,             "riff-root",    yamlRiff[2].val()  );
+        PARSE_AND_CHECK( rScale,        double,             "riff-scale",   yamlRiff[4].val()  );
+        PARSE_AND_CHECK( rBPS,          HexFloat,           "riff-bps",     yamlRiff[7].val()  );
+        PARSE_AND_CHECK( rBPMrnd,       HexFloat,           "riff-bpm-rnd", yamlRiff[9].val()  );
+        PARSE_AND_CHECK( rBarLength,    double,             "riff-bar-len", yamlRiff[10].val() );
+        PARSE_AND_CHECK( rAppVersion,   double,             "riff-appver",  yamlRiff[11].val() );
+        PARSE_AND_CHECK( rMagnitude,    double,             "riff-mag",     yamlRiff[20].val() );
+
+        std::array< std::string, 8 > stemCouchIDs;
+        std::array< float, 8 > stemGains;
+        std::array< bool, 8 > stemOn;
+        for ( int32_t stemIndex = 0; stemIndex < 8; stemIndex++ )
+        {
+            const auto stemArrayValid = yamlRiff[12 + stemIndex].is_seq();
+            const auto stemArray = yamlRiff[12 + stemIndex];
+
+            PARSE_AND_CHECK( stem_id,   std::string,        fmt::format( FMTX("stem{}-id"),     stemIndex ), stemArray[0].val() );
+            PARSE_AND_CHECK( stem_gain, HexFloat,           fmt::format( FMTX("stem{}-gain"),   stemIndex ), stemArray[2].val() );
+            PARSE_AND_CHECK( stem_on,   bool,               fmt::format( FMTX("stem{}-on"),     stemIndex ), stemArray[3].val() );
+
+            stemCouchIDs[stemIndex] = std::move( stem_id.value() );
+            stemGains[stemIndex]    = stem_gain.value().result;
+            stemOn[stemIndex]       = stem_on.value();
+        }
+
+        auto gainsJsonText = fmt::format( R"([ {} ])", fmt::join( stemGains, ", " ) );
+
+        static constexpr char injectNewRiff[] = R"(
+            INSERT OR IGNORE INTO riffs(
+                riffCID,
+                OwnerJamCID ) VALUES( ?1, ?2 );
+        )";
+
+        static constexpr char populateRiffData[] = R"(
+            UPDATE riffs SET
+                CreationTime=?2,
+                Root=?3,
+                Scale=?4,
+                BPS=?5,
+                BPMrnd=?6,
+                BarLength=?7,
+                AppVersion=?8,
+                Magnitude=?9,
+                UserName=?10,
+                StemCID_1=?11,
+                StemCID_2=?12,
+                StemCID_3=?13,
+                StemCID_4=?14,
+                StemCID_5=?15,
+                StemCID_6=?16,
+                StemCID_7=?17,
+                StemCID_8=?18,
+                GainsJSON=?19
+                WHERE riffCID=?1
+        )";
+
+        Warehouse::SqlDB::query<injectNewRiff>(
+            riffID.c_str(),
+            headerJamCouchID.value()
+        );
+
+        Warehouse::SqlDB::query<populateRiffData>(
+            riffID.c_str(),
+            static_cast<uint64_t>( rTimeUnix.value() ),
+            static_cast<uint32_t>( rRoot.value() ),
+            static_cast<uint32_t>( rScale.value() ),
+            rBPS.value().result,
+            rBPMrnd.value().result,
+            static_cast<uint32_t>(rBarLength.value()),
+            static_cast<uint32_t>(rAppVersion.value()),
+            static_cast<float>(rMagnitude.value()),
+            rUser.value().c_str(),
+            stemOn[0] ? stemCouchIDs[0].c_str() : "",
+            stemOn[1] ? stemCouchIDs[1].c_str() : "",
+            stemOn[2] ? stemCouchIDs[2].c_str() : "",
+            stemOn[3] ? stemCouchIDs[3].c_str() : "",
+            stemOn[4] ? stemCouchIDs[4].c_str() : "",
+            stemOn[5] ? stemCouchIDs[5].c_str() : "",
+            stemOn[6] ? stemCouchIDs[6].c_str() : "",
+            stemOn[7] ? stemCouchIDs[7].c_str() : "",
+            gainsJsonText.c_str()
+        );
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    ryml::ConstNodeRef yamlStemsList = yamlTree["stems"];
+    for ( ryml::ConstNodeRef const& yamlStem : yamlStemsList.children() )
+    {
+        const auto stemID = std::string( yamlStem.key().data(), yamlStem.key().size() );
+
+        PARSE_AND_CHECK( sFileEnd,      std::string,        "stem-endpoint",yamlStem[0].val()  );
+        PARSE_AND_CHECK( sFileBucket,   std::string,        "stem-bucket",  yamlStem[1].val()  );
+        PARSE_AND_CHECK( sFileKey,      std::string,        "stem-key",     yamlStem[2].val()  );
+        PARSE_AND_CHECK( sFileMIME,     std::string,        "stem-mime",    yamlStem[3].val()  );
+        PARSE_AND_CHECK( sFileLenByte,  double,             "stem-f-len",   yamlStem[4].val()  );
+        PARSE_AND_CHECK( sSampleRate,   double,             "stem-s-rate",  yamlStem[5].val()  );
+        PARSE_AND_CHECK( sTimeUnix,     double,             "stem-ts",      yamlStem[6].val()  );
+        PARSE_AND_CHECK( sPreset,       std::string,        "stem-preset",  yamlStem[7].val()  );
+        PARSE_AND_CHECK( sUser,         std::string,        "stem-user",    yamlStem[8].val()  );
+        PARSE_AND_CHECK( sColour,       std::string,        "stem-colour",  yamlStem[9].val()  );
+        PARSE_AND_CHECK( sBPS,          HexFloat,           "stem-bps",     yamlStem[11].val() );
+        PARSE_AND_CHECK( sBPMrnd,       HexFloat,           "stem-bpm-rnd", yamlStem[13].val() );
+        PARSE_AND_CHECK( sLength16s,    double,             "stem-len16",   yamlStem[14].val() );
+        PARSE_AND_CHECK( sPitch,        double,             "stem-pitch",   yamlStem[15].val() );
+        PARSE_AND_CHECK( sBarLength,    double,             "stem-bar-len", yamlStem[16].val() );
+        PARSE_AND_CHECK( sIsDrum,       bool,               "stem-is-drum", yamlStem[17].val() );
+        PARSE_AND_CHECK( sIsNote,       bool,               "stem-is-note", yamlStem[18].val() );
+        PARSE_AND_CHECK( sIsBass,       bool,               "stem-is-bass", yamlStem[19].val() );
+        PARSE_AND_CHECK( sIsMic,        bool,               "stem-is-mic",  yamlStem[20].val() );
+
+        int32_t instrumentMask = 0;
+        if ( sIsDrum.value() )
+            instrumentMask |= 1 << 1;
+        if ( sIsNote.value() )
+            instrumentMask |= 1 << 2;
+        if ( sIsBass.value() )
+            instrumentMask |= 1 << 3;
+        if ( sIsMic.value() )
+            instrumentMask |= 1 << 4;
+
+        static constexpr char injectNewStem[] = R"(
+            INSERT OR IGNORE INTO stems(
+                stemCID, OwnerJamCID ) VALUES( ?1, ?2 );
+        )";
+
+        static constexpr char updateStemDetails[] = R"(
+            UPDATE stems SET 
+                CreationTime=?2,
+                FileEndpoint=?3,
+                FileBucket=?4,
+                FileKey=?5,
+                FileMIME=?6,
+                FileLength=?7,
+                BPS=?8,
+                BPMrnd=?9,
+                Instrument=?10,
+                Length16s=?11,
+                OriginalPitch=?12,
+                BarLength=?13,
+                PresetName=?14,
+                CreatorUserName=?15,
+                SampleRate=?16,
+                PrimaryColour=?17
+                WHERE stemCID=?1
+        )";
+
+        Warehouse::SqlDB::query<injectNewStem>(
+            stemID.c_str(),
+            headerJamCouchID.value()
+        );
+
+        Warehouse::SqlDB::query<updateStemDetails>(
+            stemID.c_str(),
+            static_cast<uint64_t>( sTimeUnix.value() ),
+            sFileEnd.value().c_str(),
+            sFileBucket.value().c_str(),
+            sFileKey.value().c_str(),
+            sFileMIME.value().c_str(),
+            static_cast<uint64_t>( sFileLenByte.value() ),
+            sBPS.value().result,
+            sBPMrnd.value().result,
+            instrumentMask,
+            static_cast<uint64_t>( sLength16s.value() ),
+            static_cast<uint64_t>( sPitch.value() ),
+            static_cast<uint64_t>( sBarLength.value() ),
+            sPreset.value().c_str(),
+            sUser.value().c_str(),
+            static_cast<uint64_t>(sSampleRate.value()),
+            sColour.value().c_str()
+        );
+    }
+
     return true;
+
+#undef PARSE_AND_CHECK
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

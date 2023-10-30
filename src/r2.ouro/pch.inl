@@ -32,6 +32,9 @@
 // shim for source_location support on compilers that have yet to natively support it (glares at Apple)
 #include "source_location/source_location.hpp"
 
+// Daniel Lemire's fast_float version of std::from_chars
+#include "fast_float/fast_float.h"
+
 // abseil
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"

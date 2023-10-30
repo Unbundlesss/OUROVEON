@@ -148,9 +148,10 @@ struct Warehouse
 
 
     // -----------------------------------------------------------------------------------------------------------------
-    // Jam Export
+    // Jam Export / Import
 
     void requestJamExport( const types::JamCouchID& jamCouchID, const fs::path exportFolder, std::string_view jamTitle );
+    void requestJamImport( const fs::path pathToData );
 
 
     // -----------------------------------------------------------------------------------------------------------------

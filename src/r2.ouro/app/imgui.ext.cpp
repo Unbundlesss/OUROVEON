@@ -399,6 +399,7 @@ bool BeginFixedCenteredWindow( const char* label, const ImVec2& fixedSize, const
 // ---------------------------------------------------------------------------------------------------------------------
 void RightAlignSameLine( float objectSize )
 {
+    ImGui::SameLine( 0, 0 );
     ImGui::Dummy( ImVec2( ImGui::GetContentRegionAvail().x - objectSize, 0.0f ) );
     ImGui::SameLine( 0, 0 );
 }

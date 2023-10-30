@@ -3411,18 +3411,37 @@ int LoreApp::EntrypointOuro()
             ImGui::End();
         }
         {
+            const fs::path cWarehouseExportPath = m_storagePaths->outputApp / "database_exports";
+
             static WarehouseView warehouseView( WarehouseView::Default );
             static ImGuiTextFilter jamNameFilter;
 
             if ( ImGui::Begin( warehouseView.generateTitle().c_str() ) )
             {
+                const ImVec2 toolbarButtonSize{ 140.0f, 0.0f };
+
                 warehouseView.checkForImGuiTabSwitch();
 
                 const bool warehouseHasEndlesssAccess = m_warehouse->hasFullEndlesssNetworkAccess();
 
                 if ( warehouseView == WarehouseView::Maintenance )
                 {
-                    ImGui::CenteredText( "Database Maintenance" );
+                    // note if the warehouse is running ops, if not then disable new-task buttons
+                    const bool bWarehouseIsPaused = m_warehouse->workerIsPaused();
+
+                    ImGui::AlignTextToFramePadding();
+                    ImGui::CenteredColouredText( colour::shades::callout.neutral(), "Database Management" );
+                    ImGui::RightAlignSameLine( toolbarButtonSize.x );
+                    {
+                        // enable or disable the worker thread
+                        ImGui::Scoped::ToggleButton highlightButton( !bWarehouseIsPaused, true );
+                        if ( ImGui::Button( bWarehouseIsPaused ?
+                            ICON_FA_CIRCLE_PLAY  " RESUME  " :
+                            ICON_FA_CIRCLE_PAUSE " RUNNING ", toolbarButtonSize ) )
+                        {
+                            m_warehouse->workerTogglePause();
+                        }
+                    }
                     ImGui::SeparatorBreak();
                 }
 
@@ -3438,12 +3457,10 @@ int LoreApp::EntrypointOuro()
                     {
                         updateWarehouseContentsSortOrder();
                     }
-                    ImGui::SameLine();
                 }
 
                 {
                     ImGui::Scoped::ButtonTextAlignLeft leftAlign;
-                    const ImVec2 toolbarButtonSize{ 140.0f, 0.0f };
 
                     ImGui::RightAlignSameLine( toolbarButtonSize.x );
 
@@ -3469,18 +3486,24 @@ int LoreApp::EntrypointOuro()
                     }
                     else if ( warehouseView == WarehouseView::Maintenance )
                     {
-                        // note if the warehouse is running ops, if not then disable new-task buttons
-                        const bool bWarehouseIsPaused = m_warehouse->workerIsPaused();
-
+                        if ( ImGui::Button( ICON_FA_BOX_OPEN " Import...", toolbarButtonSize ) )
                         {
-                            // enable or disable the worker thread
-                            ImGui::Scoped::ToggleButton highlightButton( !bWarehouseIsPaused, true );
-                            if ( ImGui::Button( bWarehouseIsPaused ?
-                                ICON_FA_CIRCLE_PLAY  " RESUME  " :
-                                ICON_FA_CIRCLE_PAUSE " RUNNING ", toolbarButtonSize ) )
-                            {
-                                m_warehouse->workerTogglePause();
-                            }
+                            auto fileDialog = std::make_unique< ImGuiFileDialog >();
+
+                            fileDialog->OpenDialog(
+                                "ImpFileDlg",
+                                "Choose exported YAML data",
+                                ".yaml",
+                                cWarehouseExportPath.string().c_str(),
+                                1,
+                                nullptr,
+                                ImGuiFileDialogFlags_Modal );
+
+                            std::ignore = activateFileDialog( std::move( fileDialog ), [this]( ImGuiFileDialog& dlg )
+                                {
+                                    // ask warehouse to deal with this
+                                    m_warehouse->requestJamImport( dlg.GetFilePathName() );
+                                });
                         }
                     }
                 }
@@ -3640,11 +3663,8 @@ int LoreApp::EntrypointOuro()
 
                                 if ( ImGui::Button( ICON_FA_BOX ) )
                                 {
-                                    // pick a place to write exports
-                                    const fs::path exportPath = m_storagePaths->outputApp / "database_exports";
-
                                     // make sure it exists, pop an error if that fails
-                                    const auto exportPathStatus = filesys::ensureDirectoryExists( exportPath );
+                                    const auto exportPathStatus = filesys::ensureDirectoryExists( cWarehouseExportPath );
                                     if ( !exportPathStatus.ok() )
                                     {
                                         m_appEventBus->send<::events::AddErrorPopup>(
@@ -3657,7 +3677,7 @@ int LoreApp::EntrypointOuro()
                                         // tell warehouse to spool the database records out to disk
                                         m_warehouse->requestJamExport(
                                             m_warehouseContentsReport.m_jamCouchIDs[jI],
-                                            exportPath,
+                                            cWarehouseExportPath,
                                             m_warehouseContentsReportJamTitles[jI]
                                         );
                                     }
