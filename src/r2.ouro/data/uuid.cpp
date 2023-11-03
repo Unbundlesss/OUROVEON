@@ -41,8 +41,8 @@ std::string generateUUID_V1( bool withHypens )
         // nanosecond intervals since 00:00:00.00, 15 October 1582 (the date of
         // Gregorian reform to the Christian calendar).
 
-        const auto oct_15_1582 = sys_days{ date::month{10} / 15 / 1582 };
-        const auto unix_epoch = sys_days{ date::month{1} / 1 / 1970 };
+        const auto oct_15_1582 = date::sys_days{ date::month{10} / 15 / 1582 };
+        const auto unix_epoch  = date::sys_days{ date::month{1} / 1 / 1970 };
 
         const auto now = system_clock::now();
 
@@ -55,8 +55,8 @@ std::string generateUUID_V1( bool withHypens )
         const auto secondsFromUnixToNow         = duration_cast<seconds>(unixDiff);
 
         // total seconds from 1582 to now
-        const uint64_t totalSeconds = (uint64_t)secondsFromOriginToUnixEpoch.count() +
-                                      (uint64_t)secondsFromUnixToNow.count();
+        const uint64_t totalSeconds = static_cast<uint64_t>( secondsFromOriginToUnixEpoch.count() ) +
+                                      static_cast<uint64_t>( secondsFromUnixToNow.count() );
 
         // expand to 100-nanosecond intervals
         timePart.ts.timestamp = totalSeconds * 10000000;
