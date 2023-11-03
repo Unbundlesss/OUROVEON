@@ -1227,5 +1227,21 @@ private:
 
 } // namespace pull
 
+namespace push {
+
+// ---------------------------------------------------------------------------------------------------------------------
+struct ShareRiffOnFeed
+{
+    endlesss::types::JamCouchID         m_jamCouchID;
+    endlesss::types::RiffCouchID        m_riffCouchID;
+    std::string                         m_shareName;
+    bool                                m_private = true;
+
+    // on absl::ok, resultUUID holds the shared-rifff id that should be available on the web immediately
+    ouro_nodiscard absl::Status action( const NetConfiguration& ncfg, std::string& resultUUID );
+};
+
+} // namespace push
+
 } // namespace api
 } // namespace endlesss

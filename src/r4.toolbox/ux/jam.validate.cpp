@@ -36,6 +36,7 @@ struct JamValidateState
 
     enum class State
     {
+        FetchID,
         Intro,
         Kick,
         Wait,
@@ -68,7 +69,7 @@ struct JamValidateState
         ImGui::Spacing();
     }
 
-    State                           m_state = State::Intro;
+    State                           m_state = State::FetchID;
 
     endlesss::types::JamCouchID     m_jamCouchID;
     std::string                     m_jamExtendedID;
@@ -94,39 +95,54 @@ void JamValidateState::imgui(
 
     switch ( m_state )
     {
+        case State::FetchID:
+        {
+            endlesss::api::BandPermalinkMeta bandPermalink;
+            if ( bandPermalink.fetch( *netCfg, m_jamCouchID ) )
+            {
+                if ( bandPermalink.errors.empty() )
+                {
+                    if ( bandPermalink.data.extractLongJamIDFromPath( m_jamExtendedID ) )
+                    {
+                        m_resolverErrors.clear();
+
+                    }
+                    else
+                    {
+                        m_resolverErrors = fmt::format( FMTX( "Could not find extended ID; {}" ), bandPermalink.data.path );
+                    }
+                }
+                else
+                {
+                    m_resolverErrors = fmt::format( FMTX( "Failed to fetch link data; {}" ), bandPermalink.errors[0] );
+                }
+            }
+            else
+            {
+                m_resolverErrors = "BandPermalinkMeta network request failure";
+            }
+
+            m_state = State::Intro;
+        }
+        break;
+
         case State::Intro:
         {
             ImGui::TextWrapped( "This tool will step through this jam and re-sync all riff data against the public Endlesss API, correcting any gaps or errors as we go\n" );
             ImGui::Spacing();
             ImGui::TextColored( colour::shades::errors.light(), "%s", m_resolverErrors.c_str() );
             ImGui::SeparatorBreak();
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted( "Extended Jam ID : " );
+            ImGui::SameLine();
+            ImGui::InputText( "###extended-id", &m_jamExtendedID, ImGuiInputTextFlags_ReadOnly );
+            ImGui::SeparatorBreak();
+            ImGui::Spacing();
 
-            if ( ImGui::Button( "Fetch Jam Data", buttonSize ) )
+            ImGui::Scoped::Enabled se( m_resolverErrors.empty() );
+            if ( ImGui::Button( "Begin Analysis", buttonSize ) )
             {
-                endlesss::api::BandPermalinkMeta bandPermalink;
-                if ( bandPermalink.fetch( *netCfg, m_jamCouchID ) )
-                {
-                    if ( bandPermalink.errors.empty() )
-                    {
-                        if ( bandPermalink.data.extractLongJamIDFromPath( m_jamExtendedID ) )
-                        {
-                            m_resolverErrors.clear();
-                            m_state = State::Kick;
-                        }
-                        else
-                        {
-                            m_resolverErrors = fmt::format( FMTX( "Could not find extended ID; {}" ), bandPermalink.data.path );
-                        }
-                    }
-                    else
-                    {
-                        m_resolverErrors = fmt::format( FMTX( "Failed to fetch link data; {}" ), bandPermalink.errors[0] );
-                    }
-                }
-                else
-                {
-                    m_resolverErrors = "BandPermalinkMeta network request failure";
-                }
+                m_state = State::Kick;
             }
         }
         break;
@@ -271,7 +287,7 @@ void modalJamValidate(
     const endlesss::api::NetConfiguration::Shared& netCfg,
     tf::Executor& taskExecutor )
 {
-    const ImVec2 configWindowSize = ImVec2( 830.0f, 240.0f );
+    const ImVec2 configWindowSize = ImVec2( 830.0f, 250.0f );
     ImGui::SetNextWindowContentSize( configWindowSize );
 
     ImGui::PushStyleColor( ImGuiCol_PopupBg, ImGui::GetStyleColorVec4( ImGuiCol_ChildBg ) );

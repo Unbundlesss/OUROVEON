@@ -557,8 +557,10 @@ bool Spinner( const char* label, bool active, float radius, float thickness, flo
     // Render
     window->DrawList->PathClear();
 
-    int num_segments = 30;
-    int start = (int)( std::abs( std::sin( g.Time * 1.8f ) * (float)(num_segments - 5) ) );
+    const int num_segments = 30;
+    const double num_segments_recp = 1.0 / static_cast<double>(num_segments);
+
+    float start = (float)( std::abs( std::sin( g.Time * 1.8f ) * (float)(num_segments - 5) ) );
 
     const float a_min = IM_PI * 2.0f * ((float)start) / (float)num_segments;
     const float a_max = IM_PI * 2.0f * ((float)num_segments - 3) / (float)num_segments;
@@ -567,7 +569,7 @@ bool Spinner( const char* label, bool active, float radius, float thickness, flo
 
     for ( int i = 0; i < num_segments; i++ ) 
     {
-        const double a = a_min + ((double)i / (double)num_segments) * (a_max - a_min);
+        const double a = a_min + ( static_cast<double>( i ) * num_segments_recp ) * ( a_max - a_min );
         window->DrawList->PathLineTo( ImVec2( 
             centre.x + (float)std::cos( a + g.Time * 8.0 ) * radius,
             centre.y + (float)std::sin( a + g.Time * 8.0 ) * radius )

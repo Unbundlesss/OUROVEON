@@ -88,11 +88,13 @@ protected:
     // -----------------------------------------------------------------------------------------------------------------
 
     void event_ExportRiff( const events::ExportRiff* eventData );
+    void event_RequestToShareRiff( const events::RequestToShareRiff* eventData );
 
     // riff export config
     config::endlesss::Export                m_configExportOutput;
 
     base::EventListenerID                   m_eventLID_ExportRiff = base::EventListenerID::invalid();
+    base::EventListenerID                   m_eventLID_RequestToShareRiff = base::EventListenerID::invalid();
 
 
     // ---------------------------------------------------------------------------------------------------------------------

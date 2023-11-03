@@ -12,6 +12,8 @@
 #include "base/instrumentation.h"
 #include "base/operations.h"
 
+#include "data/uuid.h"
+
 #include "config/base.h"
 #include "config/frontend.h"
 #include "config/data.h"
@@ -263,6 +265,7 @@ int Core::Run()
         APP_EVENT_REGISTER( NetworkActivity );
         APP_EVENT_REGISTER( RiffTagAction );
         APP_EVENT_REGISTER( RequestNavigationToRiff );
+        APP_EVENT_REGISTER( RequestToShareRiff );
     }
     {
         base::EventBusClient m_eventBusClient( m_appEventBus );
@@ -869,6 +872,18 @@ int CoreGUI::Entrypoint()
             if ( ImGui::MenuItem( "Test Error Pop" ) )
             {
                 m_appEventBus->send<::events::AddErrorPopup>( "Test Error Popup", "Here's my error message, something broke, oh boy." );
+            }
+            ImGui::Separator();
+            if ( ImGui::MenuItem( "Test UUID generator" ) )
+            {
+                for ( uint32_t gen = 0; gen < 8; gen++ )
+                {
+                    blog::app( FMTX( "uuid | {}" ), data::generateUUID_V1( true ) );
+                }
+                for ( uint32_t gen = 0; gen < 8; gen++ )
+                {
+                    blog::app( FMTX( "uuid | {}" ), data::generateUUID_V1( false ) );
+                }
             }
 #endif // OURO_DEBUG
             ImGui::EndMenu();

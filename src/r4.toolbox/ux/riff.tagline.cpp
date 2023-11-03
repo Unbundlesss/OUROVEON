@@ -43,6 +43,8 @@ struct TagLine::State
 
     base::EventListenerID           m_eventLID_RiffTagAction = base::EventListenerID::invalid();
 
+    bool                            m_debugToggleDetails = false;
+
     struct CurrentData
     {
         endlesss::types::RiffCouchID    m_riffID;
@@ -162,6 +164,16 @@ void TagLine::State::imgui( const endlesss::toolkit::Warehouse& warehouse, endle
         ImGui::CompactTooltip( "Navigate to this riff" );
         ImGui::SameLine();
 
+        // push this riff to your endlesss feed
+        if ( ImGui::Button( ICON_FA_RSS, ChunkyIconButtonSize ) )
+        {
+            // dispatch a request to navigate this this riff, if we can find it
+            endlesss::types::RiffIdentity riffToNavigate( currentRiff->m_riffData.jam.couchID, currentRiff->m_riffData.riff.couchID );
+            m_eventBusClient.Send< ::events::RequestToShareRiff >( riffToNavigate );
+        }
+        ImGui::CompactTooltip( "Share this riff to your Endlesss feed" );
+        ImGui::SameLine();
+
         // hold ALT to enable debug data for the riff copy
         const bool useDebugView = (ImGui::GetMergedModFlags() & ImGuiModFlags_Alt);
         if ( ImGui::Button( useDebugView ? ICON_FA_CALENDAR_PLUS : ICON_FA_CALENDAR, ChunkyIconButtonSize ) )
@@ -185,11 +197,18 @@ void TagLine::State::imgui( const endlesss::toolkit::Warehouse& warehouse, endle
                 const auto riffTimeDelta = spacetime::calculateDeltaFromNow( currentRiff->m_stTimestamp );
 
                 ImGui::Dummy( ImVec2( 0, alignVertical ) );
+                
                 ImGui::TextUnformatted( currentRiff->m_uiDetails );
-                ImGui::Text( "v.%u | %s | %s",
-                    currentRiff->m_riffData.riff.appVersion,
-                    currentRiff->m_uiTimestamp.c_str(),
-                    riffTimeDelta.asPastTenseString( 3 ).c_str() );
+
+                if ( m_debugToggleDetails )
+                    ImGui::TextUnformatted( currentRiff->m_uiDetailsDebug );
+                else
+                    ImGui::Text( "%s | %s",
+                        currentRiff->m_uiTimestamp.c_str(),
+                        riffTimeDelta.asPastTenseString( 3 ).c_str() );
+
+                if ( ImGui::IsItemClicked( 0 ) )
+                    m_debugToggleDetails = !m_debugToggleDetails;
             }
             ImGui::EndChild();
         }

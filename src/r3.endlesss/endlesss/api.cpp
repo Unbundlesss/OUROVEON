@@ -10,6 +10,7 @@
 #include "pch.h"
 
 #include "base/hashing.h"
+#include "data/uuid.h"
 #include "spacetime/chronicle.h"
 
 #include "endlesss/api.h"
@@ -673,6 +674,137 @@ bool RiffStructureValidation::fetch( const NetConfiguration& ncfg, const std::st
     return deserializeJson< RiffStructureValidation >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamLongID ), "public_riff_structure" );
 }
 
+
+// ---------------------------------------------------------------------------------------------------------------------
+namespace push {
+
+struct ShareRequestBody
+{
+    std::string             jamId;              // extended ID
+    bool                    is_private = true;
+    std::string             rifffId;            // couch ID of riff to share
+    std::string             shareId;            // UUID for new share object
+    std::string             title;              // name of shared object
+
+    template<class Archive>
+    inline void serialize( Archive& archive )
+    {
+        archive( CEREAL_NVP( jamId )
+            , cereal::make_nvp( "private", is_private )
+            , CEREAL_NVP( rifffId )
+            , CEREAL_NVP( shareId )
+            , CEREAL_NVP( title )
+        );
+    }
+};
+struct ShareRequestResponse
+{
+    struct Data
+    {
+        std::string             id;             // should match the input shareId UUID
+
+        template<class Archive>
+        inline void serialize( Archive& archive )
+        {
+            archive( CEREAL_NVP( id )
+            );
+        }
+    };
+
+    bool        ok;
+    Data        data;
+    std::string message;
+
+    template<class Archive>
+    inline void serialize( Archive& archive )
+    {
+        archive( CEREAL_NVP( ok )
+            , CEREAL_NVP( data )
+            , CEREAL_OPTIONAL_NVP( message ) // valid if ok==false
+        );
+    }
+};
+
+} // namespace push
+
+absl::Status push::ShareRiffOnFeed::action( const NetConfiguration& ncfg, std::string& resultUUID )
+{
+    ABSL_ASSERT( !m_jamCouchID.empty() );
+    ABSL_ASSERT( !m_riffCouchID.empty() );
+    ABSL_ASSERT( !m_shareName.empty() );
+
+    std::string jamExtendedID;
+
+    // riff share call needs the full extended band ID, so go find that
+    endlesss::api::BandPermalinkMeta bandPermalink;
+    if ( bandPermalink.fetch( ncfg, m_jamCouchID ) )
+    {
+        if ( bandPermalink.errors.empty() )
+        {
+            if ( bandPermalink.data.extractLongJamIDFromPath( jamExtendedID ) )
+            {
+                blog::api( FMTX( "ShareRiff : resolved extended ID for [{}] : [{}]" ), m_jamCouchID, jamExtendedID );
+            }
+            else
+            {
+                return absl::UnavailableError( fmt::format( FMTX( "Could not find extended ID; {}" ), bandPermalink.data.path ) );
+            }
+        }
+        else
+        {
+            return absl::UnavailableError( fmt::format( FMTX( "Failed to fetch link data; {}" ), bandPermalink.errors[0] ) );
+        }
+    }
+    else
+    {
+        return absl::UnknownError( "BandPermalinkMeta network request failure" );
+    }
+
+    ShareRequestBody requestBodyData;
+    requestBodyData.jamId       = jamExtendedID;
+    requestBodyData.is_private  = m_private;
+    requestBodyData.rifffId     = m_riffCouchID.value();
+    requestBodyData.shareId     = data::generateUUID_V1( false );
+    requestBodyData.title       = m_shareName;
+
+    blog::api( FMTX( "ShareRiff : generated share UUID [{}] for [{}]" ), requestBodyData.shareId, requestBodyData.title );
+
+    // encode request to JSON to post
+    std::string requestBodyJson;
+    try
+    {
+        std::ostringstream iss;
+        {
+            cereal::JSONOutputArchive archive( iss );
+            requestBodyData.serialize( archive );
+        }
+        requestBodyJson = iss.str();
+    }
+    catch ( cereal::Exception& cEx )
+    {
+        return absl::InternalError( cEx.what() );
+    }
+
+    auto client = createEndlesssHttpClient( ncfg, UserAgent::WebWithAuth );
+
+    auto res = ncfg.attempt( [&]() -> httplib::Result {
+        return client->Post(
+            "/rifff-feed/share",
+            requestBodyJson,
+            cMimeApplicationJson );
+        });
+
+    ShareRequestResponse response;
+    const bool isOk = deserializeJson< ShareRequestResponse >( ncfg, res, response, fmt::format( "{}( {} )", __FUNCTION__, m_riffCouchID ), "share_riff_on_feed" );
+    if ( isOk )
+    {
+        ABSL_ASSERT( response.data.id == requestBodyData.shareId );
+        resultUUID = response.data.id;
+        return absl::OkStatus();
+    }
+    
+    return absl::UnknownError( fmt::format( FMTX( "Network request failed; Status {}, `{}`" ), res->status, res->body ) );
+}
 
 } // namespace remote
 } // namespace endlesss

@@ -28,7 +28,7 @@ void modalJamPrecache(
     endlesss::services::RiffFetchProvider& fetchProvider,
     tf::Executor& taskExecutor )
 {
-    const ImVec2 configWindowSize = ImVec2( 830.0f, 240.0f );
+    const ImVec2 configWindowSize = ImVec2( 830.0f, 250.0f );
     ImGui::SetNextWindowContentSize( configWindowSize );
 
     ImGui::PushStyleColor( ImGuiCol_PopupBg, ImGui::GetStyleColorVec4( ImGuiCol_ChildBg ) );

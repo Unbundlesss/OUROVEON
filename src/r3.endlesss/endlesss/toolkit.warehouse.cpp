@@ -13,6 +13,8 @@
 #include "base/text.h"
 #include "base/text.transform.h"
 
+#include "data/yamlutil.h"
+
 #include "math/rng.h"
 #include "spacetime/chronicle.h"
 
@@ -25,8 +27,6 @@
 #include "endlesss/api.h"
 
 #include "app/core.h"
-
-#include <rapidyaml/rapidyaml.hpp>
 
 
 namespace endlesss {
@@ -1221,7 +1221,21 @@ bool Warehouse::fetchSingleRiffByID( const endlesss::types::RiffCouchID& riffID,
 
     result.jam.couchID = result.riff.jamCouchID;
 
-    sql::jams::getPublicNameForID( result.jam.couchID, result.jam.displayName );
+    if ( sql::jams::getPublicNameForID( result.jam.couchID, result.jam.displayName ) == false )
+    {
+        // on failure, check if the couch ID does NOT start with "band..." indicating this is probably a personal jam
+        // (at time of writing there's no other variants we support at this level)
+        // .. and if it is, copy the couch ID as the display name
+        if ( result.jam.couchID.value().rfind( "band", 0 ) != 0 )
+        {
+            result.jam.displayName = result.jam.couchID.value();
+        }
+        else
+        {
+            blog::error::database( FMTX( "unable to resolve display name for jam [{}], may cause export issues" ), result.jam.couchID );
+            // #TODO maybe assign it something like "unknown"?
+        }
+    }
 
     for ( size_t stemI = 0; stemI < 8; stemI++ )
     {
@@ -1897,94 +1911,6 @@ bool JamExportTask::Work( TaskQueue& currentTasks )
     return true;
 }
 
-struct HexFloat { float result; };
-
-template< typename _ValueType >
-absl::StatusOr<_ValueType> parseYamlValue( const ryml::Tree& tree, std::string_view keyContext, const c4::csubstr& nodeValue )
-{
-    const std::string_view nodeValueString{ nodeValue.begin(), nodeValue.size() };
-
-    // string_view should remain valid from the tree's copy of the input text
-    if constexpr ( std::is_same_v<_ValueType, std::string> )
-    {
-        return std::string( nodeValueString );
-    }
-    else if constexpr ( std::is_same_v<_ValueType, bool> )
-    {
-        if ( nodeValueString == "true" )
-        {
-            return true;
-        }
-        if ( nodeValueString == "false" )
-        {
-            return false;
-        }
-        return absl::UnknownError( fmt::format( FMTX( "boolean value [{}] unrecognised" ), nodeValueString ) );
-    }
-    // use fast_float conversion for double/float, double can be used for most integers we care about 
-    else if constexpr ( std::is_same_v<_ValueType, double> || std::is_same_v<_ValueType, float> )
-    {
-        _ValueType result;
-        auto [ptr, errorCode] = fast_float::from_chars( nodeValueString.data(), (&nodeValueString.back()) + 1, result );
-
-        if ( errorCode == std::errc() )
-        {
-            return result;
-        }
-        else
-        {
-            const int32_t errNumber = static_cast<int32_t>(errorCode);
-
-            return absl::Status(
-                absl::ErrnoToStatusCode( errNumber ),
-                fmt::format( FMTX( "Yaml [{}] failed to convert '{}' to number ({})" ), keyContext, nodeValueString, std::strerror( errNumber ) ) );
-        }
-    }
-    // HexFloat specialisation to use strtof() that can handle the standardised hex float format
-    else if constexpr ( std::is_same_v<_ValueType, HexFloat> )
-    {
-        if ( nodeValueString.size() < 3 || nodeValueString[0] != '0' || nodeValueString[1] != 'x' )
-        {
-            return absl::OutOfRangeError( fmt::format( FMTX( "Yaml [{}] invalid hex digit string [{}]" ), keyContext, nodeValueString ) );
-        }
-
-        HexFloat hf;
-        hf.result = std::strtof( nodeValueString.data(), nullptr );
-
-        return hf;
-    }
-    // anything else will stop compilation
-    else
-    {
-        static_assert("unknown type to parse from yaml");
-    }
-}
-
-template< typename _ValueType >
-absl::StatusOr<_ValueType> parseYamlValue( const ryml::Tree& tree, std::string_view keyName )
-{
-    auto nodeKey = ryml::csubstr( std::data( keyName ), std::size( keyName ) );
-
-    const auto nodeID = tree.find_child( tree.root_id(), nodeKey );
-    if ( nodeID == size_t( -1 ) )
-    {
-        return absl::InvalidArgumentError( fmt::format( FMTX( "requied key [{}] does not exist" ), keyName ) );
-    }
-
-    const auto nodeRef = tree[nodeKey];
-
-    if ( !nodeRef.valid() )
-    {
-        return absl::InvalidArgumentError( fmt::format( FMTX( "requied key [{}] was not valid" ), keyName ) );
-    }
-    if ( !nodeRef.has_val() )
-    {
-        return absl::InvalidArgumentError( fmt::format( FMTX( "requied key [{}] has no value" ), keyName ) );
-    }
-
-    return parseYamlValue<_ValueType>( tree, keyName, nodeRef.val() );
-}
-
 
 // ---------------------------------------------------------------------------------------------------------------------
 bool JamImportTask::Work( TaskQueue& currentTasks )
@@ -2003,11 +1929,10 @@ bool JamImportTask::Work( TaskQueue& currentTasks )
         };
 
     // helper for parsing a type from the yaml, bailing out in a standard way if it fails
-#define PARSE_AND_CHECK( _valueName, _valueType, ... )                              \
-    const auto _valueName = parseYamlValue<_valueType>( yamlTree, __VA_ARGS__ );    \
-    if ( !_valueName.ok() )                                                         \
+#define PARSE_AND_CHECK( _valueName, _valueType, ... )                                      \
+    const auto _valueName = data::parseYamlValue<_valueType>( yamlTree, __VA_ARGS__ );      \
+    if ( !_valueName.ok() )                                                                 \
         return handleFailure( _valueName.status() );
-
 
     if ( !loadStatus.ok() )
     {
@@ -2051,8 +1976,8 @@ bool JamImportTask::Work( TaskQueue& currentTasks )
         PARSE_AND_CHECK( rTimeUnix,     double,             "riff-ts",      yamlRiff[1].val()  );
         PARSE_AND_CHECK( rRoot,         double,             "riff-root",    yamlRiff[2].val()  );
         PARSE_AND_CHECK( rScale,        double,             "riff-scale",   yamlRiff[4].val()  );
-        PARSE_AND_CHECK( rBPS,          HexFloat,           "riff-bps",     yamlRiff[7].val()  );
-        PARSE_AND_CHECK( rBPMrnd,       HexFloat,           "riff-bpm-rnd", yamlRiff[9].val()  );
+        PARSE_AND_CHECK( rBPS,          data::HexFloat,     "riff-bps",     yamlRiff[7].val()  );
+        PARSE_AND_CHECK( rBPMrnd,       data::HexFloat,     "riff-bpm-rnd", yamlRiff[9].val()  );
         PARSE_AND_CHECK( rBarLength,    double,             "riff-bar-len", yamlRiff[10].val() );
         PARSE_AND_CHECK( rAppVersion,   double,             "riff-appver",  yamlRiff[11].val() );
         PARSE_AND_CHECK( rMagnitude,    double,             "riff-mag",     yamlRiff[20].val() );
@@ -2066,7 +1991,7 @@ bool JamImportTask::Work( TaskQueue& currentTasks )
             const auto stemArray = yamlRiff[12 + stemIndex];
 
             PARSE_AND_CHECK( stem_id,   std::string,        fmt::format( FMTX("stem{}-id"),     stemIndex ), stemArray[0].val() );
-            PARSE_AND_CHECK( stem_gain, HexFloat,           fmt::format( FMTX("stem{}-gain"),   stemIndex ), stemArray[2].val() );
+            PARSE_AND_CHECK( stem_gain, data::HexFloat,     fmt::format( FMTX("stem{}-gain"),   stemIndex ), stemArray[2].val() );
             PARSE_AND_CHECK( stem_on,   bool,               fmt::format( FMTX("stem{}-on"),     stemIndex ), stemArray[3].val() );
 
             stemCouchIDs[stemIndex] = std::move( stem_id.value() );
@@ -2149,8 +2074,8 @@ bool JamImportTask::Work( TaskQueue& currentTasks )
         PARSE_AND_CHECK( sPreset,       std::string,        "stem-preset",  yamlStem[7].val()  );
         PARSE_AND_CHECK( sUser,         std::string,        "stem-user",    yamlStem[8].val()  );
         PARSE_AND_CHECK( sColour,       std::string,        "stem-colour",  yamlStem[9].val()  );
-        PARSE_AND_CHECK( sBPS,          HexFloat,           "stem-bps",     yamlStem[11].val() );
-        PARSE_AND_CHECK( sBPMrnd,       HexFloat,           "stem-bpm-rnd", yamlStem[13].val() );
+        PARSE_AND_CHECK( sBPS,          data::HexFloat,     "stem-bps",     yamlStem[11].val() );
+        PARSE_AND_CHECK( sBPMrnd,       data::HexFloat,     "stem-bpm-rnd", yamlStem[13].val() );
         PARSE_AND_CHECK( sLength16s,    double,             "stem-len16",   yamlStem[14].val() );
         PARSE_AND_CHECK( sPitch,        double,             "stem-pitch",   yamlStem[15].val() );
         PARSE_AND_CHECK( sBarLength,    double,             "stem-bar-len", yamlStem[16].val() );
@@ -2220,6 +2145,10 @@ bool JamImportTask::Work( TaskQueue& currentTasks )
             sColour.value().c_str()
         );
     }
+
+    m_eventBusClient.Send<::events::AddToastNotification>( ::events::AddToastNotification::Type::Info,
+        ICON_FA_BOX " Jam Import Success",
+        fmt::format( FMTX( "Imported data into [{}]" ), headerJamName.value() ) );
 
     return true;
 

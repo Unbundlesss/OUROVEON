@@ -247,13 +247,17 @@ void Riff::fetch( services::RiffFetchProvider& services )
         // preformat some state for UI display
         m_uiTimestamp = spacetime::datestampStringFromUnix( theRiff.creationTimeUnix );
 
-        m_uiDetails = fmt::format( FMTX( "{} | {} {} | {:.1f} BPM | {}/4 | #{}" ),
+        m_uiDetails = fmt::format( FMTX( "{} | {} {} | {:.1f} BPM | {}/4" ),
             theRiff.user,
             endlesss::constants::cRootNames[theRiff.root],
             endlesss::constants::cScaleNames[theRiff.scale],
             m_timingDetails.m_bpm,
-            m_timingDetails.m_quarterBeats,
-            theRiff.couchID.substr(4)
+            m_timingDetails.m_quarterBeats
+        );
+
+        m_uiDetailsDebug = fmt::format( FMTX( "v.{} | cid.{}" ),
+            theRiff.appVersion,
+            theRiff.couchID
         );
 
         m_uiPlaybackDebug = fmt::format( FMTX( "| {}[]:{}x | {:.1f}s" ),

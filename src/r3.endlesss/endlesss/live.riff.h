@@ -156,6 +156,7 @@ public:
     std::string                             m_uiTimestamp;              // prettified riff submission timestamp
     std::string                             m_uiJamUppercase;           // THE JAM NAME
     std::string                             m_uiDetails;                // compact list of riff stats (author, BPM, ..)
+    std::string                             m_uiDetailsDebug;           // debug stuff for alternative display
     std::string                             m_uiPlaybackDebug;          // some playback debugging info (stem repeats, length in sec, ..)
 
 protected:

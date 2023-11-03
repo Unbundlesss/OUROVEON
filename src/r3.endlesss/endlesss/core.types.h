@@ -676,6 +676,23 @@ endlesss::types::RiffIdentity   m_identity;
 CREATE_EVENT_END()
 
 // ---------------------------------------------------------------------------------------------------------------------
+// start process of sharing the riff to endlesss feed
+
+CREATE_EVENT_BEGIN( RequestToShareRiff )
+
+RequestToShareRiff() = delete;
+
+RequestToShareRiff( const endlesss::types::RiffIdentity& identity )
+    : m_identity( identity )
+{
+    ABSL_ASSERT( m_identity.hasData() );
+}
+
+endlesss::types::RiffIdentity   m_identity;
+
+CREATE_EVENT_END()
+
+// ---------------------------------------------------------------------------------------------------------------------
 // in the instance where we find a jam that we cannot display a name for, request a network fetch of metadata to name it;
 // this will later cause a NotifyJamNameCacheUpdated event to be sent if/when the app was able to pull new details.
 // these can get grouped together so many requests may eventually only cause a single NotifyJamNameCacheUpdated

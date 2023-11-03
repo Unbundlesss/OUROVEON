@@ -30,6 +30,7 @@
 #include "endlesss/all.h"
 
 #include "platform_folders.h"
+#include "ux/riff.feedshare.h"
 #include "xp/open.url.h"
 
 using namespace std::chrono_literals;
@@ -984,6 +985,7 @@ int OuroApp::EntrypointGUI()
         {
             base::EventBusClient m_eventBusClient( m_appEventBus );
             APP_EVENT_BIND_TO( ExportRiff );
+            APP_EVENT_BIND_TO( RequestToShareRiff );
             APP_EVENT_BIND_TO( RequestJamNameRemoteFetch );
         }
     }
@@ -1092,6 +1094,7 @@ int OuroApp::EntrypointGUI()
     {
         base::EventBusClient m_eventBusClient( m_appEventBus );
         APP_EVENT_UNBIND( RequestJamNameRemoteFetch );
+        APP_EVENT_UNBIND( RequestToShareRiff );
         APP_EVENT_UNBIND( ExportRiff );
     }
 
@@ -1208,6 +1211,18 @@ void OuroApp::event_ExportRiff( const events::ExportRiff* eventData )
             ICON_FA_FLOPPY_DISK " Riff Exported",
             eventData->m_riff->m_uiDetails );
     }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void OuroApp::event_RequestToShareRiff( const events::RequestToShareRiff* eventData )
+{
+    activateModalPopup( "Share Riff", [
+        this,
+        netCfg = getNetworkConfiguration(),
+        state = ux::createModelRiffFeedShareState( eventData->m_identity ) ](const char* title)
+    {
+        ux::modalRiffFeedShare( title, *state, netCfg, getTaskExecutor() );
+    });
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
