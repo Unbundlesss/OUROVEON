@@ -3,7 +3,7 @@ LibRoot.Ryml = SrcDir() .. "r0.data/rapidyaml"
 
 -- ==============================================================================
 ModuleRefInclude["rapidyaml"] = function()
-    includedirs
+    externalincludedirs
     {
         path.join( LibRoot.Ryml, "include" ),
     }

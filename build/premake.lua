@@ -278,6 +278,8 @@ function SetupOuroveonLayer( isFinalRing, layerName )
     {
         "VST_2_4_EXTENSIONS",
         "VST_64BIT_PLATFORM=1",
+
+        "PCG_LITTLE_ENDIAN=1",
     }
 
     for libName, libFn in pairs(ModuleRefInclude) do

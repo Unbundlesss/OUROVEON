@@ -138,13 +138,14 @@ function addSimpleHeaderOnly( isExternal, moduleName, pathTo )
     end
 end
 
-addSimpleHeaderOnly( true, "concurrent",       "r0.async/concurrent")
-addSimpleHeaderOnly( true, "taskflow",         "r0.async/taskflow/taskflow")
-addSimpleHeaderOnly( true, "utf8",             "r0.data/utf8")
-addSimpleHeaderOnly( true, "json",             "r0.data/json")
-addSimpleHeaderOnly( true, "trie",             "r0.data/trie/include")
-addSimpleHeaderOnly( true, "basen",            "r0.codec/basen")
-addSimpleHeaderOnly( true, "source_location",  "r0.platform/source_location/include")
-addSimpleHeaderOnly( true, "q_lib",            "r0.dsp/q_lib/include")
-addSimpleHeaderOnly( true, "sol",              "r0.scripting/sol-330")
+addSimpleHeaderOnly( true,  "concurrent",       "r0.async/concurrent")
+addSimpleHeaderOnly( true,  "taskflow",         "r0.async/taskflow/taskflow")
+addSimpleHeaderOnly( true,  "utf8",             "r0.data/utf8")
+addSimpleHeaderOnly( true,  "json",             "r0.data/json")
+addSimpleHeaderOnly( true,  "trie",             "r0.data/trie/include")
+addSimpleHeaderOnly( true,  "basen",            "r0.codec/basen")
+addSimpleHeaderOnly( true,  "source_location",  "r0.platform/source_location/include")
+addSimpleHeaderOnly( true,  "q_lib",            "r0.dsp/q_lib/include")
+addSimpleHeaderOnly( true,  "sol",              "r0.scripting/sol-330")
+addSimpleHeaderOnly( false, "pcg",              "r0.scaffold/pcg/include")
 
