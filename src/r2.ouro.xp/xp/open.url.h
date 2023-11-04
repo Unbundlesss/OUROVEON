@@ -10,3 +10,4 @@
 #pragma once
 
 extern int xpOpenURL(const char *url);
+extern int xpOpenFolder(const char *folder);

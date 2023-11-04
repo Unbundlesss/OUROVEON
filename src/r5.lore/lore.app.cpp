@@ -1823,7 +1823,7 @@ protected:
                 ImGui::TextWrapped( "Once complete, you can delete the old cache folder : " );
                 if ( ImGui::Button( "Open..." ) )
                 {
-                    xpOpenURL( state.m_cacheRoot.string().c_str() );
+                    xpOpenFolder( state.m_cacheRoot.string().c_str() );
                 }
                 ImGui::SameLine( 0, 12.0f );
                 ImGui::AlignTextToFramePadding();

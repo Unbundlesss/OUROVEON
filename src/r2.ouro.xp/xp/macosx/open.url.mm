@@ -19,3 +19,12 @@ int xpOpenURL(const char *url)
         return status == noErr ? 0 : -1;
     }
 }
+
+int xpOpenFolder(const char *folder)
+{
+    @autoreleasepool {
+        NSArray *fileURLs = [NSArray arrayWithObjects:[NSURL fileURLWithPath:[NSString stringWithUTF8String:folder]], nil];
+        [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs:fileURLs];
+        return 0;
+    }
+}

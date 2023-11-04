@@ -11,3 +11,5 @@ int xpOpenURL( const char* url )
 
     return (rc > ((HINSTANCE)32)) ? 0 : -1;
 }
+
+int xpOpenFolder(const char *folder) { xpOpenURL(folder); }
