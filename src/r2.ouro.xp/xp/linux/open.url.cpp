@@ -85,4 +85,4 @@ int xpOpenURL(const char *url)
     }
 }
 
-int xpOpenFolder(const char *folder) { xpOpenURL(folder); }
+int xpOpenFolder(const char *folder) { return xpOpenURL(folder); }
