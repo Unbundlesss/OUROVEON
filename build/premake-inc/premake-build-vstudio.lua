@@ -33,3 +33,33 @@ premake.override(premake.vstudio.vc2010.elements, "clCompile", function(oldfn, c
   return calls
 end)
 
+-- add options for turning on PGO phases in VS
+premake.api.register {
+    name = "pgo",
+    scope = "config",
+    kind = "string",
+    allowed = {
+        "None",
+        "Instrument",
+        "Optimize"
+    },
+}
+premake.override(premake.vstudio.vc2010.elements, "configurationProperties", function(oldfn, cfg)
+    
+    local elements = oldfn(cfg)
+
+    if cfg.pgo and cfg.pgo == "Instrument" then
+        table.remove(elements, table.indexof(elements, premake.vstudio.vc2010.wholeProgramOptimization))
+        table.insert(elements, function(cfg)
+            premake.vstudio.vc2010.element("WholeProgramOptimization", nil, "PGInstrument")
+            end)
+    end
+    if cfg.pgo and cfg.pgo == "Optimize" then
+        table.remove(elements, table.indexof(elements, premake.vstudio.vc2010.wholeProgramOptimization))
+        table.insert(elements, function(cfg)
+            premake.vstudio.vc2010.element("WholeProgramOptimization", nil, "PGOptimize")
+            end)
+    end
+
+    return elements
+  end)
