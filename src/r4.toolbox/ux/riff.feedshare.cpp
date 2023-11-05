@@ -157,7 +157,7 @@ void RiffFeedShareState::imgui(
                 ImGui::SeparatorBreak();
                 ImGui::Spacing();
 
-                ImGui::TextWrapped( m_workResult.ToString().c_str() );
+                ImGui::TextWrapped( "%s", m_workResult.ToString().c_str() );
             }
         }
         break;

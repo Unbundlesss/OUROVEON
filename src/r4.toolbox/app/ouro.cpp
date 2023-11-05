@@ -973,7 +973,7 @@ int OuroApp::EntrypointGUI()
         {
             if ( ImGui::MenuItem( "Open Output Folder..." ) )
             {
-                xpOpenURL( m_storagePaths->outputApp.string().c_str() );
+                xpOpenFolder( m_storagePaths->outputApp.string().c_str() );
             }
         });
 
