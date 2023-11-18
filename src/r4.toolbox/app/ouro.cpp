@@ -1093,8 +1093,8 @@ int OuroApp::EntrypointGUI()
 
     // plug in a callback on the main thread to do jam name resolution in the background
     registerMainThreadCall( "name-resolution", [this]( float deltaTime )
-        { 
-                updateJamNameResolutionTasks( deltaTime ); 
+        {
+            updateJamNameResolutionTasks( deltaTime ); 
         });
 
     // custom menu entries at the ouro level

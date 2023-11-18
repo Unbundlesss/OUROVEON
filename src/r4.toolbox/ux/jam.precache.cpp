@@ -20,6 +20,62 @@
 
 namespace ux {
 
+struct JamPrecacheState
+{
+    static constexpr std::size_t cSyncSamples = 16;
+
+    using Instance = std::shared_ptr<JamPrecacheState>;
+
+    enum class State
+    {
+        Intro,
+        Aborted,
+        Preflight,
+        Download,
+        Complete
+    };
+
+    JamPrecacheState() = delete;
+    JamPrecacheState( const endlesss::types::JamCouchID& jamID )
+        : m_jamCouchID( jamID )
+    {
+    }
+
+    void imgui(
+        const endlesss::toolkit::Warehouse& warehouse,
+        endlesss::services::RiffFetchProvider& fetchProvider,
+        tf::Executor& taskExecutor );
+
+    endlesss::types::JamCouchID     m_jamCouchID;
+    endlesss::types::StemCouchIDs   m_stemIDs;
+
+    bool                            m_enableSiphonMode = false;
+    bool                            m_enableDryRun = false;
+
+    int32_t                         m_maximumDownloadsInFlight = 4;
+
+    State                           m_state = State::Intro;
+    std::size_t                     m_currentStemIndex = 0;
+
+    std::atomic_uint32_t            m_statsStemsAlreadyInCache = 0;
+    std::atomic_uint32_t            m_statsStemsDownloaded = 0;
+    std::atomic_uint32_t            m_statsStemsMissingFromDb = 0;
+    std::atomic_uint32_t            m_statsStemsFailedToDownload = 0;
+
+    std::atomic_uint32_t            m_downloadsDispatched = 0;
+
+    spacetime::Moment               m_syncTimer;
+    base::RollingAverage< cSyncSamples >
+                                    m_averageSyncTimeMillis;
+    std::size_t                     m_averageSyncMeasurements = 0;
+};
+
+// ---------------------------------------------------------------------------------------------------------------------
+std::shared_ptr< JamPrecacheState > createJamPrecacheState( const endlesss::types::JamCouchID& jamID )
+{
+    return std::make_shared< JamPrecacheState >( jamID );
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 void modalJamPrecache(
     const char* title,
@@ -57,6 +113,19 @@ void JamPrecacheState::imgui(
         {
             ImGui::TextWrapped( "This tool allows you to download every stem associated with the chosen jam. This allows for playback of the jam completely offline or in the case where the Endlesss CDN is not available.\n\nDepending on the jam size, it may consume a reasonable amount of disk space and network bandwidth.\n" );
             ImGui::Spacing();
+            ImGui::Spacing();
+            {
+                ImGui::Checkbox( "Enable Dry-Run Mode", &m_enableDryRun );
+                ImGui::SameLine();
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextDisabled( "[?]" );
+                ImGui::CompactTooltip( "If enabled, no stems will be fetched from the server.\n\nThe tool will check for stems on-disk but not issue any network requests, allowing you to quickly see how full the cache is for this jam already" );
+            }
+            ImGui::Spacing();
+            ImGui::Spacing();
+            ImGui::Spacing();
+            ImGui::Spacing();
+
             if ( m_enableSiphonMode )
             {
                 ImGui::TextColored( colour::shades::pink.light(), "Database siphon mode enabled. Complete stem manifest will be used." );
@@ -164,42 +233,45 @@ void JamPrecacheState::imgui(
                     }
                     else
                     {
-                        ++m_downloadsDispatched;
-                        fileOpsBurstCount = -1;
-
-                        // keep timer on how long it takes to cycle through to dispatching new tasks; this gives
-                        // a rough idea of how long the whole process will take
+                        if ( !m_enableDryRun )
                         {
-                            const auto downloadTimeMillis = m_syncTimer.delta< std::chrono::milliseconds >();
-                            m_averageSyncTimeMillis.update( static_cast<double>(downloadTimeMillis.count()) );
-                            m_syncTimer.setToNow();
-                            ++m_averageSyncMeasurements;
-                        }
+                            ++m_downloadsDispatched;
+                            fileOpsBurstCount = -1;
 
-                        // kick out an untethered async task to initialise a live Stem object
-                        // doing so will go through the default machinery of downloading / validating it, same as
-                        // when we do this for playing riffs back in the rest of the app - difference being that 
-                        // we don't keep the live Stem around, it's just immediately tossed
-                        taskExecutor.silent_async( [=]()
+                            // keep timer on how long it takes to cycle through to dispatching new tasks; this gives
+                            // a rough idea of how long the whole process will take
                             {
-                                auto stemLivePtr = std::make_shared<endlesss::live::Stem>( stemData, 8000 );   // any sample rate is fine, we aren't keeping the data
-                                stemLivePtr->fetch(
-                                    fetchProvider->getNetConfiguration(),
-                                    stemCachePath );
+                                const auto downloadTimeMillis = m_syncTimer.delta< std::chrono::milliseconds >();
+                                m_averageSyncTimeMillis.update( static_cast<double>(downloadTimeMillis.count()) );
+                                m_syncTimer.setToNow();
+                                ++m_averageSyncMeasurements;
+                            }
 
-                                if ( stemLivePtr->hasFailed() )
+                            // kick out an untethered async task to initialise a live Stem object
+                            // doing so will go through the default machinery of downloading / validating it, same as
+                            // when we do this for playing riffs back in the rest of the app - difference being that 
+                            // we don't keep the live Stem around, it's just immediately tossed
+                            taskExecutor.silent_async( [=]()
                                 {
-                                    blog::error::app( FMTX( "failed to download stem to cache : [{}]" ), stemID );
-                                    ++m_statsStemsFailedToDownload;
-                                }
-                                else
-                                {
-                                    ++m_statsStemsDownloaded;
-                                }
+                                    auto stemLivePtr = std::make_shared<endlesss::live::Stem>( stemData, 8000 );   // any sample rate is fine, we aren't keeping the data
+                                    stemLivePtr->fetch(
+                                        fetchProvider->getNetConfiguration(),
+                                        stemCachePath );
 
-                                // tag that we are done with this task so that the cycle can kick more off
-                                --m_downloadsDispatched;
-                            } );
+                                    if ( stemLivePtr->hasFailed() )
+                                    {
+                                        blog::error::app( FMTX( "failed to download stem to cache : [{}]" ), stemID );
+                                        ++m_statsStemsFailedToDownload;
+                                    }
+                                    else
+                                    {
+                                        ++m_statsStemsDownloaded;
+                                    }
+
+                                    // tag that we are done with this task so that the cycle can kick more off
+                                    --m_downloadsDispatched;
+                                });
+                        }
                     }
                 }
                 else
@@ -247,12 +319,18 @@ void JamPrecacheState::imgui(
             if ( m_state == State::Complete )
                 ImGui::TextWrapped( "Process complete" );
 
+            const auto stemsInCache         = m_statsStemsAlreadyInCache.load();
+            const auto stemsDownloaded      = m_statsStemsDownloaded.load();
+            const double totalStemsRecpPct  = 100.0 / static_cast<double>( m_stemIDs.size() );
+            const double stemsInCachePct    = totalStemsRecpPct * static_cast<double>(stemsInCache);
+            const double downloadedPct      = totalStemsRecpPct * static_cast<double>(stemsDownloaded);
+
             ImGui::Spacing();
             ImGui::SeparatorBreak();
             ImGui::TextColored( colour::shades::white.light(), "[ %5i ] Total stems in jam", static_cast<int32_t>( m_stemIDs.size() ) );
             ImGui::SeparatorBreak();
-            ImGui::TextColored( colour::shades::toast.light(), "[ %5i ] Stems already in cache", m_statsStemsAlreadyInCache.load() );
-            ImGui::TextColored( colour::shades::callout.light(), "[ %5i ] Stems downloaded", m_statsStemsDownloaded.load() );
+            ImGui::TextColored( colour::shades::toast.light(), "[ %5i ] Stems already in cache (%.1f%%)", stemsInCache, stemsInCachePct );
+            ImGui::TextColored( colour::shades::callout.light(), "[ %5i ] Stems downloaded (%.1f%%)", stemsDownloaded, downloadedPct );
             if ( m_statsStemsFailedToDownload > 0 )
                 ImGui::TextColored( colour::shades::errors.light(), "[ %5i ] Stems failed to download", m_statsStemsFailedToDownload.load() );
             if ( m_statsStemsMissingFromDb > 0 )

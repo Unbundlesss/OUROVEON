@@ -18,54 +18,8 @@ namespace endlesss { namespace toolkit { struct Warehouse; } }
 
 namespace ux {
 
-    struct JamPrecacheState
-    {
-        static constexpr std::size_t cSyncSamples = 16;
-
-        using Instance = std::shared_ptr<JamPrecacheState>;
-
-        enum class State
-        {
-            Intro,
-            Aborted,
-            Preflight,
-            Download,
-            Complete
-        };
-
-        JamPrecacheState() = delete;
-        JamPrecacheState( endlesss::types::JamCouchID& jamID )
-            : m_jamCouchID( jamID )
-        {
-        }
-
-        void imgui(
-            const endlesss::toolkit::Warehouse& warehouse,
-            endlesss::services::RiffFetchProvider& fetchProvider,
-            tf::Executor& taskExecutor );
-
-        endlesss::types::JamCouchID     m_jamCouchID;
-        endlesss::types::StemCouchIDs   m_stemIDs;
-
-        bool                            m_enableSiphonMode = false;
-
-        int32_t                         m_maximumDownloadsInFlight = 4;
-
-        State                           m_state = State::Intro;
-        std::size_t                     m_currentStemIndex = 0;
-
-        std::atomic_uint32_t            m_statsStemsAlreadyInCache = 0;
-        std::atomic_uint32_t            m_statsStemsDownloaded = 0;
-        std::atomic_uint32_t            m_statsStemsMissingFromDb = 0;
-        std::atomic_uint32_t            m_statsStemsFailedToDownload = 0;
-
-        std::atomic_uint32_t            m_downloadsDispatched = 0;
-
-        spacetime::Moment               m_syncTimer;
-        base::RollingAverage< cSyncSamples >
-                                        m_averageSyncTimeMillis;
-        std::size_t                     m_averageSyncMeasurements = 0;
-    };
+    struct JamPrecacheState;
+    std::shared_ptr< JamPrecacheState > createJamPrecacheState( const endlesss::types::JamCouchID& jamID );
 
     // 
     void modalJamPrecache(
