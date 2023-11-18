@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include "base/text.h"
 #include "spacetime/chronicle.h"
 #include "endlesss/ids.h"
 #include "endlesss/api.h"
@@ -41,9 +42,33 @@ struct Warehouse
     };
     using ContentsReportCallback = std::function<void( const ContentsReport& report )>;
 
+    // when there is a failure to validate a stem during riff fetching, the stem is cut out of the resulting database
+    // and an entry is logged in a ledger, stashing the stem ID with any notes / tags about why we ignore it
+    enum class StemLedgerType
+    {
+        MISSING_OGG         = 1,            // ogg data vanished; this is mostly due to the broken beta that went out
+        DAMAGED_REFERENCE   = 2,            // sometimes chat messages (?!) or other riffs (??) seem to have been stored as stem CouchIDs 
+        REMOVED_ID          = 3             // just .. gone. couch ID not found. unrecoverable
+    };
+
+    static const std::string_view getStemLedgerTypeAsString( const StemLedgerType ledgerType )
+    {
+        switch ( ledgerType )
+        {
+            case StemLedgerType::MISSING_OGG:       return "MISSING_OGG";
+            case StemLedgerType::DAMAGED_REFERENCE: return "DAMAGED_REFERENCE";
+            case StemLedgerType::REMOVED_ID:        return "REMOVED_ID";
+            default:
+                return "UNKNOWN";
+        }
+    }
+
+
     // SoA extraction of a set of riff data
     struct JamSlice
     {
+        using StemUserHashes = std::array< uint64_t, 8 >;
+
         DECLARE_NO_COPY_NO_MOVE( JamSlice );
 
         JamSlice() = delete;
@@ -51,8 +76,6 @@ struct Warehouse
         {
             reserve( elementsToReserve );
         }
-
-
 
         // per-riff information
         std::vector< types::RiffCouchID >           m_ids;
@@ -62,11 +85,14 @@ struct Warehouse
         std::vector< uint8_t >                      m_scales;
         std::vector< float >                        m_bpms;
 
+        std::vector< StemUserHashes >               m_stemUserHashes;
+
         // riff-adjacency information
         std::vector< int32_t >                      m_deltaSeconds;
         std::vector< int8_t >                       m_deltaStem;
 
     protected:
+
         inline void reserve( const size_t elements )
         {
             m_ids.reserve( elements );
@@ -76,8 +102,27 @@ struct Warehouse
             m_scales.reserve( elements );
             m_bpms.reserve( elements );
 
+            m_stemUserHashes.reserve( elements );
+
             m_deltaSeconds.reserve( elements );
             m_deltaStem.reserve( elements );
+
+            std::size_t memoryUsageEstimation = 0;
+            {
+                memoryUsageEstimation += sizeof( types::RiffCouchID ) * elements;
+                memoryUsageEstimation += sizeof( spacetime::InSeconds ) * elements;
+                memoryUsageEstimation += sizeof( uint64_t ) * elements;
+                memoryUsageEstimation += sizeof( uint8_t ) * elements;
+                memoryUsageEstimation += sizeof( uint8_t ) * elements;
+                memoryUsageEstimation += sizeof( float ) * elements;
+
+                memoryUsageEstimation += sizeof( uint64_t ) * elements * 8;
+
+                memoryUsageEstimation += sizeof( int32_t ) * elements;
+                memoryUsageEstimation += sizeof( uint8_t ) * elements;
+            }
+
+            blog::app( FMTX( "JamSlice SOA array allocation {}" ), base::humaniseByteSize( "~", memoryUsageEstimation ) );
         }
     };
     using JamSlicePtr = std::unique_ptr<JamSlice>;
@@ -186,6 +231,11 @@ struct Warehouse
     bool fetchAllStems( endlesss::types::StemCouchIDs& result ) const;
 
 
+    // see if we have any notes for a stem ID (if it was removed from the database during a sync for some reason)
+    // returns false if we have no record for this stem ID
+    bool getNoteTypeForStem( const types::StemCouchID& stemCID, StemLedgerType& typeResult );
+
+
     // -----------------------------------------------------------------------------------------------------------------
     // Tags
 
@@ -230,6 +280,7 @@ protected:
     void threadWorker();
 
     void incrementChangeIndexForJam( const ::endlesss::types::JamCouchID& jamID );
+
 
     // handle riff tag actions, do database operations to add/remove as requested
     void event_RiffTagAction( const events::RiffTagAction* eventData );

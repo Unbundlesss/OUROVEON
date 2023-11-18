@@ -34,7 +34,6 @@ namespace toolkit {
 
 std::string Warehouse::m_databaseFile;
 
-
 using StemSet   = absl::flat_hash_set< endlesss::types::StemCouchID >;
 
 using Task      = std::unique_ptr<Warehouse::ITask>;
@@ -54,6 +53,7 @@ struct Warehouse::ITask
     virtual std::string Describe() = 0;
     virtual bool Work( TaskQueue& currentTasks ) = 0;
 };
+
 // version of the above for network-driven tasks
 struct Warehouse::INetworkTask : Warehouse::ITask
 {
@@ -250,7 +250,22 @@ struct GetStemData final : Warehouse::INetworkTask
 
 struct Warehouse::TaskSchedule
 {
-    TaskQueue   m_taskQueue;
+    TaskQueue                           m_taskQueue;
+    moodycamel::LightweightSemaphore    m_workerWaitSema;
+
+    template< typename TObject, typename... Args >
+    void enqueueWorkTask( Args&&... args )
+    {
+        m_taskQueue.enqueue( std::make_unique< TObject >( std::forward< Args >( args )... ) );
+        signal();
+    }
+
+    void signal()
+    {
+        // signal for 2 passes, the latter to include updating state via m_cbWorkUpdate once everything is cleared out
+        // of the task queue
+        m_workerWaitSema.signal(2);
+    }
 };
 
 namespace sql {
@@ -959,12 +974,6 @@ namespace stems {
 // ---------------------------------------------------------------------------------------------------------------------
 namespace ledger {
 
-    enum class StemLedgerType
-    {
-        MISSING_OGG         = 1,            // ogg data vanished; this is mostly due to the broken beta that went out
-        DAMAGED_REFERENCE   = 2,            // sometimes chat messages (?!) or other riffs (??) seem to have been stored as stem CouchIDs 
-        REMOVED_ID          = 3             // just .. gone. couch ID not found. unrecoverable
-    };
 
     static constexpr char createStemTable[] = R"(
         CREATE TABLE IF NOT EXISTS "StemLedger" (
@@ -990,13 +999,35 @@ namespace ledger {
     }
 
     // -----------------------------------------------------------------------------------------------------------------
-    static void storeStemNote( const types::StemCouchID& stemCID, const StemLedgerType& type, const std::string& note )
+    static void storeStemNote( const types::StemCouchID& stemCID, const Warehouse::StemLedgerType& type, const std::string& note )
     {
         static constexpr char _sqlAddLedger[] = R"(
             INSERT OR IGNORE INTO StemLedger( StemCID, Type, Note ) VALUES( ?1, ?2, ?3 );
         )";
 
         Warehouse::SqlDB::query<_sqlAddLedger>( stemCID.value(), (int32_t)type, note );
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    static bool getStemNoteType( const types::StemCouchID& stemCID, Warehouse::StemLedgerType& typeResult )
+    {
+        static constexpr char _sqlGetLedger[] = R"(
+            select Type, Note from StemLedger where StemCID = ?1
+        )";
+
+        auto query = Warehouse::SqlDB::query<_sqlGetLedger>( stemCID.value() );
+
+        int32_t          noteType = 0;
+        std::string_view noteText;
+
+        if ( query( noteType, noteText ) )
+        {
+            ABSL_ASSERT( noteType > 0 && noteType < 4 ); // just check the range before we cast
+            typeResult = static_cast<Warehouse::StemLedgerType>(noteType);
+
+            return true;
+        }
+        return false;
     }
 
 } // namespace ledger
@@ -1012,7 +1043,9 @@ Warehouse::Warehouse( const app::StoragePaths& storagePaths, api::NetConfigurati
 {
     blog::database( FMTX("sqlite version {}"), SQLITE_VERSION );
 
+    // create the lockless queue that manages the warehouse TODO list
     m_taskSchedule = std::make_unique<TaskSchedule>();
+    m_taskSchedule->signal();
 
     m_databaseFile = ( storagePaths.cacheCommon / "warehouse.db3" ).string();
     SqlDB::post_connection_hook = []( sqlite3* db_handle )
@@ -1027,6 +1060,13 @@ Warehouse::Warehouse( const app::StoragePaths& storagePaths, api::NetConfigurati
     sql::tags::runInit();
     sql::stems::runInit();
     sql::ledger::runInit();
+
+    // optimize on startup
+    {
+        spacetime::ScopedTimer stemTiming( "warehouse [optimize]" );
+        static constexpr char sqlOptimize[] = R"(pragma optimize)";
+        SqlDB::query<sqlOptimize>();
+    }
 
     m_workerThreadAlive = true;
     m_workerThread      = std::make_unique<std::thread>( &Warehouse::threadWorker, this );
@@ -1045,12 +1085,8 @@ Warehouse::~Warehouse()
 
     m_workerThreadAlive = false;
 
-    {
-        spacetime::ScopedTimer stemTiming( "warehouse [optimize]" );
-        static constexpr char sqlOptimize[] = R"(pragma optimize)";
-        SqlDB::query<sqlOptimize>();
-    }
-
+    // unblock the thread, wait for it to die out
+    m_taskSchedule->signal();
     m_workerThread->join();
     m_workerThread.reset();
 }
@@ -1058,47 +1094,62 @@ Warehouse::~Warehouse()
 // ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::setCallbackWorkReport( const WorkUpdateCallback& cb )
 {
-    std::scoped_lock<std::mutex> cbLock( m_cbMutex );
-    m_cbWorkUpdateToInstall = cb;
+    {
+        std::scoped_lock<std::mutex> cbLock( m_cbMutex );
+        m_cbWorkUpdateToInstall = cb;
+    }
+    m_taskSchedule->signal();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::setCallbackContentsReport( const ContentsReportCallback& cb )
 {
-    std::scoped_lock<std::mutex> cbLock( m_cbMutex );
-    m_cbContentsReportToInstall = cb;
+    {
+        std::scoped_lock<std::mutex> cbLock( m_cbMutex );
+        m_cbContentsReportToInstall = cb;
+    }
+    m_taskSchedule->signal();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::setCallbackTagUpdate( const TagUpdateCallback& cbUpdate, const TagBatchingCallback& cbBatch )
 {
-    std::scoped_lock<std::mutex> cbLock( m_cbMutex );
-    m_cbTagUpdate = cbUpdate;
-    m_cbTagBatching = cbBatch;
+    {
+        std::scoped_lock<std::mutex> cbLock( m_cbMutex );
+        m_cbTagUpdate = cbUpdate;
+        m_cbTagBatching = cbBatch;
+    }
+    m_taskSchedule->signal();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::setCallbackTagRemoved( const TagRemovedCallback& cb )
 {
-    std::scoped_lock<std::mutex> cbLock( m_cbMutex );
-    m_cbTagRemoved = cb;
+    {
+        std::scoped_lock<std::mutex> cbLock( m_cbMutex );
+        m_cbTagRemoved = cb;
+    }
+    m_taskSchedule->signal();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::clearAllCallbacks()
 {
-    std::scoped_lock<std::mutex> cbLock( m_cbMutex );
-    m_cbWorkUpdateToInstall = nullptr;
-    m_cbContentsReportToInstall = nullptr;
-    m_cbTagUpdate = nullptr;
-    m_cbTagBatching = nullptr;
-    m_cbTagRemoved = nullptr;
+    {
+        std::scoped_lock<std::mutex> cbLock( m_cbMutex );
+        m_cbWorkUpdateToInstall = nullptr;
+        m_cbContentsReportToInstall = nullptr;
+        m_cbTagUpdate = nullptr;
+        m_cbTagBatching = nullptr;
+        m_cbTagRemoved = nullptr;
+    }
+    m_taskSchedule->signal();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::requestContentsReport()
 {
-    m_taskSchedule->m_taskQueue.enqueue( std::make_unique<ContentsReportTask>( m_cbContentsReport ) );
+    m_taskSchedule->enqueueWorkTask<ContentsReportTask>( m_cbContentsReport );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1156,7 +1207,7 @@ void Warehouse::addOrUpdateJamSnapshot( const types::JamCouchID& jamCouchID )
         return;
     }
 
-    m_taskSchedule->m_taskQueue.enqueue( std::make_unique<JamSnapshotTask>( *m_networkConfiguration, jamCouchID ) );
+    m_taskSchedule->enqueueWorkTask<JamSnapshotTask>( *m_networkConfiguration, jamCouchID );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1168,7 +1219,7 @@ void Warehouse::addJamSliceRequest( const types::JamCouchID& jamCouchID, const J
         return;
     }
 
-    m_taskSchedule->m_taskQueue.enqueue( std::make_unique<JamSliceTask>( jamCouchID, callbackOnCompletion ) );
+    m_taskSchedule->enqueueWorkTask<JamSliceTask>( jamCouchID, callbackOnCompletion );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1180,7 +1231,7 @@ void Warehouse::requestJamPurge( const types::JamCouchID& jamCouchID )
         return;
     }
 
-    m_taskSchedule->m_taskQueue.enqueue( std::make_unique<JamPurgeTask>( jamCouchID ) );
+    m_taskSchedule->enqueueWorkTask<JamPurgeTask>( jamCouchID );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1192,7 +1243,7 @@ void Warehouse::requestJamSyncAbort( const types::JamCouchID& jamCouchID )
         return;
     }
 
-    m_taskSchedule->m_taskQueue.enqueue( std::make_unique<JamSyncAbortTask>( jamCouchID ) );
+    m_taskSchedule->enqueueWorkTask<JamSyncAbortTask>( jamCouchID );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1204,13 +1255,13 @@ void Warehouse::requestJamExport( const types::JamCouchID& jamCouchID, const fs:
         return;
     }
 
-    m_taskSchedule->m_taskQueue.enqueue( std::make_unique<JamExportTask>( m_eventBusClient, jamCouchID, exportFolder, jamTitle ) );
+    m_taskSchedule->enqueueWorkTask<JamExportTask>( m_eventBusClient, jamCouchID, exportFolder, jamTitle );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::requestJamImport( const fs::path pathToData )
 {
-    m_taskSchedule->m_taskQueue.enqueue( std::make_unique<JamImportTask>( m_eventBusClient, pathToData ) );
+    m_taskSchedule->enqueueWorkTask<JamImportTask>( m_eventBusClient, pathToData );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1410,6 +1461,12 @@ bool Warehouse::fetchAllStems( endlesss::types::StemCouchIDs& result ) const
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+bool Warehouse::getNoteTypeForStem( const types::StemCouchID& stemCID, StemLedgerType& typeResult )
+{
+    return sql::ledger::getStemNoteType( stemCID, typeResult );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::upsertTag( const endlesss::types::RiffTag& tag )
 {
     sql::tags::upsert( tag, m_cbTagUpdate );
@@ -1466,8 +1523,6 @@ void Warehouse::threadWorker()
 {
     OuroveonThreadScope ots( OURO_THREAD_PREFIX "Warehouse::Work" );
 
-    math::RNG32 rng;
-
     // mechanism for occasionally getting reports enqueued as work rolls on
     int32_t workCyclesBeforeNewReport = 0;
     const auto tryEnqueueReport = [this, &workCyclesBeforeNewReport]( bool force )
@@ -1507,12 +1562,13 @@ void Warehouse::threadWorker()
 
     while ( m_workerThreadAlive )
     {
-        // #HDD refactor how this thread works;
-        //      we should be sleeping it until we know there's potential work and controlling any rate-limiting
-        //      by virtue of what tasks are running rather than a generic top-level wait
-        //      (as this also interferes with local requests like generating jam-slices)
-        //
-        std::this_thread::sleep_for( std::chrono::milliseconds( rng.genInt32(250, 700) ) );
+        base::instr::ScopedEvent wte( "WORKER", base::instr::PresetColour::Pink );
+
+        // let the thread idle for N seconds until we take a cursory glance at anything
+        // all operations that enqueue to the task queue or futz with callbacks will signal() this sema to 
+        // instantly unblock this wait
+        static constexpr auto cWorkerThreadSpinTime = std::chrono::duration_cast<std::chrono::microseconds>( std::chrono::seconds( 10 ) );
+        m_taskSchedule->m_workerWaitSema.wait( cWorkerThreadSpinTime.count() );
 
         checkLockAndInstallNewCallbacks();
 
@@ -1577,7 +1633,8 @@ void Warehouse::threadWorker()
                         incrementChangeIndexForJam( owningJamCID );
 
                         // stem me up
-                        m_taskSchedule->m_taskQueue.enqueue( std::make_unique<GetStemData>( *m_networkConfiguration, owningJamCID, emptyStems ) );
+                        m_taskSchedule->enqueueWorkTask<GetStemData>( *m_networkConfiguration, owningJamCID, emptyStems );
+
                         tryEnqueueReport( false );
 
                         scrapingIsRunning = true;
@@ -1608,7 +1665,8 @@ void Warehouse::threadWorker()
                         incrementChangeIndexForJam( owningJamCID );
 
                         // off to riff town
-                        m_taskSchedule->m_taskQueue.enqueue( std::make_unique<GetRiffDataTask>( *m_networkConfiguration, owningJamCID, emptyRiffs ) );
+                        m_taskSchedule->enqueueWorkTask<GetRiffDataTask>( *m_networkConfiguration, owningJamCID, emptyRiffs );
+
                         tryEnqueueReport( false );
 
                         scrapingIsRunning = true;
@@ -2211,7 +2269,7 @@ bool GetRiffDataTask::Work( TaskQueue& currentTasks )
 
             sql::ledger::storeStemNote(
                 stemCheck.key,
-                sql::ledger::StemLedgerType::REMOVED_ID,
+                Warehouse::StemLedgerType::REMOVED_ID,
                 fmt::format( "[{}]", stemCheck.error ) );
 
             continue;
@@ -2232,7 +2290,7 @@ bool GetRiffDataTask::Work( TaskQueue& currentTasks )
 
             sql::ledger::storeStemNote(
                 stemCheck.key,
-                sql::ledger::StemLedgerType::REMOVED_ID,
+                Warehouse::StemLedgerType::REMOVED_ID,
                 fmt::format( "[{}]", stemCheck.error ) );
 
             continue;
@@ -2245,7 +2303,7 @@ bool GetRiffDataTask::Work( TaskQueue& currentTasks )
 
             sql::ledger::storeStemNote(
                 stemCheck.key,
-                sql::ledger::StemLedgerType::REMOVED_ID,
+                Warehouse::StemLedgerType::REMOVED_ID,
                 fmt::format( "[{}]", stemCheck.error ) );
 
             continue;
@@ -2259,7 +2317,7 @@ bool GetRiffDataTask::Work( TaskQueue& currentTasks )
 
             sql::ledger::storeStemNote(
                 stemCheck.doc._id,
-                sql::ledger::StemLedgerType::DAMAGED_REFERENCE,
+                Warehouse::StemLedgerType::DAMAGED_REFERENCE,
                 fmt::format( "[Ver:{}] Wrong type [{}]", stemCheck.doc.app_version, stemCheck.doc.type ) );
 
             continue;
@@ -2273,7 +2331,7 @@ bool GetRiffDataTask::Work( TaskQueue& currentTasks )
 
             sql::ledger::storeStemNote(
                 stemCheck.doc._id,
-                sql::ledger::StemLedgerType::MISSING_OGG,   // previously this only happened with OGG sources.. potentially we could have missing FLAC here too
+                Warehouse::StemLedgerType::MISSING_OGG,   // previously this only happened with OGG sources.. potentially we could have missing FLAC here too
                 fmt::format( "[Ver:{}]", stemCheck.doc.app_version ) );
 
             continue;
@@ -2360,6 +2418,16 @@ bool GetRiffDataTask::Work( TaskQueue& currentTasks )
             gainsJson
             );
     }
+
+    // add an additional pause to network fetch tasks to avoid hitting Endlesss too hard
+    {
+        math::RNG32 rng;
+        const auto networkPauseTime = std::chrono::milliseconds( rng.genInt32( 200, 600 ) );
+
+        blog::database( "[{}] pausing for {}", Tag, networkPauseTime );
+        std::this_thread::sleep_for( networkPauseTime );
+    }
+
     return true;
 }
 
@@ -2434,6 +2502,16 @@ bool GetStemData::Work( TaskQueue& currentTasks )
             stemData.doc.primaryColour
             );
     }
+
+    // add an additional pause to network fetch tasks to avoid hitting Endlesss too hard
+    {
+        math::RNG32 rng;
+        const auto networkPauseTime = std::chrono::milliseconds( rng.genInt32( 200, 600 ) );
+
+        blog::database( "[{}] pausing for {}", Tag, networkPauseTime );
+        std::this_thread::sleep_for( networkPauseTime );
+    }
+
     return true;
 }
 
@@ -2442,15 +2520,40 @@ bool JamSliceTask::Work( TaskQueue& currentTasks )
 {
     spacetime::ScopedTimer stemTiming( "JamSliceTask::Work" );
 
+    // count up riffs and prepare a memory buffer to populate with the results
     const int64_t riffCount = sql::riffs::countPopulated( m_jamCID, true );
-
     auto resultSlice = std::make_unique<Warehouse::JamSlice>( m_jamCID, riffCount );
 
+    // extract the basic riff information and weave in user data from the stems table so that we can 
+    // do identification analysis in the resulting data slice (this does make this query a fair bit slower due to
+    // how I structured the data .. but it's still under half a second for a 45k jam on this machine, in release)
     static constexpr char _sqlExtractRiffBits[] = R"(
-            select OwnerJamCID,RiffCID,CreationTime,UserName,Root,Scale,BPMrnd,StemCID_1,StemCID_2,StemCID_3,StemCID_4,StemCID_5,StemCID_6,StemCID_7,StemCID_8 
-            from riffs 
-            where OwnerJamCID is ?1 and CreationTime is not null 
-            order by CreationTime;
+        select riffs.OwnerJamCID,
+               riffs.RiffCID,
+               riffs.CreationTime,
+               riffs.UserName,
+               riffs.Root,
+               riffs.Scale,
+               riffs.BPMrnd,
+               riffs.StemCID_1, s1.CreatorUserName,
+               riffs.StemCID_2, s2.CreatorUserName,
+               riffs.StemCID_3, s3.CreatorUserName,
+               riffs.StemCID_4, s4.CreatorUserName,
+               riffs.StemCID_5, s5.CreatorUserName,
+               riffs.StemCID_6, s6.CreatorUserName,
+               riffs.StemCID_7, s7.CreatorUserName,
+               riffs.StemCID_8, s8.CreatorUserName
+        from riffs
+        left join stems as s1 on s1.StemCID = riffs.StemCID_1
+        left join stems as s2 on s2.StemCID = riffs.StemCID_2
+        left join stems as s3 on s3.StemCID = riffs.StemCID_3
+        left join stems as s4 on s4.StemCID = riffs.StemCID_4
+        left join stems as s5 on s5.StemCID = riffs.StemCID_5
+        left join stems as s6 on s6.StemCID = riffs.StemCID_6
+        left join stems as s7 on s7.StemCID = riffs.StemCID_7
+        left join stems as s8 on s8.StemCID = riffs.StemCID_8
+        where riffs.OwnerJamCID is ?1 and riffs.CreationTime is not null
+        order by riffs.CreationTime;
         )";
 
     auto query = Warehouse::SqlDB::query<_sqlExtractRiffBits>( m_jamCID.value() );
@@ -2463,15 +2566,23 @@ bool JamSliceTask::Work( TaskQueue& currentTasks )
     uint8_t          scale;
     float            bpmrnd;
     std::array< std::string_view, 8 > stemCIDs;
+    std::array< std::string_view, 8 > stemUsers;
 
     // for tracking data from previous riff in the list
-    absl::flat_hash_set< std::string_view > previousStemIDs;
-    previousStemIDs.reserve( 8 );
+    // unrolled to the basics - flat inline buffers to store and compare to
+    constexpr static std::size_t stemIDCharSize = 36;
+    std::array< char[stemIDCharSize], 8 > previousStemIDs;
+    for ( auto stemI = 0; stemI < 8; stemI++ )
+        memset( previousStemIDs[stemI], 0, stemIDCharSize );
 
+    // data for comparisons with previous riff
     spacetime::InSeconds previousRiffTimestamp;
     int8_t               previousNumberOfActiveStems = 0;
     int8_t               previousnumberOfUnseenStems = 0;
     bool                 firstRiffInSequence = true;
+
+    // hashing used for usernames, matching what the apps use too
+    absl::Hash<std::string_view> nameHasher;
 
     while ( query( jamCID,
                    riffCID,
@@ -2481,15 +2592,23 @@ bool JamSliceTask::Work( TaskQueue& currentTasks )
                    scale,
                    bpmrnd,
                    stemCIDs[0],
+                   stemUsers[0],
                    stemCIDs[1],
+                   stemUsers[1],
                    stemCIDs[2],
+                   stemUsers[2],
                    stemCIDs[3],
+                   stemUsers[3],
                    stemCIDs[4],
+                   stemUsers[4],
                    stemCIDs[5],
+                   stemUsers[5],
                    stemCIDs[6],
-                   stemCIDs[7] ) )
+                   stemUsers[6],
+                   stemCIDs[7],
+                   stemUsers[7] ) )
     {
-        const uint64_t hashedUsername = absl::Hash<std::string_view>{}(username);
+        const uint64_t hashedUsername = nameHasher(username);
 
         const auto contextTimestamp = spacetime::InSeconds{ std::chrono::seconds{ timestamp } };
 
@@ -2506,8 +2625,26 @@ bool JamSliceTask::Work( TaskQueue& currentTasks )
         {
             if ( !stemCID.empty() )
                 numberOfActiveStems++;
-            if ( !previousStemIDs.contains( stemCID ) )
+
+            // compare current stem CID with our list of previous ones, see if we saw it in the previous riff
+            bool sawPreviousStem = false;
+            for ( auto stemI = 0; stemI < 8; stemI++ )
+            {
+                if ( memcmp( previousStemIDs[stemI], stemCID.data(), stemCID.length()) == 0 )
+                {
+                    sawPreviousStem = true;
+                    break;
+                }
+            }
+            if ( sawPreviousStem == false )
                 numberOfUnseenStems++;
+        }
+
+        // encode per-stem user names as their hashes
+        {
+            Warehouse::JamSlice::StemUserHashes& stemUserHashes = resultSlice->m_stemUserHashes.emplace_back();
+            for ( auto stemI = 0; stemI < 8; stemI++ )
+                stemUserHashes[stemI] = nameHasher(stemUsers[stemI]);
         }
 
         // first riff reports no deltas
@@ -2532,11 +2669,11 @@ bool JamSliceTask::Work( TaskQueue& currentTasks )
         previousnumberOfUnseenStems = numberOfUnseenStems;
 
         // keep unordered set of stem IDs
-        previousStemIDs.clear();
-        for ( const auto& stemCID : stemCIDs )
-            previousStemIDs.emplace( stemCID );
+        for ( auto stemI = 0; stemI < 8; stemI++ )
+            strcpy( previousStemIDs[stemI], stemCIDs[stemI].data() );
     }
 
+    // move the report out to the callback for it to deal with
     if ( m_reportCallback )
         m_reportCallback( m_jamCID, std::move(resultSlice) );
 
