@@ -146,15 +146,6 @@ void JamPrecacheState::imgui(
             // if there are not enough live tasks running, kick some off
             while ( m_downloadsDispatched < static_cast<uint32_t>(m_maximumDownloadsInFlight) && fileOpsBurstCount > 0 )
             {
-                // keep timer on how long it takes to cycle through to dispatching new tasks; this gives
-                // a rough idea of how long the whole process will take
-                {
-                    const auto downloadTimeMillis = m_syncTimer.delta< std::chrono::milliseconds >();
-                    m_averageSyncTimeMillis.update( static_cast<double>( downloadTimeMillis.count() ) );
-                    m_syncTimer.setToNow();
-                    ++m_averageSyncMeasurements;
-                }
-
                 const endlesss::types::StemCouchID stemID = m_stemIDs[m_currentStemIndex];
 
                 // pull the full stem data we have on file
@@ -175,6 +166,15 @@ void JamPrecacheState::imgui(
                     {
                         ++m_downloadsDispatched;
                         fileOpsBurstCount = -1;
+
+                        // keep timer on how long it takes to cycle through to dispatching new tasks; this gives
+                        // a rough idea of how long the whole process will take
+                        {
+                            const auto downloadTimeMillis = m_syncTimer.delta< std::chrono::milliseconds >();
+                            m_averageSyncTimeMillis.update( static_cast<double>(downloadTimeMillis.count()) );
+                            m_syncTimer.setToNow();
+                            ++m_averageSyncMeasurements;
+                        }
 
                         // kick out an untethered async task to initialise a live Stem object
                         // doing so will go through the default machinery of downloading / validating it, same as
