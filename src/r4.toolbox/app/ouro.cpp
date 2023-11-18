@@ -30,7 +30,11 @@
 #include "endlesss/all.h"
 
 #include "platform_folders.h"
+
 #include "ux/riff.feedshare.h"
+#include "ux/cache.migrate.h"
+#include "ux/cache.trim.h"
+
 #include "xp/open.url.h"
 
 using namespace std::chrono_literals;
@@ -241,6 +245,7 @@ int OuroApp::EntrypointGUI()
     static constexpr auto popupErrorModalName = "Error";
     std::string popupErrorMessage;
 
+    bool bEnableCacheManagementMenu = false;
 
     bool successfulBreakFromLoop = false;
     bool endlesssAuthExpired = false;
@@ -297,6 +302,7 @@ int OuroApp::EntrypointGUI()
                     {
                         ImGui::TextUnformatted( "Advanced Toggles" );
                         ImGui::Checkbox( " Enable Network Diagnostics", &advancedOptionsBlock.bEnableNetworkLogging );
+                        ImGui::Checkbox( " Cache Management Tools", &bEnableCacheManagementMenu );
                     }
                     else
                     {
@@ -1085,7 +1091,39 @@ int OuroApp::EntrypointGUI()
     if ( !sessionWaitResult.ok() )
         return -1;
 
-    registerMainThreadCall( "name-resolution", [this]( float deltaTime ) { updateJamNameResolutionTasks( deltaTime ); } );
+    // plug in a callback on the main thread to do jam name resolution in the background
+    registerMainThreadCall( "name-resolution", [this]( float deltaTime )
+        { 
+                updateJamNameResolutionTasks( deltaTime ); 
+        });
+
+    // custom menu entries at the ouro level
+    if ( bEnableCacheManagementMenu )
+    {
+        // build advanced cache control menu if enabled; these tools are not really "user facing" quality, mostly
+        // for my own tests or debug usage
+        registerMainMenuEntry( 2, "CACHE", [this]()
+            {
+                if ( ImGui::MenuItem( "Migration ..." ) )
+                {
+                    activateModalPopup( "Stem Cache Migration", [
+                        this,
+                            state = ux::createCacheMigrationState( m_storagePaths->cacheCommon )](const char* title)
+                        {
+                            ux::modalCacheMigration( title, *m_warehouse, *state );
+                        } );
+                }
+                if ( ImGui::MenuItem( "Trim / Repair ..." ) )
+                {
+                    activateModalPopup( "Stem Cache Trim / Repair", [
+                        this,
+                            state = ux::createCacheTrimState( m_storagePaths->cacheCommon )](const char* title)
+                        {
+                            ux::modalCacheTrim( title, *state );
+                        } );
+                }
+            } );
+    }
 
     // all done, pass control over to next level
     int appResult = EntrypointOuro();

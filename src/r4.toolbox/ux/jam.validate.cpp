@@ -51,7 +51,7 @@ struct JamValidateState
 
     void imguiStats( bool isWorking )
     {
-        ImGui::TextColored( colour::shades::toast.neutral(), "Jam ID : %s", m_jamExtendedID.c_str() );
+        ImGui::TextUnformatted( "Fetching and analysing riff data ..." );
         if ( isWorking )
         {
             ImGui::SameLine( 0, 0 );
@@ -63,13 +63,15 @@ struct JamValidateState
 
         ImGui::Spacing();
         ImGui::SeparatorBreak();
-        ImGui::TextColored( colour::shades::toast.light(), "[ %5i ] riffs examined", m_riffsExamined.load() );
-        ImGui::TextColored( colour::shades::callout.light(), "[ %5i ] stems patched with new data", m_stemsPatched.load() );
-        ImGui::TextColored( colour::shades::errors.light(), "[ %5i ] network interruptions", m_networkRetries.load() );
+        ImGui::TextColored( colour::shades::toast.light(),      "[ %5i ] riffs examined", m_riffsExamined.load() );
+        ImGui::TextColored( colour::shades::toast.neutral(),    "[ %5i ] riffs from server not in Warehouse (ignored)", m_riffsNotInWarehouse.load() );
+        ImGui::TextColored( colour::shades::callout.light(),    "[ %5i ] stems patched with new data", m_stemsPatched.load() );
+        ImGui::TextColored( colour::shades::errors.light(),     "[ %5i ] network interruptions", m_networkRetries.load() );
         ImGui::Spacing();
     }
 
     State                           m_state = State::FetchID;
+    bool                            m_diagnosticMode = false;
 
     endlesss::types::JamCouchID     m_jamCouchID;
     std::string                     m_jamExtendedID;
@@ -80,8 +82,12 @@ struct JamValidateState
     std::future< absl::Status >     m_workFutureStatus;
 
     std::atomic_uint32_t            m_riffsExamined = 0;
+    std::atomic_uint32_t            m_riffsNotInWarehouse = 0;
     std::atomic_uint32_t            m_stemsPatched = 0;
     std::atomic_uint32_t            m_networkRetries = 0;
+
+    endlesss::types::StemCouchIDSet m_stemsValidatedForPatching;
+    endlesss::types::StemCouchIDSet m_stemsValidatedToIgnore;
 };
 
 
@@ -132,10 +138,22 @@ void JamValidateState::imgui(
             ImGui::Spacing();
             ImGui::TextColored( colour::shades::errors.light(), "%s", m_resolverErrors.c_str() );
             ImGui::SeparatorBreak();
-            ImGui::AlignTextToFramePadding();
-            ImGui::TextUnformatted( "Extended Jam ID : " );
-            ImGui::SameLine();
-            ImGui::InputText( "###extended-id", &m_jamExtendedID, ImGuiInputTextFlags_ReadOnly );
+            ImGui::Spacing();
+            {
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextUnformatted( "Extended Jam ID : " );
+                ImGui::SameLine();
+                ImGui::InputText( "###extended-id", &m_jamExtendedID, ImGuiInputTextFlags_ReadOnly );
+            }
+            ImGui::Spacing();
+            {
+                ImGui::Checkbox( "Enable Diagnostic Mode", &m_diagnosticMode );
+                ImGui::SameLine();
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextDisabled( "[?]" );
+                ImGui::CompactTooltip( "If enabled, no riff data will be patched but instead we will insert\nRiff Tags into the jam for any stem operations that would be\nmade, to help diagnose the validation logic" );
+            }
+            ImGui::Spacing();
             ImGui::SeparatorBreak();
             ImGui::Spacing();
 
@@ -154,12 +172,13 @@ void JamValidateState::imgui(
             m_workFutureStatus = taskExecutor.async( [&]()
                 {
                     // give servers more of a break if we get more initial failures
-                    const auto extraTimePadding = ((m_workRetries + 1) * 2) * 1s;
-                    std::this_thread::sleep_for( extraTimePadding + 500ms );
+                    const auto extraTimePadding = (m_workRetries * 2) * 1s;
+                    std::this_thread::sleep_for( extraTimePadding + 100ms );
 
                     endlesss::api::RiffStructureValidation riffStructure;
-                    if ( riffStructure.fetch( *netCfg, m_jamExtendedID, m_workIndex, 100 ) )
+                    if ( riffStructure.fetch( *netCfg, m_jamExtendedID, m_workIndex, 50 ) )
                     {
+                        // we're out of riffs, respond with an error denoting that we're all finished
                         if ( riffStructure.data.rifffs.empty() )
                         {
                             return absl::UnavailableError( "finished" );
@@ -167,7 +186,7 @@ void JamValidateState::imgui(
 
                         for ( const auto& riff : riffStructure.data.rifffs )
                         {
-                            endlesss::types::RiffCouchID riffCouchID( riff._id );
+                            const endlesss::types::RiffCouchID riffCouchID( riff._id );
 
                             endlesss::types::RiffComplete riffFromDatabase;
                             if ( warehouse.fetchSingleRiffByID( riffCouchID, riffFromDatabase ) )
@@ -177,23 +196,118 @@ void JamValidateState::imgui(
                                     const auto& stemEnabledOnServer = riff.state.playback[stemIndex].slot.current.on;
 
                                     const endlesss::types::Stem& databaseStem = riffFromDatabase.stems[stemIndex];
-                                    const std::string& serverStemID = riff.state.playback[stemIndex].slot.current.currentLoop;
+                                    const endlesss::types::StemCouchID serverStemID( riff.state.playback[stemIndex].slot.current.currentLoop );
+
+                                    bool bPatchStemIntoDatabaseRiff = false;
 
                                     if ( stemEnabledOnServer )
                                     {
                                         if ( databaseStem.couchID.empty() &&
                                             !serverStemID.empty() )
                                         {
-                                            blog::app( FMTX( "[R:{}] found empty stem in database vs. populated on server : [{}]" ), riffCouchID, serverStemID );
+                                            blog::app( FMTX( "[R:{}] found empty stem in database vs. populated on server : [{}] ... re-evaluating ..." ), riffCouchID, serverStemID );
 
-                                            warehouse.patchRiffStemRecord( m_jamCouchID, riffCouchID, stemIndex, endlesss::types::StemCouchID( serverStemID ) );
+                                            // we've already seen this stem and validated that it's worth patching back in? don't bother the servers to re-check ...
+                                            if ( m_stemsValidatedForPatching.contains( serverStemID ) )
+                                            {
+                                                bPatchStemIntoDatabaseRiff = true;
+                                            }
+                                            else
+                                            {
+                                                std::vector< endlesss::types::StemCouchID > stemsToValidate;
+                                                stemsToValidate.emplace_back( serverStemID );
 
-                                            m_stemsPatched++;
+                                                // run this ID through the stem check logic again, see if we get a different result
+                                                endlesss::api::StemTypeCheck stemValidation;
+                                                if ( stemValidation.fetchBatch( *netCfg, m_jamCouchID, stemsToValidate ) )
+                                                {
+                                                    // expecting a single returned row for the single stem; if not, abort
+                                                    if ( stemValidation.rows.size() != 1 )
+                                                    {
+
+                                                    }
+                                                    else
+                                                    {
+                                                        const auto& validationRow = stemValidation.rows[0];
+                                                        if ( !validationRow.error.empty() )
+                                                        {
+
+                                                        }
+                                                        else
+                                                        {
+                                                            endlesss::toolkit::Warehouse::StemLedgerType ledgerType;
+                                                            if ( warehouse.getNoteTypeForStem( validationRow.key, ledgerType ) )
+                                                            {
+                                                                blog::app( FMTX( "[R:{}] stem [{}] ledger type {} found" ),
+                                                                    riffCouchID,
+                                                                    serverStemID,
+                                                                    endlesss::toolkit::Warehouse::getStemLedgerTypeAsString( ledgerType ) );
+
+                                                                if ( ledgerType == endlesss::toolkit::Warehouse::StemLedgerType::MISSING_OGG )
+                                                                {
+                                                                    // do we have signs of life in the new network fetch?
+                                                                    // this is the inverse of the MISSING_OGG conditions
+                                                                    if ( !validationRow.doc.cdn_attachments.oggAudio.endpoint.empty() ||
+                                                                         !validationRow.doc.cdn_attachments.flacAudio.endpoint.empty() )
+                                                                    {
+                                                                        ABSL_ASSERT( !m_stemsValidatedForPatching.contains( serverStemID ) );
+                                                                        m_stemsValidatedForPatching.emplace( serverStemID );
+
+                                                                        bPatchStemIntoDatabaseRiff = true;
+                                                                    }
+                                                                    // .. looks like this is still missing audio
+                                                                    else
+                                                                    {
+
+                                                                    }
+                                                                }
+
+                                                                if ( m_diagnosticMode )
+                                                                {
+                                                                    const auto tagDesc = fmt::format( FMTX( "ledger:{} will_patch:{}" ),
+                                                                        endlesss::toolkit::Warehouse::getStemLedgerTypeAsString( ledgerType ),
+                                                                        bPatchStemIntoDatabaseRiff );
+
+                                                                    warehouse.upsertTag({
+                                                                        m_jamCouchID,
+                                                                        riffCouchID,
+                                                                        1,
+                                                                        riffFromDatabase.riff.creationTimeUnix,
+                                                                        0,
+                                                                        tagDesc
+                                                                        });
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
-                                }
+
+                                    // something to fix!
+                                    if ( bPatchStemIntoDatabaseRiff )
+                                    {
+                                        if ( !m_diagnosticMode )
+                                        {
+                                            blog::app( FMTX( "[R:{}] stem [{}] patched back into riff at index {}" ), riffCouchID, serverStemID, stemIndex );
+
+                                            warehouse.patchRiffStemRecord( m_jamCouchID, riffCouchID, stemIndex, endlesss::types::StemCouchID( serverStemID ) );
+                                        }
+
+                                        // log #s even when in diagnostic mode
+                                        m_stemsPatched++;
+                                    }
+                                } // stem index iteration
                             }
-                        }
+                            // could not find this riff in Warehouse, may be that user hasn't updated it from the server copy recently
+                            else
+                            {
+                                // not an error, just keep track of these on the UI
+                                m_riffsNotInWarehouse++;
+                            }
+
+                        } // for each riff in the server data we got
 
                         m_riffsExamined += static_cast<uint32_t>( riffStructure.data.rifffs.size() );
 

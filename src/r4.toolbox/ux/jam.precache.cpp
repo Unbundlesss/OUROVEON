@@ -139,8 +139,12 @@ void JamPrecacheState::imgui(
                 ImGui::ProgressBar( progressFraction, ImVec2( -1, 26.0f ), fmt::format( FMTX( "{} of {}" ), m_currentStemIndex + 1, m_stemIDs.size() ).c_str() );
             }
 
+            // how many fs::exists() checks we can do in a sequence, otherwise we would do one per frame and 
+            // that means iterating through larger jams that are already on-disk would be a chore
+            int32_t fileOpsBurstCount = 100;
+
             // if there are not enough live tasks running, kick some off
-            if ( m_downloadsDispatched < static_cast<uint32_t>(m_maximumDownloadsInFlight) )
+            while ( m_downloadsDispatched < static_cast<uint32_t>(m_maximumDownloadsInFlight) && fileOpsBurstCount > 0 )
             {
                 // keep timer on how long it takes to cycle through to dispatching new tasks; this gives
                 // a rough idea of how long the whole process will take
@@ -150,7 +154,7 @@ void JamPrecacheState::imgui(
                     m_syncTimer.setToNow();
                     ++m_averageSyncMeasurements;
                 }
-                
+
                 const endlesss::types::StemCouchID stemID = m_stemIDs[m_currentStemIndex];
 
                 // pull the full stem data we have on file
@@ -165,10 +169,12 @@ void JamPrecacheState::imgui(
                     if ( fs::exists( stemCachePath / stemData.couchID.value() ) )
                     {
                         m_statsStemsAlreadyInCache++;
+                        fileOpsBurstCount--;
                     }
                     else
                     {
                         ++m_downloadsDispatched;
+                        fileOpsBurstCount = -1;
 
                         // kick out an untethered async task to initialise a live Stem object
                         // doing so will go through the default machinery of downloading / validating it, same as
@@ -204,6 +210,9 @@ void JamPrecacheState::imgui(
 
                 // we've done something with this one, next stem in the list...
                 ++m_currentStemIndex;
+                // break out of the burst loop if we're out of stems, it will flush the workers on the next loop round
+                if ( m_currentStemIndex >= m_stemIDs.size() )
+                    break;
             }
 
             ImGui::Spacing();
