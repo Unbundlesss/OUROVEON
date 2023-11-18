@@ -98,12 +98,12 @@ OURO_CONFIG( rAPI )
     // 
 
     // connection and read timeouts for all network requests
-    int32_t                 networkTimeoutInSecondsDefault = 2;         // for LAN broadband / stable connections
-    int32_t                 networkTimeoutInSecondsUnstable = 6;        // for 4G / less reliable connections
+    int32_t                 networkTimeoutInSecondsDefault = 3;         // for LAN broadband / stable connections
+    int32_t                 networkTimeoutInSecondsUnstable = 8;        // for 4G / less reliable connections
 
     // how many times we'll retry a request until abandoning the idea and failing out
-    int32_t                 networkRequestRetryLimitDefault = 2;        // for LAN broadband / stable connections
-    int32_t                 networkRequestRetryLimitUnstable = 5;       // for 4G / less reliable connections
+    int32_t                 networkRequestRetryLimitDefault = 3;        // for LAN broadband / stable connections
+    int32_t                 networkRequestRetryLimitUnstable = 6;       // for 4G / less reliable connections
 
 
 
