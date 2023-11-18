@@ -60,52 +60,53 @@ private:
 #define _PAGING_NEXT_WRAP(_ty)             { Value = _ty; return; } if ( Value == _ty )
 #define _PAGING_PLAIN(_ty)                 _ty,
 
-#define DEFINE_PAGE_MANAGER( _stateType, _publicName, _internalName, _statesFunc )                                  \
-        struct _stateType                                                                                           \
-        {                                                                                                           \
-            struct LocalStateID final : public base::detail::PageID {};                                             \
-                                                                                                                    \
-            constexpr _stateType() : Value( getFirst() ) {}                                                         \
-            constexpr _stateType( const LocalStateID& v ) : Value(v) {}                                             \
-                                                                                                                    \
-            LocalStateID Value;                                                                                     \
-            _statesFunc( _PAGING_PAGE_DEF )                                                                         \
-                                                                                                                    \
-            ouro_nodiscard constexpr bool operator == ( const LocalStateID& rhs ) const { return Value == rhs; }    \
-            ouro_nodiscard constexpr operator const LocalStateID& () const { return Value; }                        \
-                                                                                                                    \
-            std::string generateTitle() const                                                                       \
-            {                                                                                                       \
-                return fmt::format( FMTX( _publicName " [" _statesFunc( _PAGING_ICON_FMT ) "]###" _internalName ),  \
-                    _statesFunc( _PAGING_ACTIVE_ICON )                                                              \
-                    "" );                                                                                           \
-            }                                                                                                       \
-            constexpr void switchToNextPage()                                                                       \
-            {                                                                                                       \
-                if ( Value.name() == nullptr )                                                                      \
-                _statesFunc( _PAGING_NEXT_WRAP )                                                                    \
-                { Value = getFirst(); }                                                                             \
-            }                                                                                                       \
-            void checkForImGuiTabSwitch()                                                                           \
-            {                                                                                                       \
-                const bool bSwitchOnBarRClick = ( ImGui::IsItemHovered() && ImGui::IsItemClicked( 1 ) );            \
-                const bool bShiftKeys         = ( ImGui::IsKeyPressed( ImGuiKey_PageUp, false) );                   \
-                const bool bSwitchOnKeyPress  = ( ImGui::IsWindowHovered( ImGuiHoveredFlags_RootAndChildWindows )   \
-                                               && bShiftKeys );                                                     \
-                                                                                                                    \
-                if ( bSwitchOnBarRClick || bSwitchOnKeyPress )                                                      \
-                {                                                                                                   \
-                    switchToNextPage();                                                                             \
-                }                                                                                                   \
-            }                                                                                                       \
-            private:                                                                                                \
-            static constexpr LocalStateID _flat_order[] = {                                                         \
-                _statesFunc( _PAGING_PLAIN )                                                                        \
-            };                                                                                                      \
-            static constexpr LocalStateID getFirst()                                                                \
-            {                                                                                                       \
-                return _flat_order[0];                                                                              \
-            }                                                                                                       \
+#define DEFINE_PAGE_MANAGER( _stateType, _publicName, _internalName, _statesFunc )                                      \
+        struct _stateType                                                                                               \
+        {                                                                                                               \
+            struct LocalStateID final : public base::detail::PageID {};                                                 \
+                                                                                                                        \
+            constexpr _stateType() : Value( getFirst() ) {}                                                             \
+            constexpr _stateType( const LocalStateID& v ) : Value(v) {}                                                 \
+                                                                                                                        \
+            LocalStateID Value;                                                                                         \
+            _statesFunc( _PAGING_PAGE_DEF )                                                                             \
+                                                                                                                        \
+            ouro_nodiscard constexpr bool operator == ( const LocalStateID& rhs ) const { return Value == rhs; }        \
+            ouro_nodiscard constexpr operator const LocalStateID& () const { return Value; }                            \
+                                                                                                                        \
+            std::string generateTitle() const                                                                           \
+            {                                                                                                           \
+                return fmt::format( FMTX( _publicName " [" _statesFunc( _PAGING_ICON_FMT ) "]###" _internalName ),      \
+                    _statesFunc( _PAGING_ACTIVE_ICON )                                                                  \
+                    "" );                                                                                               \
+            }                                                                                                           \
+            constexpr void switchToNextPage()                                                                           \
+            {                                                                                                           \
+                if ( Value.name() == nullptr )                                                                          \
+                _statesFunc( _PAGING_NEXT_WRAP )                                                                        \
+                { Value = getFirst(); }                                                                                 \
+            }                                                                                                           \
+            void checkForImGuiTabSwitch()                                                                               \
+            {                                                                                                           \
+                const bool bSwitchOnBarMouse = ( ImGui::IsItemHovered() &&                                              \
+                                                ( ImGui::IsItemClicked( 1 ) || ImGui::IsMouseDoubleClicked( 0 ) ) );    \
+                const bool bShiftKeys         = ( ImGui::IsKeyPressed( ImGuiKey_PageUp, false) );                       \
+                const bool bSwitchOnKeyPress  = ( ImGui::IsWindowHovered( ImGuiHoveredFlags_RootAndChildWindows )       \
+                                               && bShiftKeys );                                                         \
+                                                                                                                        \
+                if ( bSwitchOnBarMouse || bSwitchOnKeyPress )                                                           \
+                {                                                                                                       \
+                    switchToNextPage();                                                                                 \
+                }                                                                                                       \
+            }                                                                                                           \
+            private:                                                                                                    \
+            static constexpr LocalStateID _flat_order[] = {                                                             \
+                _statesFunc( _PAGING_PLAIN )                                                                            \
+            };                                                                                                          \
+            static constexpr LocalStateID getFirst()                                                                    \
+            {                                                                                                           \
+                return _flat_order[0];                                                                                  \
+            }                                                                                                           \
         };
 
 } // namespace base
