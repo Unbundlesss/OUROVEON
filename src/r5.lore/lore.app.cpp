@@ -3508,7 +3508,7 @@ int LoreApp::EntrypointOuro()
                                     activateModalPopup( popupLabel, [
                                         this,
                                         &riffFetchProvider,
-                                        state = std::make_shared<ux::JamPrecacheState>( m_warehouseContentsReport.m_jamCouchIDs[jI] ) ](const char* title)
+                                        state = ux::createJamPrecacheState( m_warehouseContentsReport.m_jamCouchIDs[jI] ) ](const char* title)
                                     {
                                         ux::modalJamPrecache( title, *state, *m_warehouse, riffFetchProvider, getTaskExecutor() );
                                     });
@@ -3524,7 +3524,7 @@ int LoreApp::EntrypointOuro()
                                     activateModalPopup( popupLabel, [
                                         this,
                                         netCfg = getNetworkConfiguration(),
-                                        state = ux::createModelJamValidateState( m_warehouseContentsReport.m_jamCouchIDs[jI] )](const char* title)
+                                        state = ux::createJamValidateState( m_warehouseContentsReport.m_jamCouchIDs[jI] )](const char* title)
                                     {
                                         ux::modalJamValidate( title, *state, *m_warehouse, netCfg, getTaskExecutor() );
                                     });

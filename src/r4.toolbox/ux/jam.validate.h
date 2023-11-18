@@ -17,7 +17,7 @@ namespace endlesss { namespace toolkit { struct Warehouse; } }
 namespace ux {
 
     struct JamValidateState;
-    std::shared_ptr< JamValidateState > createModelJamValidateState( const endlesss::types::JamCouchID& jamID );
+    std::shared_ptr< JamValidateState > createJamValidateState( const endlesss::types::JamCouchID& jamID );
 
     // 
     void modalJamValidate(

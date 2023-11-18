@@ -388,7 +388,7 @@ void JamValidateState::imgui(
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-std::shared_ptr< JamValidateState > createModelJamValidateState( const endlesss::types::JamCouchID& jamID )
+std::shared_ptr< JamValidateState > createJamValidateState( const endlesss::types::JamCouchID& jamID )
 {
     return std::make_shared< JamValidateState >( jamID );
 }
