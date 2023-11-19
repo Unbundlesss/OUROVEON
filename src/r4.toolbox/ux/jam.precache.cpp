@@ -84,7 +84,7 @@ void modalJamPrecache(
     endlesss::services::RiffFetchProvider& fetchProvider,
     tf::Executor& taskExecutor )
 {
-    const ImVec2 configWindowSize = ImVec2( 830.0f, 250.0f );
+    const ImVec2 configWindowSize = ImVec2( 830.0f, 260.0f );
     ImGui::SetNextWindowContentSize( configWindowSize );
 
     ImGui::PushStyleColor( ImGuiCol_PopupBg, ImGui::GetStyleColorVec4( ImGuiCol_ChildBg ) );
@@ -176,6 +176,7 @@ void JamPrecacheState::imgui(
             ImGui::Spacing();
             ImGui::SeparatorBreak();
             {
+                // allow choice of how many download tasks are kept in-flight; more tasks means larger network load / strain on endlesss
                 ImGui::AlignTextToFramePadding();
                 ImGui::TextUnformatted( "Maximum Simultaneous Downloads : " );
                 ImGui::SameLine();
@@ -317,24 +318,28 @@ void JamPrecacheState::imgui(
         case State::Complete:
         {
             if ( m_state == State::Complete )
-                ImGui::TextWrapped( "Process complete" );
+            {
+                ImGui::TextColored( colour::shades::green.light(), "Process complete" );
+            }
 
+            // work out percentages for how many stems are found on disk and how many have come down over the wire
             const auto stemsInCache         = m_statsStemsAlreadyInCache.load();
             const auto stemsDownloaded      = m_statsStemsDownloaded.load();
             const double totalStemsRecpPct  = 100.0 / static_cast<double>( m_stemIDs.size() );
             const double stemsInCachePct    = totalStemsRecpPct * static_cast<double>(stemsInCache);
             const double downloadedPct      = totalStemsRecpPct * static_cast<double>(stemsDownloaded);
 
+            // display stats
             ImGui::Spacing();
             ImGui::SeparatorBreak();
-            ImGui::TextColored( colour::shades::white.light(), "[ %5i ] Total stems in jam", static_cast<int32_t>( m_stemIDs.size() ) );
+            ImGui::TextColored( colour::shades::white.light(), "[ %6i ] Total stems in jam", static_cast<int32_t>( m_stemIDs.size() ) );
             ImGui::SeparatorBreak();
-            ImGui::TextColored( colour::shades::toast.light(), "[ %5i ] Stems already in cache (%.1f%%)", stemsInCache, stemsInCachePct );
-            ImGui::TextColored( colour::shades::callout.light(), "[ %5i ] Stems downloaded (%.1f%%)", stemsDownloaded, downloadedPct );
+            ImGui::TextColored( colour::shades::toast.light(), "[ %6i ] Stems already in cache (%.1f%%)", stemsInCache, stemsInCachePct );
+            ImGui::TextColored( colour::shades::callout.light(), "[ %6i ] Stems downloaded (%.1f%%)", stemsDownloaded, downloadedPct );
             if ( m_statsStemsFailedToDownload > 0 )
-                ImGui::TextColored( colour::shades::errors.light(), "[ %5i ] Stems failed to download", m_statsStemsFailedToDownload.load() );
+                ImGui::TextColored( colour::shades::errors.light(), "[ %6i ] Stems failed to download", m_statsStemsFailedToDownload.load() );
             if ( m_statsStemsMissingFromDb > 0 )
-                ImGui::TextColored( colour::shades::errors.light(), "[ %5i ] Stems missing from Warehouse", m_statsStemsMissingFromDb.load() );
+                ImGui::TextColored( colour::shades::errors.light(), "[ %6i ] Stems missing from Warehouse", m_statsStemsMissingFromDb.load() );
         }
         break;
     }
