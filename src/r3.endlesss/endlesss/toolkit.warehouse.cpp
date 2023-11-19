@@ -49,8 +49,8 @@ struct Warehouse::ITask
     virtual bool usesNetwork() const { return false; }
     virtual bool forceContentReport() const { return false; }
 
-    virtual const char* getTag() = 0;
-    virtual std::string Describe() = 0;
+    virtual const char* getTag() const = 0;
+    virtual std::string Describe() const = 0;
     virtual bool Work( TaskQueue& currentTasks ) = 0;
 };
 
@@ -65,6 +65,18 @@ struct Warehouse::INetworkTask : Warehouse::ITask
 
     bool usesNetwork() const override { return true; }
     const api::NetConfiguration& m_netConfig;
+
+
+    // some network tasks add in delay to help avoid attacking the endlesss servers too hard
+    // TODO data drive these pauses
+    void addNetworkPause() const
+    {
+        math::RNG32 rng;
+        const auto networkPauseTime = std::chrono::milliseconds( rng.genInt32( 250, 750 ) );
+
+        blog::database( "[{}] pausing for {}", getTag(), networkPauseTime );
+        std::this_thread::sleep_for( networkPauseTime );
+    }
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -79,8 +91,8 @@ struct ContentsReportTask final : Warehouse::ITask
 
     Warehouse::ContentsReportCallback m_reportCallback;
 
-    const char* getTag() override { return Tag; }
-    std::string Describe() override { return fmt::format( "[{}] creating database contents report", Tag ); }
+    const char* getTag() const override { return Tag; }
+    std::string Describe() const override { return fmt::format( "[{}] creating database contents report", Tag ); }
     bool Work( TaskQueue& currentTasks ) override;
 };
 
@@ -98,8 +110,8 @@ struct JamSliceTask final : Warehouse::ITask
     types::JamCouchID               m_jamCID;
     Warehouse::JamSliceCallback     m_reportCallback;
 
-    const char* getTag() override { return Tag; }
-    std::string Describe() override { return fmt::format( "[{}] extracting jam data for [{}]", Tag, m_jamCID.value() ); }
+    const char* getTag() const override { return Tag; }
+    std::string Describe() const override { return fmt::format( "[{}] extracting jam data for [{}]", Tag, m_jamCID.value() ); }
     bool Work( TaskQueue& currentTasks ) override;
 };
 
@@ -118,8 +130,8 @@ struct JamSnapshotTask final : Warehouse::INetworkTask
 
     types::JamCouchID m_jamCID;
 
-    const char* getTag() override { return Tag; }
-    std::string Describe() override { return fmt::format( "[{}] fetching Jam snapshot of [{}]", Tag, m_jamCID ); }
+    const char* getTag() const override { return Tag; }
+    std::string Describe() const override { return fmt::format( "[{}] fetching Jam snapshot of [{}]", Tag, m_jamCID ); }
     bool Work( TaskQueue& currentTasks ) override;
 };
 
@@ -138,8 +150,8 @@ struct JamPurgeTask final : Warehouse::ITask
 
     types::JamCouchID m_jamCID;
 
-    const char* getTag() override { return Tag; }
-    std::string Describe() override { return fmt::format( "[{}] deleting all records for [{}]", Tag, m_jamCID ); }
+    const char* getTag() const override { return Tag; }
+    std::string Describe() const override { return fmt::format( "[{}] deleting all records for [{}]", Tag, m_jamCID ); }
     bool Work( TaskQueue& currentTasks ) override;
 };
 
@@ -158,8 +170,8 @@ struct JamSyncAbortTask final : Warehouse::ITask
 
     types::JamCouchID m_jamCID;
 
-    const char* getTag() override { return Tag; }
-    std::string Describe() override { return fmt::format( "[{}] purging empty riff records for [{}]", Tag, m_jamCID ); }
+    const char* getTag() const override { return Tag; }
+    std::string Describe() const override { return fmt::format( "[{}] purging empty riff records for [{}]", Tag, m_jamCID ); }
     bool Work( TaskQueue& currentTasks ) override;
 };
 
@@ -181,8 +193,8 @@ struct JamExportTask final : Warehouse::ITask
     fs::path                m_exportFolder;
     std::string             m_jamName;
 
-    const char* getTag() override { return Tag; }
-    std::string Describe() override { return fmt::format( "[{}] exporting jam to disk", Tag ); }
+    const char* getTag() const override { return Tag; }
+    std::string Describe() const override { return fmt::format( "[{}] exporting jam to disk", Tag ); }
     bool Work( TaskQueue& currentTasks ) override;
 };
 
@@ -203,8 +215,8 @@ struct JamImportTask final : Warehouse::ITask
     // rebuild after add
     bool forceContentReport() const override { return true; }
 
-    const char* getTag() override { return Tag; }
-    std::string Describe() override { return fmt::format( "[{}] importing jam from disk", Tag ); }
+    const char* getTag() const override { return Tag; }
+    std::string Describe() const override { return fmt::format( "[{}] importing jam from disk", Tag ); }
     bool Work( TaskQueue& currentTasks ) override;
 };
 
@@ -222,8 +234,8 @@ struct GetRiffDataTask final : Warehouse::INetworkTask
     types::JamCouchID                 m_jamCID;
     std::vector< types::RiffCouchID > m_riffCIDs;
 
-    const char* getTag() override { return Tag; }
-    std::string Describe() override { return fmt::format( "[{}] pulling {} riff details", Tag, m_riffCIDs.size() ); }
+    const char* getTag() const override { return Tag; }
+    std::string Describe() const override { return fmt::format( "[{}] pulling {} riff details", Tag, m_riffCIDs.size() ); }
     bool Work( TaskQueue& currentTasks ) override;
 };
 
@@ -241,8 +253,8 @@ struct GetStemData final : Warehouse::INetworkTask
     types::JamCouchID                 m_jamCID;
     std::vector< types::StemCouchID > m_stemCIDs;
 
-    const char* getTag() override { return Tag; }
-    std::string Describe() override { return fmt::format( "[{}] pulling {} stem details", Tag, m_stemCIDs.size() ); }
+    const char* getTag() const override { return Tag; }
+    std::string Describe() const override { return fmt::format( "[{}] pulling {} stem details", Tag, m_stemCIDs.size() ); }
     bool Work( TaskQueue& currentTasks ) override;
 };
 
@@ -2366,67 +2378,63 @@ bool GetRiffDataTask::Work( TaskQueue& currentTasks )
 
     blog::database( "[{}] inserting {} rows of riff detail", Tag, riffDetails.rows.size() );
 
-    Warehouse::SqlDB::TransactionGuard txn;
-    for ( const auto& netRiffData : riffDetails.rows )
     {
-        types::Riff riffData{ m_jamCID, netRiffData.doc };
-
-        for ( auto stemI = 0; stemI < 8; stemI++ )
+        Warehouse::SqlDB::TransactionGuard txn;
+        for ( const auto& netRiffData : riffDetails.rows )
         {
-            const auto& stemCID = riffData.stems[stemI];
-            if ( stemCID.empty() )
-                continue;
+            types::Riff riffData{ m_jamCID, netRiffData.doc };
 
-            // check if this stem is meant to be ignored from the validation phase earlier
-            auto stemIter = uniqueStemCIDs.find( stemCID );
-            if ( stemIter != uniqueStemCIDs.end() )
+            for ( auto stemI = 0; stemI < 8; stemI++ )
             {
-                blog::database( "[{}] Removing stem {} from [{}] as it was marked as invalid", Tag, stemI, riffData.couchID );
+                const auto& stemCID = riffData.stems[stemI];
+                if ( stemCID.empty() )
+                    continue;
 
-                riffData.stemsOn[stemI] = false;
-                riffData.stems[stemI] = endlesss::types::StemCouchID{ "" };
+                // check if this stem is meant to be ignored from the validation phase earlier
+                auto stemIter = uniqueStemCIDs.find( stemCID );
+                if ( stemIter != uniqueStemCIDs.end() )
+                {
+                    blog::database( "[{}] Removing stem {} from [{}] as it was marked as invalid", Tag, stemI, riffData.couchID );
+
+                    riffData.stemsOn[stemI] = false;
+                    riffData.stems[stemI] = endlesss::types::StemCouchID{ "" };
+                }
+                else
+                {
+                    // as we walk the stems, poke the couch ID into the stems table if it doesn't already exist
+                    // so that any new ones will be found and filled in later
+                    Warehouse::SqlDB::query<insertOrIgnoreNewStemSkeleton>( stemCID.value(), m_jamCID.value() );
+                }
             }
-            else
-            {
-                // as we walk the stems, poke the couch ID into the stems table if it doesn't already exist
-                // so that any new ones will be found and filled in later
-                Warehouse::SqlDB::query<insertOrIgnoreNewStemSkeleton>( stemCID.value(), m_jamCID.value() );
-            }
-        }
 
-        auto gainsJson = fmt::format( R"([ {} ])", fmt::join( riffData.gains, ", " ) );
+            auto gainsJson = fmt::format( R"([ {} ])", fmt::join( riffData.gains, ", " ) );
 
-        Warehouse::SqlDB::query<updateRiffDetails>(
-            riffData.couchID.value(),
-            riffData.creationTimeUnix,
-            riffData.root,
-            riffData.scale,
-            riffData.BPS,
-            riffData.BPMrnd,
-            riffData.barLength,
-            riffData.appVersion,
-            riffData.magnitude,
-            riffData.user,
-            riffData.stems[0].value(),
-            riffData.stems[1].value(),
-            riffData.stems[2].value(),
-            riffData.stems[3].value(),
-            riffData.stems[4].value(),
-            riffData.stems[5].value(),
-            riffData.stems[6].value(),
-            riffData.stems[7].value(),
-            gainsJson
+            Warehouse::SqlDB::query<updateRiffDetails>(
+                riffData.couchID.value(),
+                riffData.creationTimeUnix,
+                riffData.root,
+                riffData.scale,
+                riffData.BPS,
+                riffData.BPMrnd,
+                riffData.barLength,
+                riffData.appVersion,
+                riffData.magnitude,
+                riffData.user,
+                riffData.stems[0].value(),
+                riffData.stems[1].value(),
+                riffData.stems[2].value(),
+                riffData.stems[3].value(),
+                riffData.stems[4].value(),
+                riffData.stems[5].value(),
+                riffData.stems[6].value(),
+                riffData.stems[7].value(),
+                gainsJson
             );
+        }
     }
 
     // add an additional pause to network fetch tasks to avoid hitting Endlesss too hard
-    {
-        math::RNG32 rng;
-        const auto networkPauseTime = std::chrono::milliseconds( rng.genInt32( 200, 600 ) );
-
-        blog::database( "[{}] pausing for {}", Tag, networkPauseTime );
-        std::this_thread::sleep_for( networkPauseTime );
-    }
+    addNetworkPause();
 
     return true;
 }
@@ -2465,52 +2473,48 @@ bool GetStemData::Work( TaskQueue& currentTasks )
 
     blog::database( "[{}] inserting {} rows of stem detail", Tag, stemDetails.rows.size() );
 
-    Warehouse::SqlDB::TransactionGuard txn;
-    for ( const auto& stemData : stemDetails.rows )
     {
-        const auto unixTime = (uint32_t)(stemData.doc.created / 1000); // from unix nano
+        Warehouse::SqlDB::TransactionGuard txn;
+        for ( const auto& stemData : stemDetails.rows )
+        {
+            const auto unixTime = (uint32_t)(stemData.doc.created / 1000); // from unix nano
 
-        int32_t instrumentMask = 0;
-        if ( stemData.doc.isDrum )
-            instrumentMask |= 1 << 1;
-        if ( stemData.doc.isNote )
-            instrumentMask |= 1 << 2;
-        if ( stemData.doc.isBass )
-            instrumentMask |= 1 << 3;
-        if ( stemData.doc.isMic )
-            instrumentMask |= 1 << 4;
+            int32_t instrumentMask = 0;
+            if ( stemData.doc.isDrum )
+                instrumentMask |= 1 << 1;
+            if ( stemData.doc.isNote )
+                instrumentMask |= 1 << 2;
+            if ( stemData.doc.isBass )
+                instrumentMask |= 1 << 3;
+            if ( stemData.doc.isMic )
+                instrumentMask |= 1 << 4;
 
-        const endlesss::api::IStemAudioFormat& audioFormat = stemData.doc.cdn_attachments.getAudioFormat();
+            const endlesss::api::IStemAudioFormat& audioFormat = stemData.doc.cdn_attachments.getAudioFormat();
 
-        Warehouse::SqlDB::query<updateStemDetails>(
-            stemData.id.value(),
-            unixTime,
-            audioFormat.getEndpoint().data(),
-            audioFormat.getBucket().data(),
-            audioFormat.getKey().data(),
-            audioFormat.getMIME().data(),
-            audioFormat.getLength(),
-            stemData.doc.bps,
-            types::BPStoRoundedBPM( stemData.doc.bps ),
-            instrumentMask,
-            stemData.doc.length16ths,
-            stemData.doc.originalPitch,
-            stemData.doc.barLength,
-            stemData.doc.presetName,
-            stemData.doc.creatorUserName,
-            (int32_t)stemData.doc.sampleRate,
-            stemData.doc.primaryColour
+            Warehouse::SqlDB::query<updateStemDetails>(
+                stemData.id.value(),
+                unixTime,
+                audioFormat.getEndpoint().data(),
+                audioFormat.getBucket().data(),
+                audioFormat.getKey().data(),
+                audioFormat.getMIME().data(),
+                audioFormat.getLength(),
+                stemData.doc.bps,
+                types::BPStoRoundedBPM( stemData.doc.bps ),
+                instrumentMask,
+                stemData.doc.length16ths,
+                stemData.doc.originalPitch,
+                stemData.doc.barLength,
+                stemData.doc.presetName,
+                stemData.doc.creatorUserName,
+                (int32_t)stemData.doc.sampleRate,
+                stemData.doc.primaryColour
             );
+        }
     }
 
     // add an additional pause to network fetch tasks to avoid hitting Endlesss too hard
-    {
-        math::RNG32 rng;
-        const auto networkPauseTime = std::chrono::milliseconds( rng.genInt32( 200, 600 ) );
-
-        blog::database( "[{}] pausing for {}", Tag, networkPauseTime );
-        std::this_thread::sleep_for( networkPauseTime );
-    }
+    addNetworkPause();
 
     return true;
 }
