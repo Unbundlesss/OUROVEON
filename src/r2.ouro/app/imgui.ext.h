@@ -105,6 +105,8 @@ inline void ColumnSeparatorBreak()
     ImGui::Spacing();
 }
 
+float GetFramePaddingX();
+
 bool BottomRightAlignedButton( const char* label, const ImVec2& size );
 
 void BeginDisabledControls( const bool isDisabled );

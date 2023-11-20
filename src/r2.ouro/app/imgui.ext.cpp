@@ -188,6 +188,14 @@ bool ImTextureFromFile( const char* filename, ImTexture& texture, bool clampToEd
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+float GetFramePaddingX()
+{
+    ImGuiContext& g = *GImGui;
+    const ImGuiStyle& style = g.Style;
+    return style.FramePadding.x;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 bool BottomRightAlignedButton( const char* label, const ImVec2& size)
 {
     const auto panelRegionAvail = ImGui::GetContentRegionAvail();
