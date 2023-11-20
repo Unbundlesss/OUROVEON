@@ -21,7 +21,7 @@
 namespace ux {
 
 // ---------------------------------------------------------------------------------------------------------------------
-struct TagLine::State
+struct TagLine::State : TagLineToolProvider
 {
     State( base::EventBusClient eventBus )
         : m_eventBusClient( std::move( eventBus ) )
@@ -36,7 +36,10 @@ struct TagLine::State
 
     void event_RiffTagAction( const events::RiffTagAction* eventData );
 
-    void imgui( const endlesss::toolkit::Warehouse& warehouse, endlesss::live::RiffPtr& currentRiffPtr );
+    void imgui(
+        endlesss::live::RiffPtr& currentRiffPtr,
+        const endlesss::toolkit::Warehouse* warehouseAccess,
+        TagLineToolProvider& toolProvider );
 
 
     base::EventBusClient            m_eventBusClient;
@@ -64,14 +67,20 @@ void TagLine::State::event_RiffTagAction( const events::RiffTagAction* eventData
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void TagLine::State::imgui( const endlesss::toolkit::Warehouse& warehouse, endlesss::live::RiffPtr& currentRiffPtr )
+void TagLine::State::imgui(
+    endlesss::live::RiffPtr& currentRiffPtr,
+    const endlesss::toolkit::Warehouse* warehouseAccess,
+    TagLineToolProvider& toolProvider
+)
 {
     // take temporary copy of the shared pointer, in case it gets modified mid-tick by the mixer
     endlesss::live::RiffPtr localRiffPtr = currentRiffPtr;
 
     const auto currentRiff  = localRiffPtr.get();
-    bool currentRiffIsValid = ( currentRiff &&
-                                currentRiff->m_syncState == endlesss::live::Riff::SyncState::Success );
+    const bool currentRiffIsValid = ( currentRiff &&
+                                      currentRiff->m_syncState == endlesss::live::Riff::SyncState::Success );
+
+    const bool bAddRiffTaggingTools = ( warehouseAccess != nullptr );
 
     // on null riff, reset the tag cache contents
     if ( !currentRiffIsValid )
@@ -85,7 +94,16 @@ void TagLine::State::imgui( const endlesss::toolkit::Warehouse& warehouse, endle
         {
             m_currentData = {};
             m_currentData.m_riffID = currentRiff->m_riffData.riff.couchID;
-            m_currentData.m_riffIsTagged = warehouse.isRiffTagged( m_currentData.m_riffID, &m_currentData.m_riffTag );
+
+            if ( bAddRiffTaggingTools )
+            {
+                m_currentData.m_riffIsTagged = warehouseAccess->isRiffTagged( m_currentData.m_riffID, &m_currentData.m_riffTag );
+            }
+            else
+            {
+                m_currentData.m_riffTag = {};
+                m_currentData.m_riffIsTagged = false;
+            }
 
             // if the riff was not already tagged, we have to set up some default tag data from the incoming data
             // so that it inserts correctly later
@@ -99,118 +117,126 @@ void TagLine::State::imgui( const endlesss::toolkit::Warehouse& warehouse, endle
     }
 
     {
-        static const ImVec2 ChunkyIconButtonSize        = ImVec2( 48.0f, 48.0f );
+        static const ImVec2 ChunkyIconButtonSize = ImVec2( 48.0f, 48.0f );
 
-        ImGui::Scoped::Enabled se( currentRiffIsValid );
+        const bool bIsTaggedAtF0 = currentRiffIsValid && m_currentData.m_riffIsTagged && (m_currentData.m_riffTag.m_favour == 0);
+        const bool bIsTaggedAtF1 = currentRiffIsValid && m_currentData.m_riffIsTagged && (m_currentData.m_riffTag.m_favour == 1);
 
-        const bool bIsTaggedAtF0 = currentRiffIsValid && m_currentData.m_riffIsTagged && ( m_currentData.m_riffTag.m_favour == 0 );
-        const bool bIsTaggedAtF1 = currentRiffIsValid && m_currentData.m_riffIsTagged && ( m_currentData.m_riffTag.m_favour == 1 );
-
+        if ( bAddRiffTaggingTools )
         {
-            ImGui::Scoped::ColourButton tb( colour::shades::tag_lvl_1, bIsTaggedAtF0 );
-            if ( ImGui::Button( ICON_FA_ANGLE_UP, ChunkyIconButtonSize ) ||
-                 ImGui::Shortcut( ImGuiModFlags_Ctrl, ImGuiKey_1, false ) )
+            ImGui::Scoped::Enabled se( currentRiffIsValid );
+
             {
-                if ( bIsTaggedAtF0 )
+                ImGui::Scoped::ColourButton tb( colour::shades::tag_lvl_1, bIsTaggedAtF0 );
+                if ( ImGui::Button( ICON_FA_ANGLE_UP, ChunkyIconButtonSize ) ||
+                    ImGui::Shortcut( ImGuiModFlags_Ctrl, ImGuiKey_1, false ) )
                 {
-                    m_eventBusClient.Send< ::events::RiffTagAction >( m_currentData.m_riffTag, ::events::RiffTagAction::Action::Remove );
-                }
-                else
-                {
-                    m_currentData.m_riffTag.m_favour = 0;
-                    m_eventBusClient.Send< ::events::RiffTagAction >( m_currentData.m_riffTag, ::events::RiffTagAction::Action::Upsert );
+                    if ( bIsTaggedAtF0 )
+                    {
+                        m_eventBusClient.Send< ::events::RiffTagAction >( m_currentData.m_riffTag, ::events::RiffTagAction::Action::Remove );
+                    }
+                    else
+                    {
+                        m_currentData.m_riffTag.m_favour = 0;
+                        m_eventBusClient.Send< ::events::RiffTagAction >( m_currentData.m_riffTag, ::events::RiffTagAction::Action::Upsert );
+                    }
                 }
             }
-        }
-        ImGui::CompactTooltip( bIsTaggedAtF0 ? "Un-tag this riff" : "Tag this riff with default rating" );
-        ImGui::SameLine();
+            ImGui::CompactTooltip( bIsTaggedAtF0 ? "Un-tag this riff" : "Tag this riff with default rating" );
+            ImGui::SameLine();
 
-        {
-            ImGui::Scoped::ColourButton tb( colour::shades::tag_lvl_2, bIsTaggedAtF1 );
-            if ( ImGui::Button( ICON_FA_ANGLES_UP, ChunkyIconButtonSize ) ||
-                 ImGui::Shortcut( ImGuiModFlags_Ctrl, ImGuiKey_2, false ) )
             {
-                if ( bIsTaggedAtF1 )
+                ImGui::Scoped::ColourButton tb( colour::shades::tag_lvl_2, bIsTaggedAtF1 );
+                if ( ImGui::Button( ICON_FA_ANGLES_UP, ChunkyIconButtonSize ) ||
+                    ImGui::Shortcut( ImGuiModFlags_Ctrl, ImGuiKey_2, false ) )
                 {
-                    m_eventBusClient.Send< ::events::RiffTagAction >( m_currentData.m_riffTag, ::events::RiffTagAction::Action::Remove );
-                }
-                else
-                {
-                    m_currentData.m_riffTag.m_favour = 1;
-                    m_eventBusClient.Send< ::events::RiffTagAction >( m_currentData.m_riffTag, ::events::RiffTagAction::Action::Upsert );
+                    if ( bIsTaggedAtF1 )
+                    {
+                        m_eventBusClient.Send< ::events::RiffTagAction >( m_currentData.m_riffTag, ::events::RiffTagAction::Action::Remove );
+                    }
+                    else
+                    {
+                        m_currentData.m_riffTag.m_favour = 1;
+                        m_eventBusClient.Send< ::events::RiffTagAction >( m_currentData.m_riffTag, ::events::RiffTagAction::Action::Upsert );
+                    }
                 }
             }
+            ImGui::CompactTooltip( bIsTaggedAtF1 ? "Un-tag this riff" : "Tag this riff with higher rating" );
+            ImGui::SameLine();
         }
-        ImGui::CompactTooltip( bIsTaggedAtF1 ? "Un-tag this riff" : "Tag this riff with higher rating" );
-        ImGui::SameLine();
 
-        if ( ImGui::Button( ICON_FA_FLOPPY_DISK, ChunkyIconButtonSize ) ||
-             ImGui::Shortcut( ImGuiModFlags_Ctrl, ImGuiKey_E, false ) )
+        // use the tool provider to spin out the rest of the buttons; the apps can also therefore modify and extend that
+        const uint8_t toolCount = toolProvider.getToolCount();
+        for ( uint8_t toolIndex = 0; toolIndex < toolCount; ++toolIndex )
         {
-            endlesss::toolkit::xp::RiffExportAdjustments defaultAdjustments;
+            const auto toolID = static_cast< TagLineToolProvider::ToolID >( toolIndex );
+            const bool toolEnabled = toolProvider.isToolEnabled( toolID );
+            ImGui::Scoped::Enabled se( toolEnabled && currentRiffIsValid );
 
-            m_eventBusClient.Send< ::events::ExportRiff >( localRiffPtr, defaultAdjustments );
-        }
-        ImGui::CompactTooltip( "Export this riff to disk" );
-        ImGui::SameLine();
+            std::string tooltipText;
 
-        // navigate to this riff if we can
-        if ( ImGui::Button( ICON_FA_GRIP, ChunkyIconButtonSize ) )
-        {
-            // dispatch a request to navigate this this riff, if we can find it
-            endlesss::types::RiffIdentity riffToNavigate( currentRiff->m_riffData.jam.couchID, currentRiff->m_riffData.riff.couchID );
-            m_eventBusClient.Send< ::events::RequestNavigationToRiff >( riffToNavigate );
-        }
-        ImGui::CompactTooltip( "Navigate to this riff" );
-        ImGui::SameLine();
-
-        // push this riff to your endlesss feed
-        if ( ImGui::Button( ICON_FA_RSS, ChunkyIconButtonSize ) )
-        {
-            // dispatch a request to navigate this this riff, if we can find it
-            endlesss::types::RiffIdentity riffToNavigate( currentRiff->m_riffData.jam.couchID, currentRiff->m_riffData.riff.couchID );
-            m_eventBusClient.Send< ::events::RequestToShareRiff >( riffToNavigate );
-        }
-        ImGui::CompactTooltip( "Share this riff to your Endlesss feed" );
-        ImGui::SameLine();
-
-        // hold ALT to enable debug data for the riff copy
-        const bool useDebugView = (ImGui::GetMergedModFlags() & ImGuiModFlags_Alt);
-        if ( ImGui::Button( useDebugView ? ICON_FA_CALENDAR_PLUS : ICON_FA_CALENDAR, ChunkyIconButtonSize ) )
-        {
-            ImGui::SetClipboardText( useDebugView ?
-                currentRiff->generateMetadataReport().c_str() :
-                currentRiff->m_riffData.riff.couchID.c_str()
-            );
-        }
-        ImGui::CompactTooltip( useDebugView ? "Copy full metadata to clipboard" : "Copy Couch ID to clipboard" );
-
-        // display the usual stream of riff information
-        if ( currentRiffIsValid )
-        {
-            const float alignVertical = ( ChunkyIconButtonSize.y - ( ImGui::GetTextLineHeight() * 2.0f ) ) * 0.25f;
-
-            ImGui::SameLine(0, 16.0f);
-            if ( ImGui::BeginChild( "riff-ui-details", ImVec2(0.0f, ChunkyIconButtonSize.y ) ) )
+            if ( ImGui::Button( toolProvider.getToolIcon( toolID, tooltipText ), ChunkyIconButtonSize ) )
             {
-                // compute a time delta so we can format how long ago this riff was subbed
-                const auto riffTimeDelta = spacetime::calculateDeltaFromNow( currentRiff->m_stTimestamp );
+                toolProvider.handleToolExecution( toolID, m_eventBusClient, currentRiffPtr );
+            }
+            if ( !tooltipText.empty() )
+                ImGui::CompactTooltip( tooltipText.c_str() );
 
-                ImGui::Dummy( ImVec2( 0, alignVertical ) );
-                
-                ImGui::TextUnformatted( currentRiff->m_uiDetails );
+            ImGui::SameLine();
+        }
 
-                if ( m_debugToggleDetails )
-                    ImGui::TextUnformatted( currentRiff->m_uiDetailsDebug );
-                else
-                    ImGui::Text( "%s | %s",
-                        currentRiff->m_uiTimestamp.c_str(),
-                        riffTimeDelta.asPastTenseString( 3 ).c_str() );
+        // display the usual stream of riff information & a button to yoink the data into the clipboard if desired
+        {
+            // gap size to locate the copy-to-clipboard button on the far right side
+            const float detailTextChildWidth = ImGui::GetContentRegionAvail().x - ChunkyIconButtonSize.x - (ImGui::GetFramePaddingX() * 2.0f);
 
-                if ( ImGui::IsItemClicked( 0 ) )
-                    m_debugToggleDetails = !m_debugToggleDetails;
+            ImGui::SameLine( 0, 12.0f );
+            if ( ImGui::BeginChild( "riff-ui-details", ImVec2( detailTextChildWidth, ChunkyIconButtonSize.y ) ) )
+            {
+                if ( currentRiffIsValid )
+                {
+                    // center pair vertical alignment for the detail text
+                    const float alignVertical = (ChunkyIconButtonSize.y - (ImGui::GetTextLineHeight() * 2.0f)) * 0.25f;
+
+                    // compute a time delta so we can format how long ago this riff was subbed
+                    const auto riffTimeDelta = spacetime::calculateDeltaFromNow( currentRiff->m_stTimestamp );
+
+                    ImGui::Dummy( ImVec2( 0, alignVertical ) );
+
+                    ImGui::TextUnformatted( currentRiff->m_uiDetails );
+
+                    if ( m_debugToggleDetails )
+                    {
+                        ImGui::TextUnformatted( currentRiff->m_uiDetailsDebug );
+                    }
+                    else
+                    {
+                        ImGui::Text( "%s | %s",
+                            currentRiff->m_uiTimestamp.c_str(),
+                            riffTimeDelta.asPastTenseString( 3 ).c_str() );
+                    }
+
+                    if ( ImGui::IsItemClicked( 0 ) )
+                        m_debugToggleDetails = !m_debugToggleDetails;
+                }
             }
             ImGui::EndChild();
+
+            ImGui::SameLine( 0, 0 );
+
+            {
+                ImGui::Scoped::Enabled se( currentRiffIsValid );
+                // hold ALT to enable debug data for the riff copy
+                const bool useDebugView = (ImGui::GetMergedModFlags() & ImGuiModFlags_Alt);
+                if ( ImGui::Button( useDebugView ? ICON_FA_CALENDAR_PLUS : ICON_FA_CALENDAR, ChunkyIconButtonSize ) )
+                {
+                    ImGui::SetClipboardText( useDebugView ?
+                        currentRiff->generateMetadataReport().c_str() :
+                        currentRiff->m_riffData.riff.couchID.c_str()
+                    );
+                }
+                ImGui::CompactTooltip( useDebugView ? "Copy full metadata to clipboard" : "Copy Couch ID to clipboard" );
+            }
         }
     }
 }
@@ -227,9 +253,53 @@ TagLine::~TagLine()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void TagLine::imgui( const endlesss::toolkit::Warehouse& warehouse, endlesss::live::RiffPtr& currentRiffPtr )
+void TagLine::imgui(
+    endlesss::live::RiffPtr& currentRiffPtr,
+    const endlesss::toolkit::Warehouse* warehouseAccess,
+    TagLineToolProvider* toolProvider )
 {
-    m_state->imgui( warehouse, currentRiffPtr );
+    TagLineToolProvider* tools = toolProvider;
+    if ( tools == nullptr )
+        tools = m_state.get();
+
+    m_state->imgui( currentRiffPtr, warehouseAccess, *tools );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void TagLineToolProvider::handleToolExecution( const ToolID id, base::EventBusClient& eventBusClient, endlesss::live::RiffPtr& currentRiffPtr )
+{
+    auto localRiffPtr = currentRiffPtr;
+    auto currentRiff  = localRiffPtr.get();
+
+    switch ( id )
+    {
+        case RiffExport:
+        {
+            endlesss::toolkit::xp::RiffExportAdjustments defaultAdjustments;
+            eventBusClient.Send< ::events::ExportRiff >( localRiffPtr, defaultAdjustments );
+        }
+        break;
+
+        case NavigateTo:
+        {
+            // dispatch a request to navigate this this riff, if we can find it
+            endlesss::types::RiffIdentity riffToNavigate( currentRiff->m_riffData.jam.couchID, currentRiff->m_riffData.riff.couchID );
+            eventBusClient.Send< ::events::RequestNavigationToRiff >( riffToNavigate );
+        }
+        break;
+
+        case ShareToFeed:
+        {
+            // send an event to trigger sharing to the feed, let the app handle how
+            endlesss::types::RiffIdentity riffToNavigate( currentRiff->m_riffData.jam.couchID, currentRiff->m_riffData.riff.couchID );
+            eventBusClient.Send< ::events::RequestToShareRiff >( riffToNavigate );
+        }
+        break;
+
+        default:
+            ABSL_ASSERT( 0 );
+            break;
+    }
 }
 
 } // namespace ux

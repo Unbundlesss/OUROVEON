@@ -11,6 +11,9 @@
 
 #include "app/module.frontend.h"
 #include "base/text.h"
+#include "base/instrumentation.h"
+#include "base/utils.h"
+
 #include "dsp/fft.util.h"
 #include "dsp/octave.h"
 #include "endlesss/live.stem.h"
@@ -225,6 +228,8 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
 
     if ( stemIsOGG )
     {
+        base::instr::ScopedEvent wte( "Stem::fetch::OGG", base::instr::PresetColour::Cyan );
+
         // decode the vorbis stream into interleaved shorts
         short* oggData = nullptr;
         int32_t oggChannels;
@@ -322,6 +327,8 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
     }
     else // stemIsFLAC
     {
+        base::instr::ScopedEvent wte( "Stem::fetch::FLAC", base::instr::PresetColour::Amber );
+
         uint8_t* rawAudio = audioMemory.m_rawAudio;
         uint32_t rawAudioLen = (uint32_t)audioMemory.m_rawLength;
 
@@ -682,11 +689,11 @@ bool Stem::attemptRemoteFetch( const api::NetConfiguration& ncfg, const uint32_t
 //
 void Stem::applyLoopSewingBlend()
 {
-    constexpr int32_t xfadeWindowSize = 128;
-    constexpr double xfadeWindowSizeRecp = 1.0 / (double)xfadeWindowSize;
+    static constexpr int32_t xfadeWindowSize = 128;
+    static constexpr double xfadeWindowSizeRecp = 1.0 / (double)xfadeWindowSize;
 
     // 1..0 constant-power blend over the window size
-    constexpr auto xfadeBlendCoeff{ []() constexpr 
+    static constexpr auto xfadeBlendCoeff{ []() consteval
     {
         std::array<float, xfadeWindowSize> result{};
         for ( int i = 0; i < xfadeWindowSize; ++i )
@@ -755,37 +762,41 @@ bool Stem::analyse( const Processing& processing, StemAnalysisData& result ) con
     // prepare the analysis output
     result.resize( m_sampleCount );
 
-    for ( int64_t sI = 0, fftBandLimit = 0; sI <= m_sampleCount - fftWindowSize; sI += fftWindowSize, fftBandLimit++ )
     {
-        // perform FFT on each stereo channel
-        pffft_transform_ordered( processing.m_pffftPlan, &(m_channel[0][sI]), reinterpret_cast<float*>(fftOutputL), nullptr, PFFFT_FORWARD );
-        pffft_transform_ordered( processing.m_pffftPlan, &(m_channel[1][sI]), reinterpret_cast<float*>(fftOutputR), nullptr, PFFFT_FORWARD );
+        base::instr::ScopedEvent wte( "Stem::analyse::fft", base::instr::PresetColour::Emerald );
 
-        std::array< float, 3 > frequencyBuckets;
-        frequencyBuckets.fill( 0 );
-
-        // sum the resulting spectrum into the precomputed buckets
-        for ( std::size_t freqBin = 0; freqBin < fftWindowSize / 2; freqBin++ )
+        for ( int64_t sI = 0, fftBandLimit = 0; sI <= m_sampleCount - fftWindowSize; sI += fftWindowSize, fftBandLimit++ )
         {
-            const float fftMagL      = fftOutputL[freqBin].hypot();
-            const float fftMagR      = fftOutputR[freqBin].hypot();
+            // perform FFT on each stereo channel
+            pffft_transform_ordered( processing.m_pffftPlan, &(m_channel[0][sI]), reinterpret_cast<float*>(fftOutputL), nullptr, PFFFT_FORWARD );
+            pffft_transform_ordered( processing.m_pffftPlan, &(m_channel[1][sI]), reinterpret_cast<float*>(fftOutputR), nullptr, PFFFT_FORWARD );
 
-            const float fftMag       = (fftMagL + fftMagR) * 0.5f; // #hdd average of magnitudes 'correct' here?
+            std::array< float, 3 > frequencyBuckets;
+            frequencyBuckets.fill( 0 );
 
-            frequencyBuckets[ processing.m_octaves.getBucketForFFTIndex( freqBin ) ] += fftMag;
-        }
+            // sum the resulting spectrum into the precomputed buckets
+            for ( std::size_t freqBin = 0; freqBin < fftWindowSize / 2; freqBin++ )
+            {
+                const float fftMagL = fftOutputL[freqBin].hypot();
+                const float fftMagR = fftOutputR[freqBin].hypot();
 
-        // reduce and normalise the buckets we're interested in
-        {
-            frequencyBuckets[0] *= processing.m_octaves.getRecpSizeOfBucketAt( 0 );
-            frequencyBuckets[0]  = audioSpectrumConfig.headroomNormaliseDb( frequencyBuckets[0] );
+                const float fftMag  = (fftMagL + fftMagR) * 0.5f; // #hdd average of magnitudes 'correct' here?
 
-            fftOutLowBand[fftBandLimit] = frequencyBuckets[0];
+                frequencyBuckets[processing.m_octaves.getBucketForFFTIndex( freqBin )] += fftMag;
+            }
 
-            frequencyBuckets[2] *= processing.m_octaves.getRecpSizeOfBucketAt( 2 );
-            frequencyBuckets[2] = audioSpectrumConfig.headroomNormaliseDb( frequencyBuckets[2] );
+            // reduce and normalise the buckets we're interested in
+            {
+                frequencyBuckets[0] *= processing.m_octaves.getRecpSizeOfBucketAt( 0 );
+                frequencyBuckets[0]  = audioSpectrumConfig.headroomNormaliseDb( frequencyBuckets[0] );
 
-            fftOutHighBand[fftBandLimit] = frequencyBuckets[2];
+                fftOutLowBand[fftBandLimit] = frequencyBuckets[0];
+
+                frequencyBuckets[2] *= processing.m_octaves.getRecpSizeOfBucketAt( 2 );
+                frequencyBuckets[2]  = audioSpectrumConfig.headroomNormaliseDb( frequencyBuckets[2] );
+
+                fftOutHighBand[fftBandLimit] = frequencyBuckets[2];
+            }
         }
     }
 
@@ -806,55 +817,68 @@ bool Stem::analyse( const Processing& processing, StemAnalysisData& result ) con
 
     #define PSA_ENCODE( _v ) static_cast<uint8_t>( _v * 255.0f );
 
-    // run two loops of the signal followers, ensuring that we get a good representation of the looping signal;
-    // this is also when we run peak-finding to get some beats extracted 
-    for ( auto cycle = 0; cycle < 2; cycle++ )
     {
-        std::size_t fftBandIndex = 0;
-        for ( int64_t sI = 0, fftI = 0; sI < m_sampleCount; sI++, fftI++ )
+        char scBuf[32];
+        base::itoa::i32toa( m_sampleCount, scBuf );
+
+        // ensure the beat bits are fully zeroed out, saves doing it bit-by-bit on the first cycle through
+        std::fill( result.m_beatBitfield.begin(), result.m_beatBitfield.end(), 0 );
+
+        // run two loops of the signal followers, ensuring that we get a good representation of the looping signal;
+        // this is also when we run peak-finding to get some beats extracted 
+        // NB. in profiling, this pair of loops through the samples is significantly more expensive than the FFT
+        for ( auto cycle = 0; cycle < 2; cycle++ )
         {
-            // increment [fftBandIndex] every [fftWindowSize] samples, matching how they were computed above
-            if ( fftI == fftWindowSize )
+            base::instr::ScopedEvent wte( "Stem::analyse::signal", scBuf, base::instr::PresetColour::Indigo );
+
+            std::size_t fftBandIndex = 0;
+            for ( int64_t sI = 0, fftI = 0; sI < m_sampleCount; sI++, fftI++ )
             {
-                fftBandIndex++;
-                fftI = 0;
-
-                // as the last block of samples might not have the FFT process run (as we just dumbly fit to N x WindowSize)
-                // then allow this band index to lock to the top of the allowed limit, just copying the final values from the last bucket
-                if ( fftBandIndex == fftTimeSlices )
-                    fftBandIndex = fftTimeSlices - 1;
-            }
-
-            // don't imagine max() here is terribly scientific
-            const float signalInput     = std::max( m_channel[0][sI], m_channel[1][sI] );
-            const float signalFollow    = waveFollower( signalInput );
-            const float signalFollowLF  = waveFollowerLF( fftOutLowBand[fftBandIndex] );
-            const float signalFollowHF  = waveFollowerHF( fftOutHighBand[fftBandIndex] );
-
-            float beatPeak = 0;
-
-            // clear out beats on first cycle through
-            if ( cycle == 0 )
-            {
-                result.m_beatBitfield[sI >> StemAnalysisData::BeatBitsShift] = 0;
-            }
-            // run the tracker on second pass
-            else
-            {
-                result.m_psaWave[sI]     = PSA_ENCODE( signalFollow   );
-                result.m_psaLowFreq[sI]  = PSA_ENCODE( signalFollowLF );
-                result.m_psaHighFreq[sI] = PSA_ENCODE( signalFollowHF );
-
-                if ( peakTracker( signalInput, signalFollow ) )
+                // increment [fftBandIndex] every [fftWindowSize] samples, matching how they were computed above
+                if ( fftI == fftWindowSize )
                 {
-                    result.setBeatAtSample( sI );
-                    beatPeak = 1.0f;
-                }
-            }
+                    fftBandIndex++;
+                    fftI = 0;
 
-            result.m_psaBeat[sI] = PSA_ENCODE( beatFollower( beatPeak ) );
+                    // as the last block of samples might not have the FFT process run (as we just dumbly fit to N x WindowSize)
+                    // then allow this band index to lock to the top of the allowed limit, just copying the final values from the last bucket
+                    if ( fftBandIndex == fftTimeSlices )
+                        fftBandIndex = fftTimeSlices - 1;
+                }
+
+                // don't imagine max() here is terribly scientific
+                const float signalInput     = std::max( m_channel[0][sI], m_channel[1][sI] );
+                const float signalFollow    = waveFollower( signalInput );
+                const float signalFollowLF  = waveFollowerLF( fftOutLowBand[fftBandIndex] );
+                const float signalFollowHF  = waveFollowerHF( fftOutHighBand[fftBandIndex] );
+
+                float beatPeak = 0;
+
+                if ( cycle == 0 )
+                {
+                    // do nothing on the first pass, m_beatBitfield has been cleared before and will only be set
+                    // once we've had the followers primed by the first pass
+                }
+                // run the tracker on second pass
+                else
+                {
+                    result.m_psaWave[sI]     = PSA_ENCODE( signalFollow   );
+                    result.m_psaLowFreq[sI]  = PSA_ENCODE( signalFollowLF );
+                    result.m_psaHighFreq[sI] = PSA_ENCODE( signalFollowHF );
+
+                    if ( peakTracker( signalInput, signalFollow ) )
+                    {
+                        result.setBeatAtSample( sI );
+                        beatPeak = 1.0f;
+                    }
+                }
+
+                result.m_psaBeat[sI] = PSA_ENCODE( beatFollower( beatPeak ) );
+            }
         }
     }
+
+    #undef PSA_ENCODE
 
     mem::free16( fftOutHighBand );
     mem::free16( fftOutLowBand );

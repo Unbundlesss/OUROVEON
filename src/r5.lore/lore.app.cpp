@@ -423,7 +423,8 @@ struct JamVisualisation
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-struct LoreApp final : public app::OuroApp
+struct LoreApp final : public app::OuroApp,
+                       public ux::TagLineToolProvider
 {
     LoreApp()
         : app::OuroApp()
@@ -885,6 +886,8 @@ protected:
             const ViewDimension& viewDimensions,
             const int32_t viewBrowserHeight )
         {
+            base::instr::ScopedEvent wte( "JamSlice::raster", base::instr::PresetColour::Violet );
+
             // this should have been aborted with invalid dimensions before we ever get in here
             ABSL_ASSERT( viewDimensions.isValid() );
 
@@ -1771,7 +1774,58 @@ protected:
 
     net::bond::RiffPushClient   m_rpClient;
 
+
+// TagLineToolProvider, add the BOND push tool
+protected:
+
+    enum TagExtraTools : uint8_t
+    {
+        SendViaBOND = ux::TagLineToolProvider::BuiltItToolIdTop,
+
+        TagExtraToolsCount
+    };
+
+    uint8_t getToolCount() const override
+    {
+        return TagExtraToolsCount;
+    }
+
+    bool isToolEnabled( const ToolID id ) const override
+    {
+        if ( id == SendViaBOND )
+        {
+            return m_rpClient.getState() == net::bond::Connected;
+        }
+
+        return ux::TagLineToolProvider::isToolEnabled( id );
+    }
+
+    const char* getToolIcon( const ToolID id, std::string& tooltip ) const override
+    {
+        if ( id == SendViaBOND )
+        {
+            tooltip = "Push current riff to BOND server";
+            return ICON_FA_CIRCLE_NODES;
+        }
+
+        return ux::TagLineToolProvider::getToolIcon( id, tooltip);
+    }
+
+    void handleToolExecution( const ToolID id, base::EventBusClient& eventBusClient, endlesss::live::RiffPtr& currentRiffPtr ) override
+    {
+        if ( id == SendViaBOND )
+        {
+            m_rpClient.pushRiff( currentRiffPtr->m_riffData, m_riffPlaybackAbstraction.asPermutation() );
+            return;
+        }
+
+        ux::TagLineToolProvider::handleToolExecution( id, eventBusClient, currentRiffPtr );
+    }
 };
+
+
+// =====================================================================================================================
+
 
 // ---------------------------------------------------------------------------------------------------------------------
 int LoreApp::EntrypointOuro()
@@ -1864,6 +1918,21 @@ int LoreApp::EntrypointOuro()
         APP_EVENT_BIND_TO( RequestNavigationToRiff );
     }
 
+    registerMainMenuEntry( 10, "BOND", [this]()
+        {
+            if ( ImGui::BeginMenu( "Riff Push" ) )
+            {
+                if ( ImGui::MenuItem( "Connection ..." ) )
+                {
+                    activateModalPopup( "Riff Push Connection", [this]( const char* title )
+                    {
+                        modalRiffPushClientConnection( title, m_mdFrontEnd, m_rpClient );
+                    });
+                }
+
+                ImGui::EndMenu();
+            }
+        });
 
 
 #if OURO_FEATURE_VST24
@@ -1948,6 +2017,8 @@ int LoreApp::EntrypointOuro()
         app::CoreGUI::VF_WithMainMenu  |
         app::CoreGUI::VF_WithStatusBar ) ) )
     {
+        base::instr::ScopedEvent wte( "Lore::UI", base::instr::PresetColour::Orange );
+
         // run jam slice computation that needs to run on the main thread
         m_sketchbook->processPendingUploads();
 
@@ -2076,7 +2147,7 @@ int LoreApp::EntrypointOuro()
 
             if ( ImGui::Begin( ICON_FA_BARS " Riff Details###riff_details" ) )
             {
-                m_uxTagLine->imgui( *m_warehouse, currentRiffPtr );
+                m_uxTagLine->imgui( currentRiffPtr, m_warehouse.get(), this );
 
                 ImGui::Spacing();
 

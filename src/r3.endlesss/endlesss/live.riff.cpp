@@ -8,6 +8,7 @@
 //
 
 #include "pch.h"
+#include "base/instrumentation.h"
 #include "spacetime/chronicle.h"
 
 #include "endlesss/live.riff.h"
@@ -68,6 +69,8 @@ Riff::~Riff()
 // ---------------------------------------------------------------------------------------------------------------------
 void Riff::fetch( services::RiffFetchProvider& services )
 {
+    base::instr::ScopedEvent wte( "Riff::fetch", base::instr::PresetColour::Lime );
+
     m_syncState = SyncState::Working;
     
     // take a short ID snippet to use as a more readable tag in the log in front of everything related to this riff

@@ -9,6 +9,7 @@
 
 #include "base/utils.h"
 #include "base/operations.h"
+#include "base/metaenum.h"
 
 #include "app/module.audio.h"
 
@@ -39,40 +40,47 @@ using RiffQueue          = mcc::ReaderWriterQueue< endlesss::live::RiffPtr >;
 using RiffPtrOperation   = base::ValueWithOperation< endlesss::live::RiffPtr >;
 using RiffOperationQueue = mcc::ReaderWriterQueue< RiffPtrOperation >;
 
+#define _PCR(_action)       \
+        _action(Instant)    \
+        _action(Fast)       \
+        _action(Slow)       \
+        _action(Glacial)
+REFLECT_ENUM( PermutationChangeRate, uint32_t, _PCR );
+#undef _PCR
+
 
 // ---------------------------------------------------------------------------------------------------------------------
 struct RiffMixerBase
 {
-    RiffMixerBase( const int32_t maxBufferSize, const int32_t sampleRate, base::EventBusClient& eventBusClient )
-        : m_audioMaxBufferSize( maxBufferSize )
-        , m_audioSampleRate( sampleRate )
-        , m_eventBusClient( eventBusClient )
-    {
-        memset( &m_timeInfo, 0, sizeof( m_timeInfo ) );
+    // support playback permutations with a queue + operation callback system
+    using Permutation           = endlesss::types::RiffPlaybackPermutation;
+    using PermutationOperation  = base::ValueWithOperation< Permutation >;
+    using PermutationQueue      = mcc::ReaderWriterQueue< PermutationOperation >;
 
-        for ( size_t mI = 0; mI < 8; mI++ )
-        {
-            m_mixChannelLeft[mI]  = mem::alloc16To<float>( m_audioMaxBufferSize, 0.0f );
-            m_mixChannelRight[mI] = mem::alloc16To<float>( m_audioMaxBufferSize, 0.0f );
-        }
+    // operation tag for permutation tasks
+    static constexpr base::OperationVariant OV_Permutation{ 0xAB };
 
-        m_audioSampleRateRecp = 1.0 / (double)m_audioSampleRate;
 
-        stemAmalgamReset( sampleRate );
-    }
 
-    virtual ~RiffMixerBase()
-    {
-        for ( size_t mI = 0; mI < 8; mI++ )
-        {
-            mem::free16( m_mixChannelLeft[mI] );
-            mem::free16( m_mixChannelRight[mI] );
-        }
-        m_mixChannelLeft.fill( nullptr );
-        m_mixChannelRight.fill( nullptr );
-    }
+    RiffMixerBase( const int32_t maxBufferSize, const int32_t sampleRate, base::EventBusClient& eventBusClient );
+    virtual ~RiffMixerBase();
+
 
     ouro_nodiscard constexpr const app::AudioPlaybackTimeInfo* getTimeInfoPtr() const { return &m_timeInfo; }
+
+
+    base::OperationID enqueuePermutation( const Permutation& newPerm )
+    {
+        const auto operationID = base::Operations::newID( OV_Permutation );
+
+        m_permutationQueue.emplace( operationID, newPerm );
+        return operationID;
+    }
+
+    Permutation getCurrentPermutation() const
+    {
+        return m_permutationCurrent;
+    }
 
 protected:
 
@@ -86,7 +94,11 @@ protected:
         const app::module::Audio::OutputSignal& outputSignal,
         const uint32_t samplesToWrite );
 
+    // permutation support
+    void flushPendingPermutations();
+    void updatePermutations( const uint32_t samplesToWrite, const double barLengthInSec );
 
+    // amalgam support
     void stemAmalgamReset( const int32_t sampleRate );
     void stemAmalgamUpdate();
 
@@ -95,11 +107,20 @@ protected:
     int32_t                         m_audioSampleRate       = 0;
     double                          m_audioSampleRateRecp   = 0;        // ( 1.0 / m_audioSampleRate )
 
+    app::AudioPlaybackTimeInfo      m_timeInfo;
+
+    // per-layer aligned memory buffers used for mixing
     std::array< float*, 8 >         m_mixChannelLeft;
     std::array< float*, 8 >         m_mixChannelRight;
 
-    app::AudioPlaybackTimeInfo      m_timeInfo;
+    // per-layer gain permutation controls
+    Permutation                     m_permutationCurrent;
+    Permutation                     m_permutationTarget;
+    PermutationQueue                m_permutationQueue;
+    std::array< float, 8 >          m_permutationSampleGainDelta;
+    PermutationChangeRate::Enum     m_permutationChangeRate = PermutationChangeRate::Instant;
 
+    // amalgamated stem data
     StemDataAmalgam                 m_stemDataAmalgam;
     uint32_t                        m_stemDataAmalgamSamplesBeforeReset;
     uint32_t                        m_stemDataAmalgamSamplesUsed;

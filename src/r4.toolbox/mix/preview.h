@@ -25,20 +25,13 @@ namespace mix {
 // sample averaging while blending to reduce clicks and pops on harsh riff state changes
 //
 struct Preview final : public app::module::MixerInterface,
-                            public rec::IRecordable,
-                            public RiffMixerBase
+                       public rec::IRecordable,
+                       public RiffMixerBase
 {
     static constexpr base::OperationVariant OV_EnqueueRiff { 0xAA };
-    static constexpr base::OperationVariant OV_Permutation { 0xAB };
 
     using AudioBuffer           = app::module::Audio::OutputBuffer;
     using AudioSignal           = app::module::Audio::OutputSignal;
-
-    // support playback permutations with a queue + operation callback system
-    using Permutation           = endlesss::types::RiffPlaybackPermutation;
-    using PermutationOperation  = base::ValueWithOperation< Permutation >;
-    using PermutationQueue      = mcc::ReaderWriterQueue< PermutationOperation >;
-
 
     Preview( const int32_t maxBufferSize, const int32_t sampleRate, base::EventBusClient& eventBusClient );
     ~Preview();
@@ -73,18 +66,6 @@ struct Preview final : public app::module::MixerInterface,
     }
 
 
-    inline base::OperationID enqueuePermutation( const Permutation& newPerm )
-    {
-        const auto operationID = base::Operations::newID( OV_Permutation );
-
-        m_permutationQueue.emplace( operationID, newPerm );
-        return operationID;
-    }
-
-    inline Permutation getCurrentPermutation() const
-    {
-        return m_permutationCurrent;
-    }
 
     inline void setLockTransitionToNextBar( bool onOff ) { m_lockTransitionToNextBar = onOff; }
     inline bool getLockTransitionToNextBar() const       { return m_lockTransitionToNextBar; }
@@ -106,19 +87,9 @@ protected:
         const uint32_t      outputOffset,
         const uint32_t      samplesToWrite );
 
-    void flushPendingPermutations();
-    void updatePermutations( const uint32_t samplesToWrite, const double barLengthInSec );
 
     void processCommandQueue();
 
-
-#define _PCR(_action)       \
-        _action(Instant)    \
-        _action(Fast)       \
-        _action(Slow)       \
-        _action(Glacial)
-    REFLECT_ENUM( PermutationChangeRate, uint32_t, _PCR );
-#undef _PCR
 
 #define _TX_BARS(_action)   \
         _action(Eighth)     \
@@ -140,12 +111,6 @@ protected:
     int64_t                         m_riffPlaybackSample        = 0;    //
 
     int32_t                         m_riffPlaybackNudge         = 0;
-
-    Permutation                     m_permutationCurrent;
-    Permutation                     m_permutationTarget;
-    PermutationQueue                m_permutationQueue;
-    std::array< float, 8 >          m_permutationSampleGainDelta;
-    PermutationChangeRate::Enum     m_permutationChangeRate = PermutationChangeRate::Instant;
 
 
     std::array< float, 8 >          m_txBlendCacheLeft;

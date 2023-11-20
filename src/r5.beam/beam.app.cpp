@@ -36,9 +36,9 @@ using namespace std::chrono_literals;
 
 
 // ---------------------------------------------------------------------------------------------------------------------
-struct MixEngine : public app::module::MixerInterface, 
-                   public rec::IRecordable,
-                   public mix::RiffMixerBase
+struct MixEngine final : public app::module::MixerInterface,
+                         public rec::IRecordable,
+                         public mix::RiffMixerBase
 {
     using AudioBuffer = app::module::Audio::OutputBuffer;
     using AudioSignal = app::module::Audio::OutputSignal;
@@ -138,17 +138,43 @@ struct MixEngine : public app::module::MixerInterface,
         StopRecording,
         UpdateProgressionConfiguration,     // pass ProgressionConfiguration*
         UpdateRepComConfiguration,          // pass RepComConfiguration*
+        ClearCurrentlyPlaying
     };
     struct EngineCommandData : public base::BasicCommandType<EngineCommand> { using BasicCommandType::BasicCommandType; };
 
+    // bundles a riff request - both the riff data and any layer permutations
+    struct RiffAndPermutation
+    {
+        RiffAndPermutation() = default;
+
+        RiffAndPermutation( endlesss::live::RiffPtr riff )
+            : m_riffPtr( std::move( riff ) )
+        {}
+
+        RiffAndPermutation( endlesss::live::RiffPtr riff, const endlesss::types::RiffPlaybackPermutationOpt& permOpt )
+            : m_riffPtr( std::move( riff ) )
+        {
+            if ( permOpt.has_value() )
+            {
+                m_permutation = permOpt.value();
+            }
+        }
+
+        bool isNotEmpty() const { return m_riffPtr != nullptr; }
+        bool isEmpty() const { return m_riffPtr == nullptr; }
+
+        endlesss::live::RiffPtr                     m_riffPtr;
+        endlesss::types::RiffPlaybackPermutation    m_permutation;
+    };
+
     using CommandQueue  = mcc::ReaderWriterQueue<EngineCommandData>;
-    using RiffQueue     = mcc::ReaderWriterQueue<endlesss::live::RiffPtr>;
+    using RiffQueue     = mcc::ReaderWriterQueue<RiffAndPermutation>;
 
 
     uint64_t                    m_samplePosition;
 
 
-    endlesss::live::RiffPtr     m_riffCurrent;
+    RiffAndPermutation          m_riffCurrent;
     uint32_t                    m_riffLengthInSamples;
 
     endlesss::live::RiffProgression
@@ -157,7 +183,7 @@ struct MixEngine : public app::module::MixerInterface,
     RiffQueue                   m_riffQueue;
     CommandQueue                m_commandQueue;
 
-    endlesss::live::RiffPtr     m_riffNext;
+    RiffAndPermutation          m_riffNext;
     float                       m_transitionValue;
 
     float                       m_stemBeatRate;
@@ -169,8 +195,6 @@ struct MixEngine : public app::module::MixerInterface,
     MixEngine( const int32_t maxBufferSize, const int32_t sampleRate, base::EventBusClient& eventBusClient )
         : RiffMixerBase( maxBufferSize, sampleRate, eventBusClient )
         , m_samplePosition( 0 )
-        , m_riffCurrent( nullptr )
-        , m_riffNext( nullptr )
         , m_transitionValue( 0 )
         , m_stemBeatRate( 4.0f )
         , m_transitionRate( 0.25 )
@@ -195,6 +219,13 @@ struct MixEngine : public app::module::MixerInterface,
         m_riffQueue.emplace( nextRiff );
     }
 
+    // add new riff with an optional permutation packet
+    inline void addNextRiff( const endlesss::live::RiffPtr& nextRiff, const endlesss::types::RiffPlaybackPermutationOpt& permOpt )
+    {
+        m_riffQueue.emplace( nextRiff, permOpt );
+    }
+
+
     inline void updateProgressionConfiguration( const ProgressionConfiguration* pConfig )
     {
         m_commandQueue.emplace( EngineCommand::UpdateProgressionConfiguration, (void*) pConfig );
@@ -204,6 +235,12 @@ struct MixEngine : public app::module::MixerInterface,
     {
         m_commandQueue.emplace( EngineCommand::UpdateRepComConfiguration, (void*)pConfig );
     }
+
+    inline void clearCurrentPlayback()
+    {
+        m_commandQueue.emplace( EngineCommand::ClearCurrentlyPlaying );
+    }
+
 
     inline uint32_t getBarRepetitions() const { return m_repcomRepeatBar; }
 
@@ -440,7 +477,7 @@ void MixEngine::update(
     const auto exchangeLiveRiff = [&]
     {
         m_riffCurrent           = m_riffNext;
-        m_riffNext              = nullptr;
+        m_riffNext              = {};
         m_transitionValue       = 0.0f;
         m_repcomRepeatBar       = 0;
 
@@ -498,6 +535,13 @@ void MixEngine::update(
                 }
                 break;
 
+                case EngineCommand::ClearCurrentlyPlaying:
+                {
+                    m_riffNext = {};
+                    exchangeLiveRiff();
+                }
+                break;
+
                 default:
                 case EngineCommand::Invalid:
                     blog::error::mix( "Unknown or invalid command received" );
@@ -508,7 +552,7 @@ void MixEngine::update(
 
     const auto checkForAndDequeueNextRiff = [&]
     {
-        if ( m_riffNext == nullptr )
+        if ( m_riffNext.isEmpty() )
         {
             if ( m_riffQueue.peek() != nullptr &&
                  m_transitionValue == 0 )
@@ -521,10 +565,10 @@ void MixEngine::update(
 
                 blog::mix( "[ BLEND ] DEQUEUED new riff" );
 
-                if ( m_riffNext->getSyncState() != endlesss::live::Riff::SyncState::Success )
+                if ( m_riffNext.m_riffPtr->getSyncState() != endlesss::live::Riff::SyncState::Success )
                 {
                     blog::error::mix( "[ BLEND ] .. new riff invalid, ignoring it" );
-                    m_riffNext = nullptr;
+                    m_riffNext = {};
                 }
 
                 // hard cut
@@ -536,11 +580,13 @@ void MixEngine::update(
                 // pick blend rate based on how many bars to take
                 else
                 {
-                    m_transitionRate = 1.0 / (m_riffNext->m_timingDetails.m_lengthInSecPerBar * m_progression.getBlendTimeMultiplier());
+                    ABSL_ASSERT( m_riffNext.isNotEmpty() );
+                    m_transitionRate = 1.0 / ( m_riffNext.m_riffPtr->m_timingDetails.m_lengthInSecPerBar * m_progression.getBlendTimeMultiplier() );
                 }
             }
         }
-        return (m_riffNext != nullptr);
+
+        return ( m_riffNext.isNotEmpty() );
     };
 
     // in Arbitrary mode, check all the time to see if we could be switching
@@ -550,7 +596,7 @@ void MixEngine::update(
     }
 
     // update the transition, if one is active; and swap in the next riff if one has completed
-    if ( m_riffNext != nullptr )
+    if ( m_riffNext.isNotEmpty() )
     {
         m_transitionValue += (float)(linearTimeStep * m_transitionRate);
 
@@ -561,9 +607,9 @@ void MixEngine::update(
         }
     }
 
-    // early out if we have nothing to play
-    if ( m_riffCurrent == nullptr ||
-         m_riffCurrent->m_timingDetails.m_lengthInSamples == 0 )
+    // early out if we have nothing to play or the active riff is 0-length
+    if ( m_riffCurrent.isEmpty() ||
+         m_riffCurrent.m_riffPtr->m_timingDetails.m_lengthInSamples == 0 )
     {
         outputBuffer.applySilence();
 
@@ -586,7 +632,8 @@ void MixEngine::update(
 
 
 
-    const endlesss::live::Riff* currentRiff = m_riffCurrent.get();
+    const endlesss::live::Riff* currentRiff = m_riffCurrent.m_riffPtr.get();
+    const endlesss::types::RiffPlaybackPermutation& currentPermutation = m_riffCurrent.m_permutation;
 
     // compute where we are (roughly) for the UI
     currentRiff->getTimingDetails().ComputeProgressionAtSample( m_samplePosition, m_playbackProgression );
@@ -626,7 +673,7 @@ void MixEngine::update(
         for (auto stemI = 0U; stemI < 8; stemI++)
         {
             stemTimeStretch[stemI]  = currentRiff->m_stemTimeScales[stemI];
-            stemGains[stemI]        = currentRiff->m_stemGains[stemI];
+            stemGains[stemI]        = currentRiff->m_stemGains[stemI] * currentPermutation.m_layerGainMultiplier[stemI];
             stemPtr[stemI]          = currentRiff->m_stemPtrs[stemI];
         }
     };
@@ -637,7 +684,8 @@ void MixEngine::update(
     {
         if ( m_transitionValue > 0 )
         {
-            const auto* nextRiff = m_riffNext.get();
+            const auto* nextRiff        = m_riffNext.m_riffPtr.get();
+            const auto& nextPermutation = m_riffNext.m_permutation;
 
             riffLengthInSamples[1]      = nextRiff->m_timingDetails.m_lengthInSamples;
             riffWrappedSampleStart[1]   = samplePosition % riffLengthInSamples[1];
@@ -645,7 +693,7 @@ void MixEngine::update(
             for ( auto stemI = 0U; stemI < 8; stemI++ )
             {
                 stemTimeStretch[ 8 + stemI ]  = nextRiff->m_stemTimeScales[stemI];
-                stemGains[ 8 + stemI ]        = nextRiff->m_stemGains[stemI];
+                stemGains[ 8 + stemI ]        = nextRiff->m_stemGains[stemI] * nextPermutation.m_layerGainMultiplier[stemI];
                 stemPtr[ 8 + stemI ]          = nextRiff->m_stemPtrs[stemI];
             }
         }
@@ -714,9 +762,9 @@ void MixEngine::update(
                                                 m_repcomRepeatBar >= currentRiff->m_timingDetails.m_longestStemInBars;
 
                 if (    repComTriggerPause
-                     && m_repcomState       == RepComState::Unpaused
-                     && m_riffNext          == nullptr
-                     && m_transitionValue   == 0 )
+                     && m_repcomState           == RepComState::Unpaused
+                     && m_riffNext.m_riffPtr    == nullptr
+                     && m_transitionValue       == 0 )
                 {
                     blog::mix( "[ REPCOM ] Pausing @ bar {}, sample offset {}", m_playbackProgression.m_playbackBar, sI );
 
@@ -757,6 +805,11 @@ void MixEngine::update(
             {
                 m_mixChannelLeft[stemI][sI] = 0;
                 m_mixChannelRight[stemI][sI] = 0;
+
+                m_stemDataAmalgam.m_wave[stemI] = 0;
+                m_stemDataAmalgam.m_beat[stemI] = 0;
+                m_stemDataAmalgam.m_low[stemI]  = 0;
+                m_stemDataAmalgam.m_high[stemI] = 0;
                 continue;
             }
 
@@ -773,12 +826,14 @@ void MixEngine::update(
 
             if ( stemInst->getAnalysisState() == endlesss::live::Stem::AnalysisState::AnalysisValid )
             {
+                const float permGain = currentPermutation.m_layerGainMultiplier[stemI];
+
                 const auto& stemAnalysis = stemInst->getAnalysisData();
 
-                const float stemWave = stemAnalysis.getWaveF( finalSampleIdx );
-                const float stemBeat = stemAnalysis.getBeatF( finalSampleIdx );
-                const float stemLow  = stemAnalysis.getLowFreqF( finalSampleIdx );
-                const float stemHigh = stemAnalysis.getHighFreqF( finalSampleIdx );
+                const float stemWave = stemAnalysis.getWaveF( finalSampleIdx ) * permGain;
+                const float stemBeat = stemAnalysis.getBeatF( finalSampleIdx ) * permGain;
+                const float stemLow  = stemAnalysis.getLowFreqF( finalSampleIdx ) * permGain;
+                const float stemHigh = stemAnalysis.getHighFreqF( finalSampleIdx ) * permGain;
 
                 m_stemDataAmalgam.m_wave[stemI] = std::max( m_stemDataAmalgam.m_wave[stemI], stemWave );
                 m_stemDataAmalgam.m_beat[stemI] = std::max( m_stemDataAmalgam.m_beat[stemI], stemBeat );
@@ -804,7 +859,7 @@ void MixEngine::update(
                 // when transitioning, a missing/muted stem means we need to transition down to silence, not just skip entirely
                 if ( stemInst == nullptr || stemInst->hasFailed() )
                 {
-                    m_mixChannelLeft[stemI][sI]     = base::lerp( m_mixChannelLeft[stemI][sI], 0.0f, m_transitionValue );
+                    m_mixChannelLeft[stemI][sI]     = base::lerp( m_mixChannelLeft[stemI][sI],  0.0f, m_transitionValue );
                     m_mixChannelRight[stemI][sI]    = base::lerp( m_mixChannelRight[stemI][sI], 0.0f, m_transitionValue );
 
                     continue;
@@ -820,7 +875,7 @@ void MixEngine::update(
                 }
                 finalSampleIdx %= sampleCount;
 
-                m_mixChannelLeft[stemI][sI]         = base::lerp( m_mixChannelLeft[stemI][sI], stemInst->m_channel[0][finalSampleIdx] * stemGain, m_transitionValue );
+                m_mixChannelLeft[stemI][sI]         = base::lerp( m_mixChannelLeft[stemI][sI],  stemInst->m_channel[0][finalSampleIdx] * stemGain, m_transitionValue );
                 m_mixChannelRight[stemI][sI]        = base::lerp( m_mixChannelRight[stemI][sI], stemInst->m_channel[1][finalSampleIdx] * stemGain, m_transitionValue );
             }
         }
@@ -834,7 +889,8 @@ void MixEngine::update(
 
 
 // ---------------------------------------------------------------------------------------------------------------------
-struct BeamApp : public app::OuroApp
+struct BeamApp : public app::OuroApp,
+                 public ux::TagLineToolProvider
 {
     BeamApp()
         : app::OuroApp()
@@ -848,9 +904,37 @@ struct BeamApp : public app::OuroApp
 
     int EntrypointOuro() override;
 
+protected:
+
+    // ux::TagLineToolProvider
+    // turn off all the tools, they don't really make sense to use inside BEAM (beyond the copy-to-clipboard)
+    uint8_t getToolCount() const override
+    {
+        return 0;
+    }
 
 protected:
 
+    enum class StreamSource : int32_t
+    {
+        EndlesssJam = 0,
+        BOND = 1
+    };
+
+    StreamSource                            m_streamMode = StreamSource::EndlesssJam;
+
+protected:
+
+    using BondServerInstance = std::unique_ptr< net::bond::RiffPushServer >;
+
+    static constexpr base::OperationVariant OV_RiffPlayback{ 0xBB };
+
+    BondServerInstance                      m_bondServer;
+    absl::Status                            m_bondServerStatus;
+
+    uint32_t                                m_bondMessagesHandled = 0;
+
+protected:
 
     endlesss::types::JamCouchID             m_trackedJamCouchID;
 
@@ -915,28 +999,15 @@ int BeamApp::EntrypointOuro()
         },
         [&mixEngine]( const endlesss::types::RiffIdentity& request, endlesss::live::RiffPtr& loadedRiff, const endlesss::types::RiffPlaybackPermutationOpt& playbackPermutationOpt )
         {
-            // TODO playbackPermutationOpt
-
             if ( loadedRiff )
-                mixEngine.addNextRiff( loadedRiff );
+            {
+                mixEngine.addNextRiff( loadedRiff, playbackPermutationOpt );
+            }
         },
         []()
         {
         } );
 
-    static constexpr base::OperationVariant OV_RiffPlayback{ 0xBB };
-
-    net::bond::RiffPushServer rpServer;
-    rpServer.setRiffPushedCallback([&]( 
-        const endlesss::types::JamCouchID&                  jamID,
-        const endlesss::types::RiffCouchID&                 riffID,
-        const endlesss::types::RiffPlaybackPermutationOpt&  permutationOpt )
-    {
-        const auto operationID = base::Operations::newID( OV_RiffPlayback );
-
-        riffPipeline.requestRiff( { { jamID, riffID }, permutationOpt, operationID } );
-    });
-    std::ignore = rpServer.start();
 
 
     // == MAIN LOOP ====================================================================================================
@@ -975,14 +1046,14 @@ int BeamApp::EntrypointOuro()
             }
         }
 
-        auto currentRiffPtr = mixEngine.m_riffCurrent;
+        auto currentRiffPerm = mixEngine.m_riffCurrent;
 
         {
             // process and blank out Exchange data ready to re-write it
             emitAndClearExchangeData();
 
             encodeExchangeData(
-                currentRiffPtr,
+                currentRiffPerm.m_riffPtr,
                 trackedJamData.m_displayName,
                 (uint64_t)mixEngine.getTimeInfoPtr()->samplePos,
                 nullptr );
@@ -1006,9 +1077,27 @@ int BeamApp::EntrypointOuro()
 
             // expose gain control
             {
-                float gainF = m_mdAudio->getOutputSignalGain() * 1000.0f;
-                if ( ImGui::KnobFloat( "Gain", 24.0f, &gainF, 0.0f, 1000.0f, 2000.0f ) )
-                    m_mdAudio->setOutputSignalGain( gainF * 0.001f );
+                float gainF = m_mdAudio->getOutputSignalGain();
+                if ( ImGui::KnobFloat(
+                    "##mix_gain",
+                    24.0f,
+                    &gainF,
+                    0.0f,
+                    1.0f,
+                    2000.0f,
+                    0.5f,
+                    // custom tooltip showing dB instead of 0..1
+                    []( const float percentage01, const float value ) -> std::string
+                    {
+                        if ( percentage01 <= std::numeric_limits<float>::min() )
+                            return "-INF";
+
+                        const auto dB = cycfi::q::lin_to_db( percentage01 );
+                        return fmt::format( FMTX( "{:.2f} dB" ), dB.rep );
+                    }))
+                {
+                    m_mdAudio->setOutputSignalGain( gainF );
+                }
             }
             ImGui::SameLine( 0, 8.0f );
             // button to toggle end-chain mute on audio engine (but leave processing, WAV output etc intact)
@@ -1024,24 +1113,51 @@ int BeamApp::EntrypointOuro()
                 ImGui::CompactTooltip( "Mute final audio output\nThis does not affect streaming or disk-recording" );
             }
 
-
-            ImGui::SeparatorBreak();
-            ImGui::TextUnformatted( "Disk Recorders" );
+            ImGui::SameLine( 0, 8.0f );
+            if ( ImGui::BeginChild( "disk-recorders", ImVec2( 210.0f, 48.0f ) ) )
             {
                 ux::widget::DiskRecorder( *m_mdAudio, m_storagePaths->outputApp );
-                ux::widget::DiskRecorder(  mixEngine, m_storagePaths->outputApp );
+                ux::widget::DiskRecorder( mixEngine, m_storagePaths->outputApp );
+            }
+            ImGui::EndChild();
+            
+            ImGui::Spacing();
+            ImGui::SeparatorBreak();
+            ImGui::Spacing();
+
+            {
+                const bool bIsSourceSwitchEnabled = ( m_bondServer == nullptr ) && ( jamSentinel.isTrackerRunning() == false );
+
+                ImGui::Scoped::Enabled se( bIsSourceSwitchEnabled );
+                ImGui::TextUnformatted( "Select Stream Source :" );
+                ImGui::Indent( 16.0f );
+                ImGui::RadioButton( " Live Endlesss Jam", (int32_t*) &m_streamMode, static_cast<int32_t>( StreamSource::EndlesssJam ) );
+                ImGui::RadioButton( " BOND Transmission", (int32_t*) &m_streamMode, static_cast<int32_t>( StreamSource::BOND ) );
+                ImGui::Unindent( 16.0f );
+                ImGui::Spacing();
+                ImGui::Spacing();
+                {
+                    ImGui::PushStyleColor( ImGuiCol_Text, colour::shades::callout.light() );
+                    ImGui::TextWrapped( "Once a stream source has been selected and used, you must fully disconnect it or restart BEAM to switch to another." );
+                    ImGui::PopStyleColor();
+                }
+                ImGui::Spacing();
             }
 
+            ImGui::Spacing();
             ImGui::SeparatorBreak();
+            ImGui::Spacing();
+
+            const float chunkyButtonHeight = 40.0f;
+            ImGui::PushItemWidth( panelRegionAvailable.x );
+
+            if ( m_streamMode == StreamSource::EndlesssJam )
             {
                 const bool hasSelectedJam       = !m_trackedJamCouchID.empty();
                 const bool isTracking           = jamSentinel.isTrackerRunning();
                 const bool isTrackerBroken      = jamSentinel.isTrackerBroken();
-                const float chunkyButtonHeight  = 40.0f;
 
                 ImGui::TextUnformatted( "Selected Jam :" );
-
-                ImGui::PushItemWidth( panelRegionAvailable.x );
 
                 {
                     ImGui::TextColored( 
@@ -1088,7 +1204,58 @@ int BeamApp::EntrypointOuro()
                 }
                 ImGui::EndDisabledControls( !hasSelectedJam );
             }
+            if ( m_streamMode == StreamSource::BOND )
+            {
+                if ( m_bondServer == nullptr )
+                {
+                    if ( ImGui::Button( ICON_FA_CIRCLE_NODES " Start BOND Server ", ImVec2( panelRegionAvailable.x, chunkyButtonHeight ) ) )
+                    {
+                        m_trackedJamCouchID = {};
+                        mixEngine.clearCurrentPlayback();
 
+                        // create a BOND server instance; plug the riff-push handler to push all new requests
+                        // straight into the riff resolver pipeline; these will then get enqueued into the mixer when they're available
+                        m_bondServer = std::make_unique< net::bond::RiffPushServer >();
+                        m_bondServer->setRiffPushedCallback( [&](
+                            const endlesss::types::JamCouchID& jamID,
+                            const endlesss::types::RiffCouchID& riffID,
+                            const endlesss::types::RiffPlaybackPermutationOpt& permutationOpt )
+                            {
+                                const auto operationID = base::Operations::newID( OV_RiffPlayback );
+
+                                riffPipeline.requestRiff( { { jamID, riffID }, permutationOpt, operationID } );
+
+                                m_bondMessagesHandled++;
+                            });
+
+                        m_bondMessagesHandled = 0;
+                        m_bondServerStatus = m_bondServer->start();
+                    }
+                }
+                else
+                {
+                    if ( m_bondServerStatus.ok() )
+                    {
+                        ImGui::TextColored( colour::shades::green.light(), ICON_FA_CIRCLE_NODES " BOND Server Running" );
+                        ImGui::Spacing();
+                        ImGui::Text( "Messages Handled : %u", m_bondMessagesHandled );
+                    }
+                    else
+                    {
+                        ImGui::TextColored( colour::shades::errors.light(), "Server Error :" );
+                        ImGui::TextWrapped( "%s", m_bondServerStatus.ToString().c_str() );
+                    }
+                    
+                    ImGui::Spacing();
+                    ImGui::Spacing();
+
+                    if ( ImGui::Button( ICON_FA_CIRCLE_STOP " Stop BOND Server ", ImVec2( panelRegionAvailable.x, chunkyButtonHeight ) ) )
+                    {
+                        std::ignore = m_bondServer->stop();
+                        m_bondServer.reset();
+                    }
+                }
+            }
 
             ImGui::PopItemWidth();
             ImGui::End();
@@ -1202,33 +1369,64 @@ int BeamApp::EntrypointOuro()
             ImGui::Begin( "Current Riff" );
             const auto panelRegionAvailable = ImGui::GetContentRegionAvail();
 
-            const auto* currentRiff = currentRiffPtr.get();
+            const auto* currentRiff = currentRiffPerm.m_riffPtr.get();
 
-            ImGui::TextUnformatted( "Current Jam" );
-            if ( currentRiff )
+            ImGui::TextUnformatted( "Current Riff Source" );
+            if ( m_bondServer != nullptr )
             {
-                // jam title
-                ImGui::PushStyleColor( ImGuiCol_Text, 0xffffffffU );
+                // empty title
+                ImGui::PushStyleColor( ImGuiCol_Text, colour::shades::sea_green.neutralU32() );
                 ImGui::PushFont( m_mdFrontEnd->getFont( app::module::Frontend::FontChoice::MediumTitle ) );
-                ImGui::TextUnformatted( currentRiff->m_uiJamUppercase.c_str() );
-                ImGui::PopFont();
+                ImGui::TextUnformatted( "BOND : " );
                 ImGui::PopStyleColor();
 
-
-                //ImGui::ux::RiffDetails( currentRiffPtr, m_appEventBusClient.value() );
+                ImGui::SameLine(0, 0);
+                if ( currentRiff )
+                {
+                    ImGui::TextColored( colour::shades::sea_green.light(), currentRiff->m_uiJamUppercase.c_str() );
+                }
+                else
+                {
+                    switch ( m_bondServer->getState() )
+                    {
+                        case net::bond::BondState::Disconnected:
+                            ImGui::TextColored( colour::shades::green.dark(), "STOPPED" );
+                            break;
+                        case net::bond::BondState::InFlux:
+                            ImGui::TextColored( colour::shades::green.neutral(), "STARTING ..." );
+                            break;
+                        case net::bond::BondState::Connected:
+                            ImGui::TextColored( colour::shades::green.light(), "LIVE" );
+                            break;
+                    }
+                }
+                ImGui::PopFont();
             }
             else
             {
-                // empty title
-                ImGui::PushStyleColor( ImGuiCol_Text, ImGui::GetColorU32( ImGuiCol_SeparatorHovered ) );
-                ImGui::PushFont( m_mdFrontEnd->getFont( app::module::Frontend::FontChoice::MediumTitle ) );
-                ImGui::TextUnformatted( "NO CONNECTION");
-                ImGui::PopFont();
-                ImGui::PopStyleColor();
+                if ( currentRiff )
+                {
+                    // jam title
+                    ImGui::PushStyleColor( ImGuiCol_Text, colour::shades::sea_green.neutralU32() );
+                    ImGui::PushFont( m_mdFrontEnd->getFont( app::module::Frontend::FontChoice::MediumTitle ) );
+                    ImGui::TextUnformatted( currentRiff->m_uiJamUppercase.c_str() );
+                    ImGui::PopFont();
+                    ImGui::PopStyleColor();
+                }
+                else
+                {
+                    // empty title
+                    ImGui::PushStyleColor( ImGuiCol_Text, colour::shades::blue_gray.neutralU32() );
+                    ImGui::PushFont( m_mdFrontEnd->getFont( app::module::Frontend::FontChoice::MediumTitle ) );
+                    ImGui::TextUnformatted( "NO CONNECTION" );
+                    ImGui::PopFont();
+                    ImGui::PopStyleColor();
+                }
             }
 
 
-            if ( currentRiffPtr != nullptr )
+
+            if ( currentRiffPerm.isNotEmpty() )
             {
                 const ImVec2 verticalSpacer( 0.0f, 16.0f );
 
@@ -1257,7 +1455,14 @@ int BeamApp::EntrypointOuro()
                          mixEngine.isRecording() )
                     {
                         ImGui::Spacing();
-                        ImGui::BeatSegments( "##bars_sync", currentRiff->m_timingDetails.m_barCount, mixEngine.getBarPausedOn(), 3.0f, ImGui::GetColorU32( ImGuiCol_HeaderActive ) );
+                        ImGui::BeatSegments(
+                            "##bars_sync",
+                            currentRiff->m_timingDetails.m_barCount,
+                            mixEngine.getBarPausedOn(),
+                            -1,
+                            3.0f,
+                            ImGui::GetColorU32( ImGuiCol_HeaderActive )
+                        );
                         ImGui::Spacing();
 
                         ImGui::Text( "Repetition Counter : %u | Last Pause Bar : %i", mixEngine.getBarRepetitions(), mixEngine.getBarPausedOn() );
@@ -1266,17 +1471,19 @@ int BeamApp::EntrypointOuro()
                 }
                 ImGui::Dummy( verticalSpacer );
                 {
-                    m_uxTagLine->imgui( *m_warehouse, currentRiffPtr );
+                    m_uxTagLine->imgui( currentRiffPerm.m_riffPtr, nullptr, this );
                 }
 
                 ImGui::Dummy( verticalSpacer );
-                if ( ImGui::BeginTable( "##stem_stack", 10, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg ) )
+                if ( ImGui::BeginTable( "##stem_stack", 11, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg ) )
                 {
                     ImGui::PushStyleColor( ImGuiCol_Text, ImGui::GetStyleColorVec4( ImGuiCol_ResizeGripHovered ) );
+
+                    ImGui::TableSetupColumn( "",        ImGuiTableColumnFlags_WidthFixed, 10.0f  );
                     ImGui::TableSetupColumn( "User",    ImGuiTableColumnFlags_WidthFixed, 140.0f );
                     ImGui::TableSetupColumn( "Instr",   ImGuiTableColumnFlags_WidthFixed, 60.0f  );
                     ImGui::TableSetupColumn( "Preset",  ImGuiTableColumnFlags_WidthFixed, 140.0f );
-                    ImGui::TableSetupColumn( "Format",  ImGuiTableColumnFlags_WidthFixed, 70.0f );
+                    ImGui::TableSetupColumn( "Format",  ImGuiTableColumnFlags_WidthFixed, 70.0f  );
                     ImGui::TableSetupColumn( "Gain",    ImGuiTableColumnFlags_WidthFixed, 45.0f  );
                     ImGui::TableSetupColumn( "Speed",   ImGuiTableColumnFlags_WidthFixed, 45.0f  );
                     ImGui::TableSetupColumn( "Rep",     ImGuiTableColumnFlags_WidthFixed, 30.0f  );
@@ -1302,15 +1509,17 @@ int BeamApp::EntrypointOuro()
                             ImGui::TableNextColumn(); ImGui::TextUnformatted( "" );
                             ImGui::TableNextColumn(); ImGui::TextUnformatted( "" );
                             ImGui::TableNextColumn(); ImGui::TextUnformatted( "" );
+                            ImGui::TableNextColumn(); ImGui::TextUnformatted( "" );
                         }
                         else
                         {
                             const auto& riffDocument = currentRiff->m_riffData;
 
-                            ImGui::TableNextColumn(); ImGui::TextUnformatted( stem->m_data.user.c_str() );
-                            ImGui::TableNextColumn(); ImGui::TextUnformatted( stem->m_data.getInstrumentName() );
-                            ImGui::TableNextColumn(); ImGui::TextUnformatted( stem->m_data.preset.c_str() );
-                            ImGui::TableNextColumn();
+                            ImGui::TableNextColumn(); ImGui::AlignTextToFramePadding(); ImGui::VerticalProgress( "##gainBar", currentRiffPerm.m_permutation.m_layerGainMultiplier[sI] );
+                            ImGui::TableNextColumn(); ImGui::AlignTextToFramePadding(); ImGui::TextUnformatted( stem->m_data.user.c_str() );
+                            ImGui::TableNextColumn(); ImGui::AlignTextToFramePadding(); ImGui::TextUnformatted( stem->m_data.getInstrumentName() );
+                            ImGui::TableNextColumn(); ImGui::AlignTextToFramePadding(); ImGui::TextUnformatted( stem->m_data.preset.c_str() );
+                            ImGui::TableNextColumn(); ImGui::AlignTextToFramePadding();
                             switch ( stem->getCompressionFormat() )
                             {
                                 case endlesss::live::Stem::Compression::Unknown:
@@ -1326,12 +1535,12 @@ int BeamApp::EntrypointOuro()
                                     ImGui::PopStyleColor();
                                     break;
                             }
-                            ImGui::TableNextColumn(); ImGui::Text( "%.2f",  m_endlesssExchange.m_stemGain[sI] );
-                            ImGui::TableNextColumn(); ImGui::Text( "%.2f",  currentRiff->m_stemTimeScales[sI] );
-                            ImGui::TableNextColumn(); ImGui::Text( "%ix",   currentRiff->m_stemRepetitions[sI] );
-                            ImGui::TableNextColumn(); ImGui::Text( "%.2fs", currentRiff->m_stemLengthInSec[sI] );
-                            ImGui::TableNextColumn(); ImGui::Text( "%i",    stem->m_data.sampleRate );
-                            ImGui::TableNextColumn(); ImGui::Text( "%i",    stem->m_data.fileLengthBytes / 1024 );
+                            ImGui::TableNextColumn(); ImGui::AlignTextToFramePadding(); ImGui::Text( "%.2f",  m_endlesssExchange.m_stemGain[sI] );
+                            ImGui::TableNextColumn(); ImGui::AlignTextToFramePadding(); ImGui::Text( "%.2f",  currentRiff->m_stemTimeScales[sI] );
+                            ImGui::TableNextColumn(); ImGui::AlignTextToFramePadding(); ImGui::Text( "%ix",   currentRiff->m_stemRepetitions[sI] );
+                            ImGui::TableNextColumn(); ImGui::AlignTextToFramePadding(); ImGui::Text( "%.2fs", currentRiff->m_stemLengthInSec[sI] );
+                            ImGui::TableNextColumn(); ImGui::AlignTextToFramePadding(); ImGui::Text( "%i",    stem->m_data.sampleRate );
+                            ImGui::TableNextColumn(); ImGui::AlignTextToFramePadding(); ImGui::Text( "%i",    stem->m_data.fileLengthBytes / 1024 );
                         }
                     }
 
