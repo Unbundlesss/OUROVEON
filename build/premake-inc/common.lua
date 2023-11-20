@@ -53,6 +53,13 @@ function SetDefaultBuildConfiguration()
         }
     filter {}
 
+    filter { "configurations:Release", "options:pgo=instrument" }
+        pgo "Instrument"
+    filter {}
+    filter { "configurations:Release", "options:pgo=optimise" }
+        pgo "Optimize"
+    filter {}
+
 end
 
 -- ------------------------------------------------------------------------------

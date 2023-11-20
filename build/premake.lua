@@ -7,6 +7,18 @@ require('xcode')
 local xcode = premake.modules.xcode 
 xcode.cppLanguageStandards["C++20"] = "c++20"
 
+newoption {
+    trigger = "pgo",
+    value = "mode",
+    description = "enable PGO link phase",
+    allowed = {
+        { "none",       "disabled" },
+        { "instrument", "instrumentation phase" },
+        { "optimise",   "optimisation phase" }
+     },
+     default = "none"
+}
+
 include "premake-inc/premake-build-vstudio.lua"
 
 
@@ -43,7 +55,7 @@ end
 
 
 function GetBuildRootToken()
-    if ( os.host() == "windows" ) then
+    if ( GeneratingForVisualStudio() ) then
         return "$(SolutionDir)"
     else
         return initialDir .. "/" .. rootBuildGenerationDir .. "/"

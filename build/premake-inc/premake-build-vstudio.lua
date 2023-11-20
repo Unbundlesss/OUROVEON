@@ -1,5 +1,16 @@
 require('vstudio')
 
+-- ------------------------------------------------------------------------------
+function GeneratingForVisualStudio()
+    -- try decode from _ACTION, looking for vs####
+    if ( tostring("_%{_ACTION or ''}"):find("^vs") ~= nil ) then
+        return true
+    end
+    -- otherwise likelyhood is if we're generating on windows then...
+    return os.target() == "windows" 
+end
+
+-- ------------------------------------------------------------------------------
 -- https://github.com/premake/premake-core/issues/1061
 -- ability to add (for example) natvis files
 
