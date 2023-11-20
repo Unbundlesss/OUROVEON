@@ -82,7 +82,7 @@ struct Warehouse::INetworkTask : Warehouse::ITask
 // ---------------------------------------------------------------------------------------------------------------------
 struct ContentsReportTask final : Warehouse::ITask
 {
-    static constexpr char Tag[] = "CONTENTS";
+    static constexpr std::string_view Tag = "CONTENTS";
 
     ContentsReportTask( const Warehouse::ContentsReportCallback& callbackOnCompletion )
         : ITask()
@@ -91,7 +91,7 @@ struct ContentsReportTask final : Warehouse::ITask
 
     Warehouse::ContentsReportCallback m_reportCallback;
 
-    const char* getTag() const override { return Tag; }
+    const char* getTag() const override { return Tag.data(); }
     std::string Describe() const override { return fmt::format( "[{}] creating database contents report", Tag ); }
     bool Work( TaskQueue& currentTasks ) override;
 };
@@ -99,7 +99,7 @@ struct ContentsReportTask final : Warehouse::ITask
 // ---------------------------------------------------------------------------------------------------------------------
 struct JamSliceTask final : Warehouse::ITask
 {
-    static constexpr char Tag[] = "JAMSLICE";
+    static constexpr std::string_view Tag = "JAMSLICE";
 
     JamSliceTask( const types::JamCouchID& jamCID, const Warehouse::JamSliceCallback& callbackOnCompletion )
         : ITask()
@@ -110,7 +110,7 @@ struct JamSliceTask final : Warehouse::ITask
     types::JamCouchID               m_jamCID;
     Warehouse::JamSliceCallback     m_reportCallback;
 
-    const char* getTag() const override { return Tag; }
+    const char* getTag() const override { return Tag.data(); }
     std::string Describe() const override { return fmt::format( "[{}] extracting jam data for [{}]", Tag, m_jamCID.value() ); }
     bool Work( TaskQueue& currentTasks ) override;
 };
@@ -118,7 +118,7 @@ struct JamSliceTask final : Warehouse::ITask
 // ---------------------------------------------------------------------------------------------------------------------
 struct JamSnapshotTask final : Warehouse::INetworkTask
 {
-    static constexpr char Tag[] = "SNAPSHOT";
+    static constexpr std::string_view Tag = "SNAPSHOT";
 
     JamSnapshotTask( const api::NetConfiguration& ncfg, const types::JamCouchID& jamCID )
         : Warehouse::INetworkTask( ncfg )
@@ -130,7 +130,7 @@ struct JamSnapshotTask final : Warehouse::INetworkTask
 
     types::JamCouchID m_jamCID;
 
-    const char* getTag() const override { return Tag; }
+    const char* getTag() const override { return Tag.data(); }
     std::string Describe() const override { return fmt::format( "[{}] fetching Jam snapshot of [{}]", Tag, m_jamCID ); }
     bool Work( TaskQueue& currentTasks ) override;
 };
@@ -138,7 +138,7 @@ struct JamSnapshotTask final : Warehouse::INetworkTask
 // ---------------------------------------------------------------------------------------------------------------------
 struct JamPurgeTask final : Warehouse::ITask
 {
-    static constexpr char Tag[] = "PURGE";
+    static constexpr std::string_view Tag = "PURGE";
 
     JamPurgeTask( const types::JamCouchID& jamCID )
         : Warehouse::ITask()
@@ -150,7 +150,7 @@ struct JamPurgeTask final : Warehouse::ITask
 
     types::JamCouchID m_jamCID;
 
-    const char* getTag() const override { return Tag; }
+    const char* getTag() const override { return Tag.data(); }
     std::string Describe() const override { return fmt::format( "[{}] deleting all records for [{}]", Tag, m_jamCID ); }
     bool Work( TaskQueue& currentTasks ) override;
 };
@@ -158,7 +158,7 @@ struct JamPurgeTask final : Warehouse::ITask
 // ---------------------------------------------------------------------------------------------------------------------
 struct JamSyncAbortTask final : Warehouse::ITask
 {
-    static constexpr char Tag[] = "SYNC-ABORT";
+    static constexpr std::string_view Tag = "SYNC-ABORT";
 
     JamSyncAbortTask( const types::JamCouchID& jamCID )
         : Warehouse::ITask()
@@ -170,7 +170,7 @@ struct JamSyncAbortTask final : Warehouse::ITask
 
     types::JamCouchID m_jamCID;
 
-    const char* getTag() const override { return Tag; }
+    const char* getTag() const override { return Tag.data(); }
     std::string Describe() const override { return fmt::format( "[{}] purging empty riff records for [{}]", Tag, m_jamCID ); }
     bool Work( TaskQueue& currentTasks ) override;
 };
@@ -178,7 +178,7 @@ struct JamSyncAbortTask final : Warehouse::ITask
 // ---------------------------------------------------------------------------------------------------------------------
 struct JamExportTask final : Warehouse::ITask
 {
-    static constexpr char Tag[] = "EXPORT";
+    static constexpr std::string_view Tag = "EXPORT";
 
     JamExportTask( base::EventBusClient& eventBus, const types::JamCouchID& jamCID, const fs::path& exportFolder, std::string_view jamName )
         : Warehouse::ITask()
@@ -193,7 +193,7 @@ struct JamExportTask final : Warehouse::ITask
     fs::path                m_exportFolder;
     std::string             m_jamName;
 
-    const char* getTag() const override { return Tag; }
+    const char* getTag() const override { return Tag.data(); }
     std::string Describe() const override { return fmt::format( "[{}] exporting jam to disk", Tag ); }
     bool Work( TaskQueue& currentTasks ) override;
 };
@@ -201,7 +201,7 @@ struct JamExportTask final : Warehouse::ITask
 // ---------------------------------------------------------------------------------------------------------------------
 struct JamImportTask final : Warehouse::ITask
 {
-    static constexpr char Tag[] = "IMPORT";
+    static constexpr std::string_view Tag = "IMPORT";
 
     JamImportTask( base::EventBusClient& eventBus, const fs::path& fileToImport )
         : Warehouse::ITask()
@@ -215,7 +215,7 @@ struct JamImportTask final : Warehouse::ITask
     // rebuild after add
     bool forceContentReport() const override { return true; }
 
-    const char* getTag() const override { return Tag; }
+    const char* getTag() const override { return Tag.data(); }
     std::string Describe() const override { return fmt::format( "[{}] importing jam from disk", Tag ); }
     bool Work( TaskQueue& currentTasks ) override;
 };
@@ -223,7 +223,7 @@ struct JamImportTask final : Warehouse::ITask
 // ---------------------------------------------------------------------------------------------------------------------
 struct GetRiffDataTask final : Warehouse::INetworkTask
 {
-    static constexpr char Tag[] = "RIFFDATA";
+    static constexpr std::string_view Tag = "RIFFDATA";
 
     GetRiffDataTask( const api::NetConfiguration& ncfg, const types::JamCouchID& jamCID, const std::vector< types::RiffCouchID >& riffCIDs )
         : Warehouse::INetworkTask( ncfg )
@@ -234,7 +234,7 @@ struct GetRiffDataTask final : Warehouse::INetworkTask
     types::JamCouchID                 m_jamCID;
     std::vector< types::RiffCouchID > m_riffCIDs;
 
-    const char* getTag() const override { return Tag; }
+    const char* getTag() const override { return Tag.data(); }
     std::string Describe() const override { return fmt::format( "[{}] pulling {} riff details", Tag, m_riffCIDs.size() ); }
     bool Work( TaskQueue& currentTasks ) override;
 };
@@ -242,7 +242,7 @@ struct GetRiffDataTask final : Warehouse::INetworkTask
 // ---------------------------------------------------------------------------------------------------------------------
 struct GetStemData final : Warehouse::INetworkTask
 {
-    static constexpr char Tag[] = "STEMDATA";
+    static constexpr std::string_view Tag = "STEMDATA";
 
     GetStemData( const api::NetConfiguration& ncfg, const types::JamCouchID& jamCID, const std::vector< types::StemCouchID >& stemCIDs )
         : Warehouse::INetworkTask( ncfg )
@@ -253,7 +253,7 @@ struct GetStemData final : Warehouse::INetworkTask
     types::JamCouchID                 m_jamCID;
     std::vector< types::StemCouchID > m_stemCIDs;
 
-    const char* getTag() const override { return Tag; }
+    const char* getTag() const override { return Tag.data(); }
     std::string Describe() const override { return fmt::format( "[{}] pulling {} stem details", Tag, m_stemCIDs.size() ); }
     bool Work( TaskQueue& currentTasks ) override;
 };
