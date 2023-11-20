@@ -251,7 +251,7 @@ int Core::Run()
         // register basic event IDs
         APP_EVENT_REGISTER( AddErrorPopup );
         APP_EVENT_REGISTER( AddToastNotification );
-        APP_EVENT_REGISTER_SPECIFIC( OperationComplete, 16 * 1024 );
+        APP_EVENT_REGISTER_SPECIFIC( OperationComplete, 64 * 1024 );
         APP_EVENT_REGISTER( PanicStop );
         APP_EVENT_REGISTER( StemDataAmalgamGenerated );
 
