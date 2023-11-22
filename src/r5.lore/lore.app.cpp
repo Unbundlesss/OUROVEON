@@ -3416,17 +3416,17 @@ int LoreApp::EntrypointOuro()
 
                         if ( warehouseView == WarehouseView::Default )
                         {
-                            ImGui::TableSetupColumn( "View",        ImGuiTableColumnFlags_WidthFixed, 32.0f  );
-                            ImGui::TableSetupColumn( "Jam Name",    ImGuiTableColumnFlags_WidthFixed, 360.0f );
-                            ImGui::TableSetupColumn( "Sync",        ImGuiTableColumnFlags_WidthFixed, 32.0f  );
+                            ImGui::TableSetupColumn( "View",        ImGuiTableColumnFlags_WidthFixed,  32.0f );
+                            ImGui::TableSetupColumn( "Jam Name",    ImGuiTableColumnFlags_WidthStretch, 1.0f );
+                            ImGui::TableSetupColumn( "Sync",        ImGuiTableColumnFlags_WidthFixed,  32.0f );
                             ImGui::TableSetupColumn( "Riffs",       ImGuiTableColumnFlags_WidthFixed, 120.0f );
                             ImGui::TableSetupColumn( "Stems",       ImGuiTableColumnFlags_WidthFixed, 120.0f );
                         }
                         else
                         {
-                            ImGui::TableSetupColumn( "Jam Name",    ImGuiTableColumnFlags_WidthFixed, 360.0f );
+                            ImGui::TableSetupColumn( "Jam Name",    ImGuiTableColumnFlags_WidthStretch, 1.0f );
                             ImGui::TableSetupColumn( "Tools",       ImGuiTableColumnFlags_WidthFixed, 270.0f );
-                            ImGui::TableSetupColumn( "Wipe",        ImGuiTableColumnFlags_WidthFixed, 32.0f  );
+                            ImGui::TableSetupColumn( "Wipe",        ImGuiTableColumnFlags_WidthFixed,  32.0f );
 
                         }
                         ImGui::TableHeadersRow();
