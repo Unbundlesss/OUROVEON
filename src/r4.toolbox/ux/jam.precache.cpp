@@ -57,6 +57,9 @@ struct JamPrecacheState
     State                           m_state = State::Intro;
     std::size_t                     m_currentStemIndex = 0;
 
+    std::size_t                     m_stemPayloadFileSizeEstimation = 0;
+    std::string                     m_stemPayloadFileSizeEstimationString;
+
     std::atomic_uint32_t            m_statsStemsAlreadyInCache = 0;
     std::atomic_uint32_t            m_statsStemsDownloaded = 0;
     std::atomic_uint32_t            m_statsStemsMissingFromDb = 0;
@@ -145,12 +148,13 @@ void JamPrecacheState::imgui(
                 bool bFoundStems = false;
                 if ( m_enableSiphonMode )
                 {
-                    bFoundStems = warehouse.fetchAllStems( m_stemIDs );
+                    bFoundStems = warehouse.fetchAllStems( m_stemIDs, m_stemPayloadFileSizeEstimation );
                 }
                 else
                 {
-                    bFoundStems = warehouse.fetchAllStemsForJam( m_jamCouchID, m_stemIDs );
+                    bFoundStems = warehouse.fetchAllStemsForJam( m_jamCouchID, m_stemIDs, m_stemPayloadFileSizeEstimation );
                 }
+                m_stemPayloadFileSizeEstimationString = base::humaniseByteSize( "", m_stemPayloadFileSizeEstimation );
 
                 if ( bFoundStems )
                     m_state = State::Preflight;
@@ -170,7 +174,8 @@ void JamPrecacheState::imgui(
         // present the work to do, allow tuning of download limits
         case State::Preflight:
         {
-            ImGui::TextColored( colour::shades::callout.light(), "Total stems : %u", static_cast<uint32_t>( m_stemIDs.size() ) );
+            ImGui::TextColored( colour::shades::callout.light(),   "        Total stems : %u", static_cast<uint32_t>( m_stemIDs.size() ) );
+            ImGui::TextColored( colour::shades::callout.neutral(), "Disk space estimate : %s", m_stemPayloadFileSizeEstimationString.c_str() );
             ImGui::Spacing();
             ImGui::TextWrapped( "Note that you may already have some of these stems in your cache - they will not be re-downloaded. Abort the download at any point by clicking [Close] - it may pause briefly to finish all active downloads." );
             ImGui::Spacing();

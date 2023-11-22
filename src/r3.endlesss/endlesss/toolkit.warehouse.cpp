@@ -1383,7 +1383,7 @@ bool Warehouse::batchFindJamIDForStem( const endlesss::types::StemCouchIDs& stem
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-bool Warehouse::fetchAllStemsForJam( const types::JamCouchID& jamCouchID, endlesss::types::StemCouchIDs& result ) const
+bool Warehouse::fetchAllStemsForJam( const types::JamCouchID& jamCouchID, endlesss::types::StemCouchIDs& result, std::size_t& estimatedTotalFileSize ) const
 {
     // try and get a count so we can prime the output
     int64_t stemCount = 0;
@@ -1404,19 +1404,23 @@ bool Warehouse::fetchAllStemsForJam( const types::JamCouchID& jamCouchID, endles
     if ( stemCount > 0 )
         result.reserve( stemCount );
 
+    estimatedTotalFileSize = 0;
+
     // pull all stem IDs out
     {
         static constexpr char _allStemsInJam[] = R"(
-            select StemCID from stems where OwnerJamCID = ?1 order by CreationTime asc;
+            select StemCID, FileLength from stems where OwnerJamCID = ?1 order by CreationTime asc;
         )";
 
         auto query = Warehouse::SqlDB::query<_allStemsInJam>( jamCouchID.value() );
 
         std::string_view stemCID;
+        uint64_t stemFileLengthBytes = 0;
 
-        while ( query( stemCID ) )
+        while ( query( stemCID, stemFileLengthBytes ) )
         {
             result.emplace_back( endlesss::types::StemCouchID( stemCID ) );
+            estimatedTotalFileSize += stemFileLengthBytes;
         }
     }
 
@@ -1432,7 +1436,7 @@ bool Warehouse::fetchSingleStemByID( const types::StemCouchID& stemCouchID, endl
 // ---------------------------------------------------------------------------------------------------------------------
 // this isn't really for normal use. potentially this could return 100k+ stem IDs on a decently populated warehouse
 //
-bool Warehouse::fetchAllStems( endlesss::types::StemCouchIDs& result ) const
+bool Warehouse::fetchAllStems( endlesss::types::StemCouchIDs& result, std::size_t& estimatedTotalFileSize ) const
 {
     // try and get a count so we can prime the output
     int64_t stemCount = 0;
@@ -1453,19 +1457,23 @@ bool Warehouse::fetchAllStems( endlesss::types::StemCouchIDs& result ) const
     if ( stemCount > 0 )
         result.reserve( stemCount );
 
+    estimatedTotalFileSize = 0;
+
     // pull all stem IDs out
     {
         static constexpr char _allStems[] = R"(
-            select StemCID from stems;
+            select StemCID, FileLength from stems;
         )";
 
         auto query = Warehouse::SqlDB::query<_allStems>();
 
         std::string_view stemCID;
+        uint64_t stemFileLengthBytes = 0;
 
-        while ( query( stemCID ) )
+        while ( query( stemCID, stemFileLengthBytes ) )
         {
             result.emplace_back( endlesss::types::StemCouchID( stemCID ) );
+            estimatedTotalFileSize += stemFileLengthBytes;
         }
     }
 
@@ -1764,12 +1772,12 @@ void Warehouse::event_RiffTagAction( const events::RiffTagAction* eventData )
 // ---------------------------------------------------------------------------------------------------------------------
 bool JamSnapshotTask::Work( TaskQueue& currentTasks )
 {
-    blog::database( "[{}] requesting full riff manifest", Tag );
+    blog::database( FMTX( "[{}] requesting full riff manifest" ), Tag );
 
     endlesss::api::JamFullSnapshot jamSnapshot;
     if ( !jamSnapshot.fetch( m_netConfig, m_jamCID ) )
     {
-        blog::error::database( "[{}] Failed to fetch snapshot for jam [{}]", Tag, m_jamCID );
+        blog::error::database( FMTX( "[{}] Failed to fetch snapshot for jam [{}]" ), Tag, m_jamCID );
         return false;
     }
 
@@ -1794,7 +1802,7 @@ bool JamSnapshotTask::Work( TaskQueue& currentTasks )
 
     const auto countAfterTx = sql::riffs::countRiffsInJam( m_jamCID );
 
-    blog::database( "[{}] {} online, added {} to Db", Tag, jamSnapshot.rows.size(), countAfterTx - countBeforeTx );
+    blog::database( FMTX( "[{}] {} online, added {} to Db" ), Tag, jamSnapshot.rows.size(), countAfterTx - countBeforeTx );
     return true;
 }
 

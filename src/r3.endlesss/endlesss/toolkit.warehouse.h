@@ -222,13 +222,14 @@ struct Warehouse
     bool batchFindJamIDForStem( const endlesss::types::StemCouchIDs& stems, endlesss::types::JamCouchIDs& result ) const;
 
     // populate the output vector with every stem associated with a jam (for example, for precatching them all into the cache)
-    bool fetchAllStemsForJam( const types::JamCouchID& jamCouchID, endlesss::types::StemCouchIDs& result ) const;
+    // also returns the summed FileLength values, in case disk storage estimation or reporting is useful
+    bool fetchAllStemsForJam( const types::JamCouchID& jamCouchID, endlesss::types::StemCouchIDs& result, std::size_t& estimatedTotalFileSize ) const;
 
     // resolve a single stem data block from the database, if we can find it; returns false if we didn't
     bool fetchSingleStemByID( const types::StemCouchID& stemCouchID, endlesss::types::Stem& result ) const;
 
     // do you want all the stems? all of them? damn son alright
-    bool fetchAllStems( endlesss::types::StemCouchIDs& result ) const;
+    bool fetchAllStems( endlesss::types::StemCouchIDs& result, std::size_t& estimatedTotalFileSize ) const;
 
 
     // see if we have any notes for a stem ID (if it was removed from the database during a sync for some reason)
