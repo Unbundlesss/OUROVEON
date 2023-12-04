@@ -690,13 +690,14 @@ struct ShareRequestBody
     inline void serialize( Archive& archive )
     {
         archive( CEREAL_NVP( jamId )
-            , cereal::make_nvp( "private", is_private )
-            , CEREAL_NVP( rifffId )
-            , CEREAL_NVP( shareId )
-            , CEREAL_NVP( title )
+               , cereal::make_nvp( "private", is_private )
+               , CEREAL_NVP( rifffId )
+               , CEREAL_NVP( shareId )
+               , CEREAL_NVP( title )
         );
     }
 };
+
 struct ShareRequestResponse
 {
     struct Data
@@ -719,8 +720,8 @@ struct ShareRequestResponse
     inline void serialize( Archive& archive )
     {
         archive( CEREAL_NVP( ok )
-            , CEREAL_NVP( data )
-            , CEREAL_OPTIONAL_NVP( message ) // valid if ok==false
+               , CEREAL_NVP( data )
+               , CEREAL_OPTIONAL_NVP( message ) // valid if ok==false
         );
     }
 };
