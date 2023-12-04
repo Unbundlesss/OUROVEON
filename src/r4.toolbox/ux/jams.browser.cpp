@@ -290,6 +290,7 @@ void modalUniversalJamBrowser(
             const bool showAsDisabled = ( behaviour.fnIsDisabled && behaviour.fnIsDisabled(jamData.m_jamCID) );
 
             ImGui::TableNextColumn();
+            ImGui::PushID( jamData.m_displayName.c_str() );
 
             // icon to show jam description as tooltip hover
             if ( jamData.m_description.empty() )
@@ -328,6 +329,8 @@ void modalUniversalJamBrowser(
             ImGui::TableNextColumn();
             if ( !jamData.m_timestampOrderingDescription.empty() )
                 ImGui::TextUnformatted( jamData.m_timestampOrderingDescription.c_str(), &jamData.m_timestampOrderingDescription.back() + 1 );
+
+            ImGui::PopID();
         };
 
         jamNameFilter.Draw( "##NameFilter", 200.0f );
@@ -497,6 +500,7 @@ void modalUniversalJamBrowser(
                                     const bool showAsDisabled = (behaviour.fnIsDisabled && behaviour.fnIsDisabled( jamID ));
 
                                     ImGui::TableNextColumn();
+                                    ImGui::PushID( index );
 
                                     if ( showAsDisabled )
                                     {
@@ -521,6 +525,8 @@ void modalUniversalJamBrowser(
 
                                     ImGui::TableNextColumn();
                                     ImGui::Text( "%.3f %%", userPct );
+
+                                    ImGui::PopID();
                                 }
                                 ImGui::EndTable();
                             }
