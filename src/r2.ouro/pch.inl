@@ -7,8 +7,8 @@
 //  
 //
 
-#define OURO_FRAMEWORK_VERSION    "0.8.3"
-#define OURO_FRAMEWORK_CREDIT     "ishani.org 2023"
+#define OURO_FRAMEWORK_VERSION    "0.8.4"
+#define OURO_FRAMEWORK_CREDIT     "ishani.org 2024"
 
 // ---------------------------------------------------------------------------------------------------------------------
 
@@ -44,6 +44,11 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/cleanup/cleanup.h"
+
+// ---------------------------------------------------------------------------------------------------------------------
+
+// maximum number of threads to allow taskflow to spin up
+#define OURO_THREAD_LIMIT   (8U)
 
 // ---------------------------------------------------------------------------------------------------------------------
 
