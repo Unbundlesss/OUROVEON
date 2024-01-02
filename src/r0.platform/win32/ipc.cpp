@@ -51,11 +51,19 @@ void* details::IPC::create( const std::wstring& mapName, const std::wstring& mut
         bufferSize,
         mapName.c_str() );
 
+    ABSL_ASSERT( m_hFileMapping != nullptr );
+    if ( m_hFileMapping == nullptr )
+        return nullptr;
+
     DWORD mapAccess = FILE_MAP_WRITE;
     if ( requestedAccess == Access::Read )
         mapAccess = FILE_MAP_READ;
 
     uint8_t* memoryBuffer = (uint8_t*)::MapViewOfFile( m_hFileMapping, mapAccess, 0, 0, bufferSize );
+
+    ABSL_ASSERT( memoryBuffer != nullptr );
+    if ( memoryBuffer == nullptr )
+        return nullptr;
 
     if ( requestedAccess == Access::Write )
         memset( memoryBuffer, 0, bufferSize );
