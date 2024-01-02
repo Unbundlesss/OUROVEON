@@ -31,7 +31,7 @@
 #include <dpp/cluster.h>
 #include <thread>
 #include "nlohmann/json.hpp"
-#include "fmt/format.h"
+
 #include <dpp/etf.h>
 #include <zlib.h>
 
@@ -233,7 +233,7 @@ bool discord_client::handle_frame(const std::string &buffer)
 				j = json::parse(data);
 			}
 			catch (const std::exception &e) {
-				log(dpp::ll_error, fmt::format("discord_client::handle_frame(JSON): {} [{}]", e.what(), data));
+				log(dpp::ll_error, std::format("discord_client::handle_frame(JSON): {} [{}]", e.what(), data));
 				return true;
 			}
 		break;
@@ -242,7 +242,7 @@ bool discord_client::handle_frame(const std::string &buffer)
 				j = etf->parse(data);
 			}
 			catch (const std::exception &e) {
-				log(dpp::ll_error, fmt::format("discord_client::handle_frame(ETF): {} len={}\n{}", e.what(), data.size(), dpp::utility::debug_dump((uint8_t*)data.data(), data.size())));
+				log(dpp::ll_error, std::format("discord_client::handle_frame(ETF): {} len={}\n{}", e.what(), data.size(), dpp::utility::debug_dump((uint8_t*)data.data(), data.size())));
 				return true;
 			}
 		break;
@@ -261,7 +261,7 @@ bool discord_client::handle_frame(const std::string &buffer)
 			case 9:
 				/* Reset session state and fall through to 10 */
 				op = 10;
-				log(dpp::ll_debug, fmt::format("Failed to resume session {}, will reidentify", sessionid));
+				log(dpp::ll_debug, std::format("Failed to resume session {}, will reidentify", sessionid));
 				this->sessionid = "";
 				this->last_seq = 0;
 				/* No break here, falls through to state 10 to cause a reidentify */
@@ -274,7 +274,7 @@ bool discord_client::handle_frame(const std::string &buffer)
 
 				if (last_seq && !sessionid.empty()) {
 					/* Resume */
-					log(dpp::ll_debug, fmt::format("Resuming session {} with seq={}", sessionid, last_seq));
+					log(dpp::ll_debug, std::format("Resuming session {} with seq={}", sessionid, last_seq));
 					json obj = {
 						{ "op", 6 },
 						{ "d", {
@@ -290,7 +290,7 @@ bool discord_client::handle_frame(const std::string &buffer)
 					/* Full connect */
 					while (time(nullptr) < creator->last_identify + 5) {
 						time_t wait = (creator->last_identify + 5) - time(nullptr);
-						log(dpp::ll_debug, fmt::format("Waiting {} seconds before identifying for session...", wait));
+						log(dpp::ll_debug, std::format("Waiting {} seconds before identifying for session...", wait));
 						std::this_thread::sleep_for(std::chrono::seconds(wait));
 					}
 					log(dpp::ll_debug, "Connecting new session...");
@@ -329,7 +329,7 @@ bool discord_client::handle_frame(const std::string &buffer)
 			}
 			break;
 			case 7:
-				log(dpp::ll_debug, fmt::format("Reconnection requested, closing socket {}", sessionid));
+				log(dpp::ll_debug, std::format("Reconnection requested, closing socket {}", sessionid));
 				message_queue.clear();
 
 				shutdown(sfd, 2);
@@ -405,7 +405,7 @@ void discord_client::error(uint32_t errorcode)
 	if (i != errortext.end()) {
 		error = i->second;
 	}
-	log(dpp::ll_warning, fmt::format("OOF! Error from underlying websocket: {}: {}", errorcode, error));
+	log(dpp::ll_warning, std::format("OOF! Error from underlying websocket: {}: {}", errorcode, error));
 }
 
 void discord_client::log(dpp::loglevel severity, const std::string &msg) const
@@ -471,7 +471,7 @@ void discord_client::one_second_timer()
 		 * Miss two ACKS, forces a reconnection.
 		 */
 		if ((time(nullptr) - this->last_heartbeat_ack) > heartbeat_interval * 2) {
-			log(dpp::ll_warning, fmt::format("Missed heartbeat ACK, forcing reconnection to session {}", sessionid));
+			log(dpp::ll_warning, std::format("Missed heartbeat ACK, forcing reconnection to session {}", sessionid));
 			message_queue.clear();
 
 		shutdown(sfd, 2);
@@ -577,7 +577,7 @@ void discord_client::connect_voice(snowflake guild_id, snowflake channel_id, boo
 		/* Once sent, this expects two events (in any order) on the websocket:
 		* VOICE_SERVER_UPDATE and VOICE_STATUS_UPDATE
 		*/
-		log(ll_debug, fmt::format("Sending op 4 to join VC, guild {} channel {} ", guild_id, channel_id));
+		log(ll_debug, std::format("Sending op 4 to join VC, guild {} channel {} ", guild_id, channel_id));
 		queue_message(jsonobj_to_string(json({
 			{ "op", 4 },
 			{ "d", {
@@ -589,7 +589,7 @@ void discord_client::connect_voice(snowflake guild_id, snowflake channel_id, boo
 			}
 		})), false);
 	} else {
-		log(ll_debug, fmt::format("Requested the bot connect to voice channel {} on guild {}, but it seems we are already on this VC", channel_id, guild_id));
+		log(ll_debug, std::format("Requested the bot connect to voice channel {} on guild {}, but it seems we are already on this VC", channel_id, guild_id));
 	}
 #endif
 }
@@ -607,7 +607,7 @@ void discord_client::disconnect_voice_internal(snowflake guild_id, bool emit_jso
 	std::lock_guard<std::mutex> lock(voice_mutex);
 	auto v = connecting_voice_channels.find(guild_id);
 	if (v != connecting_voice_channels.end()) {
-		log(ll_debug, fmt::format("Disconnecting voice, guild: {}", guild_id));
+		log(ll_debug, std::format("Disconnecting voice, guild: {}", guild_id));
 		if (emit_json) {
 			queue_message(jsonobj_to_string(json({
 				{ "op", 4 },
@@ -672,13 +672,13 @@ void voiceconn::connect(snowflake guild_id) {
 		/* This is wrapped in a thread because instantiating discord_voice_client can initiate a blocking SSL_connect() */
 		auto t = std::thread([guild_id, this]() {
 			try {
-				this->creator->log(ll_debug, fmt::format("Connecting voice for guild {} channel {}", guild_id, this->channel_id));
+				this->creator->log(ll_debug, std::format("Connecting voice for guild {} channel {}", guild_id, this->channel_id));
 				this->voiceclient = new discord_voice_client(creator->creator, this->channel_id, guild_id, this->token, this->session_id, this->websocket_hostname);
 				/* Note: Spawns thread! */
 				this->voiceclient->run();
 			}
 			catch (std::exception &e) {
-				this->creator->log(ll_error, fmt::format("Can't connect to voice websocket (guild_id: {}, channel_id: {}): {}", guild_id, this->channel_id, e.what()));
+				this->creator->log(ll_error, std::format("Can't connect to voice websocket (guild_id: {}, channel_id: {}): {}", guild_id, this->channel_id, e.what()));
 			}
 		});
 		t.detach();

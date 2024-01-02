@@ -22,7 +22,7 @@
 #include <dpp/discord.h>
 #include <dpp/cluster.h>
 #include "nlohmann/json.hpp"
-#include "fmt/format.h"
+
 
 namespace dpp {
 
@@ -32,7 +32,7 @@ void cluster::guild_add_member(const guild_member& gm, const std::string &access
 		j = json::parse(gm.build_json());
 	}
 	catch (const std::exception &e) {
-		log(ll_error, fmt::format("guild_add_member(): {}", e.what()));
+		log(ll_error, std::format("guild_add_member(): {}", e.what()));
 		return;
 	}
 	j["access_token"] = access_token;
@@ -63,7 +63,7 @@ void cluster::guild_get_member(snowflake guild_id, snowflake user_id, command_co
 
 
 void cluster::guild_get_members(snowflake guild_id, uint16_t limit, snowflake after, command_completion_event_t callback) {
-	this->post_rest(API_PATH "/guilds", std::to_string(guild_id), fmt::format("members?limit={}&after={}", limit, after), m_get, "", [callback, guild_id](json &j, const http_request_completion_t& http) {
+	this->post_rest(API_PATH "/guilds", std::to_string(guild_id), std::format("members?limit={}&after={}", limit, after), m_get, "", [callback, guild_id](json &j, const http_request_completion_t& http) {
 		guild_member_map guild_members;
 		confirmation_callback_t e("confirmation", confirmation(), http);
 		if (!e.is_error()) {
@@ -123,7 +123,7 @@ void cluster::guild_member_move(const snowflake channel_id, const snowflake guil
 
 
 void cluster::guild_search_members(snowflake guild_id, const std::string& query, uint16_t limit, command_completion_event_t callback) {
-	this->post_rest(API_PATH "/guilds", std::to_string(guild_id), fmt::format("members/search?query=\"{}\"&limit={}", dpp::url_encode(query), limit), m_get, "", [callback, guild_id] (json &j, const http_request_completion_t& http) {
+	this->post_rest(API_PATH "/guilds", std::to_string(guild_id), std::format("members/search?query=\"{}\"&limit={}", dpp::url_encode(query), limit), m_get, "", [callback, guild_id] (json &j, const http_request_completion_t& http) {
 		guild_member_map guild_members;
 		confirmation_callback_t e("confirmation", confirmation(), http);
 		if (!e.is_error()) {

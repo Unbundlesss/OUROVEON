@@ -23,7 +23,7 @@
 #include <dpp/slashcommand.h>
 #include <dpp/dispatcher.h>
 #include <dpp/cluster.h>
-#include "fmt/format.h"
+
 #include <variant>
 
 #define event_ctor(a, b) a::a(discord_client* client, const std::string &raw) : b(client, raw) {}

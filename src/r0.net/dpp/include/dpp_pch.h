@@ -7,20 +7,12 @@
 #include <cinttypes>
 #include <cstdio>
 #include <cstring>
-#include <deque>
-#include <fstream>
-#include <iomanip>
-#include <iostream>
-#include <locale>
-#include <map>
-#include <mutex>
-#include <regex>
-#include <shared_mutex>
-#include <sstream>
-#include <string>
+#include <format>
 #include <variant>
 #include <vector>
 #include <atomic>
+
+#include "nlohmann/json.hpp"
 
 // dpp
 #include <dpp/discord.h>

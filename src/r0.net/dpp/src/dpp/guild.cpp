@@ -26,7 +26,7 @@
 #include <dpp/discordevents.h>
 #include <dpp/stringops.h>
 #include "nlohmann/json.hpp"
-#include "fmt/format.h"
+
 
 using json = nlohmann::json;
 
@@ -156,7 +156,7 @@ std::string guild_member::get_avatar_url()  const {
 	 * At some point in the future this URL *will* change!
 	 */
 	if (!this->avatar.to_string().empty()) {
-		return fmt::format("https://cdn.discordapp.com/avatars/{}/{}{}.{}",
+		return std::format("https://cdn.discordapp.com/avatars/{}/{}{}.{}",
 			this->user_id,
 			(has_animated_guild_avatar() ? "a_" : ""),
 			this->avatar.to_string(),

@@ -23,7 +23,7 @@
 #include <iostream>
 #include <fstream>
 #include <dpp/wsclient.h>
-#include "fmt/format.h"
+
 
 namespace dpp {
 
@@ -37,7 +37,7 @@ const size_t MAXHEADERSIZE = sizeof(uint64_t) + 2;
 
 websocket_client::websocket_client(const std::string &hostname, const std::string &port, const std::string &urlpath, ws_opcode opcode)
 	: ssl_client(hostname, port),
-	key(fmt::format("{:16x}", time(nullptr))),
+	key(std::format("{:16x}", time(nullptr))),
 	state(HTTP_HEADERS),
 	path(urlpath),
 	data_opcode(opcode)
@@ -49,7 +49,7 @@ void websocket_client::connect()
 	state = HTTP_HEADERS;
 	/* Send headers synchronously */
 	this->write(
-		fmt::format(
+		std::format(
 
 			"GET {} HTTP/1.1\r\n"
 			"Host: {}\r\n"
