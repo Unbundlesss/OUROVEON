@@ -124,18 +124,25 @@ absl::Status archiveFilesInDirectoryToTAR(
     const std::filesystem::path& outputTarFile,
     const ArchiveProgressCallback& archivingProgressFunction )
 {
+    // allocate a buffer to use as staging for read/writing from the input files to the output stream
+    static constexpr std::size_t ioBufferSize = 1 * 1024 * 1024;
+    void* ioBuffer = mem::alloc16<char>( ioBufferSize );
+
     FILE* tarOutputFile = fopen( outputTarFile.string().c_str(), "wb" );
-    absl::Cleanup closeFileOnScopeExit = [&]() noexcept {
+
+    // auto close tar file and free the ioBuffer memory on scope exit
+    absl::Cleanup cleanupOnScopeExit = [&]() noexcept
+    {
         fclose( tarOutputFile );
         tarOutputFile = nullptr;
+
+        mem::free16( ioBuffer );
+        ioBuffer = nullptr;
         };
 
 
     const fs::path baseInputPath = inputPath.parent_path();
 
-    // allocate a buffer to use as staging for read/writing from the input files to the output stream
-    static constexpr std::size_t ioBufferSize = 1 * 1024 * 1024;
-    void* ioBuffer = mem::alloc16<char>( ioBufferSize );
 
     // keep track of bytes processed so the UI can show something happening
     std::size_t bytesProcessedIntoTar = 0;
