@@ -11,6 +11,7 @@
 
 #include "base/eventbus.h"
 #include "colour/preset.h"
+#include "font/icons.Fira.h"
 
 #include "spacetime/moment.h"
 
@@ -96,13 +97,14 @@ struct ICoreServices : public config::IPathProvider
 {
     virtual ~ICoreServices() {}
 
-    virtual app::AudioModule&                               getAudioModule() = 0;
-    virtual app::MidiModule&                                getMidiModule() = 0;
-    virtual endlesss::api::NetConfiguration::Shared&        getNetworkConfiguration() = 0;
-    virtual const endlesss::toolkit::Exchange&              getEndlesssExchange() const = 0;
-    virtual const endlesss::toolkit::PopulationQuery&       getEndlesssPopulation() const = 0;
-    virtual tf::Executor&                                   getTaskExecutor() = 0;
-    virtual sol::state_view&                                getLuaState() = 0;
+    virtual ouro_nodiscard app::AudioModule&                            getAudioModule() = 0;
+    virtual ouro_nodiscard app::MidiModule&                             getMidiModule() = 0;
+    virtual ouro_nodiscard endlesss::api::NetConfiguration::Shared&     getNetworkConfiguration() = 0;
+    virtual ouro_nodiscard const endlesss::toolkit::Exchange&           getEndlesssExchange() const = 0;
+    virtual ouro_nodiscard const endlesss::toolkit::PopulationQuery&    getEndlesssPopulation() const = 0;
+    virtual ouro_nodiscard tf::Executor&                                getTaskExecutor() = 0;
+    virtual ouro_nodiscard sol::state_view&                             getLuaState() = 0;
+    virtual ouro_nodiscard base::EventBusClient                         getEventBusClient() const = 0;
 };
 
 // exposure of custom render injection callbacks as interface
@@ -238,9 +240,9 @@ protected:
 
 
 protected:
-    // network activity tracing
 
-    base::EventListenerID                   m_eventLID_NetworkActivity = base::EventListenerID::invalid();
+    // network activity tracing
+    base::EventListenerID                   m_eventLID_NetworkActivity   = base::EventListenerID::invalid();
 
     double                                  m_avgNetActivityLag = 0;
     double                                  m_avgNetPayloadValue = 0;
@@ -260,15 +262,46 @@ protected:
             m_avgNetErrorCount++;
     }
 
-    void networkActivityUpdate();
+    // async task tracing
+    base::EventListenerID                   m_eventLID_AsyncTaskActivity = base::EventListenerID::invalid();
+
+    float                                   m_asyncTaskActivityIntensity = 0.0f;
+    std::array< uint8_t, 5 >                m_asyncTaskPulseSlots;
+
+    void event_AsyncTaskActivity( const events::AsyncTaskActivity* )
+    {
+        m_asyncTaskActivityIntensity = 1.0f;
+    }
+
+    template< typename TArrayType >
+    std::string pulseSlotsToString( const std::string_view prefix, const TArrayType& arrayInput )
+    {
+        const auto pulseCount = arrayInput.size();
+
+        std::string pulseOverview( prefix );
+        pulseOverview.reserve( pulseCount * 3 );
+        for ( std::size_t idx = 0; idx < pulseCount; idx++ )
+        {
+            switch ( arrayInput[idx] )
+            {
+            default:
+            case 0: pulseOverview += " "; break;
+            case 1: pulseOverview += ICON_FC_VBAR_1; break;
+            case 2: pulseOverview += ICON_FC_VBAR_2; break;
+            case 3: pulseOverview += ICON_FC_VBAR_3; break;
+            case 4: pulseOverview += ICON_FC_VBAR_4; break;
+            case 5: pulseOverview += ICON_FC_VBAR_5; break;
+            case 6: pulseOverview += ICON_FC_VBAR_6; break;
+            case 7: pulseOverview += ICON_FC_VBAR_7; break;
+            }
+        }
+        return pulseOverview;
+    }
+
+    // update the network / task activity monitors and tracking values, called per frame on main thread
+    void tickActivityUpdate();
 
 public:
-
-    ouro_nodiscard base::EventBusClient getEventBusClient() const
-    { 
-        ABSL_ASSERT( m_appEventBusClient.has_value() );
-        return m_appEventBusClient.value();
-    }
 
     // config::IPathProvider
     ouro_nodiscard fs::path getPath( const PathFor p ) const override
@@ -285,13 +318,18 @@ public:
 
 
     // ICoreServices
-    app::AudioModule&                           getAudioModule() override               { return m_mdAudio; }
-    app::MidiModule&                            getMidiModule() override                { return m_mdMidi; }
-    endlesss::api::NetConfiguration::Shared&    getNetworkConfiguration() override      { return m_networkConfiguration; }
-    const endlesss::toolkit::Exchange&          getEndlesssExchange() const override    { return m_endlesssExchange; }
-    const endlesss::toolkit::PopulationQuery&   getEndlesssPopulation() const override  { return m_endlesssPopulation;}
-    tf::Executor&                               getTaskExecutor() override              { return m_taskExecutor; }
-    sol::state_view&                            getLuaState() override                  { return m_lua; }
+    ouro_nodiscard app::AudioModule&                            getAudioModule() override               { return m_mdAudio; }
+    ouro_nodiscard app::MidiModule&                             getMidiModule() override                { return m_mdMidi; }
+    ouro_nodiscard endlesss::api::NetConfiguration::Shared&     getNetworkConfiguration() override      { return m_networkConfiguration; }
+    ouro_nodiscard const endlesss::toolkit::Exchange&           getEndlesssExchange() const override    { return m_endlesssExchange; }
+    ouro_nodiscard const endlesss::toolkit::PopulationQuery&    getEndlesssPopulation() const override  { return m_endlesssPopulation;}
+    ouro_nodiscard tf::Executor&                                getTaskExecutor() override              { return m_taskExecutor; }
+    ouro_nodiscard sol::state_view&                             getLuaState() override                  { return m_lua; }
+    ouro_nodiscard base::EventBusClient                         getEventBusClient() const override
+    {
+        ABSL_ASSERT( m_appEventBusClient.has_value() );
+        return m_appEventBusClient.value();
+    }
 };
 
 

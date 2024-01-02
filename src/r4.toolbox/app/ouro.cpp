@@ -122,35 +122,27 @@ int OuroApp::EntrypointGUI()
         ImGui::PopStyleColor();
     });
 
+    // network activity display
+    const auto sbbAsyncTaskActivity = registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Right, 100.0f, [=]()
+    {
+        if ( m_asyncTaskActivityIntensity > 0 )
+        {
+            const std::string pulseOverview = pulseSlotsToString( "BUSY ", m_asyncTaskPulseSlots );
 
+            ImGui::TextUnformatted( pulseOverview.c_str() );
+        }
+    });
     // network activity display
     const auto sbbNetworkActivity = registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Right, 300.0f, [=]()
     {
-        const auto pulseCount = m_avgNetPulseHistory.size();
-
-        std::string pulseOverview;
-        pulseOverview.reserve( pulseCount * 3 );
-        for ( std::size_t idx = 0; idx < pulseCount; idx++ )
-        {
-            switch ( m_avgNetPulseHistory[idx] )
-            {
-            default:
-                case 0: pulseOverview += " "; break;
-                case 1: pulseOverview += ICON_FC_VBAR_1; break;
-                case 2: pulseOverview += ICON_FC_VBAR_2; break;
-                case 3: pulseOverview += ICON_FC_VBAR_3; break;
-                case 4: pulseOverview += ICON_FC_VBAR_4; break;
-                case 5: pulseOverview += ICON_FC_VBAR_5; break;
-                case 6: pulseOverview += ICON_FC_VBAR_6; break;
-                case 7: pulseOverview += ICON_FC_VBAR_7; break;
-            }
-        }
+        const std::string pulseOverview = pulseSlotsToString( " ", m_avgNetPulseHistory);
 
         const auto kbAvgPayload = m_avgNetPayloadPerSec.m_average / 1024.0;
-        const auto networkState = fmt::format( FMTX( " {}  {:>6.1f} Kb/s " ), pulseOverview, kbAvgPayload );
+        const auto networkState = fmt::format( FMTX( "{}  {:>6.1f} Kb/s " ), pulseOverview, kbAvgPayload );
 
         ImGui::TextUnformatted( networkState );
     });
+
 
     // load any saved configs
     config::endlesss::Auth endlesssAuth;
@@ -486,8 +478,13 @@ int OuroApp::EntrypointGUI()
                         m_mdFrontEnd->titleText( "Endlesss Accesss" );
                         ImGui::Indent( perBlockIndent );
 
-                        ImGui::Checkbox( " Unstable Network Compensation", &m_configPerf.enableUnstableNetworkCompensation );
-                        ImGui::CompactTooltip( "Enable if connecting over less reliable networks or via 4G/mobile\nto have increased API retries on failures\nplus longer time-out allowance on all calls" );
+                        {
+                            ImGui::Checkbox( " Unstable Network Compensation", &m_configPerf.enableUnstableNetworkCompensation );
+                            ImGui::SameLine();
+                            ImGui::AlignTextToFramePadding();
+                            ImGui::TextDisabled( "[?]" );
+                            ImGui::CompactTooltip( "Enable if connecting over less reliable networks or via 4G/mobile\nto have increased API retries on failures\nplus longer time-out allowance on all calls" );
+                        }
 
                         // used to enable/disable buttons if the jam cache update thread is working
                         const bool jamsAreUpdating = (asyncFetchState == endlesss::cache::Jams::AsyncFetchState::Working);
@@ -500,17 +497,21 @@ int OuroApp::EntrypointGUI()
 
                         {
                             const bool offerNoAuthMode = ( supportsUnauthorisedEndlesssMode() && endlesssAuthExpired );
-                            ImGui::BeginDisabledControls( !offerNoAuthMode );
-                            ImGui::Checkbox( " Continue without Authentication", &endlesssWorkUnauthorised );
-                            ImGui::EndDisabledControls( !offerNoAuthMode );
+                            {
+                                ImGui::Scoped::Enabled se( offerNoAuthMode );
+                                ImGui::Checkbox( " Continue without Authentication", &endlesssWorkUnauthorised );
+                            }
+                            ImGui::SameLine();
+                            ImGui::AlignTextToFramePadding();
+                            ImGui::TextDisabled( "[?]" );
 
                             // give context-aware tooltip help
                             if ( !supportsUnauthorisedEndlesssMode() )
-                                ImGui::CompactTooltip( "This app does not support Unauthorised Mode" );
+                                ImGui::CompactTooltip( "This app does not support 'No Authentication' Mode" );
                             else if ( endlesssAuthExpired )
-                                ImGui::CompactTooltip( "Enable to allow booting without valid Endlesss\nauthentication, which may limit some features" );
+                                ImGui::CompactTooltip( "Enable to allow booting without valid Endlesss\nauthentication, limiting some features" );
                             else 
-                                ImGui::CompactTooltip( "Unauthorised mode only available when signed-out of Endlesss" );
+                                ImGui::CompactTooltip( "'No Authentication' mode only available when signed-out of Endlesss" );
 
                             ImGui::Spacing();
                         }
@@ -523,20 +524,22 @@ int OuroApp::EntrypointGUI()
                         }
                         else
                         {
-                            ImGui::BeginDisabledControls( jamsAreUpdating );
-                            if ( ImGui::IconButton( ICON_FA_RIGHT_FROM_BRACKET ) )
                             {
-                                // zero out the disk copy and our local cache
-                                config::endlesss::Auth emptyAuth;
-                                config::save( *this, emptyAuth );
-                                config::load( *this, endlesssAuth );
+                                ImGui::Scoped::Disabled sd( jamsAreUpdating );
+                                if ( ImGui::IconButton( ICON_FA_RIGHT_FROM_BRACKET ) )
+                                {
+                                    // zero out the disk copy and our local cache
+                                    config::endlesss::Auth emptyAuth;
+                                    config::save( *this, emptyAuth );
+                                    config::load( *this, endlesssAuth );
 
-                                // wipe out any existing auth details in the network config
-                                if ( !m_networkConfiguration->hasNoAccessSet() )
-                                    m_networkConfiguration->initWithoutAuthentication( m_appEventBus, m_configEndlesssAPI );
+                                    // wipe out any existing auth details in the network config
+                                    if ( !m_networkConfiguration->hasNoAccessSet() )
+                                        m_networkConfiguration->initWithoutAuthentication( m_appEventBus, m_configEndlesssAPI );
+                                }
                             }
                             ImGui::CompactTooltip( "Log out" );
-                            ImGui::EndDisabledControls( jamsAreUpdating );
+
                             ImGui::SameLine( 0, 12.0f );
 
                             ImGui::TextUnformatted( "Authentication expires in" );
@@ -992,7 +995,7 @@ int OuroApp::EntrypointGUI()
             base::EventBusClient m_eventBusClient( m_appEventBus );
             APP_EVENT_BIND_TO( ExportRiff );
             APP_EVENT_BIND_TO( RequestToShareRiff );
-            APP_EVENT_BIND_TO( RequestJamNameRemoteFetch );
+            APP_EVENT_BIND_TO( BNSCacheMiss );
         }
     }
 
@@ -1020,8 +1023,9 @@ int OuroApp::EntrypointGUI()
                     m_networkConfiguration,
                     m_appEventBus );
 
-                m_warehouse->upsertJamDictionaryFromCache( m_jamLibrary );             // update warehouse list of jam IDs -> names from the current cache
-                m_warehouse->extractJamDictionary( m_jamHistoricalFromWarehouse );     // pull full list of jam IDs -> names from warehouse as "historical" list
+                m_warehouse->upsertJamDictionaryFromCache( m_jamLibrary );              // update warehouse list of jam IDs -> names from the current cache
+                m_warehouse->upsertJamDictionaryFromBNS( m_jamNameService );            // .. and same with the BNS entries
+                m_warehouse->extractJamDictionary( m_jamHistoricalFromWarehouse );      // pull full list of jam IDs -> names from warehouse as "historical" list
             }
 
             return absl::OkStatus();
@@ -1131,7 +1135,7 @@ int OuroApp::EntrypointGUI()
     // unhook events
     {
         base::EventBusClient m_eventBusClient( m_appEventBus );
-        APP_EVENT_UNBIND( RequestJamNameRemoteFetch );
+        APP_EVENT_UNBIND( BNSCacheMiss );
         APP_EVENT_UNBIND( RequestToShareRiff );
         APP_EVENT_UNBIND( ExportRiff );
     }
@@ -1158,20 +1162,24 @@ void OuroApp::ensureStemCacheChecksComplete()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-endlesss::services::IJamNameCacheServices::LookupResult OuroApp::lookupNameForJam(
+endlesss::services::IJamNameResolveService::LookupResult OuroApp::lookupJamNameAndTime(
     const endlesss::types::JamCouchID& jamID,
-    std::string& result ) const
+    std::string& resultJamName,
+    uint64_t& resultTimestamp ) const
 {
+    resultTimestamp = 0;    // default to unknown timestamp
+
     if ( !endlesss::types::Constants::isStandardJamID( jamID ) )
     {
-        result = jamID.value();
+        resultJamName = jamID.value();
         return LookupResult::PresumedPersonal;
     }
 
     endlesss::cache::Jams::Data jamData;
     if ( m_jamLibrary.loadDataForDatabaseID( jamID, jamData ) )
     {
-        result = jamData.m_displayName;
+        resultJamName = jamData.m_displayName;
+        resultTimestamp = jamData.m_timestampOrdering;
         return LookupResult::FoundInPrimarySource;
     }
 
@@ -1180,9 +1188,9 @@ endlesss::services::IJamNameCacheServices::LookupResult OuroApp::lookupNameForJa
     if ( nsIt != m_jamNameService.entries.end() )
     {
         if ( nsIt->second.sync_name.empty() )
-            result = nsIt->second.link_name;
+            resultJamName = nsIt->second.link_name;
         else
-            result = nsIt->second.sync_name;
+            resultJamName = nsIt->second.sync_name;
         return LookupResult::FoundInArchives;
     }
 
@@ -1190,7 +1198,7 @@ endlesss::services::IJamNameCacheServices::LookupResult OuroApp::lookupNameForJa
     const auto historicalIt = m_jamHistoricalFromWarehouse.find( jamID );
     if ( historicalIt != m_jamHistoricalFromWarehouse.end() )
     {
-        result = historicalIt->second;
+        resultJamName = historicalIt->second;
         return LookupResult::FoundInArchives;
     }
 
@@ -1264,7 +1272,7 @@ void OuroApp::event_RequestToShareRiff( const events::RequestToShareRiff* eventD
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void OuroApp::event_RequestJamNameRemoteFetch( const events::RequestJamNameRemoteFetch* eventData )
+void OuroApp::event_BNSCacheMiss( const events::BNSCacheMiss* eventData )
 {
     // kick a task that uses a few network calls to go from a band### id to a public name; this uses the permalink
     // endpoint (to get the extended ID) and the public riff API with that ID to snag the names
@@ -1325,6 +1333,8 @@ void OuroApp::updateJamNameResolutionTasks( float deltaTime )
     JamNameRemoteResolution jamNameRemoteResolution;
     if ( m_jamNameRemoteFetchResultQueue.try_dequeue( jamNameRemoteResolution ) )
     {
+        blog::api( FMTX( "BNS name resolution update: [{}] => [{}]" ), jamNameRemoteResolution.first, jamNameRemoteResolution.second );
+
         // plug this new resolved name directly back into the warehouse (upserting any existing ID)
         m_warehouse->upsertSingleJamIDToName( jamNameRemoteResolution.first, jamNameRemoteResolution.second );
 
@@ -1340,7 +1350,7 @@ void OuroApp::updateJamNameResolutionTasks( float deltaTime )
         m_jamNameRemoteFetchUpdateBroadcastTimer -= deltaTime;
         if ( m_jamNameRemoteFetchUpdateBroadcastTimer <= 0 )
         {
-            getEventBusClient().Send< ::events::NotifyJamNameCacheUpdated >( 0 );
+            getEventBusClient().Send< ::events::BNSWasUpdated >( 0 );
             m_jamNameRemoteFetchUpdateBroadcastTimer = 0;
         }
     }

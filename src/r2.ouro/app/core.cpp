@@ -177,7 +177,7 @@ CoreStart::~CoreStart()
 Core::Core()
     : CoreStart()
     , m_networkConfiguration( std::make_shared<endlesss::api::NetConfiguration>() )
-    , m_taskExecutor( std::clamp( std::thread::hardware_concurrency(), 2U, 8U ), std::make_shared<TaskFlowWorkerHook>() )
+    , m_taskExecutor( std::clamp( std::thread::hardware_concurrency(), 2U, OURO_THREAD_LIMIT ), std::make_shared<TaskFlowWorkerHook>() )
 {
 }
 
@@ -260,9 +260,10 @@ int Core::Run()
 
         // events from the endlesss sdk layer
         APP_EVENT_REGISTER( EnqueueRiffPlayback );
-        APP_EVENT_REGISTER( RequestJamNameRemoteFetch );
-        APP_EVENT_REGISTER( NotifyJamNameCacheUpdated );
+        APP_EVENT_REGISTER( BNSCacheMiss );
+        APP_EVENT_REGISTER( BNSWasUpdated );
         APP_EVENT_REGISTER( NetworkActivity );
+        APP_EVENT_REGISTER( AsyncTaskActivity );
         APP_EVENT_REGISTER( RiffTagAction );
         APP_EVENT_REGISTER( RequestNavigationToRiff );
         APP_EVENT_REGISTER( RequestToShareRiff );
@@ -270,8 +271,10 @@ int Core::Run()
     {
         base::EventBusClient m_eventBusClient( m_appEventBus );
         APP_EVENT_BIND_TO( NetworkActivity );
+        APP_EVENT_BIND_TO( AsyncTaskActivity );
 
         m_avgNetPulseHistory.fill( 0 );
+        m_asyncTaskPulseSlots.fill( 0 );
     }
 
 
@@ -510,6 +513,7 @@ int Core::Run()
 
     {
         base::EventBusClient m_eventBusClient( m_appEventBus );
+        APP_EVENT_UNBIND( AsyncTaskActivity );
         APP_EVENT_UNBIND( NetworkActivity );
     }
 
@@ -598,10 +602,24 @@ void Core::emitAndClearExchangeData()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void Core::networkActivityUpdate()
+void Core::tickActivityUpdate()
 {
     const float deltaTime = ImGui::GetIO().DeltaTime;
     const float lagRate = deltaTime * 0.5f;
+
+    // simple pulse bars for 'tasks are going on in the background'
+    {
+        m_asyncTaskActivityIntensity = std::max( m_asyncTaskActivityIntensity - deltaTime * 0.5f, 0.0f );
+
+        float pulseDelta = 0.0f;
+        for ( std::size_t pI = 0; pI < m_asyncTaskPulseSlots.size(); pI++ )
+        {
+            const auto pulseSine = (2.0 + std::sin( pulseDelta + ImGui::GetTime() * 4.0f )) * 0.333333 * m_asyncTaskActivityIntensity;
+            m_asyncTaskPulseSlots[pI] = static_cast<uint8_t>(std::round( pulseSine * 7.0 ));
+
+            pulseDelta += 0.75f;
+        }
+    }
 
     m_avgNetActivity.update( 0 );
     if ( m_avgNetActivity.m_average < 0.01 )    // clip at small values
@@ -629,8 +647,9 @@ void Core::networkActivityUpdate()
             m_avgNetPulseHistory[idx] = m_avgNetPulseHistory[idx + 1];
         }
         // write new pulse value at the end
-        const auto pulseSine = (2.0 + std::sin( ImGui::GetTime() * 2.0f )) * 0.333333;
-        m_avgNetPulseHistory[pulseCountMinusOne] = static_cast<uint8_t>(std::round( pulseSine * m_avgNetActivityLag * 7.0 ));
+        const auto pulseWave1 = ( 2.0 + std::sin( ImGui::GetTime() * 2.0f ) ) * 0.333333;
+        const auto pulseWave2 = ( 2.0 + std::sin( ImGui::GetTime() * 1.0f ) ) * 0.333333;
+        m_avgNetPulseHistory[pulseCountMinusOne] = static_cast<uint8_t>(std::round( std::max( pulseWave1, pulseWave2 ) * m_avgNetActivityLag * 7.0 ));
 
         m_avgNetPulseUpdateTimer = 0.2f;
     }
@@ -1047,7 +1066,7 @@ bool CoreGUI::beginInterfaceLayout( const ViewportFlags viewportFlags )
                 const double audioEngineLoad = m_mdAudio->getAudioEngineCPULoadPercent();
                 m_audoLoadAverage.update( audioEngineLoad );
 
-                ImGui::Text( "LOAD %03.0f%%", m_audoLoadAverage.m_average );
+                ImGui::Text( " CPU %03.0f%%", m_audoLoadAverage.m_average );
             }
 
             for ( const auto& statusBlock : m_statusBarBlocksRight )
@@ -1156,7 +1175,7 @@ void CoreGUI::finishInterfaceLayoutAndRender()
     m_appEventBus->mainThreadDispatch();
 
     // update networking averages #HDD move to Core:: main tick 
-    networkActivityUpdate();
+    tickActivityUpdate();
 
     m_perfData.m_uiEventBus = m_perfData.m_moment.delta< std::chrono::milliseconds >();
     m_perfData.m_moment.setToNow();

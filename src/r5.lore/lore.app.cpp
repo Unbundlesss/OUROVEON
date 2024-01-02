@@ -1,7 +1,5 @@
 #include "pch.h"
 
-namespace stdp = std::placeholders;
-
 #include "base/utils.h"
 #include "base/metaenum.h"
 #include "base/instrumentation.h"
@@ -38,6 +36,7 @@ namespace stdp = std::placeholders;
 #include "ux/stem.analysis.h"
 #include "ux/shared.riffs.view.h"
 #include "ux/riff.tagline.h"
+#include "ux/riff.history.h"
 #include "ux/user.selector.h"
 
 #include "vx/vibes.h"
@@ -53,6 +52,8 @@ namespace stdp = std::placeholders;
 
 #include "gfx/sketchbook.h"
 
+#include "io/tarch.h"
+
 #include "net/bond.riffpush.h"
 #include "net/bond.riffpush.connect.h"
 
@@ -67,7 +68,9 @@ namespace stdp = std::placeholders;
 // ---------------------------------------------------------------------------------------------------------------------
 #define _WH_VIEW_STATES(_action)    \
       _action(Default)              \
-      _action(Maintenance)
+      _action(ContentsManagement)   \
+      _action(ImportExport)         \
+      _action(Advanced)
 
 DEFINE_PAGE_MANAGER( WarehouseView, ICON_FA_DATABASE " Data Warehouse", "data_warehouse_view", _WH_VIEW_STATES );
 
@@ -465,7 +468,7 @@ protected:
 
     std::unique_ptr< ux::SharedRiffView >   m_uxSharedRiffView;
     std::unique_ptr< ux::TagLine >          m_uxTagLine;
-
+    std::unique_ptr< ux::RiffHistory >      m_uxRiffHistory;
 
 
 
@@ -505,6 +508,46 @@ protected:
     std::atomic_bool                m_riffPipelineClearInProgress = false;
 
     base::EventListenerID           m_eventListenerRiffEnqueue;
+
+
+    using OperationsRunningOnJamIDs = absl::btree_multimap< endlesss::types::JamCouchID, base::OperationID >;
+    using OperationToSourceJamID = absl::flat_hash_map< base::OperationID, endlesss::types::JamCouchID >;
+
+    OperationsRunningOnJamIDs       m_operationsRunningOnJamIDs;
+    OperationToSourceJamID          m_operationToSourceJamID;
+
+    void addOperationToJam( const endlesss::types::JamCouchID& jamID, const base::OperationID& operationID )
+    {
+        m_operationsRunningOnJamIDs.emplace( jamID, operationID );
+        m_operationToSourceJamID.emplace( operationID, jamID );
+    }
+
+    bool doesJamHaveActiveOperations( const endlesss::types::JamCouchID& jamID ) const
+    {
+        return m_operationsRunningOnJamIDs.contains( jamID );
+    }
+
+    bool clearOperationFromJam( const base::OperationID& operationID )
+    {
+        const auto oIt = m_operationToSourceJamID.find( operationID );
+        ABSL_ASSERT( oIt != m_operationToSourceJamID.end() );
+        if ( oIt != m_operationToSourceJamID.end() )
+        {
+            const endlesss::types::JamCouchID originJamID = oIt->second;
+            m_operationToSourceJamID.erase( operationID );
+
+            const auto count = absl::erase_if( m_operationsRunningOnJamIDs, [=]( const auto& item )
+                {
+                    auto const& [jam, op] = item;
+                    return op == operationID;
+                });
+
+            ABSL_ASSERT( count == 1 );
+            return count == 1;
+        }
+        return false;
+    }
+
 
 
     static constexpr base::OperationVariant OV_RiffExport{ 0xBA };
@@ -572,17 +615,20 @@ protected:
         {
             m_permutationOperationImGuiMap.remove( eventData->m_id );
         }
-        else if ( variant == OV_RiffExport )
+        else
+        if ( variant == OV_RiffExport )
         {
             m_riffExportOperationsMap.remove( eventData->m_id );
         }
         else
+        if ( variant == endlesss::toolkit::Warehouse::OV_AddOrUpdateJamSnapshot ||
+             variant == endlesss::toolkit::Warehouse::OV_ExportAction )
         {
-
+            clearOperationFromJam( eventData->m_id );
         }
     }
 
-    void event_NotifyJamNameCacheUpdated( const events::NotifyJamNameCacheUpdated* eventData )
+    void event_BNSWasUpdated( const events::BNSWasUpdated* eventData )
     {
         m_warehouse->requestContentsReport();
     }
@@ -592,9 +638,9 @@ protected:
 
     base::BiMap< base::OperationID, ImGuiID >   m_permutationOperationImGuiMap;
 
-    base::EventListenerID                       m_eventLID_MixerRiffChange = base::EventListenerID::invalid();
+    base::EventListenerID                       m_eventLID_MixerRiffChange   = base::EventListenerID::invalid();
     base::EventListenerID                       m_eventLID_OperationComplete = base::EventListenerID::invalid();
-    base::EventListenerID                       m_eventLID_NotifyJamNameCacheUpdated = base::EventListenerID::invalid();
+    base::EventListenerID                       m_eventLID_BNSWasUpdated     = base::EventListenerID::invalid();
 
 protected:
     endlesss::types::JamCouchID                 m_currentViewedJam;
@@ -628,53 +674,46 @@ protected:
         m_warehouseContentsReportJamInFluxMoment.clear();
         m_warehouseContentsReportJamInFluxSet.clear();
 
-        const auto resolveJamPublicNameFromCID = [&]( const endlesss::types::JamCouchID& jamCouchID )
-        {
-            // manual check in the jam library as it will also pull the timestamp that we need
-            endlesss::cache::Jams::Data jamData;
-            if ( m_jamLibrary.loadDataForDatabaseID( jamCouchID, jamData ) )
-            {
-                m_warehouseContentsReportJamTimestamp.emplace_back( jamData.m_timestampOrdering );
-                m_warehouseContentsReportJamTitles.emplace_back( jamData.m_displayName );
-                m_warehouseContentsReportJamTitlesForSort.emplace_back( base::StrToLwrExt( jamData.m_displayName ) );
-                return;
-            }
-
-            // no usable timestamp data for fall-back paths, sort to the bottom of the list
-            m_warehouseContentsReportJamTimestamp.emplace_back( m_warehouseContentsReportJamTimestamp.size() );
-
-            // do core path name lookup
-            std::string resolvedName;
-            const auto lookupResult = lookupNameForJam( jamCouchID, resolvedName );
-
-            // take anything that isn't a failure
-            if ( lookupResult != endlesss::services::IJamNameCacheServices::LookupResult::NotFound )
-            {
-                m_warehouseContentsReportJamTitlesForSort.emplace_back( base::StrToLwrExt( resolvedName ) );
-                m_warehouseContentsReportJamTitles.emplace_back( std::move(resolvedName) );
-                return;
-            }
-
-            // failed to find anything in our local stores, go get an async request going to find the name from the servers
-            m_appEventBus->send< ::events::RequestJamNameRemoteFetch >( jamCouchID );
-
-            m_warehouseContentsReportJamTitles.emplace_back( "[ Unknown ID ]" );
-            m_warehouseContentsReportJamTitlesForSort.emplace_back( "[ unknown id ]" );
-        };
 
         for ( auto jIdx = 0; jIdx < m_warehouseContentsReport.m_jamCouchIDs.size(); jIdx++ )
         {
-            const auto& jamCID = m_warehouseContentsReport.m_jamCouchIDs[jIdx];
+            const auto& jamCouchID = m_warehouseContentsReport.m_jamCouchIDs[jIdx];
 
-            m_warehouseContentsReportJamIDs.emplace( jamCID );
+            m_warehouseContentsReportJamIDs.emplace( jamCouchID );
 
-            resolveJamPublicNameFromCID( jamCID );
+            // resolve data for the jam ID
+            {
+                std::string resolvedName;
+                uint64_t resolvedTimestamp = 0;
+                const auto lookupResult = lookupJamNameAndTime( jamCouchID, resolvedName, resolvedTimestamp );
+
+                // no usable timestamp data for fall-back paths, sort to the bottom of the list
+                if ( resolvedTimestamp == 0 )
+                    resolvedTimestamp = m_warehouseContentsReportJamTimestamp.size();
+
+                // emplace timestamp
+                m_warehouseContentsReportJamTimestamp.emplace_back( resolvedTimestamp );
+
+                if ( lookupResult == endlesss::services::IJamNameResolveService::LookupResult::NotFound )
+                {
+                    m_warehouseContentsReportJamTitlesForSort.emplace_back( "[ unknown id ]" );
+                    m_warehouseContentsReportJamTitles.emplace_back( "[ Unknown ID ]" );
+
+                    // failed to find anything in our local stores, go get an async request going to find the name from the servers
+                    m_appEventBus->send< ::events::BNSCacheMiss >( jamCouchID );
+                }
+                else
+                {
+                    m_warehouseContentsReportJamTitlesForSort.emplace_back( base::StrToLwrExt( resolvedName ) );
+                    m_warehouseContentsReportJamTitles.emplace_back( std::move( resolvedName ) );
+                }
+            }
 
             if ( m_warehouseContentsReport.m_unpopulatedRiffs[jIdx] > 0 ||
                  m_warehouseContentsReport.m_unpopulatedStems[jIdx] > 0 ||
                  m_warehouseContentsReport.m_awaitingInitialSync[jIdx] )
             {
-                m_warehouseContentsReportJamInFluxSet.emplace( jamCID );
+                m_warehouseContentsReportJamInFluxSet.emplace( jamCouchID );
                 m_warehouseContentsReportJamInFlux.push_back( true );
             }
             else
@@ -745,6 +784,18 @@ protected:
     WarehouseContentsSortMode::Enum                 m_warehouseContentsSortMode                 = WarehouseContentsSortMode::ByName;
     std::vector< std::size_t >                      m_warehouseContentsSortedIndices;
 
+    void triggerSyncOnJamInContentsReport( std::size_t index )
+    {
+        ABSL_ASSERT( index < m_warehouseContentsReportJamInFlux.size() );
+
+        const auto iterCurrentJamID = m_warehouseContentsReport.m_jamCouchIDs[index];
+
+        m_warehouseContentsReportJamInFlux[index] = true;
+        m_warehouseContentsReportJamInFluxMoment[index].setToFuture( std::chrono::seconds( 4 ) );
+
+        const base::OperationID updateOperationID = m_warehouse->addOrUpdateJamSnapshot( iterCurrentJamID );
+        addOperationToJam( iterCurrentJamID, updateOperationID );
+    }
 
     struct WarehouseJamBrowserBehaviour : public ux::UniversalJamBrowserBehaviour
     {
@@ -1476,8 +1527,8 @@ protected:
 
             m_jamSliceHoveredRiffIndex = -1;
 
-            const auto lookupResult = lookupNameForJam( m_currentViewedJam, m_currentViewedJamName );
-            if ( lookupResult == endlesss::services::IJamNameCacheServices::LookupResult::NotFound )
+            const auto lookupResult = lookupJamName( m_currentViewedJam, m_currentViewedJamName );
+            if ( lookupResult == endlesss::services::IJamNameResolveService::LookupResult::NotFound )
             {
                 m_currentViewedJamName = "[ Unknown ]";
             }
@@ -1616,8 +1667,8 @@ protected:
         // go look up a display name for the jam in question; this should always resolve if the nav request came
         // from any of our UI tools as they automatically resolve and store unknown jam name results upfront
         std::string jamName;
-        const LookupResult jamNameLookup = lookupNameForJam( jamToNavigateTo, jamName );
-        if ( jamNameLookup == endlesss::services::IJamNameCacheServices::LookupResult::NotFound )
+        const LookupResult jamNameLookup = lookupJamName( jamToNavigateTo, jamName );
+        if ( jamNameLookup == endlesss::services::IJamNameResolveService::LookupResult::NotFound )
         {
             jamName = "Unknown Jam";
         }
@@ -1678,7 +1729,9 @@ protected:
                             if ( ImGui::Button( ICON_FA_CIRCLE_PLUS " Add Jam to Warehouse ...", buttonSize ) )
                             {
                                 m_warehouseContentsReportJamInFluxSet.emplace( jamToNavigateTo ); // immediately add to the current in-flux set to represent things are in play
-                                m_warehouse->addOrUpdateJamSnapshot( jamToNavigateTo );
+
+                                const auto updateOperationID = m_warehouse->addOrUpdateJamSnapshot( jamToNavigateTo );
+                                addOperationToJam( jamToNavigateTo, updateOperationID );
 
                                 ImGui::CloseCurrentPopup();
                             }
@@ -1787,17 +1840,10 @@ protected:
 
     uint8_t getToolCount() const override
     {
-        return TagExtraToolsCount;
-    }
+        if ( m_rpClient.getState() == net::bond::Connected )
+            return TagExtraToolsCount;
 
-    bool isToolEnabled( const ToolID id ) const override
-    {
-        if ( id == SendViaBOND )
-        {
-            return m_rpClient.getState() == net::bond::Connected;
-        }
-
-        return ux::TagLineToolProvider::isToolEnabled( id );
+        return ux::TagLineToolProvider::getToolCount();
     }
 
     const char* getToolIcon( const ToolID id, std::string& tooltip ) const override
@@ -1811,11 +1857,24 @@ protected:
         return ux::TagLineToolProvider::getToolIcon( id, tooltip);
     }
 
+    bool checkToolKeyboardShortcut( const ToolID id ) const override
+    {
+        if ( id == SendViaBOND )
+            return ImGui::Shortcut( ImGuiModFlags_Ctrl, ImGuiKey_B, false );
+
+        return false;
+    }
+
     void handleToolExecution( const ToolID id, base::EventBusClient& eventBusClient, endlesss::live::RiffPtr& currentRiffPtr ) override
     {
         if ( id == SendViaBOND )
         {
             m_rpClient.pushRiff( currentRiffPtr->m_riffData, m_riffPlaybackAbstraction.asPermutation() );
+
+            m_appEventBus->send<::events::AddToastNotification>( ::events::AddToastNotification::Type::Info,
+                ICON_FA_CIRCLE_NODES " Riff Pushed To Server",
+                currentRiffPtr->m_uiDetails );
+
             return;
         }
 
@@ -1835,16 +1894,30 @@ int LoreApp::EntrypointOuro()
     endlesss::services::RiffFetchInstance riffFetchService( this );
     endlesss::services::RiffFetchProvider riffFetchProvider = riffFetchService.makeBound();
 
+    // .. and same for jam-name resolution calls
+    endlesss::services::JamNameResolveInstance JamNameResolveService( this );
+    endlesss::services::JamNameResolveProvider JamNameResolveProvider = JamNameResolveService.makeBound();
 
 
-    m_warehouse->setCallbackWorkReport( std::bind( &LoreApp::handleWarehouseWorkUpdate, this, stdp::_1, stdp::_2 ) );
-    m_warehouse->setCallbackContentsReport( std::bind( &LoreApp::handleWarehouseContentsReport, this, stdp::_1 ) );
+
+
+    m_warehouse->setCallbackWorkReport( [this](const bool tasksRunning, const std::string& currentTask)
+        {
+            this->handleWarehouseWorkUpdate( tasksRunning, currentTask );
+        });
+    m_warehouse->setCallbackContentsReport( [this]( const endlesss::toolkit::Warehouse::ContentsReport& report )
+        {
+            this->handleWarehouseContentsReport( report );
+        });
 
     m_warehouse->setCallbackTagUpdate(
         [this]( const endlesss::types::RiffTag& updatedTag ) { this->warehouseCallbackTagUpdate( updatedTag ); },
         [this]( const bool bBatchUpdateBegun ) { this->warehouseCallbackTagBatching( bBatchUpdateBegun ); }
     );
-    m_warehouse->setCallbackTagRemoved( [this]( const endlesss::types::RiffCouchID& tagRiffID ) { this->warehouseCallbackTagRemoved( tagRiffID ); } );
+    m_warehouse->setCallbackTagRemoved( [this]( const endlesss::types::RiffCouchID& tagRiffID )
+        { 
+            this->warehouseCallbackTagRemoved( tagRiffID );
+        });
 
 
     WarehouseJamBrowserBehaviour warehouseJamBrowser;
@@ -1855,7 +1928,9 @@ int LoreApp::EntrypointOuro()
     warehouseJamBrowser.fnOnSelected = [this]( const endlesss::types::JamCouchID& newJamCID )
     {
         m_warehouseContentsReportJamInFluxSet.emplace( newJamCID ); // immediately add to the current in-flux set to represent things are in play
-        m_warehouse->addOrUpdateJamSnapshot( newJamCID );
+        
+        const auto updateOperationID = m_warehouse->addOrUpdateJamSnapshot( newJamCID );
+        addOperationToJam( newJamCID, updateOperationID );
     };
 
 
@@ -1896,6 +1971,7 @@ int LoreApp::EntrypointOuro()
     m_sketchbook = std::make_unique<gfx::Sketchbook>();
 
     m_uxSharedRiffView  = std::make_unique<ux::SharedRiffView>( m_networkConfiguration, getEventBusClient() );
+    m_uxRiffHistory     = std::make_unique<ux::RiffHistory>( getEventBusClient() );
     m_uxTagLine         = std::make_unique<ux::TagLine>( getEventBusClient() );
 
     m_jamTaggingSaveLoadDir = m_storagePaths->outputApp;
@@ -1914,7 +1990,7 @@ int LoreApp::EntrypointOuro()
 
         APP_EVENT_BIND_TO( MixerRiffChange );
         APP_EVENT_BIND_TO( OperationComplete );
-        APP_EVENT_BIND_TO( NotifyJamNameCacheUpdated );
+        APP_EVENT_BIND_TO( BNSWasUpdated );
         APP_EVENT_BIND_TO( RequestNavigationToRiff );
     }
 
@@ -2905,7 +2981,7 @@ int LoreApp::EntrypointOuro()
                                             if ( loadedState.jamID != m_jamTagging.jamID )
                                             {
                                                 std::string resolvedName;
-                                                const auto lookupResult = lookupNameForJam( loadedState.jamID, resolvedName );
+                                                const auto lookupResult = lookupJamName( loadedState.jamID, resolvedName );
 
                                                 m_appEventBus->send<::events::AddErrorPopup>(
                                                     "Failed to Load Tags",
@@ -3297,88 +3373,89 @@ int LoreApp::EntrypointOuro()
             ImGui::End();
         }
         {
-            const fs::path cWarehouseExportPath = m_storagePaths->outputApp / "database_exports";
+            const fs::path cWarehouseExportPath = m_storagePaths->outputApp / "$database_exports";
+            static const ImVec2 toolbarButtonSize{ 155.0f, 0.0f };
 
             static WarehouseView warehouseView( WarehouseView::Default );
             static ImGuiTextFilter jamNameFilter;
 
-            if ( ImGui::Begin( warehouseView.generateTitle().c_str() ) )
-            {
-                const ImVec2 toolbarButtonSize{ 140.0f, 0.0f };
+            const bool bWarehouseHasEndlesssAccess = m_warehouse->hasFullEndlesssNetworkAccess();
 
-                warehouseView.checkForImGuiTabSwitch();
-
-                const bool warehouseHasEndlesssAccess = m_warehouse->hasFullEndlesssNetworkAccess();
-
-                if ( warehouseView == WarehouseView::Maintenance )
+            const auto fnWarehouseViewHeaders = [&]()
                 {
-                    // note if the warehouse is running ops, if not then disable new-task buttons
+                    constexpr float cEdgeInsetSize = 4.0f;
+
+                    // show if the warehouse is running ops, if not then disable new-task buttons
                     const bool bWarehouseIsPaused = m_warehouse->workerIsPaused();
 
+                    ImGui::Dummy( { cEdgeInsetSize, 0 } );
+                    ImGui::SameLine( 0, 0 );
                     ImGui::AlignTextToFramePadding();
-                    ImGui::CenteredColouredText( colour::shades::callout.neutral(), "Database Management" );
-                    ImGui::RightAlignSameLine( toolbarButtonSize.x );
-                    {
-                        // enable or disable the worker thread
-                        ImGui::Scoped::ToggleButton highlightButton( !bWarehouseIsPaused, true );
-                        if ( ImGui::Button( bWarehouseIsPaused ?
-                            ICON_FA_CIRCLE_PLAY  " RESUME  " :
-                            ICON_FA_CIRCLE_PAUSE " RUNNING ", toolbarButtonSize ) )
-                        {
-                            m_warehouse->workerTogglePause();
-                        }
-                    }
-                    ImGui::SeparatorBreak();
-                }
-
-
-                {
-                    ImGui::StandardFilterBox( jamNameFilter, "###nameFilter" );
-                    ImGui::SameLine( 0, 16.0f );
-
-                    ImGui::TextUnformatted( "Sort" );
-                    ImGui::SameLine();
-                    ImGui::SetNextItemWidth( 150.0f );
-                    if ( WarehouseContentsSortMode::ImGuiCombo( "###sortOrder", m_warehouseContentsSortMode ) )
-                    {
-                        updateWarehouseContentsSortOrder();
-                    }
-                }
-
-                {
-                    ImGui::Scoped::ButtonTextAlignLeft leftAlign;
-
-                    ImGui::RightAlignSameLine( toolbarButtonSize.x );
-
-                    // extra tools in a pile
                     if ( warehouseView == WarehouseView::Default )
                     {
-                        ImGui::BeginDisabledControls( !warehouseHasEndlesssAccess );
-                        if ( ImGui::Button( ICON_FA_CIRCLE_PLUS " Add Jam...", toolbarButtonSize ) )
+                        ImGui::TextColored( colour::shades::white.dark(), ICON_FA_DATABASE " Storing %s",
+                            fmt::format( std::locale( "" ), "[ {:L} Jams ] [ {:L} Riffs ] [ {:L} Stems ]",
+                                m_warehouseContentsReport.m_populatedRiffs.size(),
+                                m_warehouseContentsReport.m_totalPopulatedRiffs,
+                                m_warehouseContentsReport.m_totalPopulatedStems).c_str()
+                        );
+
+                        ImGui::Scoped::ButtonTextAlignLeft leftAlign;
+
+                        // button to start the sync process on every jam we know about
+                        ImGui::RightAlignSameLine( toolbarButtonSize.x + cEdgeInsetSize );
+                        if ( ImGui::Button( " " ICON_FA_ARROWS_ROTATE " Sync All", toolbarButtonSize ) )
                         {
-                            // create local copy of the current warehouse jam ID map for use by the popup; avoids
-                            // having to worry about warehouse contents shifting underneath / locking mutex in dialog
+                            std::scoped_lock<std::mutex> reportLock( m_warehouseContentsReportMutex );
+                            for ( size_t jamIdx = 0; jamIdx < m_warehouseContentsReport.m_jamCouchIDs.size(); jamIdx++ )
                             {
-                                std::scoped_lock<std::mutex> reportLock( m_warehouseContentsReportMutex );
-                                warehouseJamBrowser.m_warehouseJamIDs = m_warehouseContentsReportJamIDs;
+                                const std::size_t jI = m_warehouseContentsSortedIndices[jamIdx];
+                                triggerSyncOnJamInContentsReport( jI );
                             }
-                            // launch modal browser
-                            activateModalPopup( "Select Jam To Sync", [&, this]( const char* title )
-                            {
-                                ux::modalUniversalJamBrowser( title, m_jamLibrary, warehouseJamBrowser, *this );
-                            });
                         }
-                        ImGui::EndDisabledControls( !warehouseHasEndlesssAccess );
+                        ImGui::CompactTooltip( "Trigger a sync for all jams\nThis may take a while if you have lots of jams!" );
                     }
-                    else if ( warehouseView == WarehouseView::Maintenance )
+                    else
+                    if ( warehouseView == WarehouseView::ContentsManagement )
                     {
-                        if ( ImGui::Button( ICON_FA_BOX_OPEN " Import...", toolbarButtonSize ) )
+                        ImGui::TextColored( colour::shades::callout.neutral(), ICON_FA_GEAR " Contents Management" );
+
+                        ImGui::Scoped::ButtonTextAlignLeft leftAlign;
+
+                        ImGui::RightAlignSameLine( toolbarButtonSize.x + cEdgeInsetSize );
+                        if ( ImGui::Button( " " ICON_FA_CLIPBOARD " Copy Report", toolbarButtonSize ) )
+                        {
+                            std::string reportResult;
+                            reportResult.reserve( 32 * 1024 );
+
+                            std::scoped_lock<std::mutex> reportLock( m_warehouseContentsReportMutex );
+                            for ( size_t jamIdx = 0; jamIdx < m_warehouseContentsReport.m_jamCouchIDs.size(); jamIdx++ )
+                            {
+                                const std::size_t jI = m_warehouseContentsSortedIndices[jamIdx];
+
+                                reportResult += fmt::format( FMTX( "{:60} | {:6} riffs | {:6} stems\n" ),
+                                    m_warehouseContentsReportJamTitles[jI],
+                                    m_warehouseContentsReport.m_populatedRiffs[jI],
+                                    m_warehouseContentsReport.m_populatedStems[jI]
+                                    );
+                            }
+                            ImGui::SetClipboardText( reportResult.c_str() );
+                        }
+                        ImGui::CompactTooltip( "Produce and copy a simple jam contents report to the clipboard" );
+                    }
+                    else
+                    if ( warehouseView == WarehouseView::ImportExport )
+                    {
+                        ImGui::TextColored( colour::shades::callout.neutral(), ICON_FA_GEAR " Import / Export" );
+
+                        ImGui::RightAlignSameLine( ( toolbarButtonSize.x * 2.0f ) + 6.0f + cEdgeInsetSize );
+
+                        if ( ImGui::Button( ICON_FA_BOX_OPEN " Import Data...", toolbarButtonSize ) )
                         {
                             auto fileDialog = std::make_unique< ImGuiFileDialog >();
-
                             fileDialog->OpenDialog(
                                 "ImpFileDlg",
-                                "Choose exported YAML data",
+                                "Choose exported LORE metadata",
                                 ".yaml",
                                 cWarehouseExportPath.string().c_str(),
                                 1,
@@ -3388,23 +3465,151 @@ int LoreApp::EntrypointOuro()
                             std::ignore = activateFileDialog( std::move( fileDialog ), [this]( ImGuiFileDialog& dlg )
                                 {
                                     // ask warehouse to deal with this
-                                    m_warehouse->requestJamImport( dlg.GetFilePathName() );
+                                    const base::OperationID importOperationID = m_warehouse->requestJamDataImport( dlg.GetFilePathName() );
+                                });
+                        }
+                        ImGui::SameLine( 0, 6.0f );
+                        if ( ImGui::Button( ICON_FA_BOX_OPEN " Import Stems...", toolbarButtonSize ) )
+                        {
+                            auto fileDialog = std::make_unique< ImGuiFileDialog >();
+                            fileDialog->OpenDialog(
+                                "ImpFileDlg",
+                                "Choose LORE stem archive",
+                                ".tar",
+                                cWarehouseExportPath.string().c_str(),
+                                1,
+                                nullptr,
+                                ImGuiFileDialogFlags_Modal );
+
+                            std::ignore = activateFileDialog( std::move( fileDialog ), [this]( ImGuiFileDialog& dlg )
+                                {
+                                    const fs::path inputTarFile = dlg.GetFilePathName();
+                                    const fs::path outputPath = fs::absolute( getStemCache().getCacheRootPath() / fs::path( ".." ) / "test_extraction" );
+
+                                    blog::app( FMTX( "stem import task queued - from [{}] to [{}]" ), inputTarFile.string(), outputPath.string() );
+
+                                    const auto importOperationID = base::Operations::newID( endlesss::toolkit::Warehouse::OV_ImportAction );
+
+                                    // spin up a background task to archive the stems into a .tar archive
+                                    getTaskExecutor().silent_async( [this, inputTarFile, outputPath, importOperationID]()
+                                        {
+                                            base::EventBusClient m_eventBusClient( m_appEventBus );
+                                            OperationCompleteOnScopeExit( importOperationID );
+
+                                            std::size_t filesTouched = 0;
+
+                                            const auto tarArchiveStatus = io::unarchiveTARIntoDirectory(
+                                                inputTarFile,
+                                                outputPath,
+                                                [&]( const std::size_t bytesProcessed, const std::size_t filesProcessed )
+                                                {
+                                                    // ping that we're still working on async tasks
+                                                    m_eventBusClient.Send< ::events::AsyncTaskActivity >();
+                                                    filesTouched++;
+                                                });
+
+                                            // deal with issues, tell user we bailed
+                                            if ( !tarArchiveStatus.ok() )
+                                            {
+                                                m_appEventBus->send<::events::AddErrorPopup>(
+                                                    "Stem Import from TAR Failed",
+                                                    fmt::format( FMTX("Error reported during stem import:\n{}"), tarArchiveStatus.ToString() )
+                                                );
+                                            }
+                                            else
+                                            {
+                                                m_appEventBus->send<::events::AddToastNotification>( ::events::AddToastNotification::Type::Info,
+                                                    ICON_FA_BOXES_PACKING " Stem Import Success",
+                                                    fmt::format( FMTX( "Extracted {} stems" ), filesTouched ) );
+                                            }
+                                        });
                                 });
                         }
                     }
+                    else
+                    if ( warehouseView == WarehouseView::Advanced )
+                    {
+                        ImGui::TextColored( colour::shades::callout.neutral(), ICON_FA_GEAR " Advanced" );
+
+                        ImGui::RightAlignSameLine( toolbarButtonSize.x + cEdgeInsetSize );
+                        {
+                            // enable or disable the worker thread
+                            ImGui::Scoped::ToggleButton highlightButton( !bWarehouseIsPaused, true );
+                            if ( ImGui::Button( bWarehouseIsPaused ?
+                                ICON_FA_CIRCLE_PLAY  " RESUME  " :
+                                ICON_FA_CIRCLE_PAUSE " RUNNING ", toolbarButtonSize ) )
+                            {
+                                m_warehouse->workerTogglePause();
+                            }
+                        }
+                    }
+                };
+
+            if ( ImGui::Begin( warehouseView.generateTitle().c_str() ) )
+            {
+                warehouseView.checkForImGuiTabSwitch();
+
+                fnWarehouseViewHeaders();
+                ImGui::SeparatorBreak();
+
+                {
+                    ImGui::Dummy( { 4, 0 } );
+                    ImGui::SameLine( 0, 0 );
+                    ImGui::AlignTextToFramePadding();
+                    ImGui::StandardFilterBox( jamNameFilter, "###nameFilter" );
+
+                    ImGui::SameLine( 0, 16.0f );
+                    ImGui::TextUnformatted( "Sort" );
+                    ImGui::SameLine();
+                    ImGui::SetNextItemWidth( toolbarButtonSize.x );
+                    if ( WarehouseContentsSortMode::ImGuiCombo( "###sortOrder", m_warehouseContentsSortMode ) )
+                    {
+                        updateWarehouseContentsSortOrder();
+                    }
                 }
+                {
+                    ImGui::Scoped::ButtonTextAlignLeft leftAlign;
 
+                    ImGui::RightAlignSameLine( toolbarButtonSize.x + 4.0f );
+                    ImGui::BeginDisabledControls( !bWarehouseHasEndlesssAccess );
+                    if ( ImGui::Button( " " ICON_FA_CIRCLE_PLUS " Add Jam...", toolbarButtonSize ) )
+                    {
+                        // create local copy of the current warehouse jam ID map for use by the popup; avoids
+                        // having to worry about warehouse contents shifting underneath / locking mutex in dialog
+                        {
+                            std::scoped_lock<std::mutex> reportLock( m_warehouseContentsReportMutex );
+                            warehouseJamBrowser.m_warehouseJamIDs = m_warehouseContentsReportJamIDs;
+                        }
+                        // launch modal browser
+                        activateModalPopup( "Select Jam To Sync", [&, this]( const char* title )
+                        {
+                            ux::modalUniversalJamBrowser( title, m_jamLibrary, warehouseJamBrowser, *this );
+                        });
+                    }
+                    ImGui::EndDisabledControls( !bWarehouseHasEndlesssAccess );
+                }
                 ImGui::Spacing();
                 ImGui::Spacing();
 
-                static ImVec2 buttonSizeMidTable( 29.0f, 21.0f );
+
+                static ImVec2 buttonSizeMidTable( 33.0f, 22.0f );
 
                 if ( ImGui::BeginChild( "##data_child" ) )
                 {
                     const auto TextColourDownloading  = ImGui::GetStyleColorVec4( ImGuiCol_CheckMark );
                     const auto TextColourDownloadable = ImGui::GetStyleColorVec4( ImGuiCol_PlotHistogram );
 
-                    const auto columnCount = (warehouseView == WarehouseView::Default) ? 5 : 3;
+                    const auto GetColumnCount = [=]()
+                        {
+                            if ( warehouseView == WarehouseView::Default )              return 5;
+                            if ( warehouseView == WarehouseView::ContentsManagement )   return 3;
+                            if ( warehouseView == WarehouseView::ImportExport )         return 3;
+                            if ( warehouseView == WarehouseView::Advanced )             return 4;
+
+                            ABSL_ASSERT( 0 );
+                            return 0;
+                        };
+                    const auto columnCount = GetColumnCount();
 
                     if ( ImGui::BeginTable( "##warehouse_table", columnCount,
                                 ImGuiTableFlags_ScrollY         |
@@ -3414,20 +3619,30 @@ int LoreApp::EntrypointOuro()
                     {
                         ImGui::TableSetupScrollFreeze( 0, 1 );  // top row always visible
 
+                        ImGui::TableSetupColumn( "View",            ImGuiTableColumnFlags_WidthFixed,  32.0f );
+                        ImGui::TableSetupColumn( "Jam Name",        ImGuiTableColumnFlags_WidthStretch, 1.0f );
+
                         if ( warehouseView == WarehouseView::Default )
                         {
-                            ImGui::TableSetupColumn( "View",        ImGuiTableColumnFlags_WidthFixed,  32.0f );
-                            ImGui::TableSetupColumn( "Jam Name",    ImGuiTableColumnFlags_WidthStretch, 1.0f );
                             ImGui::TableSetupColumn( "Sync",        ImGuiTableColumnFlags_WidthFixed,  32.0f );
                             ImGui::TableSetupColumn( "Riffs",       ImGuiTableColumnFlags_WidthFixed, 120.0f );
                             ImGui::TableSetupColumn( "Stems",       ImGuiTableColumnFlags_WidthFixed, 120.0f );
                         }
                         else
+                        if ( warehouseView == WarehouseView::Advanced )
                         {
-                            ImGui::TableSetupColumn( "Jam Name",    ImGuiTableColumnFlags_WidthStretch, 1.0f );
-                            ImGui::TableSetupColumn( "Tools",       ImGuiTableColumnFlags_WidthFixed, 270.0f );
+                            ImGui::TableSetupColumn( "Data",        ImGuiTableColumnFlags_WidthFixed, 240.0f + 9.0f ); // 9.0 for some kind of padding per column that gets added
                             ImGui::TableSetupColumn( "Wipe",        ImGuiTableColumnFlags_WidthFixed,  32.0f );
-
+                        }
+                        else
+                        if ( warehouseView == WarehouseView::ImportExport )
+                        {
+                            ImGui::TableSetupColumn( "Export",      ImGuiTableColumnFlags_WidthFixed, 272.0f + 9.0f + 9.0f );
+                        }
+                        // generic fallback
+                        else
+                        {
+                            ImGui::TableSetupColumn( "Tools",       ImGuiTableColumnFlags_WidthFixed, 272.0f + 9.0f + 9.0f );
                         }
                         ImGui::TableHeadersRow();
 
@@ -3440,9 +3655,11 @@ int LoreApp::EntrypointOuro()
                             const int64_t unpopulated       = m_warehouseContentsReport.m_unpopulatedRiffs[jI];
                             const int64_t populated         = m_warehouseContentsReport.m_populatedRiffs[jI];
 
-                            const auto knownCachedRiffCount = m_jamLibrary.loadKnownRiffCountForDatabaseID( m_warehouseContentsReport.m_jamCouchIDs[jI] );
+                            const auto iterCurrentJamID     = m_warehouseContentsReport.m_jamCouchIDs[jI];
 
-                            const bool bIsJamInFlux         = m_warehouseContentsReportJamInFlux[jI];
+                            const auto knownCachedRiffCount = m_jamLibrary.loadKnownRiffCountForDatabaseID( iterCurrentJamID );
+
+                            const bool bIsJamInFlux         = m_warehouseContentsReportJamInFlux[jI] || doesJamHaveActiveOperations( iterCurrentJamID );
                             const bool bHasDataToSync       = ( unpopulated > 0 || knownCachedRiffCount > populated );
 
 
@@ -3456,38 +3673,39 @@ int LoreApp::EntrypointOuro()
                             // highlight or lowlight column based on state
                             if ( bIsJamInFlux )
                                 ImGui::TableSetBgColor( ImGuiTableBgTarget_RowBg0, ImGui::GetSyncBusyColour( 0.2f ) );
-                            if ( m_currentViewedJam == m_warehouseContentsReport.m_jamCouchIDs[jI] )
+                            if ( m_currentViewedJam == iterCurrentJamID )
                                 ImGui::TableSetBgColor( ImGuiTableBgTarget_RowBg0, ImGui::GetColorU32( ImGuiCol_TableRowBgAlt, 2.5f ) );
 
-                            if ( warehouseView == WarehouseView::Default )
+                            // always show the view-this-jam button regardless of mode
                             {
-                                ImGui::BeginDisabledControls( bIsJamInFlux );
-                                if ( ImGui::PrecisionButton( ICON_FA_GRIP, buttonSizeMidTable, 1.0f ) )
+                                if ( bIsJamInFlux )
                                 {
-                                    beginChangeToViewJam( m_warehouseContentsReport.m_jamCouchIDs[jI] );
+                                    ImGui::Dummy( { 8, 2 } );
+                                    ImGui::SameLine( 0, 0 );
+                                    ImGui::Spinner( "##syncing", true, ImGui::GetTextLineHeight() * 0.4f, 3.0f, 1.5f, ImGui::GetColorU32( ImGuiCol_Text ) );
                                 }
-                                ImGui::EndDisabledControls( bIsJamInFlux );
+                                else
+                                {
+                                    if ( ImGui::PrecisionButton( ICON_FA_GRIP, buttonSizeMidTable, 1.0f ) )
+                                    {
+                                        beginChangeToViewJam( iterCurrentJamID );
+                                    }
+                                }
 
                                 ImGui::TableNextColumn();
                             }
-
-                            ImGui::Dummy( ImVec2( 0.0f, 1.0f ) );
-                            if ( warehouseView == WarehouseView::Maintenance )
+                            // .. followed by the jam name
                             {
-                                ImGui::TextDisabled( "ID" );
-                                if ( ImGui::IsItemClicked() )
-                                {
-                                    ImGui::SetClipboardText( m_warehouseContentsReport.m_jamCouchIDs[jI].c_str() );
-                                }
-                                ImGui::CompactTooltip( m_warehouseContentsReport.m_jamCouchIDs[jI].c_str() );
-                                ImGui::SameLine();
+                                ImGui::AlignTextToFramePadding();
+                                ImGui::TextUnformatted( m_warehouseContentsReportJamTitles[jI].c_str() );
+                                ImGui::TableNextColumn();
                             }
-                            ImGui::TextUnformatted( m_warehouseContentsReportJamTitles[jI].c_str() );
-                            ImGui::TableNextColumn();
 
+
+                            // -----------------------------------------------------------------------------------------
                             if ( warehouseView == WarehouseView::Default )
                             {
-                                if ( warehouseHasEndlesssAccess )
+                                if ( bWarehouseHasEndlesssAccess )
                                 {
                                     if ( bIsJamInFlux )
                                     {
@@ -3498,9 +3716,9 @@ int LoreApp::EntrypointOuro()
                                             const bool bNotEnoughTimePassedSinceAbortShown = !m_warehouseContentsReportJamInFluxMoment[jI].hasPassed();
                                             ImGui::Scoped::Disabled se( bNotEnoughTimePassedSinceAbortShown || !bHasDataToSync );
                                             ImGui::Scoped::ColourButton cb( colour::shades::errors, colour::shades::white );
-                                            if ( ImGui::PrecisionButton( ICON_FA_BAN, buttonSizeMidTable, 1.0f ) )
+                                            if ( ImGui::Button( ICON_FA_BAN, buttonSizeMidTable ) )
                                             {
-                                                m_warehouse->requestJamSyncAbort( m_warehouseContentsReport.m_jamCouchIDs[jI] );
+                                                m_warehouse->requestJamSyncAbort( iterCurrentJamID );
                                                 // push the abort task timer way forward to immediately disable the button
                                                 m_warehouseContentsReportJamInFluxMoment[jI].setToFuture( std::chrono::hours( 1 ) );
                                             }
@@ -3509,117 +3727,195 @@ int LoreApp::EntrypointOuro()
                                     }
                                     else
                                     {
-                                        if ( ImGui::PrecisionButton( ICON_FA_ARROWS_ROTATE, buttonSizeMidTable, 1.0f ) )
+                                        if ( ImGui::Button( ICON_FA_ARROWS_ROTATE, buttonSizeMidTable ) )
                                         {
-                                            m_warehouseContentsReportJamInFlux[jI] = true;
-                                            m_warehouseContentsReportJamInFluxMoment[jI].setToFuture( std::chrono::seconds( 4 ) );
-                                            m_warehouse->addOrUpdateJamSnapshot( m_warehouseContentsReport.m_jamCouchIDs[jI] );
+                                            triggerSyncOnJamInContentsReport( jI );
                                         }
                                         ImGui::CompactTooltip( "Update and download the latest metadata for this jam" );
                                     }
                                 }
 
-                                ImGui::TableNextColumn();
+                                // riffs
+                                {
+                                    ImGui::TableNextColumn();
+                                    ImGui::AlignTextToFramePadding();
+                                    ImGui::Text( "%" PRIi64, populated );
+
+                                    if ( unpopulated > 0 )
+                                    {
+                                        ImGui::SameLine( 0, 0 );
+                                        ImGui::TextColored( TextColourDownloading, " (+%" PRIi64 ")", unpopulated );
+                                    }
+                                    else if ( knownCachedRiffCount > populated )
+                                    {
+                                        ImGui::SameLine( 0, 0 );
+                                        ImGui::TextColored( TextColourDownloadable, " (" ICON_FA_ARROW_UP "%li)", knownCachedRiffCount - populated );
+                                    }
+                                }
+                                // stems
+                                {
+                                    ImGui::TableNextColumn();
+                                    ImGui::AlignTextToFramePadding();
+                                    ImGui::Text( "%" PRIi64, populated );
+
+                                    {
+                                        const auto unpopulatedStems = m_warehouseContentsReport.m_unpopulatedStems[jI];
+                                        const auto populatedStems   = m_warehouseContentsReport.m_populatedStems[jI];
+
+                                        if ( unpopulatedStems > 0 )
+                                        {
+                                            ImGui::SameLine( 0, 0 );
+                                            ImGui::TextColored( TextColourDownloading, " (+%" PRIi64 ")", unpopulatedStems );
+                                        }
+                                    }
+                                }
                             }
 
                             // -----------------------------------------------------------------------------------------
-                            // default      : riff count
-                            // maintenance  : tool rack
-                            //
-                            ImGui::AlignTextToFramePadding();
-                            if ( warehouseView == WarehouseView::Default )
+                            if ( warehouseView == WarehouseView::ContentsManagement )
                             {
-                                ImGui::Text( "%" PRIi64, populated );
-
-                                if ( unpopulated > 0 )
-                                {
-                                    ImGui::SameLine( 0, 0 );
-                                    ImGui::TextColored( TextColourDownloading, " (+%" PRIi64 ")", unpopulated );
-                                }
-                                else if ( knownCachedRiffCount > populated )
-                                {
-                                    ImGui::SameLine( 0, 0 );
-                                    ImGui::TextColored( TextColourDownloadable, " (" ICON_FA_ARROW_UP "%li)", knownCachedRiffCount - populated );
-                                }
-                            }
-                            else
-                            {
-                                // disable these tools if we're syncing, just to be safe
+                                // disable tools if we're syncing
                                 ImGui::Scoped::Disabled sd( bIsJamInFlux );
 
-                                if ( ImGui::Button( ICON_FA_BOX ) )
-                                {
-                                    // make sure it exists, pop an error if that fails
-                                    const auto exportPathStatus = filesys::ensureDirectoryExists( cWarehouseExportPath );
-                                    if ( !exportPathStatus.ok() )
-                                    {
-                                        m_appEventBus->send<::events::AddErrorPopup>(
-                                            "Enable to create output directory",
-                                            "Was unable to create database export directory, cannot save to disk"
-                                        );
-                                    }
-                                    else
-                                    {
-                                        // tell warehouse to spool the database records out to disk
-                                        m_warehouse->requestJamExport(
-                                            m_warehouseContentsReport.m_jamCouchIDs[jI],
-                                            cWarehouseExportPath,
-                                            m_warehouseContentsReportJamTitles[jI]
-                                        );
-                                    }
-                                }
-                                ImGui::CompactTooltip( "Begin an export process to archive this jam's database records to a file on disk" );
-
-                                ImGui::SameLine();
-                                if ( ImGui::Button( " " ICON_FA_LIST_CHECK " Precache ") )
+                                if ( ImGui::Button( " " ICON_FA_LIST_CHECK " Cache ... " ) )
                                 {
                                     const auto popupLabel = fmt::format( FMTX( "Precache All Stems : {}###precache_modal" ), m_warehouseContentsReportJamTitles[jI] );
 
                                     // create and launch the precache tool w. attached state
                                     activateModalPopup( popupLabel, [
                                         this,
-                                        &riffFetchProvider,
-                                        state = ux::createJamPrecacheState( m_warehouseContentsReport.m_jamCouchIDs[jI] ) ](const char* title)
-                                    {
-                                        ux::modalJamPrecache( title, *state, *m_warehouse, riffFetchProvider, getTaskExecutor() );
-                                    });
+                                            &riffFetchProvider,
+                                            state = ux::createJamPrecacheState( iterCurrentJamID )](const char* title)
+                                        {
+                                            ux::modalJamPrecache( title, *state, *m_warehouse, riffFetchProvider, getTaskExecutor() );
+                                        });
                                 }
                                 ImGui::CompactTooltip( "Open a utility that allows you to download all stems for this jam,\nallowing for fully offline browsing and archival" );
+                            }
+                            else
+                            if ( warehouseView == WarehouseView::ImportExport )
+                            {
+                                // disable tools if we're syncing
+                                ImGui::Scoped::Disabled sd( bIsJamInFlux );
+
+                                const auto checkOutputDirValid = [&]()
+                                    {
+                                        const auto exportPathStatus = filesys::ensureDirectoryExists( cWarehouseExportPath );
+                                        if ( !exportPathStatus.ok() )
+                                        {
+                                            m_appEventBus->send<::events::AddErrorPopup>(
+                                                "Enable to create output directory",
+                                                "Was unable to create database export directory, cannot save to disk"
+                                            );
+                                            return false;
+                                        }
+                                        return true;
+                                    };
+
+                                if ( ImGui::Button( " " ICON_FA_BOX_ARCHIVE " Data    ") )
+                                {
+                                    // make sure it exists, pop an error if that fails
+                                    if ( checkOutputDirValid() )
+                                    {
+                                        // tell warehouse to spool the database records out to disk
+                                        const base::OperationID exportOperationID = m_warehouse->requestJamDataExport(
+                                            iterCurrentJamID,
+                                            cWarehouseExportPath,
+                                            m_warehouseContentsReportJamTitles[jI]
+                                        );
+
+                                        addOperationToJam( iterCurrentJamID, exportOperationID );
+                                    }
+                                }
+                                ImGui::CompactTooltip( "Begin an export process to archive this jam's database records to a file on disk" );
 
                                 ImGui::SameLine();
-                                if ( ImGui::Button( " " ICON_FA_MAGNIFYING_GLASS_PLUS " Validate ") )
+                                if ( ImGui::Button( " " ICON_FA_BOXES_PACKING " Stems   " ) )
                                 {
-                                    const auto popupLabel = fmt::format( FMTX( "Validation : {}###validate_modal" ), m_warehouseContentsReportJamTitles[jI] );
-
-                                    // create and launch the precache tool w. attached state
-                                    activateModalPopup( popupLabel, [
-                                        this,
-                                        netCfg = getNetworkConfiguration(),
-                                        state = ux::createJamValidateState( m_warehouseContentsReport.m_jamCouchIDs[jI] )](const char* title)
+                                    if ( checkOutputDirValid() )
                                     {
-                                        ux::modalJamValidate( title, *state, *m_warehouse, netCfg, getTaskExecutor() );
-                                    });
-                                }
-                                ImGui::CompactTooltip( "Display tools for validating the data in the warehouse against the Endlesss server" );
-                            }
+                                        const std::string exportFilenameTar = endlesss::toolkit::Warehouse::createExportFilenameForJam(
+                                            iterCurrentJamID,
+                                            m_warehouseContentsReportJamTitles[jI],
+                                            "tar" );
 
-                            if ( warehouseView == WarehouseView::Default )
+                                        const fs::path inputPath = getStemCache().getCacheRootPath() / fs::path( iterCurrentJamID.value() );
+                                        const fs::path outputPath = cWarehouseExportPath / exportFilenameTar;
+
+                                        blog::app( FMTX( "stem export task queued - from [{}] to [{}]" ), inputPath.string(), outputPath.string() );
+
+                                        const auto exportOperationID = base::Operations::newID( endlesss::toolkit::Warehouse::OV_ExportAction );
+                                        addOperationToJam( iterCurrentJamID, exportOperationID );
+
+                                        // spin up a background task to archive the stems into a .tar archive
+                                        getTaskExecutor().silent_async( [this, inputPath, outputPath, exportFile = std::move( exportFilenameTar ), exportOperationID]()
+                                            {
+                                                base::EventBusClient m_eventBusClient( m_appEventBus );
+                                                OperationCompleteOnScopeExit( exportOperationID );
+
+                                                const auto tarArchiveStatus = io::archiveFilesInDirectoryToTAR(
+                                                    inputPath,
+                                                    outputPath,
+                                                    [&]( const std::size_t bytesProcessed, const std::size_t filesProcessed )
+                                                    {
+                                                        // ping that we're still working on async tasks
+                                                        m_eventBusClient.Send< ::events::AsyncTaskActivity >();
+                                                    });
+
+                                                // deal with issues, tell user we bailed
+                                                if ( !tarArchiveStatus.ok() )
+                                                {
+                                                    m_appEventBus->send<::events::AddErrorPopup>(
+                                                        "Stem Export to TAR Failed",
+                                                        fmt::format( FMTX("Error reported during export:\n{}"), tarArchiveStatus.ToString() )
+                                                    );
+                                                }
+                                                else
+                                                {
+                                                    m_appEventBus->send<::events::AddToastNotification>( ::events::AddToastNotification::Type::Info,
+                                                        ICON_FA_BOXES_PACKING " Stem Export Success",
+                                                        fmt::format( FMTX( "Written to [{}]" ), exportFile ) );
+                                                }
+                                            });
+                                    }
+                                }
+                                ImGui::CompactTooltip( "Begin the process to bundle up all stems from this jam into a .tar archive" );
+                            }
+                            else
+                            if ( warehouseView == WarehouseView::Advanced )
                             {
-                                ImGui::TableNextColumn();
-                                ImGui::AlignTextToFramePadding();
+                                const char* jamBandID = iterCurrentJamID.c_str();
+
                                 {
-                                    const auto unpopulated = m_warehouseContentsReport.m_unpopulatedStems[jI];
-                                    const auto populated = m_warehouseContentsReport.m_populatedStems[jI];
+                                    // disable tools if we're syncing
+                                    ImGui::Scoped::Disabled sd( bIsJamInFlux );
 
-                                    if ( unpopulated > 0 )
-                                        ImGui::Text( "%" PRIi64 " (+%" PRIi64 ")", populated, unpopulated );
-                                    else
-                                        ImGui::Text( "%" PRIi64, populated );
+                                    if ( ImGui::Button( " " ICON_FA_MAGNIFYING_GLASS_PLUS " Validate " ) )
+                                    {
+                                        const auto popupLabel = fmt::format( FMTX( "Validation : {}###validate_modal" ), m_warehouseContentsReportJamTitles[jI] );
+
+                                        // create and launch the precache tool w. attached state
+                                        activateModalPopup( popupLabel, [
+                                            this,
+                                                netCfg = getNetworkConfiguration(),
+                                                state = ux::createJamValidateState( iterCurrentJamID )](const char* title)
+                                            {
+                                                ux::modalJamValidate( title, *state, *m_warehouse, netCfg, getTaskExecutor() );
+                                            } );
+                                    }
+                                    ImGui::CompactTooltip( "Display tools for validating the data in the warehouse against the Endlesss server" );
                                 }
-                            }
+                                
+                                ImGui::SameLine();
+                                ImGui::AlignTextToFramePadding();
+                                ImGui::TextDisabled( jamBandID );
+                                if ( ImGui::IsItemClicked() )
+                                {
+                                    ImGui::SetClipboardText( jamBandID );
+                                }
+                                ImGui::CompactTooltip( jamBandID );
 
-                            if ( warehouseView == WarehouseView::Maintenance )
-                            {
+
                                 ImGui::TableNextColumn();
                                 ImGui::AlignTextToFramePadding();
 
@@ -3628,10 +3924,11 @@ int LoreApp::EntrypointOuro()
                                 ImGui::Scoped::ColourButton cb( colour::shades::errors, colour::shades::white );
                                 if ( ImGui::Button( ICON_FA_TRASH_CAN, buttonSizeMidTable ) )
                                 {
-                                    m_warehouse->requestJamPurge( m_warehouseContentsReport.m_jamCouchIDs[jI] );
+                                    m_warehouse->requestJamPurge( iterCurrentJamID );
                                 }
                                 ImGui::CompactTooltip( "Request a deletion of the jam and all associated data" );
                             }
+
                             ImGui::PopID();
                         }
 
@@ -3644,7 +3941,9 @@ int LoreApp::EntrypointOuro()
 
         } // warehouse imgui 
 
-        m_uxSharedRiffView->imgui( *this, *this );
+        m_uxRiffHistory->imgui( *this );
+        m_uxSharedRiffView->imgui( *this, JamNameResolveProvider );
+
 
         maintainStemCacheAsync();
 
@@ -3660,7 +3959,7 @@ int LoreApp::EntrypointOuro()
 
         APP_EVENT_UNBIND( MixerRiffChange );
         APP_EVENT_UNBIND( OperationComplete );
-        APP_EVENT_UNBIND( NotifyJamNameCacheUpdated );
+        APP_EVENT_UNBIND( BNSWasUpdated );
         APP_EVENT_UNBIND( RequestNavigationToRiff );
     }
 

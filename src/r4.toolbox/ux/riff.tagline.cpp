@@ -175,7 +175,8 @@ void TagLine::State::imgui(
 
             std::string tooltipText;
 
-            if ( ImGui::Button( toolProvider.getToolIcon( toolID, tooltipText ), ChunkyIconButtonSize ) )
+            if ( ImGui::Button( toolProvider.getToolIcon( toolID, tooltipText ), ChunkyIconButtonSize ) ||
+                 toolProvider.checkToolKeyboardShortcut( toolID ) )
             {
                 toolProvider.handleToolExecution( toolID, m_eventBusClient, currentRiffPtr );
             }

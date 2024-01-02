@@ -17,12 +17,12 @@
 
 namespace ux {
 
-struct SharedRiffView
+struct RiffHistory
 {
-    SharedRiffView( endlesss::api::NetConfiguration::Shared& networkConfig, base::EventBusClient eventBus );
-    ~SharedRiffView();
+    RiffHistory( base::EventBusClient eventBus );
+    ~RiffHistory();
 
-    void imgui( app::CoreGUI& coreGUI, endlesss::services::JamNameResolveProvider& jamNameResolver );
+    void imgui( app::CoreGUI& coreGUI );
 
 private:
 

@@ -53,6 +53,14 @@ struct TagLineToolProvider
         }
     }
 
+    virtual bool checkToolKeyboardShortcut( const ToolID id ) const
+    {
+        if ( id == RiffExport )
+            return ImGui::Shortcut( ImGuiModFlags_Ctrl, ImGuiKey_E, false );
+
+        return false;
+    }
+
     virtual void handleToolExecution( const ToolID id, base::EventBusClient& eventBusClient, endlesss::live::RiffPtr& currentRiffPtr );
 };
 

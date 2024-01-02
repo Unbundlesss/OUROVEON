@@ -43,22 +43,22 @@ struct SharedRiffView::State
         }
 
         APP_EVENT_BIND_TO( MixerRiffChange );
-        APP_EVENT_BIND_TO( NotifyJamNameCacheUpdated );
+        APP_EVENT_BIND_TO( BNSWasUpdated );
     }
 
     ~State()
     {
-        APP_EVENT_UNBIND( NotifyJamNameCacheUpdated );
+        APP_EVENT_UNBIND( BNSWasUpdated );
         APP_EVENT_UNBIND( MixerRiffChange );
     }
 
     void event_MixerRiffChange( const events::MixerRiffChange* eventData );
-    void event_NotifyJamNameCacheUpdated( const events::NotifyJamNameCacheUpdated* eventData );
+    void event_BNSWasUpdated( const events::BNSWasUpdated* eventData );
 
 
     void imgui(
         app::CoreGUI& coreGUI,
-        endlesss::services::IJamNameCacheServices& jamNameCacheServices );
+        endlesss::services::JamNameResolveProvider& jamNameResolver );
 
 
     void onNewDataFetched( toolkit::Shares::StatusOrData newData );
@@ -81,7 +81,7 @@ struct SharedRiffView::State
     endlesss::types::RiffCouchIDSet m_enqueuedRiffIDs;
 
     base::EventListenerID           m_eventLID_MixerRiffChange = base::EventListenerID::invalid();
-    base::EventListenerID           m_eventLID_NotifyJamNameCacheUpdated = base::EventListenerID::invalid();
+    base::EventListenerID           m_eventLID_BNSWasUpdated = base::EventListenerID::invalid();
 
     ImGui::ux::UserSelector         m_user;
 
@@ -116,7 +116,7 @@ void SharedRiffView::State::event_MixerRiffChange( const events::MixerRiffChange
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void SharedRiffView::State::event_NotifyJamNameCacheUpdated( const events::NotifyJamNameCacheUpdated* eventData )
+void SharedRiffView::State::event_BNSWasUpdated( const events::BNSWasUpdated* eventData )
 {
     m_jamNameCacheUpdateChangeIndex = eventData->m_changeIndex;
     restartJamNameCacheResolution();
@@ -125,7 +125,7 @@ void SharedRiffView::State::event_NotifyJamNameCacheUpdated( const events::Notif
 // ---------------------------------------------------------------------------------------------------------------------
 void SharedRiffView::State::imgui(
     app::CoreGUI& coreGUI,
-    endlesss::services::IJamNameCacheServices& jamNameCacheServices )
+    endlesss::services::JamNameResolveProvider& jamNameResolver )
 {
     // try to restore from the cache if requested; usually on the first time through, done here as we need CoreGUI / path provider
     if ( m_tryLoadFromCache )
@@ -167,15 +167,15 @@ void SharedRiffView::State::imgui(
         else
         {
             // ask jame name services for data
-            const auto bJamNameFound = jamNameCacheServices.lookupNameForJam(
+            const auto bJamNameFound = jamNameResolver->lookupJamName(
                 dataPtr->m_jamIDs[m_jamNameCacheSyncIndex],
                 m_jamNameResolvedArray[m_jamNameCacheSyncIndex]
             );
 
             // if we get a cache miss, issue a fetch request to go plumb the servers for answers
-            if ( bJamNameFound == endlesss::services::IJamNameCacheServices::LookupResult::NotFound )
+            if ( bJamNameFound == endlesss::services::IJamNameResolveService::LookupResult::NotFound )
             {
-                m_eventBusClient.Send< ::events::RequestJamNameRemoteFetch >(
+                m_eventBusClient.Send< ::events::BNSCacheMiss >(
                     dataPtr->m_jamIDs[m_jamNameCacheSyncIndex] );
             }
         }
@@ -506,9 +506,9 @@ SharedRiffView::~SharedRiffView()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void SharedRiffView::imgui( app::CoreGUI& coreGUI, endlesss::services::IJamNameCacheServices& jamNameCacheServices )
+void SharedRiffView::imgui( app::CoreGUI& coreGUI, endlesss::services::JamNameResolveProvider& jamNameResolver )
 {
-    m_state->imgui( coreGUI, jamNameCacheServices );
+    m_state->imgui( coreGUI, jamNameResolver );
 }
 
 } // namespace ux

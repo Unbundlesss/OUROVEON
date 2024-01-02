@@ -500,7 +500,7 @@ void modalUniversalJamBrowser(
                                     const bool showAsDisabled = (behaviour.fnIsDisabled && behaviour.fnIsDisabled( jamID ));
 
                                     ImGui::TableNextColumn();
-                                    ImGui::PushID( index );
+                                    ImGui::PushID( (int32_t)index );
 
                                     if ( showAsDisabled )
                                     {
@@ -613,6 +613,10 @@ void modalUniversalJamBrowser(
                                 ImGui::Scoped::Disabled sd( validationState.m_data.empty() );
                                 if ( ImGui::Button( "Validate", buttonSize ) )
                                 {
+                                    // trigger a BNS request (even if it doesn't need one); this ensures that the name 
+                                    // is propogated nicely to all the various caches and name lookups
+                                    coreServices.getEventBusClient().Send< ::events::BNSCacheMiss >( jamToValidate );
+
                                     // test-run access to whatever they're asking for to avoid adding garbage to the warehouse
                                     // and then also drag the name back to display, help people know what they're about to get
                                     endlesss::api::JamLatestState testPermissions;

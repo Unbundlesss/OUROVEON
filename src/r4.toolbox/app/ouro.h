@@ -22,12 +22,15 @@ namespace app {
 // "login" screen that offers audio/services configuration and validating a connection to the Endlesss backend
 //
 struct OuroApp : public CoreGUI,
-                 public endlesss::services::RiffFetch,              // natively support using the built-in member services to load riffs
-                 public endlesss::services::IJamNameCacheServices   // assume base level support for abstract jam name resolution
+                 public endlesss::services::IRiffFetchService,          // natively support using the built-in member services to load riffs
+                 public endlesss::services::IJamNameResolveService      // assume base level support for abstract jam name resolution
 {
     OuroApp()
         : CoreGUI()
     {}
+
+    endlesss::toolkit::Warehouse* getWarehouseInstance() { return m_warehouse.get(); }
+    const endlesss::toolkit::Warehouse* getWarehouseInstance() const { return m_warehouse.get(); }
 
 protected:
 
@@ -40,14 +43,18 @@ protected:
 
 protected:
 
-    // endlesss::services::RiffFetch
+    // endlesss::services::IRiffFetchService
     int32_t                                 getSampleRate() const override;
     const endlesss::api::NetConfiguration&  getNetConfiguration() const override { return *m_networkConfiguration; }
     endlesss::cache::Stems&                 getStemCache() override { return m_stemCache; }
     tf::Executor&                           getTaskExecutor() override { return m_taskExecutor; }
 
     // endlesss::services::IJamNameCacheServices
-    LookupResult lookupNameForJam( const endlesss::types::JamCouchID& jamID, std::string& result ) const override;
+    LookupResult lookupJamNameAndTime(
+        const endlesss::types::JamCouchID& jamID,
+        std::string& resultJamName,
+        uint64_t& resultTimestamp ) const override;
+
 
 
     // validated storage locations for the app
@@ -103,12 +110,12 @@ protected:
     using JamNameRemoteFetchResultQueue = mcc::ConcurrentQueue< JamNameRemoteResolution >;
 
     // take a band### id and go find a public name for it, via circuitous means
-    void event_RequestJamNameRemoteFetch( const events::RequestJamNameRemoteFetch* eventData );
+    void event_BNSCacheMiss( const events::BNSCacheMiss* eventData );
 
     // run on main thread to work with the results of async jam name resolution
     void updateJamNameResolutionTasks( float deltaTime );
 
-    base::EventListenerID                   m_eventLID_RequestJamNameRemoteFetch = base::EventListenerID::invalid();
+    base::EventListenerID                   m_eventLID_BNSCacheMiss = base::EventListenerID::invalid();
     JamNameRemoteFetchResultQueue           m_jamNameRemoteFetchResultQueue;
     float                                   m_jamNameRemoteFetchUpdateBroadcastTimer = 0;
 };

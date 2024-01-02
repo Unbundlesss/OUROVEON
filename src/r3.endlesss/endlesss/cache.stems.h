@@ -23,6 +23,8 @@ namespace cache {
 // 
 struct Stems
 {
+    DECLARE_NO_COPY_NO_MOVE( Stems );
+
     enum class CacheVersion
     {
         Version1,       // pre 0.7.7; stems were stored in a single root directory, partitioned by the initial stem ID letter
@@ -38,9 +40,6 @@ struct Stems
     );
 
 
-    DECLARE_NO_COPY_NO_MOVE( Stems );
-
-
     Stems();
 
     absl::Status initialise( 
@@ -52,6 +51,8 @@ struct Stems
 
     // tot up all live stems' approximate memory usage; not const as it locks the mutex, dont call it every frame
     ouro_nodiscard std::size_t estimateMemoryUsageBytes();
+
+    ouro_nodiscard fs::path getCacheRootPath() const { return m_cacheStemRoot; }
 
     // synchronously lock & garbage collect the cache
     void lockAndPrune( const bool verbose, const uint32_t generationsToKeep = 64 );

@@ -18,17 +18,17 @@ namespace id {
 template<class _identity>
 struct StringWrapper
 {
-    explicit inline StringWrapper( const char* rhs ) : _value( rhs ) {}
-    explicit inline StringWrapper( std::string rhs ) : _value( std::move( rhs ) ) {}
-    explicit inline StringWrapper( const std::string_view rhs ) : _value( rhs ) {}
-    inline StringWrapper() : _value() {}
+    explicit StringWrapper( const char* rhs ) : _value( rhs ) {}
+    explicit StringWrapper( std::string rhs ) : _value( std::move( rhs ) ) {}
+    explicit StringWrapper( const std::string_view rhs ) : _value( rhs ) {}
+    StringWrapper() : _value() {}
 
     ouro_nodiscard constexpr const std::string& value() const { return _value; }
     ouro_nodiscard constexpr std::string& value() { return _value; }
     ouro_nodiscard constexpr operator const std::string&() const { return _value; }
     ouro_nodiscard constexpr operator const char*() const { return _value.c_str(); }
 
-    inline auto operator<=>( const StringWrapper& ) const = default;
+    auto operator<=>( const StringWrapper& ) const = default;
 
     ouro_nodiscard constexpr bool empty() const { return _value.empty(); }
     ouro_nodiscard constexpr const char* c_str() const { return _value.c_str(); }
@@ -68,14 +68,18 @@ private:
 } // namespace base
 
 
-// create output shims for {fmt}, sit on top of existing std::string formatting
+//
+// create output shims for {fmt}, sit on top of existing std::string formatting,
+// forwards to that existing formatter via [StringWrapper].value()
+//
 #define Gen_StringWrapperFormatter( _type )                                                         \
+                                                                                                    \
             template <> struct fmt::formatter<_type> : formatter<std::string>                       \
             {                                                                                       \
-                template <typename FormatContext>                                                   \
-                auto format( const _type& c, FormatContext& ctx ) const -> decltype(ctx.out())      \
-                {                                                                                   \
-                    return formatter<std::string>::format( c, ctx );                                \
-                }                                                                                   \
-            };
-
+                auto format( const _type& c, format_context& ctx ) const;                           \
+            };                                                                                      \
+                                                                                                    \
+            inline auto fmt::formatter<_type>::format( const _type& c, format_context& ctx ) const  \
+            {                                                                                       \
+                return formatter<std::string>::format( c.value(), ctx );                            \
+            }

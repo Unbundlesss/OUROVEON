@@ -47,7 +47,7 @@ struct Preview final : public app::module::MixerInterface,
 
 
     // main thread requests for a new riff, added to queue for processing by mixer thread
-    inline base::OperationID enqueueRiff( endlesss::live::RiffPtr& nextRiff )
+    base::OperationID enqueueRiff( endlesss::live::RiffPtr& nextRiff )
     {
         // only accept fully synchronised and ready-to-play riffs; go do this on your own time please
         if ( nextRiff->getSyncState() != endlesss::live::Riff::SyncState::Success )
@@ -60,7 +60,7 @@ struct Preview final : public app::module::MixerInterface,
     }
 
     // request to stop playing anything and remove everything from the request queue
-    inline void stop()
+    void stop()
     {
         m_drainQueueAndStop = true;
     }

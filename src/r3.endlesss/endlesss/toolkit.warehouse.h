@@ -10,6 +10,7 @@
 #pragma once
 
 #include "base/text.h"
+#include "base/operations.h"
 #include "spacetime/chronicle.h"
 #include "endlesss/ids.h"
 #include "endlesss/api.h"
@@ -39,6 +40,11 @@ struct Warehouse
         std::vector< int64_t >              m_populatedStems;
         std::vector< int64_t >              m_unpopulatedStems;
         std::vector< bool >                 m_awaitingInitialSync;  // initial data set has not yet arrived, consider in flux
+
+        int64_t m_totalPopulatedRiffs     = 0;
+        int64_t m_totalUnpopulatedRiffs   = 0;
+        int64_t m_totalPopulatedStems     = 0;
+        int64_t m_totalUnpopulatedStems   = 0;
     };
     using ContentsReportCallback = std::function<void( const ContentsReport& report )>;
 
@@ -172,6 +178,9 @@ struct Warehouse
     // upsert all jamID -> display name records from the given jam cache, keeping the warehouse name lookup fresh
     void upsertJamDictionaryFromCache( const cache::Jams& jamCache );
 
+    // upsert all jamID -> display name records from the Band Name Service record, similar to above
+    void upsertJamDictionaryFromBNS( const config::endlesss::BandNameService& bnsData );
+
     // fetch a list of all the JamID -> display name rows we have as a lookup table
     void extractJamDictionary( types::JamIDToNameMap& jamDictionary ) const;
 
@@ -179,8 +188,10 @@ struct Warehouse
     // -----------------------------------------------------------------------------------------------------------------
     // Jam Synchronisation
 
+    static constexpr base::OperationVariant OV_AddOrUpdateJamSnapshot{ 0xF0 };
+
     // insert a jam ID into the warehouse to be queried and filled
-    void addOrUpdateJamSnapshot( const types::JamCouchID& jamCouchID );
+    ouro_nodiscard base::OperationID addOrUpdateJamSnapshot( const types::JamCouchID& jamCouchID );
 
     // fetch the full stack of data for a given jam
     void addJamSliceRequest( const types::JamCouchID& jamCouchID, const JamSliceCallback& callbackOnCompletion );
@@ -195,8 +206,17 @@ struct Warehouse
     // -----------------------------------------------------------------------------------------------------------------
     // Jam Export / Import
 
-    void requestJamExport( const types::JamCouchID& jamCouchID, const fs::path exportFolder, std::string_view jamTitle );
-    void requestJamImport( const fs::path pathToData );
+    static constexpr base::OperationVariant OV_ExportAction{ 0xF1 };
+    static constexpr base::OperationVariant OV_ImportAction{ 0xF2 };
+
+    ouro_nodiscard base::OperationID requestJamDataExport( const types::JamCouchID& jamCouchID, const fs::path exportFolder, std::string_view jamTitle );
+    ouro_nodiscard base::OperationID requestJamDataImport( const fs::path pathToData );
+
+    // produce a common format filename for exported things - database stuff, stem archives, etc
+    static std::string createExportFilenameForJam(
+        const types::JamCouchID& jamCouchID,
+        const std::string_view jamName,
+        const std::string_view fileExtension );
 
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -292,6 +312,7 @@ protected:
     base::EventBusClient                    m_eventBusClient;
 
     std::unique_ptr<TaskSchedule>           m_taskSchedule;
+    std::unique_ptr<TaskSchedule>           m_taskSchedulePriority;     // parallel queue used to stage tasks that should be run before the default queue gets a look in
 
     ChangeIndexMap                          m_changeIndexMap;
 

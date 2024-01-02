@@ -32,6 +32,16 @@
 namespace endlesss {
 namespace toolkit {
 
+// ---------------------------------------------------------------------------------------------------------------------
+std::string Warehouse::createExportFilenameForJam( const types::JamCouchID& jamCouchID, const std::string_view jamName, const std::string_view fileExtension )
+{
+    std::string sanitisedJamName;
+    base::sanitiseNameForPath( jamName, sanitisedJamName, '_', false );
+
+    return fmt::format( FMTX( "orx.{}.{}.{}" ), jamCouchID, base::StrToLwrExt( sanitisedJamName ), fileExtension );
+}
+
+
 std::string Warehouse::m_databaseFile;
 
 using StemSet   = absl::flat_hash_set< endlesss::types::StemCouchID >;
@@ -79,6 +89,19 @@ struct Warehouse::INetworkTask : Warehouse::ITask
     }
 };
 
+
+// ---------------------------------------------------------------------------------------------------------------------
+struct EmptyTask final : Warehouse::ITask
+{
+    static constexpr std::string_view Tag = "----";
+
+    EmptyTask() = default;
+
+    const char* getTag() const override { return Tag.data(); }
+    std::string Describe() const override { return fmt::format( "flushing schedule" ); }
+    bool Work( TaskQueue& currentTasks ) override { return true; }
+};
+
 // ---------------------------------------------------------------------------------------------------------------------
 struct ContentsReportTask final : Warehouse::ITask
 {
@@ -120,15 +143,19 @@ struct JamSnapshotTask final : Warehouse::INetworkTask
 {
     static constexpr std::string_view Tag = "SNAPSHOT";
 
-    JamSnapshotTask( const api::NetConfiguration& ncfg, const types::JamCouchID& jamCID )
+    JamSnapshotTask( const api::NetConfiguration& ncfg, base::EventBusClient& eventBus, const types::JamCouchID& jamCID, const base::OperationID opID )
         : Warehouse::INetworkTask( ncfg )
+        , m_eventBusClient( eventBus )
         , m_jamCID( jamCID )
+        , m_operationID( opID )
     {}
 
     // always trigger a contents update after snapping a new jam
     bool forceContentReport() const override { return true; }
 
-    types::JamCouchID m_jamCID;
+    base::EventBusClient    m_eventBusClient;
+    types::JamCouchID       m_jamCID;
+    base::OperationID       m_operationID;
 
     const char* getTag() const override { return Tag.data(); }
     std::string Describe() const override { return fmt::format( "[{}] fetching Jam snapshot of [{}]", Tag, m_jamCID ); }
@@ -180,18 +207,20 @@ struct JamExportTask final : Warehouse::ITask
 {
     static constexpr std::string_view Tag = "EXPORT";
 
-    JamExportTask( base::EventBusClient& eventBus, const types::JamCouchID& jamCID, const fs::path& exportFolder, std::string_view jamName )
+    JamExportTask( base::EventBusClient& eventBus, const types::JamCouchID& jamCID, const fs::path& exportFolder, std::string_view jamName, const base::OperationID opID )
         : Warehouse::ITask()
         , m_eventBusClient( eventBus )
         , m_jamCID( jamCID )
         , m_exportFolder( exportFolder )
         , m_jamName( jamName )
+        , m_operationID( opID )
     {}
 
     base::EventBusClient    m_eventBusClient;
     types::JamCouchID       m_jamCID;
     fs::path                m_exportFolder;
     std::string             m_jamName;
+    base::OperationID       m_operationID;
 
     const char* getTag() const override { return Tag.data(); }
     std::string Describe() const override { return fmt::format( "[{}] exporting jam to disk", Tag ); }
@@ -203,14 +232,16 @@ struct JamImportTask final : Warehouse::ITask
 {
     static constexpr std::string_view Tag = "IMPORT";
 
-    JamImportTask( base::EventBusClient& eventBus, const fs::path& fileToImport )
+    JamImportTask( base::EventBusClient& eventBus, const fs::path& fileToImport, const base::OperationID opID )
         : Warehouse::ITask()
         , m_eventBusClient( eventBus )
         , m_fileToImport( fileToImport )
+        , m_operationID( opID )
     {}
 
     base::EventBusClient    m_eventBusClient;
     fs::path                m_fileToImport;
+    base::OperationID       m_operationID;
 
     // rebuild after add
     bool forceContentReport() const override { return true; }
@@ -1055,9 +1086,12 @@ Warehouse::Warehouse( const app::StoragePaths& storagePaths, api::NetConfigurati
 {
     blog::database( FMTX("sqlite version {}"), SQLITE_VERSION );
 
-    // create the lockless queue that manages the warehouse TODO list
-    m_taskSchedule = std::make_unique<TaskSchedule>();
-    m_taskSchedule->signal();
+    // create the lockless queues that manages the warehouse TODO list
+    {
+        m_taskSchedule = std::make_unique<TaskSchedule>();
+        m_taskSchedule->signal();
+        m_taskSchedulePriority = std::make_unique<TaskSchedule>();
+    }
 
     m_databaseFile = ( storagePaths.cacheCommon / "warehouse.db3" ).string();
     SqlDB::post_connection_hook = []( sqlite3* db_handle )
@@ -1161,7 +1195,11 @@ void Warehouse::clearAllCallbacks()
 // ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::requestContentsReport()
 {
-    m_taskSchedule->enqueueWorkTask<ContentsReportTask>( m_cbContentsReport );
+    m_taskSchedulePriority->enqueueWorkTask<ContentsReportTask>( m_cbContentsReport );
+
+    // we only track the semaphore in the main queue, kick it to unblock the scheduler loop
+    m_taskSchedule->enqueueWorkTask<EmptyTask>();
+    m_taskSchedule->signal();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1178,10 +1216,30 @@ void Warehouse::upsertSingleJamIDToName( const endlesss::types::JamCouchID& jamC
 // ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::upsertJamDictionaryFromCache( const cache::Jams& jamCache )
 {
+    Warehouse::SqlDB::TransactionGuard txn;
+
     jamCache.iterateAllJams( [this]( const cache::Jams::Data& jamData )
         {
             upsertSingleJamIDToName( jamData.m_jamCID, jamData.m_displayName );
         });
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void Warehouse::upsertJamDictionaryFromBNS( const config::endlesss::BandNameService& bnsData )
+{
+    Warehouse::SqlDB::TransactionGuard txn;
+
+    std::string resultJamName;
+
+    for ( const auto& bnsPair : bnsData.entries )
+    {
+        if ( bnsPair.second.sync_name.empty() )
+            resultJamName = bnsPair.second.link_name;
+        else
+            resultJamName = bnsPair.second.sync_name;
+
+        upsertSingleJamIDToName( bnsPair.first, resultJamName );
+    }
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1206,20 +1264,26 @@ void Warehouse::extractJamDictionary( types::JamIDToNameMap& jamDictionary ) con
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void Warehouse::addOrUpdateJamSnapshot( const types::JamCouchID& jamCouchID )
+base::OperationID Warehouse::addOrUpdateJamSnapshot( const types::JamCouchID& jamCouchID )
 {
+    const auto operationID = base::Operations::newID( OV_AddOrUpdateJamSnapshot );
+
     if ( jamCouchID.empty() )
     {
         blog::error::database( "cannot add empty jam ID to warehouse" );
-        return;
+
+        return base::OperationID::invalid();
     }
     if ( !hasFullEndlesssNetworkAccess() )
     {
         blog::error::database( "cannot call Warehouse::addOrUpdateJamSnapshot() with no active Endlesss network" );
-        return;
+
+        return base::OperationID::invalid();
     }
 
-    m_taskSchedule->enqueueWorkTask<JamSnapshotTask>( *m_networkConfiguration, jamCouchID );
+    m_taskSchedule->enqueueWorkTask<JamSnapshotTask>( *m_networkConfiguration, m_eventBusClient, jamCouchID, operationID );
+
+    return operationID;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1259,21 +1323,29 @@ void Warehouse::requestJamSyncAbort( const types::JamCouchID& jamCouchID )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void Warehouse::requestJamExport( const types::JamCouchID& jamCouchID, const fs::path exportFolder, std::string_view jamTitle )
+base::OperationID Warehouse::requestJamDataExport( const types::JamCouchID& jamCouchID, const fs::path exportFolder, std::string_view jamTitle )
 {
+    const auto operationID = base::Operations::newID( OV_ExportAction );
+
     if ( jamCouchID.empty() )
     {
         blog::error::database( "empty Jam ID passed to warehouse for export" );
-        return;
+        return base::OperationID::invalid();
     }
 
-    m_taskSchedule->enqueueWorkTask<JamExportTask>( m_eventBusClient, jamCouchID, exportFolder, jamTitle );
+    m_taskSchedule->enqueueWorkTask<JamExportTask>( m_eventBusClient, jamCouchID, exportFolder, jamTitle, operationID );
+
+    return operationID;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void Warehouse::requestJamImport( const fs::path pathToData )
+base::OperationID Warehouse::requestJamDataImport( const fs::path pathToData )
 {
-    m_taskSchedule->enqueueWorkTask<JamImportTask>( m_eventBusClient, pathToData );
+    const auto operationID = base::Operations::newID( OV_ImportAction );
+
+    m_taskSchedule->enqueueWorkTask<JamImportTask>( m_eventBusClient, pathToData, operationID );
+
+    return operationID;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1598,9 +1670,17 @@ void Warehouse::threadWorker()
             continue;
         }
 
-        // something to do?
         Task nextTask;
-        if ( m_taskSchedule->m_taskQueue.try_dequeue( nextTask ) )
+        
+        // something to do? check the priority pile first in case we have stuff that needs running before
+        // the rest of the queue (usually stuff like a contents report)
+        bool bGotValidTask = m_taskSchedulePriority->m_taskQueue.try_dequeue( nextTask );
+        if ( !bGotValidTask )
+        {
+            bGotValidTask = m_taskSchedule->m_taskQueue.try_dequeue( nextTask );
+        }
+
+        if ( bGotValidTask )
         {
             if ( m_cbWorkUpdate )
                 m_cbWorkUpdate( true, nextTask->Describe() );
@@ -1714,7 +1794,7 @@ void Warehouse::threadWorker()
             }
 
             if ( m_cbWorkUpdate )
-                m_cbWorkUpdate( false, "No tasks queued" );
+                m_cbWorkUpdate( false, "Database Idle" );
         }
     }
 
@@ -1772,6 +1852,8 @@ void Warehouse::event_RiffTagAction( const events::RiffTagAction* eventData )
 // ---------------------------------------------------------------------------------------------------------------------
 bool JamSnapshotTask::Work( TaskQueue& currentTasks )
 {
+    OperationCompleteOnScopeExit( m_operationID );
+
     blog::database( FMTX( "[{}] requesting full riff manifest" ), Tag );
 
     endlesss::api::JamFullSnapshot jamSnapshot;
@@ -1854,12 +1936,11 @@ bool JamSyncAbortTask::Work( TaskQueue& currentTasks )
 //
 bool JamExportTask::Work( TaskQueue& currentTasks )
 {
-    std::string sanitisedJamName;
-    {
-        base::sanitiseNameForPath( m_jamName, sanitisedJamName, '_', false );
-        sanitisedJamName = "ldx." + m_jamCID.value() + "." + base::StrToLwrExt(sanitisedJamName) + ".yaml";
-    }
-    const fs::path finalOutputFile = m_exportFolder / sanitisedJamName;
+    OperationCompleteOnScopeExit( m_operationID );
+
+    const std::string exportFilenameYaml = Warehouse::createExportFilenameForJam( m_jamCID, m_jamName, "yaml" );
+
+    const fs::path finalOutputFile = m_exportFolder / exportFilenameYaml;
     blog::database( FMTX( "Export process for [{}] to [{}]" ), m_jamName, finalOutputFile.string() );
 
     std::ofstream yamlOutput;
@@ -1984,7 +2065,7 @@ bool JamExportTask::Work( TaskQueue& currentTasks )
 
     m_eventBusClient.Send<::events::AddToastNotification>( ::events::AddToastNotification::Type::Info,
         ICON_FA_BOX " Jam Export Success",
-        fmt::format( FMTX( "Written to {}" ), sanitisedJamName ) );
+        fmt::format( FMTX( "Written to {}" ), exportFilenameYaml ) );
 
     return true;
 }
@@ -1993,6 +2074,8 @@ bool JamExportTask::Work( TaskQueue& currentTasks )
 // ---------------------------------------------------------------------------------------------------------------------
 bool JamImportTask::Work( TaskQueue& currentTasks )
 {
+    OperationCompleteOnScopeExit( m_operationID );
+
     auto loadStatus = base::readTextFile( m_fileToImport );
 
     auto handleFailure = [this]( const absl::Status& failureStatus ) -> bool
@@ -2769,6 +2852,11 @@ bool ContentsReportTask::Work( TaskQueue& currentTasks )
             reportResult.m_unpopulatedStems.emplace_back( totalUnpopulatedStems );
 
             reportResult.m_awaitingInitialSync.emplace_back( false );
+
+            reportResult.m_totalPopulatedRiffs      += totalPopulatedRiffs;
+            reportResult.m_totalUnpopulatedRiffs    += totalUnpopulatedRiffs;
+            reportResult.m_totalPopulatedStems      += totalPopulatedStems;
+            reportResult.m_totalUnpopulatedStems    += totalUnpopulatedStems;
         }
     }
 

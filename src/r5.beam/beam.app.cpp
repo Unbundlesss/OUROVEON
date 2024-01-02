@@ -1034,9 +1034,9 @@ int BeamApp::EntrypointOuro()
         else
         {
             std::string resolvedName;
-            const auto lookupResult = lookupNameForJam( m_trackedJamCouchID, resolvedName );
+            const auto lookupResult = lookupJamName( m_trackedJamCouchID, resolvedName );
 
-            if ( lookupResult != endlesss::services::IJamNameCacheServices::LookupResult::NotFound )
+            if ( lookupResult != endlesss::services::IJamNameResolveService::LookupResult::NotFound )
             {
                 trackedJamData.m_displayName = resolvedName;
             }

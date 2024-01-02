@@ -535,27 +535,6 @@ struct RiffTag
 };
 
 } // namespace types
-
-namespace services {
-
-// ---------------------------------------------------------------------------------------------------------------------
-struct IJamNameCacheServices
-{
-    enum class LookupResult
-    {
-        NotFound,                   // no clue :'(
-        FoundInPrimarySource,       // subscribed stuff, public jams
-        FoundInArchives,            // historical data, scraped names, misc junk
-        PresumedPersonal            // everything not band#######, presumed to be personal jams
-    };
-
-    // ask to lookup a public name for a given couch ID, returning true if it was found, false if not
-    virtual LookupResult lookupNameForJam( const endlesss::types::JamCouchID& jamID, std::string& result ) const = 0;
-
-    virtual ~IJamNameCacheServices() {}
-};
-
-} // namespace services
 } // namespace endlesss
 
 
@@ -693,15 +672,15 @@ endlesss::types::RiffIdentity   m_identity;
 CREATE_EVENT_END()
 
 // ---------------------------------------------------------------------------------------------------------------------
-// in the instance where we find a jam that we cannot display a name for, request a network fetch of metadata to name it;
-// this will later cause a NotifyJamNameCacheUpdated event to be sent if/when the app was able to pull new details.
-// these can get grouped together so many requests may eventually only cause a single NotifyJamNameCacheUpdated
+// band name service - in the instance where we find a jam that we cannot display a name for, request a network fetch of 
+// metadata to name it; this will later cause a BNSWasUpdated event to be sent if/when the app was able to pull new details.
+// these can get grouped together so many requests may eventually only cause a single BNSWasUpdated
 
-CREATE_EVENT_BEGIN( RequestJamNameRemoteFetch )
+CREATE_EVENT_BEGIN( BNSCacheMiss )
 
-RequestJamNameRemoteFetch() = delete;
+BNSCacheMiss() = delete;
 
-RequestJamNameRemoteFetch( const endlesss::types::JamCouchID& jamID )
+BNSCacheMiss( const endlesss::types::JamCouchID& jamID )
     : m_jamID( jamID )
 {
 }
@@ -711,13 +690,13 @@ endlesss::types::JamCouchID     m_jamID;
 CREATE_EVENT_END()
 
 // ---------------------------------------------------------------------------------------------------------------------
-// new jam name data is available to anyone that cares about such things
+// band name service - new jam name data is available to anyone that cares about such things
 
-CREATE_EVENT_BEGIN( NotifyJamNameCacheUpdated )
+CREATE_EVENT_BEGIN( BNSWasUpdated )
 
-NotifyJamNameCacheUpdated() = delete;
+BNSWasUpdated() = delete;
 
-NotifyJamNameCacheUpdated( uint64_t changeIndex )
+BNSWasUpdated( uint64_t changeIndex )
     : m_changeIndex( changeIndex )
 {
 }
@@ -749,4 +728,10 @@ static NetworkActivity failure()
 std::size_t    m_bytes;
 bool           m_bFailure;
 
+CREATE_EVENT_END()
+
+// ---------------------------------------------------------------------------------------------------------------------
+// similar to network activity but just a generic "async tasks are running" pulse to put something on UI to let user know
+
+CREATE_EVENT_BEGIN( AsyncTaskActivity )
 CREATE_EVENT_END()

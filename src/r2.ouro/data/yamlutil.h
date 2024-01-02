@@ -12,7 +12,7 @@
 #include <rapidyaml/rapidyaml.hpp>
 
 // Daniel Lemire's fast_float version of std::from_chars
-#include "fast_float/fast_float.h"
+#include "data/fast_float.h"
 
 namespace data {
 

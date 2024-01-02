@@ -41,6 +41,16 @@ struct JamPrecacheState
     {
     }
 
+#if OURO_DEBUG
+    ~JamPrecacheState()
+    {
+        if ( m_failureDiagnosticLog != nullptr )
+        {
+            fclose( m_failureDiagnosticLog );
+        }
+    }
+#endif // OURO_DEBUG
+
     void imgui(
         const endlesss::toolkit::Warehouse& warehouse,
         endlesss::services::RiffFetchProvider& fetchProvider,
@@ -52,7 +62,16 @@ struct JamPrecacheState
     bool                            m_enableSiphonMode = false;
     bool                            m_enableDryRun = false;
 
-    int32_t                         m_maximumDownloadsInFlight = 4;
+    // debug tool that writes out all failed download URLs; for giving them to Endlesss to see if they can fix the
+    // access control issues on the CDN
+#if OURO_DEBUG
+    bool                            m_enableFailureLog = false;
+    
+    std::mutex                      m_failureDiagnosticMutex;
+    FILE*                           m_failureDiagnosticLog = nullptr;
+#endif // OURO_DEBUG
+
+    int32_t                         m_maximumDownloadsInFlight = OURO_THREAD_LIMIT;
 
     State                           m_state = State::Intro;
     std::size_t                     m_currentStemIndex = 0;
@@ -124,6 +143,15 @@ void JamPrecacheState::imgui(
                 ImGui::TextDisabled( "[?]" );
                 ImGui::CompactTooltip( "If enabled, no stems will be fetched from the server.\n\nThe tool will check for stems on-disk but not issue any network requests, allowing you to quickly see how full the cache is for this jam already" );
             }
+#if OURO_DEBUG
+            {
+                ImGui::Checkbox( "Enable Failure Log", &m_enableFailureLog );
+                ImGui::SameLine();
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextDisabled( "[?]" );
+                ImGui::CompactTooltip( "If enabled, all stems that fail to download will be recorded in a diagnostic log file for future analysis" );
+            }
+#endif // OURO_DEBUG
             ImGui::Spacing();
             ImGui::Spacing();
             ImGui::Spacing();
@@ -186,12 +214,20 @@ void JamPrecacheState::imgui(
                 ImGui::TextUnformatted( "Maximum Simultaneous Downloads : " );
                 ImGui::SameLine();
                 ImGui::SetNextItemWidth( 200.0f );
-                ImGui::SliderInt( "##simd", &m_maximumDownloadsInFlight, 1, 12 );
+                ImGui::SliderInt( "##simd", &m_maximumDownloadsInFlight, 1, OURO_THREAD_LIMIT );
             }
             ImGui::Spacing();
             if ( ImGui::Button( "Begin Download", buttonSize ) )
             {
                 ABSL_ASSERT( m_currentStemIndex == 0 );
+
+#if OURO_DEBUG
+                if ( m_enableFailureLog )
+                {
+                    m_failureDiagnosticLog = fopen( "precache_failures.txt", "wt" );
+                }
+#endif // OURO_DEBUG
+
                 m_syncTimer.setToNow();
                 m_state = State::Download;
             }
@@ -266,6 +302,14 @@ void JamPrecacheState::imgui(
 
                                     if ( stemLivePtr->hasFailed() )
                                     {
+#if OURO_DEBUG
+                                        if ( m_enableFailureLog )
+                                        {
+                                            const auto failedEndpoint = stemData.fullEndpoint();
+                                            fprintf( m_failureDiagnosticLog, "%s/%s\n", failedEndpoint.c_str(), stemData.fileKey.c_str() );
+                                            fflush( m_failureDiagnosticLog );
+                                        }
+#endif // OURO_DEBUG
                                         blog::error::app( FMTX( "failed to download stem to cache : [{}]" ), stemID );
                                         ++m_statsStemsFailedToDownload;
                                     }

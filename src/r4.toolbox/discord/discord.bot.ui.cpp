@@ -52,6 +52,22 @@ void BotWithUI::imgui( app::CoreGUI& coreGUI )
 
     const bool bIsBotBusy = ( m_discordBot && m_discordBot->isBotBusy() );
 
+    // always tick the bot if its running, regardless of if we are showing the UI or not
+    // .. otherwise navigating to other tabs would halt the bot
+    discord::Bot::DispatchStats stats;
+    if ( m_discordBot )
+    {
+        // main-thread update for the bot manager instance, read out current set of stats
+        m_discordBot->update( stats );
+
+        // update telemetry
+        if ( stats.m_averagePacketSize > 0 )
+            m_avgPacketSize.update( (double)stats.m_averagePacketSize );
+
+        m_trafficOutBytes += stats.m_packetsSentBytes;
+    }
+
+    // main view
     if ( ImGui::Begin( ICON_FAB_DISCORD " Discord Stream###discord_view") )
     {
         const float discordViewWidth = ImGui::GetContentRegionAvail().x;
@@ -68,16 +84,6 @@ void BotWithUI::imgui( app::CoreGUI& coreGUI )
 
         if ( m_discordBot )
         {
-            // main-thread update for the bot manager instance
-            discord::Bot::DispatchStats stats;
-            m_discordBot->update( stats );
-
-            if ( stats.m_averagePacketSize > 0 )
-                m_avgPacketSize.update( (double)stats.m_averagePacketSize );
-
-            m_trafficOutBytes += stats.m_packetsSentBytes;
-
-
             const auto botPhase = m_discordBot->getConnectionPhase();
             switch ( botPhase )
             {
