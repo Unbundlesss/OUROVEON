@@ -33,9 +33,13 @@
 #include "source_location/source_location.hpp"
 
 // abseil
+#include "absl/memory/memory.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/container/inlined_vector.h"
+#include "absl/container/fixed_array.h"
+#include "absl/container/btree_map.h"
+#include "absl/container/btree_set.h"
 #include "absl/hash/hash.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -147,7 +151,7 @@ namespace fs = std::filesystem;
 namespace blog {
 namespace detail {
 
-    template < const fmt::color _fg1, const fmt::color _fg2, typename S, typename... Args, fmt::FMT_ENABLE_IF( fmt::detail::is_string<S>::value )>
+    template < const fmt::color _fg1, const fmt::color _fg2, typename S, typename... Args, FMT_ENABLE_IF( fmt::detail::is_string<S>::value )>
     void _printer( const std::string_view prefix, const S& format_str, const Args&... args ) noexcept
     {
         const auto& vargs = fmt::make_format_args( args... );
@@ -212,10 +216,10 @@ namespace detail {
 }
 
 #define ADD_BLOG( _name, _colour, _nameBold )                                                                                                                               \
-        template <typename S, typename... Args, fmt::FMT_ENABLE_IF( fmt::detail::is_string<S>::value )>                                                                     \
+        template <typename S, typename... Args, FMT_ENABLE_IF( fmt::detail::is_string<S>::value )>                                                                     \
         void _name( const S& format_str, const Args&... args ) { detail::_printer<fmt::color::white, (fmt::color)_colour,S,Args...>( _nameBold, format_str, args...); }     \
         namespace error {                                                                                                                                                   \
-        template <typename S, typename... Args, fmt::FMT_ENABLE_IF( fmt::detail::is_string<S>::value )>                                                                     \
+        template <typename S, typename... Args, FMT_ENABLE_IF( fmt::detail::is_string<S>::value )>                                                                     \
         void _name( const S& format_str, const Args&... args ) { detail::_printer<fmt::color::red, fmt::color::orange_red,S,Args...>( _nameBold, format_str, args... ); }   \
         }
 
