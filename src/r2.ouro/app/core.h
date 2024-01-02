@@ -97,14 +97,14 @@ struct ICoreServices : public config::IPathProvider
 {
     virtual ~ICoreServices() {}
 
-    virtual ouro_nodiscard app::AudioModule&                            getAudioModule() = 0;
-    virtual ouro_nodiscard app::MidiModule&                             getMidiModule() = 0;
-    virtual ouro_nodiscard endlesss::api::NetConfiguration::Shared&     getNetworkConfiguration() = 0;
-    virtual ouro_nodiscard const endlesss::toolkit::Exchange&           getEndlesssExchange() const = 0;
-    virtual ouro_nodiscard const endlesss::toolkit::PopulationQuery&    getEndlesssPopulation() const = 0;
-    virtual ouro_nodiscard tf::Executor&                                getTaskExecutor() = 0;
-    virtual ouro_nodiscard sol::state_view&                             getLuaState() = 0;
-    virtual ouro_nodiscard base::EventBusClient                         getEventBusClient() const = 0;
+    ouro_nodiscard virtual app::AudioModule&                            getAudioModule() = 0;
+    ouro_nodiscard virtual app::MidiModule&                             getMidiModule() = 0;
+    ouro_nodiscard virtual endlesss::api::NetConfiguration::Shared&     getNetworkConfiguration() = 0;
+    ouro_nodiscard virtual const endlesss::toolkit::Exchange&           getEndlesssExchange() const = 0;
+    ouro_nodiscard virtual const endlesss::toolkit::PopulationQuery&    getEndlesssPopulation() const = 0;
+    ouro_nodiscard virtual tf::Executor&                                getTaskExecutor() = 0;
+    ouro_nodiscard virtual sol::state_view&                             getLuaState() = 0;
+    ouro_nodiscard virtual base::EventBusClient                         getEventBusClient() const = 0;
 };
 
 // exposure of custom render injection callbacks as interface
