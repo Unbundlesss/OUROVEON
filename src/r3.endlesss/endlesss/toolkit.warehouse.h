@@ -69,8 +69,34 @@ struct Warehouse
         }
     }
 
+    // configurable modes for dealing with the cursed duplicate Riff ID values that can happen when people Remix stuff
+    // into their private jams. These riff IDs have new owner-jam IDs but they are the same Riff ID from the original 
+    // jam, which isn't valid in our current sql data model where the Riff ID is a unique key
+    // .. so we have some options
+    enum class RiffIDConflictHandling
+    {
+        IgnoreAll,                  // first riff that arrived wins, we ignore all conflicts
+        Overwrite,                  // whatever is being synced wins, we overwrite the owner-jam ID with whatever the new one is
+        OverwriteExceptPersonal     // the default; we do 'Overwrite' behaviour except for in your personal jam where it is ignored - 
+                                    // this means all non-personal jams are kept intact as others would see them, but your personal jam
+                                    // may be missing things. users can switch to Overwrite and sync their personal to have all those
+                                    // duplicate riffs restored into the personal jam timeline
+    };
+    
+    static const std::string_view getRiffIDConflictHandlingDescription( const RiffIDConflictHandling conflictHandling )
+    {
+        switch ( conflictHandling )
+        {
+        case RiffIDConflictHandling::IgnoreAll:                 return "Ignore Any Conflicts";
+        case RiffIDConflictHandling::Overwrite:                 return "Use Most Recently Synced";
+        case RiffIDConflictHandling::OverwriteExceptPersonal:   return "Use Most Recently Synced, Ignore For Personal Jam";
+        default:
+            return "UNKNOWN";
+        }
+    }
 
-    // SoA extraction of a set of riff data
+
+    // SoA extraction of a set of riff data; this is the data returned to the client app when a view on a jam is requested
     struct JamSlice
     {
         using StemUserHashes = std::array< uint64_t, 8 >;
@@ -91,9 +117,10 @@ struct Warehouse
         std::vector< uint8_t >                      m_scales;
         std::vector< float >                        m_bpms;
 
+        // hashed stem-owner username, per stem in each riff
         std::vector< StemUserHashes >               m_stemUserHashes;
 
-        // riff-adjacency information
+        // sequential adjacency information, based on previously (index - 1) seen riff
         std::vector< int32_t >                      m_deltaSeconds;
         std::vector< int8_t >                       m_deltaStem;
 
@@ -213,7 +240,7 @@ struct Warehouse
     ouro_nodiscard base::OperationID requestJamDataImport( const fs::path pathToData );
 
     // produce a common format filename for exported things - database stuff, stem archives, etc
-    static std::string createExportFilenameForJam(
+    ouro_nodiscard static std::string createExportFilenameForJam(
         const types::JamCouchID& jamCouchID,
         const std::string_view jamName,
         const std::string_view fileExtension );
@@ -291,6 +318,14 @@ struct Warehouse
     // that require it if it isn't present (and tasks will check and bail in error)
     ouro_nodiscard bool hasFullEndlesssNetworkAccess() const { return m_networkConfiguration->hasAccess( api::NetConfiguration::Access::Authenticated ); }
 
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // conflict handling controls
+
+    void setCurrentRiffIDConflictHandling( RiffIDConflictHandling handling ) { m_riffIDConflictHandling = handling; }
+    ouro_nodiscard RiffIDConflictHandling getCurrentRiffIDConflictHandling() const { return m_riffIDConflictHandling; }
+
+
 protected:
 
     using ChangeIndexMap = absl::flat_hash_map< ::endlesss::types::JamCouchID, ChangeIndex >;
@@ -328,6 +363,8 @@ protected:
     std::unique_ptr<std::thread>            m_workerThread;
     std::atomic_bool                        m_workerThreadAlive;
     std::atomic_bool                        m_workerThreadPaused;
+
+    RiffIDConflictHandling                  m_riffIDConflictHandling = RiffIDConflictHandling::OverwriteExceptPersonal;
 };
 
 } // namespace toolkit

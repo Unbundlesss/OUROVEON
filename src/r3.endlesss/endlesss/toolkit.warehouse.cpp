@@ -57,7 +57,11 @@ struct Warehouse::ITask
     virtual ~ITask() {}
 
     virtual bool usesNetwork() const { return false; }
-    virtual bool forceContentReport() const { return false; }
+    virtual bool shouldTriggerContentReport() const { return false; }
+
+    // task can automatically increment the 'jam change' index that denotes the client app might want to refresh
+    // jam views if their own change index no longer matches
+    virtual bool shouldIncrementJamChangeIndex( types::JamCouchID& jamID ) const { return false; }
 
     virtual const char* getTag() const = 0;
     virtual std::string Describe() const = 0;
@@ -143,19 +147,29 @@ struct JamSnapshotTask final : Warehouse::INetworkTask
 {
     static constexpr std::string_view Tag = "SNAPSHOT";
 
-    JamSnapshotTask( const api::NetConfiguration& ncfg, base::EventBusClient& eventBus, const types::JamCouchID& jamCID, const base::OperationID opID )
+    JamSnapshotTask( const api::NetConfiguration& ncfg, base::EventBusClient& eventBus, const types::JamCouchID& jamCID, const base::OperationID opID, Warehouse::RiffIDConflictHandling conflictHandling )
         : Warehouse::INetworkTask( ncfg )
         , m_eventBusClient( eventBus )
         , m_jamCID( jamCID )
         , m_operationID( opID )
+        , m_conflictHandling( conflictHandling )
     {}
 
     // always trigger a contents update after snapping a new jam
-    bool forceContentReport() const override { return true; }
+    bool shouldTriggerContentReport() const override { return true; }
 
-    base::EventBusClient    m_eventBusClient;
-    types::JamCouchID       m_jamCID;
-    base::OperationID       m_operationID;
+    // always pump the jam change index on snapshot, even if we got nothing new
+    bool shouldIncrementJamChangeIndex( types::JamCouchID& jamID ) const override
+    { 
+        jamID = m_jamCID;
+        return true;
+    }
+
+
+    base::EventBusClient                m_eventBusClient;
+    types::JamCouchID                   m_jamCID;
+    base::OperationID                   m_operationID;
+    Warehouse::RiffIDConflictHandling   m_conflictHandling;
 
     const char* getTag() const override { return Tag.data(); }
     std::string Describe() const override { return fmt::format( "[{}] fetching Jam snapshot of [{}]", Tag, m_jamCID ); }
@@ -173,7 +187,15 @@ struct JamPurgeTask final : Warehouse::ITask
     {}
 
     // always trigger a contents update after wiping out data
-    bool forceContentReport() const override { return true; }
+    bool shouldTriggerContentReport() const override { return true; }
+
+    // jam change index up as we just nuked the data
+    bool shouldIncrementJamChangeIndex( types::JamCouchID& jamID ) const override
+    {
+        jamID = m_jamCID;
+        return true;
+    }
+
 
     types::JamCouchID m_jamCID;
 
@@ -193,7 +215,7 @@ struct JamSyncAbortTask final : Warehouse::ITask
     {}
 
     // always trigger a contents update after wiping out data
-    bool forceContentReport() const override { return true; }
+    bool shouldTriggerContentReport() const override { return true; }
 
     types::JamCouchID m_jamCID;
 
@@ -244,7 +266,7 @@ struct JamImportTask final : Warehouse::ITask
     base::OperationID       m_operationID;
 
     // rebuild after add
-    bool forceContentReport() const override { return true; }
+    bool shouldTriggerContentReport() const override { return true; }
 
     const char* getTag() const override { return Tag.data(); }
     std::string Describe() const override { return fmt::format( "[{}] importing jam from disk", Tag ); }
@@ -1281,7 +1303,7 @@ base::OperationID Warehouse::addOrUpdateJamSnapshot( const types::JamCouchID& ja
         return base::OperationID::invalid();
     }
 
-    m_taskSchedule->enqueueWorkTask<JamSnapshotTask>( *m_networkConfiguration, m_eventBusClient, jamCouchID, operationID );
+    m_taskSchedule->enqueueWorkTask<JamSnapshotTask>( *m_networkConfiguration, m_eventBusClient, jamCouchID, operationID, m_riffIDConflictHandling );
 
     return operationID;
 }
@@ -1706,8 +1728,16 @@ void Warehouse::threadWorker()
                 }
             }
 
-            if ( nextTask->forceContentReport() )
-                tryEnqueueReport( true );
+            {
+                if ( nextTask->shouldTriggerContentReport() )
+                    tryEnqueueReport( true );
+
+                types::JamCouchID jamToIncrement;
+                if ( nextTask->shouldIncrementJamChangeIndex( jamToIncrement ) )
+                {
+                    incrementChangeIndexForJam( jamToIncrement );
+                }
+            }
         }
         // go looking for holes to fill
         else
@@ -1864,21 +1894,67 @@ bool JamSnapshotTask::Work( TaskQueue& currentTasks )
     }
 
     const auto countBeforeTx = sql::riffs::countRiffsInJam( m_jamCID );
+    const bool bJamIsPersonal = m_jamCID.value().rfind( "band", 0 ) != 0;   // true if this jam is not a "band####" style ID, representing a user's own solo jam
 
     // the snapshot is only for getting the root couch IDs for all riffs in a jam; further details
-    // are then plucked one-by-one as we fill the warehouse. newly discovered riffs will INSERT, previously
-    // touched ones are ignored
-    static constexpr char insertOrIgnoreNewRiffSkeleton[] = R"(
+    // are then plucked one-by-one as we fill the warehouse.
+    
+    // we have two modes of operation when it comes to dealing with riff values, either we ignore conflicts or
+    // overwrite any existing Owner Jam value with the new one coming in. Check the RiffIDConflictHandling enum for
+    // more details
+    static constexpr char insertOrIgnore_RiffSkeleton[] = R"(
         INSERT OR IGNORE INTO riffs( riffCID, OwnerJamCID ) VALUES( ?1, ?2 );
+    )";
+    static constexpr char insertWithUpdate_RiffSkeleton[] = R"(
+        INSERT INTO riffs( riffCID, OwnerJamCID ) VALUES( ?1, ?2 )
+        ON CONFLICT( riffCID ) DO UPDATE SET OwnerJamCID = ?2
     )";
 
     {
         // bundle into single transaction
         Warehouse::SqlDB::TransactionGuard txn;
-        for ( const auto& jamData : jamSnapshot.rows )
+
+        // choose which conflict mode we're using for this
+        bool bIgnoreConflicts = true;
+        switch ( m_conflictHandling )
         {
-            const auto& riffCID = jamData.id;
-            Warehouse::SqlDB::query<insertOrIgnoreNewRiffSkeleton>( riffCID.value(), m_jamCID.value() );
+            default:
+                ABSL_ASSERT( 0 );
+            case Warehouse::RiffIDConflictHandling::IgnoreAll:
+                break;
+
+            case Warehouse::RiffIDConflictHandling::Overwrite:
+                bIgnoreConflicts = false;
+                break;
+
+            case Warehouse::RiffIDConflictHandling::OverwriteExceptPersonal:
+                {
+                    if ( !bJamIsPersonal )
+                        bIgnoreConflicts = false;
+                }
+                break;
+        }
+
+        // run chosen queries against the fetched rows
+        if ( bIgnoreConflicts )
+        {
+            blog::database( FMTX( "[{}] riff ID [{}] : conflicts will be ignored" ), Tag, m_jamCID );
+
+            for ( const auto& jamData : jamSnapshot.rows )
+            {
+                const auto& riffCID = jamData.id;
+                Warehouse::SqlDB::query<insertOrIgnore_RiffSkeleton>( riffCID.value(), m_jamCID.value() );
+            }
+        }
+        else
+        {
+            blog::database( FMTX( "[{}] riff ID [{}] : conflicts will be overwritten" ), Tag, m_jamCID );
+
+            for ( const auto& jamData : jamSnapshot.rows )
+            {
+                const auto& riffCID = jamData.id;
+                Warehouse::SqlDB::query<insertWithUpdate_RiffSkeleton>( riffCID.value(), m_jamCID.value() );
+            }
         }
     }
 
@@ -2381,8 +2457,7 @@ bool GetRiffDataTask::Work( TaskQueue& currentTasks )
         // does this have vintage attachment data? if so, allow the fact it might be also missing an app version tag
         const bool bThisIsAnOldButValidStem = !stemCheck.doc._attachments.oggAudio.content_type.empty();
 
-        // check for invalid app version - this is usually a red flag for invalid stems but on very old jams this
-        // was the norm - there is a config flag that allows these to pass and be synced
+        // check for invalid app version - this is usually a red flag for invalid stems but on very old jams this was the norm 
         const bool ignoreForMissingAppData = ( stemCheck.doc.app_version == 0 && bThisIsAnOldButValidStem == false );
 
         // stem is lacking app versioning (and isn't just old)
