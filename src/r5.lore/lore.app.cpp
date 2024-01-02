@@ -2027,6 +2027,8 @@ int LoreApp::EntrypointOuro()
             // most requests can be serviced direct from the DB
             if ( m_warehouse->fetchSingleRiffByID( request.getRiffID(), result ) )
             {
+                ABSL_ASSERT( result.jam.couchID == request.getJamID() );
+
                 endlesss::toolkit::Pipeline::applyRequestCustomNaming( request, result );
                 return true;
             }
@@ -3484,7 +3486,7 @@ int LoreApp::EntrypointOuro()
                             std::ignore = activateFileDialog( std::move( fileDialog ), [this]( ImGuiFileDialog& dlg )
                                 {
                                     const fs::path inputTarFile = dlg.GetFilePathName();
-                                    const fs::path outputPath = fs::absolute( getStemCache().getCacheRootPath() / fs::path( ".." ) / "test_extraction" );
+                                    const fs::path outputPath = getStemCache().getCacheRootPath();
 
                                     blog::app( FMTX( "stem import task queued - from [{}] to [{}]" ), inputTarFile.string(), outputPath.string() );
 
