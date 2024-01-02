@@ -27,6 +27,12 @@ struct Operations
     static OperationVariant variantFromID( const OperationID operationID );
 };
 
+// send OperationComplete regardless of how we leave scope
+#define OperationCompleteOnScopeExit( _idName )                             \
+    absl::Cleanup sendOperationCompleteOnExit = [&] {                       \
+        m_eventBusClient.Send< ::events::OperationComplete >( _idName );    \
+        }
+
 // ---------------------------------------------------------------------------------------------------------------------
 template< typename _withType >
 struct ValueWithOperation
