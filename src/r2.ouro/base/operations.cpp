@@ -12,7 +12,7 @@
 
 namespace base {
 
-using OperationIDs = mcc::ReaderWriterQueue<OperationID>;
+using OperationIDs = mcc::ConcurrentQueue<OperationID>;
 
 std::unique_ptr< OperationIDs >     gOperationIDCache;
 uint32_t                            gOperationIDCounter;
@@ -23,7 +23,7 @@ void OperationsFill( std::size_t count )
     std::scoped_lock<std::mutex> fillLock( gOperationIDCacheFillLock );
     for ( auto i = 0; i < count; i++ )
     {
-        gOperationIDCache->emplace( gOperationIDCounter++ );
+        gOperationIDCache->enqueue( OperationID( gOperationIDCounter++ ) );
     }
 }
 
