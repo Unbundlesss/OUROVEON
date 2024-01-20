@@ -161,7 +161,7 @@ bool Pipeline::resolveSharedRiff(
         result.jam.couchID = endlesss::types::JamCouchID( riffBandExtractor.estimateJamCouchID( riffData ) );
     }
 
-    result.jam.displayName = fmt::format( FMTX( "shared_riff_{}" ), riffData.rifff.userName ); // encode the username we have for sake of export
+    result.jam.displayName = fmt::format( FMTX( "{}_{}" ), endlesss::types::Constants::SharedRiffJam(), riffData.rifff.userName ); // encode the username we have for sake of export
 
     // log the given title from the shared-riff as an extra bit of jam metadata
     result.jam.description = riffData.title;

@@ -287,7 +287,7 @@ void Preview::update(
         RiffPtrOperation riffOperation;
         while ( m_riffQueue.try_dequeue( riffOperation ) )
         {
-            m_eventBusClient.Send< ::events::MixerRiffChange >( riffOperation.m_value );
+            m_eventBusClient.Send< ::events::MixerRiffChange >( riffOperation.m_value, true ); // mark "was cancelled" as true to show we didn't actually play it
             m_eventBusClient.Send< ::events::OperationComplete >( riffOperation.m_operation );
         }
         // .. finally, we play nothing

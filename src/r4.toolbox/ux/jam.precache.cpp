@@ -237,7 +237,9 @@ void JamPrecacheState::imgui(
         // do the actual work; this runs through and triggers more download tasks if we don't have enough in-flight
         case State::Download:
         {
-            if ( m_currentStemIndex >= m_stemIDs.size() )
+            const auto stemCount = m_stemIDs.size();
+
+            if ( m_currentStemIndex >= stemCount )
             {
                 taskExecutor.wait_for_all();
                 m_state = State::Complete;
@@ -246,7 +248,7 @@ void JamPrecacheState::imgui(
 
             // show progress
             {
-                const float progressFraction = (1.0f / static_cast<float>(m_stemIDs.size())) * static_cast<float>(m_currentStemIndex);
+                const float progressFraction = (1.0f / static_cast<float>(stemCount)) * static_cast<float>(m_currentStemIndex);
                 ImGui::ProgressBar( progressFraction, ImVec2( -1, 26.0f ), fmt::format( FMTX( "{} of {}" ), m_currentStemIndex + 1, m_stemIDs.size() ).c_str() );
             }
 
@@ -257,7 +259,7 @@ void JamPrecacheState::imgui(
             // if there are not enough live tasks running, kick some off
             while ( m_downloadsDispatched < static_cast<uint32_t>(m_maximumDownloadsInFlight) && fileOpsBurstCount > 0 )
             {
-                const endlesss::types::StemCouchID stemID = m_stemIDs[m_currentStemIndex];
+                const endlesss::types::StemCouchID stemID = m_stemIDs[ ( stemCount - 1 ) - m_currentStemIndex ];
 
                 // pull the full stem data we have on file
                 endlesss::types::Stem stemData;

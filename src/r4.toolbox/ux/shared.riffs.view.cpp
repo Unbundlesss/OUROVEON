@@ -323,7 +323,7 @@ void SharedRiffView::State::imgui(
                                     
                                     // encode an export/display name from the active username that shared the riff
                                     // .. there is no way to get that info during network resolve, so we have to tag it here
-                                    customNaming.m_jamDisplayName = fmt::format( FMTX( "shared_riff_{}" ), dataPtr->m_username );
+                                    customNaming.m_jamDisplayName = fmt::format( FMTX( "{}_{}" ), endlesss::types::Constants::SharedRiffJam(), dataPtr->m_username );
 
                                     return endlesss::types::RiffIdentity(
                                         asSharedRiff ? endlesss::types::Constants::SharedRiffJam() : originJam,

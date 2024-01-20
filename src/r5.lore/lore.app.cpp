@@ -2639,7 +2639,10 @@ int LoreApp::EntrypointOuro()
                                                             else
                                                             {
                                                                 const auto& riffCouchID = m_jamSliceSketch->m_slice->m_ids[m_jamSliceHoveredRiffIndex];
-                                                                requestRiffPlayback( { m_currentViewedJam, riffCouchID }, m_riffPlaybackAbstraction.asPermutation() );
+
+                                                                const bool bRiffCurrentlyPlaying = (currentRiff && currentRiff->m_riffData.riff.couchID == riffCouchID);
+                                                                if ( !bRiffCurrentlyPlaying )
+                                                                    requestRiffPlayback( { m_currentViewedJam, riffCouchID }, m_riffPlaybackAbstraction.asPermutation() );
                                                             }
                                                         }
                                                     }
@@ -3170,7 +3173,10 @@ int LoreApp::EntrypointOuro()
                                     ImGui::Scoped::ToggleButton highlightButton( bRiffIsPlaying, true );
                                     if ( ImGui::Button( ICON_FA_PLAY, buttonSizeMidTable ) )
                                     {
-                                        getEventBusClient().Send< ::events::EnqueueRiffPlayback >( riffTag.m_jam, riffID );
+                                        if ( !bRiffIsPlaying )
+                                        {
+                                            getEventBusClient().Send< ::events::EnqueueRiffPlayback >( riffTag.m_jam, riffID );
+                                        }
                                     }
                                     if ( ImGui::IsItemHovered() )
                                     {
@@ -3386,9 +3392,12 @@ int LoreApp::EntrypointOuro()
             const auto fnWarehouseViewHeaders = [&]()
                 {
                     constexpr float cEdgeInsetSize = 4.0f;
+                    constexpr float cButtonGapSize = 6.0f;
 
                     // show if the warehouse is running ops, if not then disable new-task buttons
                     const bool bWarehouseIsPaused = m_warehouse->workerIsPaused();
+
+                    ImGui::Scoped::ButtonTextAlignLeft leftAlign;
 
                     ImGui::Dummy( { cEdgeInsetSize, 0 } );
                     ImGui::SameLine( 0, 0 );
@@ -3401,8 +3410,6 @@ int LoreApp::EntrypointOuro()
                                 m_warehouseContentsReport.m_totalPopulatedRiffs,
                                 m_warehouseContentsReport.m_totalPopulatedStems).c_str()
                         );
-
-                        ImGui::Scoped::ButtonTextAlignLeft leftAlign;
 
                         // button to start the sync process on every jam we know about
                         ImGui::RightAlignSameLine( toolbarButtonSize.x + cEdgeInsetSize );
@@ -3421,8 +3428,6 @@ int LoreApp::EntrypointOuro()
                     if ( warehouseView == WarehouseView::ContentsManagement )
                     {
                         ImGui::TextColored( colour::shades::callout.neutral(), ICON_FA_GEAR " Contents Management" );
-
-                        ImGui::Scoped::ButtonTextAlignLeft leftAlign;
 
                         ImGui::RightAlignSameLine( toolbarButtonSize.x + cEdgeInsetSize );
                         if ( ImGui::Button( " " ICON_FA_CLIPBOARD " Copy Report", toolbarButtonSize ) )
@@ -3450,9 +3455,9 @@ int LoreApp::EntrypointOuro()
                     {
                         ImGui::TextColored( colour::shades::callout.neutral(), ICON_FA_GEAR " Import / Export" );
 
-                        ImGui::RightAlignSameLine( ( toolbarButtonSize.x * 2.0f ) + 6.0f + cEdgeInsetSize );
+                        ImGui::RightAlignSameLine( ( toolbarButtonSize.x * 2.0f ) + cButtonGapSize + cEdgeInsetSize );
 
-                        if ( ImGui::Button( ICON_FA_BOX_OPEN " Import Data...", toolbarButtonSize ) )
+                        if ( ImGui::Button( " " ICON_FA_BOX_OPEN " Import Data", toolbarButtonSize) )
                         {
                             auto fileDialog = std::make_unique< ImGuiFileDialog >();
                             fileDialog->OpenDialog(
@@ -3470,8 +3475,8 @@ int LoreApp::EntrypointOuro()
                                     const base::OperationID importOperationID = m_warehouse->requestJamDataImport( dlg.GetFilePathName() );
                                 });
                         }
-                        ImGui::SameLine( 0, 6.0f );
-                        if ( ImGui::Button( ICON_FA_BOX_OPEN " Import Stems...", toolbarButtonSize ) )
+                        ImGui::SameLine( 0, cButtonGapSize );
+                        if ( ImGui::Button( " " ICON_FA_BOX_OPEN " Import Stems", toolbarButtonSize) )
                         {
                             auto fileDialog = std::make_unique< ImGuiFileDialog >();
                             fileDialog->OpenDialog(
@@ -3533,13 +3538,66 @@ int LoreApp::EntrypointOuro()
                     {
                         ImGui::TextColored( colour::shades::callout.neutral(), ICON_FA_GEAR " Advanced" );
 
-                        ImGui::RightAlignSameLine( toolbarButtonSize.x + cEdgeInsetSize );
+                        ImGui::RightAlignSameLine( (toolbarButtonSize.x * 2.0f) + cButtonGapSize + cEdgeInsetSize );
+
+                        if ( ImGui::Button( " " ICON_FA_CODE_MERGE " Conflicts...", toolbarButtonSize ) )
+                        {
+                            activateModalPopup( "Set Conflict Resolution Mode", [&, this]( const char* title )
+                            {
+                                using namespace endlesss::toolkit;
+
+                                const ImVec2 configWindowSize = ImVec2( 680.0f, 320.0f );
+                                ImGui::SetNextWindowContentSize( configWindowSize );
+
+                                if ( ImGui::BeginPopupModal( title, nullptr, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize ) )
+                                {
+                                    const ImVec2 buttonSize( 240.0f, 32.0f );
+
+                                    ImGui::TextWrapped( "Due to a quirk with how Endlesss handles riff remixing, it's possible to find riffs in a personal feed that share a 'unique' ID with the jams where they were originally authored. This is not compatible with the way the OUROVEON Warehouse database organises things, expecting riffs to have a globally unqiue ID." );
+                                    ImGui::Spacing();
+                                    ImGui::TextWrapped( "More details can be found in the OUROVEON documentation." );
+                                    ImGui::Spacing();
+                                    ImGui::TextWrapped( "To work around this, there are several options for how to resolve conflicts. Check the tooltips for some further explanation." );
+                                    ImGui::Spacing();
+                                    ImGui::Spacing();
+                                    ImGui::Spacing();
+
+                                    {
+                                        int32_t currentMode = (int32_t)m_warehouse->getCurrentRiffIDConflictHandling();
+
+                                        ImGui::RadioButton( "Ignore All", &currentMode, (int32_t)Warehouse::RiffIDConflictHandling::IgnoreAll );
+                                        ImGui::CompactTooltip( Warehouse::getRiffIDConflictHandlingTooltip( Warehouse::RiffIDConflictHandling::IgnoreAll ).data() );
+
+                                        ImGui::RadioButton( "Overwrite", &currentMode, (int32_t)Warehouse::RiffIDConflictHandling::Overwrite );
+                                        ImGui::CompactTooltip( Warehouse::getRiffIDConflictHandlingTooltip( Warehouse::RiffIDConflictHandling::Overwrite ).data() );
+
+                                        ImGui::RadioButton( "Overwrite, Except Personal", &currentMode, (int32_t)Warehouse::RiffIDConflictHandling::OverwriteExceptPersonal );
+                                        ImGui::CompactTooltip( Warehouse::getRiffIDConflictHandlingTooltip( Warehouse::RiffIDConflictHandling::OverwriteExceptPersonal ).data() );
+
+                                        m_warehouse->setCurrentRiffIDConflictHandling( (Warehouse::RiffIDConflictHandling)currentMode );
+                                    }
+
+                                    ImGui::Spacing();
+                                    ImGui::Spacing();
+
+                                    if ( ImGui::BottomRightAlignedButton( "Close", buttonSize ) )
+                                    {
+                                        ImGui::CloseCurrentPopup();
+                                    }
+
+                                    ImGui::EndPopup();
+                                }
+                            });
+                        }
+                        ImGui::CompactTooltip( "Configure logic for handling Riff ID conflicts during sync" );
+
+                        ImGui::SameLine( 0, cButtonGapSize );
                         {
                             // enable or disable the worker thread
                             ImGui::Scoped::ToggleButton highlightButton( !bWarehouseIsPaused, true );
                             if ( ImGui::Button( bWarehouseIsPaused ?
-                                ICON_FA_CIRCLE_PLAY  " RESUME  " :
-                                ICON_FA_CIRCLE_PAUSE " RUNNING ", toolbarButtonSize ) )
+                                " " ICON_FA_CIRCLE_PLAY  " RESUME  " :
+                                " " ICON_FA_CIRCLE_PAUSE " RUNNING ", toolbarButtonSize ) )
                             {
                                 m_warehouse->workerTogglePause();
                             }
@@ -3560,7 +3618,8 @@ int LoreApp::EntrypointOuro()
                     ImGui::AlignTextToFramePadding();
                     ImGui::StandardFilterBox( jamNameFilter, "###nameFilter" );
 
-                    ImGui::SameLine( 0, 16.0f );
+                    ImGui::RightAlignSameLine( ( toolbarButtonSize.x * 2.0f ) + 4.0f + 6.0f + 40.0f );
+
                     ImGui::TextUnformatted( "Sort" );
                     ImGui::SameLine();
                     ImGui::SetNextItemWidth( toolbarButtonSize.x );
@@ -3568,12 +3627,12 @@ int LoreApp::EntrypointOuro()
                     {
                         updateWarehouseContentsSortOrder();
                     }
+                    ImGui::SameLine(0, 6.0f);
                 }
                 {
                     ImGui::Scoped::ButtonTextAlignLeft leftAlign;
+                    ImGui::Scoped::Enabled se( bWarehouseHasEndlesssAccess );
 
-                    ImGui::RightAlignSameLine( toolbarButtonSize.x + 4.0f );
-                    ImGui::BeginDisabledControls( !bWarehouseHasEndlesssAccess );
                     if ( ImGui::Button( " " ICON_FA_CIRCLE_PLUS " Add Jam...", toolbarButtonSize ) )
                     {
                         // create local copy of the current warehouse jam ID map for use by the popup; avoids
@@ -3588,7 +3647,6 @@ int LoreApp::EntrypointOuro()
                             ux::modalUniversalJamBrowser( title, m_jamLibrary, warehouseJamBrowser, *this );
                         });
                     }
-                    ImGui::EndDisabledControls( !bWarehouseHasEndlesssAccess );
                 }
                 ImGui::Spacing();
                 ImGui::Spacing();

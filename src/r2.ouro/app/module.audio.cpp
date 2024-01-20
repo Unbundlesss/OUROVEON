@@ -106,7 +106,7 @@ absl::Status Audio::initOutput( const config::Audio& outputDevice, const config:
     PaStreamParameters outputParameters;
     if ( AudioDeviceQuery::generateStreamParametersFromDeviceConfig( outputDevice, outputParameters ) < 0 )
     {
-        return absl::UnavailableError( "Unable to resolve stream parameters" );
+        return absl::UnavailableError( "Audio engine was unable to resolve stream parameters; could not find an output device to use?" );
     }
 
     PaError err = Pa_OpenStream(
@@ -121,7 +121,7 @@ absl::Status Audio::initOutput( const config::Audio& outputDevice, const config:
 
     if ( err != paNoError )
     {
-        return absl::UnavailableError( fmt::format( FMTX( "Pa_OpenStream failed [{}]" ), Pa_GetErrorText( err ) ) );
+        return absl::UnavailableError( fmt::format( FMTX( "Audio engine error - Pa_OpenStream failed [{}]" ), Pa_GetErrorText( err ) ) );
     }
 
     m_mixerBuffers = new OutputBuffer( getMaximumBufferSize() );
@@ -131,7 +131,7 @@ absl::Status Audio::initOutput( const config::Audio& outputDevice, const config:
     {
         termOutput();
 
-        return absl::UnavailableError( fmt::format( FMTX( "Pa_StartStream failed [{}]" ), Pa_GetErrorText( err ) ) );
+        return absl::UnavailableError( fmt::format( FMTX( "Audio engine error - Pa_StartStream failed [{}]" ), Pa_GetErrorText( err ) ) );
     }
 
     return absl::OkStatus();
@@ -520,7 +520,7 @@ void AudioDeviceQuery::findSuitable( const config::Audio& audioConfig )
     if ( paDeviceCount <= 0 )
         return;
 
-    std::unordered_set< std::string > uniqueDeviceNames;
+    absl::flat_hash_set< std::string > uniqueDeviceNames;
     uniqueDeviceNames.reserve( paDeviceCount );
 
     PaStreamParameters outputParameters;
@@ -540,7 +540,7 @@ void AudioDeviceQuery::findSuitable( const config::Audio& audioConfig )
         {
             const auto paDeviceName = std::string( paDeviceInfo->name );
 
-            if ( uniqueDeviceNames.find( paDeviceName ) == uniqueDeviceNames.end() )
+            if ( uniqueDeviceNames.contains( paDeviceName ) == false )
             {
                 uniqueDeviceNames.emplace( paDeviceName );
 

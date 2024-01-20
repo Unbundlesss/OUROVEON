@@ -368,11 +368,32 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
             uint32_t rawAudioInBytes = rawAudioLen; // size of remaining raw audio
             uint32_t flacAudioOutSamples = flacDecoderBufferSize; // size of output buffer
 
-#ifdef DEBUG
+#if OURO_DEBUG
             memset( decodeBuffer, 0, sizeof( int32_t ) * flacDecoderBufferSize );
-#endif
+#endif // OURO_DEBUG
 
             const fx_flac_state_t flacState = fx_flac_process( flac, rawAudio, &rawAudioInBytes, decodeBuffer, &flacAudioOutSamples );
+
+#ifdef OURO_FLAC_VERBOSE
+            // dump out every state; only do this with a single thread running, obviously
+            static constexpr std::array< std::string_view, 8 > flacStateStrings = {
+                "FLAC_ERR             ( -1 )",
+                "FLAC_INIT            (  0 )",
+                "FLAC_IN_METADATA     (  1 )",
+                "FLAC_END_OF_METADATA (  2 )",
+                "FLAC_SEARCH_FRAME    (  3 )",
+                "FLAC_IN_FRAME        (  4 )",
+                "FLAC_DECODED_FRAME   (  5 )",
+                "FLAC_END_OF_FRAME    (  6 )",
+            };
+            blog::stem( FMTX( "FLAC | state = {} | remaining : {:06} - {:06} | buffer to process : {:06} | write_index : {:06}" ),
+                flacStateStrings[(std::size_t)flacState + 1],
+                rawAudioLen,
+                rawAudioInBytes,
+                flacAudioOutSamples,
+                flacStreamChannelsWriteIndex );
+#endif // OURO_FLAC_VERBOSE
+
             switch ( flacState )
             {
                 case FLAC_ERR:
@@ -479,7 +500,41 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
         // we should expect (AFAIK) to have eaten the entire incoming audio stream and produces the 
         // same number of samples as the metadata specified
         ABSL_ASSERT( rawAudioLen == 0 );
-        ABSL_ASSERT( flacStreamChannelsWriteIndex == flacSampleCount );
+
+        // case where the number of samples extracted does not match what the file specified it contained : 
+        // I have found this to happen exactly once amongst over 1 million stems so far - what seems to happen is we end the FLAC
+        // with a tiny number of samples missing (in the specific example, just 2 samples). The final frame is a FLAC_SEARCH_FRAME
+        // rather than FLAC_END_OF_FRAME. I'm not sure why that happens; to try and support these final quirks, we allow a tiny amount of
+        // drift here (but also log it out as an error)
+        ABSL_ASSERT( flacStreamChannelsWriteIndex <= flacSampleCount );
+        if ( flacStreamChannelsWriteIndex != flacSampleCount )
+        {
+            blog::error::stem( FMTX( "[s:{}..] FLAC decompression sample mismatch ( written {} != declared {} )" ), stemCouchSnip, flacStreamChannelsWriteIndex, flacSampleCount );
+        }
+
+        // go backfill those missing samples, just copy them from the last one we got
+        if ( flacStreamChannelsWriteIndex > 1 && flacStreamChannelsWriteIndex < flacSampleCount )
+        {
+            // allow a maximum number of missing samples
+            const uint32_t missingSamples = flacSampleCount - flacStreamChannelsWriteIndex;
+            if ( missingSamples < 4 )
+            {
+                blog::error::stem( FMTX( "[s:{}..] FLAC fixing {} missing samples" ), stemCouchSnip, missingSamples );
+
+                // .. and 'fix' by just copying the last valid one we have over the gaps to avoid a click
+                for ( uint32_t hackSample = flacStreamChannelsWriteIndex; hackSample < flacSampleCount; hackSample++ )
+                {
+                    flacStreamChannels[0][hackSample] = flacStreamChannels[0][flacStreamChannelsWriteIndex - 1];
+                    flacStreamChannels[1][hackSample] = flacStreamChannels[1][flacStreamChannelsWriteIndex - 1];
+                }
+                flacStreamChannelsWriteIndex = flacSampleCount;
+            }
+            else
+            {
+                m_state = State::Failed_Decompression;
+                return;
+            }
+        }
         m_sampleCount = static_cast<int32_t>( flacSampleCount );
 
         // similar to OGG, handle sample rate conversion as we create the final data buffers

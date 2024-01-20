@@ -50,7 +50,7 @@ struct Warehouse
 
     // when there is a failure to validate a stem during riff fetching, the stem is cut out of the resulting database
     // and an entry is logged in a ledger, stashing the stem ID with any notes / tags about why we ignore it
-    enum class StemLedgerType
+    enum class StemLedgerType : int32_t
     {
         MISSING_OGG         = 1,            // ogg data vanished; this is mostly due to the broken beta that went out
         DAMAGED_REFERENCE   = 2,            // sometimes chat messages (?!) or other riffs (??) seem to have been stored as stem CouchIDs 
@@ -73,7 +73,7 @@ struct Warehouse
     // into their private jams. These riff IDs have new owner-jam IDs but they are the same Riff ID from the original 
     // jam, which isn't valid in our current sql data model where the Riff ID is a unique key
     // .. so we have some options
-    enum class RiffIDConflictHandling
+    enum class RiffIDConflictHandling : int32_t
     {
         IgnoreAll,                  // first riff that arrived wins, we ignore all conflicts
         Overwrite,                  // whatever is being synced wins, we overwrite the owner-jam ID with whatever the new one is
@@ -83,13 +83,13 @@ struct Warehouse
                                     // duplicate riffs restored into the personal jam timeline
     };
     
-    static const std::string_view getRiffIDConflictHandlingDescription( const RiffIDConflictHandling conflictHandling )
+    static const std::string_view getRiffIDConflictHandlingTooltip( const RiffIDConflictHandling conflictHandling )
     {
         switch ( conflictHandling )
         {
-        case RiffIDConflictHandling::IgnoreAll:                 return "Ignore Any Conflicts";
-        case RiffIDConflictHandling::Overwrite:                 return "Use Most Recently Synced";
-        case RiffIDConflictHandling::OverwriteExceptPersonal:   return "Use Most Recently Synced, Ignore For Personal Jam";
+        case RiffIDConflictHandling::IgnoreAll:                 return "Ignore all conflicts; any duplicate riff arriving will be ignored, leaving the original that arrived first.";
+        case RiffIDConflictHandling::Overwrite:                 return "Synchronising a jam containing any duplicates will give that jam ownership of them. If you then sync your personal jam, it will take ownership of them.";
+        case RiffIDConflictHandling::OverwriteExceptPersonal:   return "Like 'Overwrite' but we never let the personal jam have ownership.\nThis is the default to try and ensure the most visible, public data - the original jams - have the most complete data";
         default:
             return "UNKNOWN";
         }

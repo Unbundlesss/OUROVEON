@@ -25,7 +25,13 @@ MixerRiffChange( endlesss::live::RiffPtr& riff )
     : m_riff( riff )
 {}
 
+MixerRiffChange( endlesss::live::RiffPtr& riff, bool bWasCancelled )
+    : m_riff( riff )
+    , m_wasCancelled( bWasCancelled )
+{}
+
 endlesss::live::RiffPtr     m_riff;
+bool                        m_wasCancelled = false;     // true if the mixer discarded this change (ie if panic-stopping)
 
 CREATE_EVENT_END()
 
