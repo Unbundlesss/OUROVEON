@@ -609,18 +609,18 @@ inline bool findGCD( double l, double s, double& GCD )
 {
 	int it = 0;
 
-	while( it < 50 )
+	while( ++it < 150 )
 	{
-		if( s <= 0.0 )
+		const double r = l - s;
+
+		if( r == 0.0 )
 		{
-			GCD = l;
-			return( true );
+			GCD = s;
+			return( s > 0.0 );
 		}
 
-		const double r = l - s;
 		l = s;
-		s = ( r < 0.0 ? -r : r );
-		it++;
+		s = fabs( r );
 	}
 
 	return( false );
@@ -644,7 +644,7 @@ inline bool getWholeStepping( const double SSampleRate,
 {
 	double GCD;
 
-	if( !findGCD( SSampleRate, DSampleRate, GCD ) || GCD < 1.0 )
+	if( !findGCD( SSampleRate, DSampleRate, GCD ))
 	{
 		return( false );
 	}

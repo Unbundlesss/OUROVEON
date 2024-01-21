@@ -1,4 +1,4 @@
-# r8brain-free-src - High-Quality, Fast Resampler #
+# r8brain-free-src - High-Quality, Fast Resampler (in C++) #
 
 ## Introduction ##
 
@@ -6,7 +6,7 @@ Open source (under the MIT license) high-quality professional audio sample
 rate converter (SRC) / resampler C++ library.  Features routines for SRC,
 both up- and downsampling, to/from any sample rate, including non-integer
 sample rates: it can be also used for conversion to/from SACD/DSD sample
-rates, and even go beyond that.  SRC routines were implemented in a
+rates, and even go beyond that.  SRC routines were implemented in a portable,
 multi-platform C++ code, and have a high level of optimality. Also suitable
 for fast general-purpose 1D time-series resampling / interpolation (with
 relaxed filter parameters).
@@ -29,17 +29,12 @@ following way: "Sample rate converter designed by Aleksey Vaneev of Voxengo".
 
 ## Requirements ##
 
-C++ compiler and system with the "double" floating point type (53-bit
+C++ compiler and system with the "double" floating-point type (53-bit
 mantissa) support.  No explicit code for the "float" type is present in this
-library, because as practice has shown the "float"-based code performs
+library, because as practice has shown, the "float"-based code performs
 considerably slower on a modern processor, at least in this library.  This
 library does not have dependencies beside the standard C library, the
 "windows.h" on Windows and the "pthread.h" on macOS and Linux.
-
-## Links ##
-
-* [Documentation](https://www.voxengo.com/public/r8brain-free-src/Documentation/)
-* [Discussion](https://www.kvraudio.com/forum/viewtopic.php?t=389711)
 
 ## Usage Information ##
 
@@ -49,6 +44,8 @@ whole library.  You do not basically need to use nor understand any other
 classes beside this class.  Several derived classes that have varying levels
 of precision are also available (for full-resolution 16-bit and 24-bit
 resampling).
+
+* [Documentation](https://www.voxengo.com/public/r8brain-free-src/Documentation/)
 
 The code of the library resides in the "r8b" C++ namespace, effectively
 isolating it from all other code.  The code is thread-safe.  A separate
@@ -164,11 +161,15 @@ which is engaged automatically if the resampling parameters permit.
 
 This library was tested for compatibility with [GNU C++](https://gcc.gnu.org/),
 [Microsoft Visual C++](https://visualstudio.microsoft.com/),
-[LLVM](https://llvm.org/) and [Intel C++](https://software.intel.com/en-us/c-compilers)
+[Clang](https://clang.llvm.org/) and [Intel C++](https://software.intel.com/en-us/c-compilers)
 compilers, on 32- and 64-bit Windows, macOS, and CentOS Linux.
 
 Most code is "inline", without the need to compile many source files. The
 memory footprint is quite modest.
+
+For high-quality dithering you may consider using
+[PRVHASH PRNG](https://github.com/avaneev/prvhash) which features an excellent
+psycho-acoustic performance.
 
 ## Acknowledgements ##
 
@@ -198,13 +199,28 @@ This library is used by:
 * [Ripcord](https://cancel.fm/ripcord/)
 * [TensorVox](https://github.com/ZDisket/TensorVox)
 * [Curvessor](https://github.com/unevens/Curvessor)
-
-Please send me a note via aleksey.vaneev@gmail.com and I will include a link
-to your software product to this list of users. This list is important in
-maintaining confidence in this library among the interested parties. The
-inclusion into this list is not mandatory.
+* [Hang Loose Convolver](https://accuratesound.ca/hang-loose-convolver-hlc/)
+* [Wave Breaker](https://pressplay-music.com/wave-breaker/)
 
 ## Change Log ##
+
+Version 6.5:
+
+* Made a fix to the getWholeStepping() function to permit GCD search for
+fractional sample rates lower than 1.0.
+* Changed floating-point `0x1pN` constants not supported by some compilers,
+to `e` notation.
+
+Version 6.4:
+
+* Improved SSE detection macros.
+
+Version 6.3:
+
+* Improved the findGCD() function, to cover a wider range of sample rate
+ratios.
+* Added the R8B_DSPBASECLASS macro, to redefine the base class of non-cached
+objects.
 
 Version 6.2:
 
