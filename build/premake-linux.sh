@@ -12,9 +12,9 @@ export CC=/usr/bin/clang-16
 export CPP=/usr/bin/clang-cpp-16
 export CXX=/usr/bin/clang++-16
 
-export CXXFLAGS=" -fsanitize=address -fno-omit-frame-pointer "
-export LDFLAGS="-v -fsanitize=address -fuse-ld=lld-16"
+export CXXFLAGS=" -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer -g "
+export LDFLAGS="-v -fsanitize=address -fsanitize=undefined -fuse-ld=lld-16 "
 
 
 cd _gen
-make LORE config=release_x86_64
+make LORE -j 11 config=debug_x86_64
