@@ -516,13 +516,13 @@ void Stem::fetch( const api::NetConfiguration& ncfg, const fs::path& cachePath )
         if ( flacStreamChannelsWriteIndex > 1 && flacStreamChannelsWriteIndex < flacSampleCount )
         {
             // allow a maximum number of missing samples
-            const uint32_t missingSamples = flacSampleCount - flacStreamChannelsWriteIndex;
+            const std::size_t missingSamples = flacSampleCount - flacStreamChannelsWriteIndex;
             if ( missingSamples < 4 )
             {
                 blog::error::stem( FMTX( "[s:{}..] FLAC fixing {} missing samples" ), stemCouchSnip, missingSamples );
 
                 // .. and 'fix' by just copying the last valid one we have over the gaps to avoid a click
-                for ( uint32_t hackSample = flacStreamChannelsWriteIndex; hackSample < flacSampleCount; hackSample++ )
+                for ( std::size_t hackSample = flacStreamChannelsWriteIndex; hackSample < flacSampleCount; hackSample++ )
                 {
                     flacStreamChannels[0][hackSample] = flacStreamChannels[0][flacStreamChannelsWriteIndex - 1];
                     flacStreamChannels[1][hackSample] = flacStreamChannels[1][flacStreamChannelsWriteIndex - 1];
@@ -870,7 +870,7 @@ bool Stem::analyse( const Processing& processing, StemAnalysisData& result ) con
         processing.m_tuning.m_trackerHysteresis );
 
 
-    #define PSA_ENCODE( _v ) static_cast<uint8_t>( _v * 255.0f );
+    #define PSA_ENCODE( _v ) static_cast<uint8_t>( std::min( _v * 255.0f, 255.0f ) );
 
     {
         char scBuf[32];
