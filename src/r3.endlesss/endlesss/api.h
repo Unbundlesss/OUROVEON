@@ -396,13 +396,15 @@ struct ResultDocsSafeHeader
 // return of rifffLoopsByCreateTime() query function, representing a stored riff as ids
 struct ResultRiffAndStemIDs
 {
-    endlesss::types::RiffCouchID                 id;     // this will be the document ID of the riff metadata
-    std::vector< endlesss::types::StemCouchID >  value;  // document IDs of the stems in play
+    endlesss::types::RiffCouchID                 id;        // this will be the document ID of the riff metadata
+    uint64_t                                     key = 0;   // unix nano time
+    std::vector< endlesss::types::StemCouchID >  value;     // document IDs of the stems in play
 
     template<class Archive>
     inline void serialize( Archive& archive )
     {
         archive( CEREAL_NVP( id )
+               , CEREAL_NVP( key )
                , CEREAL_NVP( value )
         );
     }

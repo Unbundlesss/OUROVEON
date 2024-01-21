@@ -1906,8 +1906,8 @@ bool JamSnapshotTask::Work( TaskQueue& currentTasks )
         INSERT OR IGNORE INTO riffs( riffCID, OwnerJamCID ) VALUES( ?1, ?2 );
     )";
     static constexpr char insertWithUpdate_RiffSkeleton[] = R"(
-        INSERT INTO riffs( riffCID, OwnerJamCID ) VALUES( ?1, ?2 )
-        ON CONFLICT( riffCID ) DO UPDATE SET OwnerJamCID = ?2
+        INSERT INTO riffs( riffCID, OwnerJamCID, CreationTime ) VALUES( ?1, ?2, ?3 )
+        ON CONFLICT( riffCID ) DO UPDATE SET OwnerJamCID = ?2, CreationTime = ?3
     )";
 
     {
@@ -1943,6 +1943,7 @@ bool JamSnapshotTask::Work( TaskQueue& currentTasks )
             for ( const auto& jamData : jamSnapshot.rows )
             {
                 const auto& riffCID = jamData.id;
+
                 Warehouse::SqlDB::query<insertOrIgnore_RiffSkeleton>( riffCID.value(), m_jamCID.value() );
             }
         }
@@ -1952,8 +1953,10 @@ bool JamSnapshotTask::Work( TaskQueue& currentTasks )
 
             for ( const auto& jamData : jamSnapshot.rows )
             {
-                const auto& riffCID = jamData.id;
-                Warehouse::SqlDB::query<insertWithUpdate_RiffSkeleton>( riffCID.value(), m_jamCID.value() );
+                const auto& riffCID          = jamData.id;
+                const auto  riffCreationTime = jamData.key;
+
+                Warehouse::SqlDB::query<insertWithUpdate_RiffSkeleton>( riffCID.value(), m_jamCID.value(), riffCreationTime );
             }
         }
     }
