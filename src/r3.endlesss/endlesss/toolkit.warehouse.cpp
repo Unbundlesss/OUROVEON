@@ -441,6 +441,8 @@ namespace riffs {
         CREATE INDEX        IF NOT EXISTS "Riff_IndexStems"      ON "Riffs" ( "StemCID_1", "StemCID_2", "StemCID_3", "StemCID_4", "StemCID_5", "StemCID_6", "StemCID_7", "StemCID_8" );)";
     static constexpr char createIndex_6[] = R"(
         CREATE INDEX        IF NOT EXISTS "Riff_IndexOwner2Time" ON "Riffs" ( "OwnerJamCID", "CreationTime" );)";  // w. stem index, accelerates contents report a bunch (300 -> 70ms)
+    static constexpr char createIndex_7[] = R"(
+        CREATE INDEX        IF NOT EXISTS "Riff_IndexOwner2Ver"  ON "Riffs" ( "OwnerJamCID", "AppVersion" );)";  // new stem indexing
 
     static constexpr char deprecated_0[] = { DEPRECATE_INDEX "IndexRiff" };
     static constexpr char deprecated_1[] = { DEPRECATE_INDEX "IndexOwner" };
@@ -461,6 +463,7 @@ namespace riffs {
         Warehouse::SqlDB::query<createIndex_4>();
         Warehouse::SqlDB::query<createIndex_5>();
         Warehouse::SqlDB::query<createIndex_6>();
+        Warehouse::SqlDB::query<createIndex_7>();
 
         // deprecate
         Warehouse::SqlDB::query<deprecated_0>();
@@ -489,10 +492,10 @@ namespace riffs {
     static int64_t countPopulated( const types::JamCouchID& jamCID, bool populated )
     {
         static constexpr char _sqlCountTotalRiffsInJamUnpopulated[] = R"(
-            select count(*) from riffs where OwnerJamCID is ?1 and CreationTime is null;
+            select count(*) from riffs where OwnerJamCID is ?1 and AppVersion is null;
         )";
         static constexpr char _sqlCountTotalRiffsInJamPopulated[] = R"(
-            select count(*) from riffs where OwnerJamCID is ?1 and CreationTime is not null;
+            select count(*) from riffs where OwnerJamCID is ?1 and AppVersion is not null;
         )";
 
         int64_t totalSpecificRiffs = 0;
@@ -516,7 +519,7 @@ namespace riffs {
     static bool findUnpopulated( types::JamCouchID& jamCID, types::RiffCouchID& riffCID )
     {
         static constexpr char findEmptyRiff[] = R"(
-            select OwnerJamCID, riffCID from riffs where CreationTime is null limit 1 )";
+            select OwnerJamCID, riffCID from riffs where AppVersion is null limit 1 )";
 
         std::string _jamCID, _riffCID;
 
@@ -533,7 +536,7 @@ namespace riffs {
     static bool findUnpopulatedBatch( const types::JamCouchID& jamCID, const int32_t maximumRiffsToFind, std::vector<types::RiffCouchID>& riffCIDs )
     {
         static constexpr char findEmptyRiffsInJam[] = R"(
-            select riffCID from riffs where OwnerJamCID is ?1 and CreationTime is null limit ?2 )";
+            select riffCID from riffs where OwnerJamCID is ?1 and AppVersion is null limit ?2 )";
 
         auto query = Warehouse::SqlDB::query<findEmptyRiffsInJam>( jamCID.value(), maximumRiffsToFind );
 
@@ -2004,7 +2007,7 @@ bool JamPurgeTask::Work( TaskQueue& currentTasks )
 bool JamSyncAbortTask::Work( TaskQueue& currentTasks )
 {
     static constexpr char deleteEmptyRiffs[] = R"(
-        delete from riffs where OwnerJamCID = ?1 and Riffs.CreationTime is null;
+        delete from riffs where OwnerJamCID = ?1 and Riffs.AppVersion is null;
     )";
 
     Warehouse::SqlDB::query<deleteEmptyRiffs>( m_jamCID.value() );
@@ -2728,7 +2731,7 @@ bool JamSliceTask::Work( TaskQueue& currentTasks )
         left join stems as s6 on s6.StemCID = riffs.StemCID_6
         left join stems as s7 on s7.StemCID = riffs.StemCID_7
         left join stems as s8 on s8.StemCID = riffs.StemCID_8
-        where riffs.OwnerJamCID is ?1 and riffs.CreationTime is not null
+        where riffs.OwnerJamCID is ?1 and riffs.AppVersion is not null
         order by riffs.CreationTime;
         )";
 
@@ -2892,8 +2895,8 @@ bool ContentsReportTask::Work( TaskQueue& currentTasks )
             FROM 
             (
                 SELECT Riffs.OwnerJamCID,
-                    count(case when Riffs.CreationTime is null then 1 end) as EmptyRiffs,
-                    count(case when Riffs.CreationTime is not null then 1 end) as FilledRiffs
+                    count(case when Riffs.AppVersion is null then 1 end) as EmptyRiffs,
+                    count(case when Riffs.AppVersion is not null then 1 end) as FilledRiffs
                 FROM Riffs
                 GROUP BY Riffs.OwnerJamCID
             ) as a
