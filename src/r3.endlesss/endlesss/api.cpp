@@ -594,6 +594,27 @@ bool SharedRiffsByUser::commonRequest( const NetConfiguration& ncfg, const std::
             char* bodyStream = &bodyText[0];
             for ( auto i = 0; i < bodySize - 16; i++ )
             {
+                // snip out any nulled 'current:' objects, they are marked as optional NVPs in the json anyway
+                CHECK_CHAR(  0, '\"')
+                CHECK_CHAR(  1, 'c')
+                CHECK_CHAR(  2, 'u')
+                CHECK_CHAR(  3, 'r')
+                CHECK_CHAR(  4, 'r')
+                CHECK_CHAR(  5, 'e')
+                CHECK_CHAR(  6, 'n' )
+                CHECK_CHAR(  7, 't')
+                CHECK_CHAR(  8, '\"')
+                CHECK_CHAR(  9, ':')
+                CHECK_CHAR( 10, 'n')
+                CHECK_CHAR( 11, 'u')
+                CHECK_CHAR( 12, 'l')
+                CHECK_CHAR( 13, 'l' )
+                CHECK_CHAR( 14, ',')
+                {
+                    for ( auto rp = 0; rp <= 14; rp++ )
+                        bodyStream[i + rp] = ' ';
+                }
+
                 CHECK_CHAR( 0, '\"')
                 CHECK_CHAR( 1, 'l')
                 CHECK_CHAR( 2, 'o')
@@ -653,6 +674,22 @@ bool SharedRiffsByUser::commonRequest( const NetConfiguration& ncfg, const std::
                         bodyStream[i + 3] = ' ';
                         bodyStream[i + 4] = ' ';
                         i += 4;
+                        continue;
+                    }
+
+                    // handle end-of-list case, no comma
+                    CHECK_CHAR( 0, 'n' )
+                    CHECK_CHAR( 1, 'u' )
+                    CHECK_CHAR( 2, 'l' )
+                    CHECK_CHAR( 3, 'l' )
+                    CHECK_CHAR( 4, ']' )
+                    {
+                        bodyStream[i - 1] = ' ';    // remove trailing comma
+                        bodyStream[i + 0] = ' ';
+                        bodyStream[i + 1] = ' ';
+                        bodyStream[i + 2] = ' ';
+                        bodyStream[i + 3] = ' ';
+                        i += 3;
                         continue;
                     }
                 }
