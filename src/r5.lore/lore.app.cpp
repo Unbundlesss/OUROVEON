@@ -1849,7 +1849,7 @@ protected:
 
     const char* getToolIcon( const ToolID id, std::string& tooltip ) const override
     {
-        if ( id == SendViaBOND )
+        if ( static_cast<TagExtraTools>(id) == SendViaBOND )
         {
             tooltip = "Push current riff to BOND server";
             return ICON_FA_CIRCLE_NODES;
@@ -1860,7 +1860,7 @@ protected:
 
     bool checkToolKeyboardShortcut( const ToolID id ) const override
     {
-        if ( id == SendViaBOND )
+        if ( static_cast<TagExtraTools>(id) == SendViaBOND )
             return ImGui::Shortcut( ImGuiModFlags_Ctrl, ImGuiKey_B, false );
 
         return false;
@@ -1868,7 +1868,7 @@ protected:
 
     void handleToolExecution( const ToolID id, base::EventBusClient& eventBusClient, endlesss::live::RiffPtr& currentRiffPtr ) override
     {
-        if ( id == SendViaBOND )
+        if ( static_cast<TagExtraTools>(id) == SendViaBOND )
         {
             m_rpClient.pushRiff( currentRiffPtr->m_riffData, m_riffPlaybackAbstraction.asPermutation() );
 
@@ -4024,7 +4024,7 @@ int LoreApp::EntrypointOuro()
                                 
                                 ImGui::SameLine();
                                 ImGui::AlignTextToFramePadding();
-                                ImGui::TextDisabled( jamBandID );
+                                ImGui::TextDisabled( "%s", jamBandID );
                                 if ( ImGui::IsItemClicked() )
                                 {
                                     ImGui::SetClipboardText( jamBandID );

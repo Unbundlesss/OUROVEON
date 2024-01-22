@@ -618,9 +618,9 @@ void Vibes::State::doImGuiDisplay( const endlesss::toolkit::Exchange& data, app:
 
         const bool currentBufferFlip = m_bufferFlip;
 
-        ICustomRendering->registerRenderCallback( app::ICoreCustomRendering::RenderPoint::PreImgui, [=]()
+        ICustomRendering->registerRenderCallback( app::ICoreCustomRendering::RenderPoint::PreImgui, [this, &data, currentBufferFlip, renderWidth, renderHeight,  activeDecl = currentDeclaration.get()]()
             {
-                currentDeclaration->render( currentBufferFlip, m_vibeDriver, data, renderWidth, renderHeight );
+                activeDecl->render( currentBufferFlip, m_vibeDriver, data, renderWidth, renderHeight );
             });
 
         ImVec2 uvOffset = ( renderViewScaled * m_finalOutputFBO->getDimensionsRecp() ) * 0.5f;

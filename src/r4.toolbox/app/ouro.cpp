@@ -95,13 +95,10 @@ int OuroApp::EntrypointGUI()
     std::string previewSampleRate = ImGui::ValueArrayPreviewString( cSampleRateLabels, cSampleRateValues, audioConfig.sampleRate );
     std::string previewBufferSize = ImGui::ValueArrayPreviewString( cBufferSizeLabels, cBufferSizeValues, audioConfig.bufferSize );
 
-    // stash current TZ
-    const auto timezoneLocal    = date::current_zone();
-    const auto timezoneUTC      = date::locate_zone( "Etc/UTC" );
-
     // add UTC/Server time on left of status bar
-    const auto sbbTimeStatusLeftID = registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Left, 375.0f, [=]()
+    const auto sbbTimeStatusLeftID = registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Left, 375.0f, []()
     {
+        const auto timezoneUTC = date::locate_zone( "Etc/UTC" );
         auto t  = date::make_zoned( timezoneUTC, std::chrono::system_clock::now() );
         auto tf = date::format( spacetime::defaultDisplayTimeFormatTZ, t );
         const auto serverTime = fmt::format( FMTX( " {} | {}" ), timezoneUTC->name(), tf );
@@ -111,8 +108,9 @@ int OuroApp::EntrypointGUI()
         ImGui::PopStyleColor();
     });
     // add local timezone time on right 
-    const auto sbbTimeStatusRightID = registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Left, 375.0f, [=]()
+    const auto sbbTimeStatusRightID = registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Left, 375.0f, []()
     {
+        const auto timezoneLocal = date::current_zone();
         auto t  = date::make_zoned( timezoneLocal, std::chrono::system_clock::now() );
         auto tf = date::format( spacetime::defaultDisplayTimeFormatTZ, t );
         const auto localTime = fmt::format( FMTX( " {} | {}" ), timezoneLocal->name(), tf );
@@ -123,7 +121,7 @@ int OuroApp::EntrypointGUI()
     });
 
     // network activity display
-    const auto sbbAsyncTaskActivity = registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Right, 100.0f, [=]()
+    const auto sbbAsyncTaskActivity = registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Right, 100.0f, [this]()
     {
         if ( m_asyncTaskActivityIntensity > 0 )
         {
@@ -133,7 +131,7 @@ int OuroApp::EntrypointGUI()
         }
     });
     // network activity display
-    const auto sbbNetworkActivity = registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Right, 300.0f, [=]()
+    const auto sbbNetworkActivity = registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Right, 300.0f, [this]()
     {
         const std::string pulseOverview = pulseSlotsToString( " ", m_avgNetPulseHistory);
 
