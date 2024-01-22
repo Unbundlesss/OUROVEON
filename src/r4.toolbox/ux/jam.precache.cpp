@@ -295,7 +295,7 @@ void JamPrecacheState::imgui(
                             // doing so will go through the default machinery of downloading / validating it, same as
                             // when we do this for playing riffs back in the rest of the app - difference being that 
                             // we don't keep the live Stem around, it's just immediately tossed
-                            taskExecutor.silent_async( [=]()
+                            taskExecutor.silent_async( [=, this]()
                                 {
                                     auto stemLivePtr = std::make_shared<endlesss::live::Stem>( stemData, 8000 );   // any sample rate is fine, we aren't keeping the data
                                     stemLivePtr->fetch(
