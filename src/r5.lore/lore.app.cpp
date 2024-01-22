@@ -2511,6 +2511,10 @@ int LoreApp::EntrypointOuro()
                                                 ImGui::PopStyleColor();
                                                 break;
                                         }
+                                        if ( ImGui::IsItemClicked() )
+                                        {
+                                            ImGui::SetClipboardText( fmt::format( FMTX("https://{}/{}"), stem->m_data.fullEndpoint(), stem->m_data.fileKey ).c_str() );
+                                        }
                                         break;
                                     }
                                     case 7:
@@ -2536,6 +2540,11 @@ int LoreApp::EntrypointOuro()
                                     case 11:
                                     {
                                         ImGui::Text( "%i", stem->m_data.fileLengthBytes / 1024 );
+                                        if ( ImGui::IsItemClicked() )
+                                        {
+                                            ImGui::SetClipboardText( stem->m_data.couchID.value().c_str() );
+                                        }
+                                        ImGui::CompactTooltip( stem->m_data.couchID.value() );
                                         break;
                                     }
                                     default:
