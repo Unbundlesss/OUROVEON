@@ -1956,7 +1956,10 @@ bool JamSnapshotTask::Work( TaskQueue& currentTasks )
                 const auto& riffCID          = jamData.id;
                 const auto  riffCreationTime = jamData.key;
 
-                Warehouse::SqlDB::query<insertWithUpdate_RiffSkeleton>( riffCID.value(), m_jamCID.value(), riffCreationTime );
+                Warehouse::SqlDB::query<insertWithUpdate_RiffSkeleton>(
+                    riffCID.value(),
+                    m_jamCID.value(),
+                    riffCreationTime / 1000 ); // from unix nano
             }
         }
     }
