@@ -450,6 +450,7 @@ struct LoreApp final : public app::OuroApp,
 
 
 
+
 protected:
 
 
@@ -1880,6 +1881,61 @@ protected:
 
         ux::TagLineToolProvider::handleToolExecution( id, eventBusClient, currentRiffPtr );
     }
+
+
+private:
+
+#if OURO_DEBUG
+
+#define OURO_REACHABILITY_ALL_BNS 0
+
+    bool addDeveloperMenuItems() override
+    {
+        if ( ImGui::MenuItem( "Warehouse Jam Reachability Report" ) )
+        {
+            getTaskExecutor().silent_async( [this]()
+                {
+                    std::string reportText;
+                    std::string reportLine;
+
+#if OURO_REACHABILITY_ALL_BNS
+
+                    for ( const auto bns : m_jamNameService.entries )
+                    {
+                        const auto iterCurrentJamID = bns.first;
+                        const auto iterJamName = bns.second.link_name;
+
+#else // OURO_REACHABILITY_ALL_BNS
+
+                    for ( size_t jamIdx = 0; jamIdx < m_warehouseContentsReport.m_jamCouchIDs.size(); jamIdx++ )
+                    {
+                        const std::size_t jI = m_warehouseContentsSortedIndices[jamIdx];
+                        const auto iterCurrentJamID = m_warehouseContentsReport.m_jamCouchIDs[jI];
+                        const auto iterJamName = m_warehouseContentsReportJamTitles[jI];
+
+#endif // OURO_REACHABILITY_ALL_BNS
+
+                        getEventBusClient().Send< ::events::AsyncTaskActivity >();
+
+                        endlesss::api::JamLatestState jamStateCheck;
+                        if ( !jamStateCheck.fetch( *m_networkConfiguration, iterCurrentJamID ) )
+                        {
+                            reportLine = fmt::format( FMTX( "{} failed ({})\n" ), iterCurrentJamID, iterJamName );
+                            reportText += reportLine;
+
+                            blog::error::api( FMTX( " RR ! {}" ), reportLine );
+                        }
+                    }
+                    ImGui::SetClipboardText( reportText.c_str() );
+                    m_appEventBus->send<::events::AddToastNotification>( ::events::AddToastNotification::Type::Info, "Test Complete", "Report copied to clipboard" );
+                });
+        }
+
+        return true;
+    }
+
+#endif // OURO_DEBUG
+
 };
 
 

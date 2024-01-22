@@ -475,6 +475,9 @@ protected:
         *boolFlagAddress = false;
         m_developerMenuRegistry.emplace( std::move( menuName ), boolFlagAddress );
     }
+    // overridable developer menu callback, inside the ImGui::BeginMenu() loop 
+    // return true if items were added, false if not
+    virtual bool addDeveloperMenuItems() { return false; }
 
 
     config::Frontend        m_configFrontend;

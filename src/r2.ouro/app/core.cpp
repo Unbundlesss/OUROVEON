@@ -877,6 +877,11 @@ int CoreGUI::Entrypoint()
             {
                 ImGui::MenuItem( developerFlag.first.c_str(), "", developerFlag.second );
             }
+
+            // add entries from overriden client code - if it returns false, nothing was added
+            if ( addDeveloperMenuItems() )
+                ImGui::Separator();
+
 #if OURO_DEBUG
             ImGui::Separator();
             if ( ImGui::MenuItem( "Test Toast (info)" ) )
