@@ -7,7 +7,7 @@
 //  
 //
 
-#define OURO_FRAMEWORK_VERSION    "0.8.4"
+#define OURO_FRAMEWORK_VERSION    "0.8.5"
 #define OURO_FRAMEWORK_CREDIT     "ishani.org 2024"
 
 // ---------------------------------------------------------------------------------------------------------------------
