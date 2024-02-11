@@ -1,16 +1,19 @@
 {
     "jams": [
         {
-            "jamId": "5f87d577cb45041cf2ad8a92cebe6f065cc8c15bdd0f952078a6240b9fc066b",
-            "name": "Paul Cine",
-            "bio": "Real-Time traveller exploring flow state mechanics. A collector of a riff receives a 4 minute long  audiovisual version of the collected riff.. ",
-            "bandId": "band87ff21d996",
-            "owner": "paul_cine",
+            "jamId": "3d723d7a497c72dc0bc745e21407b1746393fa1ea847d08c6adb646d308a22e4",
+            "name": "Stereo Babies",
+            "bio": "What dem babies do?!",
+            "bandId": "band48a4eba344",
+            "owner": "ashtonmaxwell",
             "members": [
-                "paul_cine"
+                "ashtonmaxwell",
+                "thevoidinclusive",
+                "firephly",
+                "fry"
             ],
-            "rifftime": 1693359302065,
-            "riffCount": 360
+            "rifftime": 1706942652819,
+            "riffCount": 1735
         },
         {
             "jamId": "2bf2f447bd9bace355c0a6733cff1f50f3affb7a317e777fd8f426a77634be35",
@@ -23,33 +26,8 @@
                 "thevoidinclusive",
                 "littlewing"
             ],
-            "rifftime": 1693351285443,
-            "riffCount": 2249
-        },
-        {
-            "jamId": "2b6c859cca06e094d2800ac1829b7c135b1f8b3e527d32d5da1e654b473ce8c5",
-            "name": "elling",
-            "bio": "i'm just messin around",
-            "bandId": "band7f0516215d",
-            "owner": "elling",
-            "members": [
-                "elling"
-            ],
-            "rifftime": 1693263597841,
-            "riffCount": 3135
-        },
-        {
-            "jamId": "4922c2e3be54b4ade11182e6a5103894775da418909df55b45266465d50f115c",
-            "name": "Stellar Flame",
-            "bio": "Two fiery souls ignite the eternal Stellar Flame as ambient waves wash over intense rhythms & dissolve into prismatic particles amid ethereal echoes",
-            "bandId": "band0ee040437d",
-            "owner": "firephly",
-            "members": [
-                "firephly",
-                "oddstar"
-            ],
-            "rifftime": 1693019917222,
-            "riffCount": 1353
+            "rifftime": 1705965487812,
+            "riffCount": 2435
         },
         {
             "jamId": "56ff383e3f422d2d8f29faa9af0de32c9b6746bdfa2205e854bcb35a6f6d0e15",
@@ -62,8 +40,404 @@
                 "n0face",
                 "failsafe"
             ],
-            "rifftime": 1692829753259,
-            "riffCount": 205
+            "rifftime": 1705616618581,
+            "riffCount": 333
+        },
+        {
+            "jamId": "65e69f98c389fc272cd2d55bd7d1894f995641907734b558c2264470fd2cc2d0",
+            "name": "essssphere ",
+            "bio": "Who knows where this will lead... down the rabbit hole and into the essssphere ",
+            "bandId": "bandda806a4642",
+            "owner": "foid",
+            "members": [
+                "foid"
+            ],
+            "rifftime": 1704543638756,
+            "riffCount": 245
+        },
+        {
+            "jamId": "52928fc0562f5b7c1f14be0c1b3ab02ac4c59f99637ec3de6890f6f7f3ecf423",
+            "name": "BUGY BUG BUGGY",
+            "bio": "Its the BUG!",
+            "bandId": "band90a84658a2",
+            "owner": "mng",
+            "members": [
+                "mng"
+            ],
+            "rifftime": 1704417128184,
+            "riffCount": 7
+        },
+        {
+            "jamId": "3111e7070fdd7bcbd7537bfde9dc42dfc5908cc8e38f462c283d656281ef1119",
+            "name": "worldendland",
+            "bio": "Post-post-apocaplytic soundtracks",
+            "bandId": "bandb89300761a",
+            "owner": "caerickson",
+            "members": [
+                "caerickson"
+            ],
+            "rifftime": 1703827613288,
+            "riffCount": 649
+        },
+        {
+            "jamId": "662703589770992cb547d23e4389f9892923959369f81185b9cd22801125f229",
+            "name": "LANTIC MOTION",
+            "bio": "",
+            "bandId": "band734d9e8048",
+            "owner": "fancyspectacles",
+            "members": [
+                "fancyspectacles",
+                "feloniousmonk",
+                "njlang",
+                "trinitou"
+            ],
+            "rifftime": 1701445303177,
+            "riffCount": 2487
+        },
+        {
+            "jamId": "4922c2e3be54b4ade11182e6a5103894775da418909df55b45266465d50f115c",
+            "name": "Stellar Flame",
+            "bio": "Two fiery souls ignite the eternal Stellar Flame as ambient waves wash over intense rhythms & dissolve into prismatic particles amid ethereal echoes",
+            "bandId": "band0ee040437d",
+            "owner": "firephly",
+            "members": [
+                "firephly",
+                "oddstar"
+            ],
+            "rifftime": 1701236282557,
+            "riffCount": 1492
+        },
+        {
+            "jamId": "e71a7b882aaad52b9061f4e035b9aec9c721a69c8722de2e83efd24e081eb55",
+            "name": "nightsound",
+            "bio": "alone in the dark",
+            "bandId": "band460ffee029",
+            "owner": "oddstar",
+            "members": [
+                "oddstar"
+            ],
+            "rifftime": 1700463172382,
+            "riffCount": 1971
+        },
+        {
+            "jamId": "16dceb9bc12a09271de62df0d4b8718d3a538938238df75ecd30a5432179caa3",
+            "name": "The Circle of Friends",
+            "bio": "Step onboard the wonder wheel for foggy hip hop grooves and dirty beats.",
+            "bandId": "band51b8104737",
+            "owner": "caerickson",
+            "members": [
+                "caerickson",
+                "anubot",
+                "stoic",
+                "njlang",
+                "andymac"
+            ],
+            "rifftime": 1700070340351,
+            "riffCount": 3399
+        },
+        {
+            "jamId": "469ce93e8b68ceadc23b7dcbbcaff7f4636553c763e80492944555ce8f8c740",
+            "name": "Trispectacular momentum",
+            "bio": "",
+            "bandId": "band96d8fffb9e",
+            "owner": "trinitou",
+            "members": [
+                "trinitou",
+                "fancyspectacles",
+                "njlang",
+                "feloniousmonk"
+            ],
+            "rifftime": 1700014501975,
+            "riffCount": 479
+        },
+        {
+            "jamId": "2b4514a63ecf606344747b64fa369757952eeb5167fd8980e91d259ea10e3726",
+            "name": "Byzantine Beatbox",
+            "bio": "Beats, soundtracks and soundscapes with a fantasy, neo-medievalist vibe. The theme song to your next D&D campaign.",
+            "bandId": "bandf9ca36c6f2",
+            "owner": "caerickson",
+            "members": [
+                "caerickson"
+            ],
+            "rifftime": 1699924883684,
+            "riffCount": 845
+        },
+        {
+            "jamId": "484854f003f4864b9bb1d90bd7fbde0cc0aff6ca3fc5e61b0a7e6cdd7ec0284f",
+            "name": "Carnivale",
+            "bio": "",
+            "bandId": "band3f4b5759c7",
+            "owner": "m0nk",
+            "members": [
+                "m0nk",
+                "paul_cine",
+                "theau",
+                "herzihelmut"
+            ],
+            "rifftime": 1699750519871,
+            "riffCount": 772
+        },
+        {
+            "jamId": "2b6c859cca06e094d2800ac1829b7c135b1f8b3e527d32d5da1e654b473ce8c5",
+            "name": "elling",
+            "bio": "i'm just messin around",
+            "bandId": "band7f0516215d",
+            "owner": "elling",
+            "members": [
+                "elling"
+            ],
+            "rifftime": 1699736952490,
+            "riffCount": 3168
+        },
+        {
+            "jamId": "39a6df2c803c564649d88265610734ff360f6f914c1725e871e94fc37d3146a3",
+            "name": "the nature of things",
+            "bio": "an exploration into the deeper channels of rhythm",
+            "bandId": "banda0ebc61aa0",
+            "owner": "deadkousin",
+            "members": [
+                "deadkousin",
+                "slowgaffle",
+                "caerickson",
+                "firephly",
+                "winkle89"
+            ],
+            "rifftime": 1699668091217,
+            "riffCount": 546
+        },
+        {
+            "jamId": "48af8d57b0ffb89754ba3c6bb051c054136a13b971c9deb3cede9825502e880a",
+            "name": "One Cut",
+            "bio": "",
+            "bandId": "band9cab29554e",
+            "owner": "lwlkc",
+            "members": [
+                "lwlkc"
+            ],
+            "rifftime": 1699538574455,
+            "riffCount": 201
+        },
+        {
+            "jamId": "27489cb0b945097fd047038afa71c4a464ed0347e5dc67a1f680e2075f98368b",
+            "name": "MintyHelmut",
+            "bio": "",
+            "bandId": "band5f80c172c4",
+            "owner": "herzihelmut",
+            "members": [
+                "herzihelmut"
+            ],
+            "rifftime": 1699199779740,
+            "riffCount": 113
+        },
+        {
+            "jamId": "7648f3713454d490aaf0a4c8905801ea3d0f5d93aa78e6a5649d9a2c4ee8c1f8",
+            "name": "Red Sky Lullaby",
+            "bio": "Red Sky Lullaby's collectible Jam",
+            "bandId": "band5d9466e5c4",
+            "owner": "redskylullaby",
+            "members": [
+                "redskylullaby"
+            ],
+            "rifftime": 1699130194667,
+            "riffCount": 460
+        },
+        {
+            "jamId": "69b1c99b76d6327a62b34da88aefdca496b68bb692b8b7c999f4c8b075659a30",
+            "name": "The Way to StuFland",
+            "bio": "Part 1",
+            "bandId": "banda26299a186",
+            "owner": "thestuf",
+            "members": [
+                "thestuf"
+            ],
+            "rifftime": 1699129526578,
+            "riffCount": 3080
+        },
+        {
+            "jamId": "50bead7d68bbbbe995a2547f942850faeea1186f6aa52d16bd3e14a0fac720d4",
+            "name": "Test Patterns",
+            "bio": "started as one thing. now it is others. others will become. what are your patterns?",
+            "bandId": "bandcb2b282aae",
+            "owner": "lwlkc",
+            "members": [
+                "lwlkc"
+            ],
+            "rifftime": 1699016801312,
+            "riffCount": 690
+        },
+        {
+            "jamId": "18c7d15659c055c896378aebff5334954dd7bae9c35376dca914c3cac3d863e9",
+            "name": "The Sith Eternal Breaks",
+            "bio": "Low tempos, decayed breaks, moody, \ncinematic, big bass with open minor notes, as much field recording type stuff as possible. A musical journey of the political decay of the Sith Eternal hierarchy",
+            "bandId": "band6019162ed4",
+            "owner": "dsorce",
+            "members": [
+                "dsorce",
+                "firephly",
+                "foid",
+                "marky2coats",
+                "mostllyjustj"
+            ],
+            "rifftime": 1698837333640,
+            "riffCount": 3556
+        },
+        {
+            "jamId": "41cade13abb7b647daff38630923a0628d33403dbabe6362946cd3b56b075368",
+            "name": "FELONIUS FIVE",
+            "bio": "FELONIUS AF",
+            "bandId": "band8fb63c1b77",
+            "owner": "fancyspectacles",
+            "members": [
+                "fancyspectacles",
+                "n0face",
+                "feloniousmonk",
+                "littlewing",
+                "omnijess"
+            ],
+            "rifftime": 1698699579664,
+            "riffCount": 2268
+        },
+        {
+            "jamId": "35ae6e1de281b4c32f0015b62ebd3827ee33a998c94e96ecc457b0d6370445c",
+            "name": "birdbath virtual",
+            "bio": "virtual bird bath for your ears",
+            "bandId": "band584b4fddc3",
+            "owner": "williamsharkey",
+            "members": [
+                "williamsharkey"
+            ],
+            "rifftime": 1698698039012,
+            "riffCount": 894
+        },
+        {
+            "jamId": "cfdf86c6e695b4ba18e7a160dde0a3ea07e1a29824db291045ad3ba5949c02",
+            "name": "Près du Soleil",
+            "bio": "Veltrons genesis mintable jam",
+            "bandId": "band0a5d1690f1",
+            "owner": "redskylullaby",
+            "members": [
+                "redskylullaby",
+                "theau",
+                "stevie__j",
+                "badrico"
+            ],
+            "rifftime": 1698538322455,
+            "riffCount": 3255
+        },
+        {
+            "jamId": "21240f8a8f0b3ca7dde2be3892d521cf14815346ae5cea3f02314c79145295f9",
+            "name": "Flow Machine 2.0",
+            "bio": "Endlesss is now better than the original Flow Machine instrument that inspired it. Time to inaugurate the Flow Machine 2.0",
+            "bandId": "band54409281db",
+            "owner": "timexile",
+            "members": [
+                "timexile"
+            ],
+            "rifftime": 1698428729905,
+            "riffCount": 409
+        },
+        {
+            "jamId": "5c7df42944a9f4301defa4d38f5a04296f34d3f40bab69f97824293cce4fb176",
+            "name": "Sentient",
+            "bio": "",
+            "bandId": "bande6936984e6",
+            "owner": "firephly",
+            "members": [
+                "firephly",
+                "elling"
+            ],
+            "rifftime": 1698287541183,
+            "riffCount": 416
+        },
+        {
+            "jamId": "477b6e5b2be4fc044ee144619cecad92f60837b42ea64e671faf5e719ca74d74",
+            "name": "Imagination Land",
+            "bio": "",
+            "bandId": "band9b4807b0b4",
+            "owner": "winkle89",
+            "members": [
+                "winkle89",
+                "firephly",
+                "thevoidinclusive",
+                "fancyspectacles",
+                "awro"
+            ],
+            "rifftime": 1698200530986,
+            "riffCount": 4166
+        },
+        {
+            "jamId": "5f87d577cb45041cf2ad8a92cebe6f065cc8c15bdd0f952078a6240b9fc066b",
+            "name": "Paul Cine",
+            "bio": "Real-Time traveller exploring flow state mechanics. A collector of a riff receives a 4 minute long  audiovisual version of the collected riff.. ",
+            "bandId": "band87ff21d996",
+            "owner": "paul_cine",
+            "members": [
+                "paul_cine"
+            ],
+            "rifftime": 1696975898633,
+            "riffCount": 408
+        },
+        {
+            "jamId": "497ac7f4aea3edbe5aa342dbf994b49f18007ae6add8f161c3cbc4a01e9e90a3",
+            "name": "Horror Film Score",
+            "bio": "",
+            "bandId": "band71a706a40d",
+            "owner": "elling",
+            "members": [
+                "elling"
+            ],
+            "rifftime": 1696875509098,
+            "riffCount": 175
+        },
+        {
+            "jamId": "26242ac5a8b42e9d6b2c3a3eb22e48eb89f751fa6beb577e4e00bd99147d6556",
+            "name": "AtaraXie",
+            "bio": "Ataraxia is the lucid state of robust equanimity characterised by ongoing freedom from distress and worry. ",
+            "bandId": "band89f9c33268",
+            "owner": "katinkera",
+            "members": [
+                "katinkera"
+            ],
+            "rifftime": 1696199352096,
+            "riffCount": 293
+        },
+        {
+            "jamId": "52ad701fd9808e4efeb87d6543d499c8b1aeb02c882a845939687b4a52882615",
+            "name": "remaining within",
+            "bio": "",
+            "bandId": "band4cbc45df89",
+            "owner": "lwlkc",
+            "members": [
+                "lwlkc",
+                "thevoidinclusive"
+            ],
+            "rifftime": 1695912961823,
+            "riffCount": 886
+        },
+        {
+            "jamId": "304b299ba26bd9a444e67c84cfd61e7cf599754c96ae24fc70fea3f93dbb97cf",
+            "name": "Where Redwoods Meet The Sea",
+            "bio": "Atmospheres of expansive drifting universes and ambiguous moods. linktr.ee/firephly",
+            "bandId": "band704c526665",
+            "owner": "firephly",
+            "members": [
+                "firephly"
+            ],
+            "rifftime": 1695856599508,
+            "riffCount": 354
+        },
+        {
+            "jamId": "1c48c1666063658b8a82aa422ed7a365448c126f29016412ece33d02acce173f",
+            "name": "Studio 42 Tapes",
+            "bio": "",
+            "bandId": "band6a4e9ed11d",
+            "owner": "thevoidinclusive",
+            "members": [
+                "thevoidinclusive",
+                "theau"
+            ],
+            "rifftime": 1695674891848,
+            "riffCount": 257
         },
         {
             "jamId": "6be911ced3da008a195b116c6937afed20143c6bc89549c53bde0fa1e2d43ca1",
@@ -75,8 +449,21 @@
                 "firephly",
                 "thevoidinclusive"
             ],
-            "rifftime": 1692327421942,
-            "riffCount": 814
+            "rifftime": 1695102715651,
+            "riffCount": 963
+        },
+        {
+            "jamId": "51da2046c457a2201588bc22387b77e01fa5ce5af8e47ab50180cc5cf1b78ac0",
+            "name": "Defunct",
+            "bio": "Feloniusmonk & Paul Cine",
+            "bandId": "band28388959a8",
+            "owner": "paul_cine",
+            "members": [
+                "paul_cine",
+                "feloniousmonk"
+            ],
+            "rifftime": 1693860111912,
+            "riffCount": 1478
         },
         {
             "jamId": "1eaabbe4b702cd67cd898c8ba90cf8e265f35735b5363c33736d3794a7183796",
@@ -92,18 +479,6 @@
             "riffCount": 790
         },
         {
-            "jamId": "69b1c99b76d6327a62b34da88aefdca496b68bb692b8b7c999f4c8b075659a30",
-            "name": "The Way to StuFland",
-            "bio": "Part 1",
-            "bandId": "banda26299a186",
-            "owner": "thestuf",
-            "members": [
-                "thestuf"
-            ],
-            "rifftime": 1693081418158,
-            "riffCount": 2995
-        },
-        {
             "jamId": "3cce2ec0bdf0433c80639cda804987cca1770520372fff067883e0647d572ca6",
             "name": "lwlkc",
             "bio": "what makes ears sound",
@@ -114,33 +489,6 @@
             ],
             "rifftime": 1691753560185,
             "riffCount": 572
-        },
-        {
-            "jamId": "662703589770992cb547d23e4389f9892923959369f81185b9cd22801125f229",
-            "name": "LANTIC MOTION",
-            "bio": "",
-            "bandId": "band734d9e8048",
-            "owner": "fancyspectacles",
-            "members": [
-                "fancyspectacles",
-                "feloniousmonk",
-                "njlang",
-                "trinitou"
-            ],
-            "rifftime": 1691630923687,
-            "riffCount": 2450
-        },
-        {
-            "jamId": "e71a7b882aaad52b9061f4e035b9aec9c721a69c8722de2e83efd24e081eb55",
-            "name": "nightsound",
-            "bio": "alone in the dark",
-            "bandId": "band460ffee029",
-            "owner": "oddstar",
-            "members": [
-                "oddstar"
-            ],
-            "rifftime": 1691298099830,
-            "riffCount": 1870
         },
         {
             "jamId": "47bee9c983c44484cd2b39230b0b6f589c239c798fb208a84d1419f841ef12d2",
@@ -198,35 +546,6 @@
             "riffCount": 1654
         },
         {
-            "jamId": "51da2046c457a2201588bc22387b77e01fa5ce5af8e47ab50180cc5cf1b78ac0",
-            "name": "Defunct",
-            "bio": "Feloniusmonk & Paul Cine",
-            "bandId": "band28388959a8",
-            "owner": "paul_cine",
-            "members": [
-                "paul_cine",
-                "feloniousmonk"
-            ],
-            "rifftime": 1690042047156,
-            "riffCount": 1476
-        },
-        {
-            "jamId": "477b6e5b2be4fc044ee144619cecad92f60837b42ea64e671faf5e719ca74d74",
-            "name": "Imagination Land",
-            "bio": "",
-            "bandId": "band9b4807b0b4",
-            "owner": "winkle89",
-            "members": [
-                "winkle89",
-                "firephly",
-                "thevoidinclusive",
-                "fancyspectacles",
-                "awro"
-            ],
-            "rifftime": 1689519354006,
-            "riffCount": 4107
-        },
-        {
             "jamId": "60a31be4b951d4ddf2b2e4d966f2ff990ec94741d01493b94293744fe29715d6",
             "name": "This Twilight Garden",
             "bio": "Rumination & Melancholia",
@@ -249,18 +568,6 @@
             ],
             "rifftime": 1689082150106,
             "riffCount": 1
-        },
-        {
-            "jamId": "21240f8a8f0b3ca7dde2be3892d521cf14815346ae5cea3f02314c79145295f9",
-            "name": "Flow Machine 2.0",
-            "bio": "Endlesss is now better than the original Flow Machine instrument that inspired it. Time to inaugurate the Flow Machine 2.0",
-            "bandId": "band54409281db",
-            "owner": "timexile",
-            "members": [
-                "timexile"
-            ],
-            "rifftime": 1689082133755,
-            "riffCount": 408
         },
         {
             "jamId": "763c5565a277607a6c763049aaeade02885be8b8a585ed7a5a4f4036186c820d",
@@ -302,73 +609,6 @@
             ],
             "rifftime": 1688864815745,
             "riffCount": 1376
-        },
-        {
-            "jamId": "cfdf86c6e695b4ba18e7a160dde0a3ea07e1a29824db291045ad3ba5949c02",
-            "name": "Près du Soleil",
-            "bio": "Veltrons genesis mintable jam",
-            "bandId": "band0a5d1690f1",
-            "owner": "redskylullaby",
-            "members": [
-                "redskylullaby",
-                "theau",
-                "stevie__j",
-                "badrico"
-            ],
-            "rifftime": 1688756141839,
-            "riffCount": 2495
-        },
-        {
-            "jamId": "3d723d7a497c72dc0bc745e21407b1746393fa1ea847d08c6adb646d308a22e4",
-            "name": "Stereo Babies",
-            "bio": "What dem babies do?!",
-            "bandId": "band48a4eba344",
-            "owner": "ashtonmaxwell",
-            "members": [
-                "ashtonmaxwell",
-                "thevoidinclusive",
-                "firephly",
-                "katinkera",
-                "fry"
-            ],
-            "rifftime": 1693346335867,
-            "riffCount": 1649
-        },
-        {
-            "jamId": "26242ac5a8b42e9d6b2c3a3eb22e48eb89f751fa6beb577e4e00bd99147d6556",
-            "name": "AtaraXie",
-            "bio": "Ataraxia is the lucid state of robust equanimity characterised by ongoing freedom from distress and worry. ",
-            "bandId": "band89f9c33268",
-            "owner": "katinkera",
-            "members": [
-                "katinkera"
-            ],
-            "rifftime": 1688500451367,
-            "riffCount": 250
-        },
-        {
-            "jamId": "50bead7d68bbbbe995a2547f942850faeea1186f6aa52d16bd3e14a0fac720d4",
-            "name": "Test Patterns",
-            "bio": "started as one thing. now it is others. others will become. what are your patterns?",
-            "bandId": "bandcb2b282aae",
-            "owner": "lwlkc",
-            "members": [
-                "lwlkc"
-            ],
-            "rifftime": 1688474721516,
-            "riffCount": 508
-        },
-        {
-            "jamId": "2b4514a63ecf606344747b64fa369757952eeb5167fd8980e91d259ea10e3726",
-            "name": "Byzantine Beatbox",
-            "bio": "Beats, soundtracks and soundscapes with a fantasy, neo-medievalist vibe. The theme song to your next D&D campaign.",
-            "bandId": "bandf9ca36c6f2",
-            "owner": "caerickson",
-            "members": [
-                "caerickson"
-            ],
-            "rifftime": 1687645573866,
-            "riffCount": 822
         },
         {
             "jamId": "223507ff6bd17d9feef24c34deb8d3c384c032b5d641242f89d1a4370aeb898b",
@@ -420,47 +660,6 @@
             ],
             "rifftime": 1686191573110,
             "riffCount": 432
-        },
-        {
-            "jamId": "3111e7070fdd7bcbd7537bfde9dc42dfc5908cc8e38f462c283d656281ef1119",
-            "name": "worldendland",
-            "bio": "Post-post-apocaplytic soundtracks",
-            "bandId": "bandb89300761a",
-            "owner": "caerickson",
-            "members": [
-                "caerickson"
-            ],
-            "rifftime": 1685506452252,
-            "riffCount": 595
-        },
-        {
-            "jamId": "41cade13abb7b647daff38630923a0628d33403dbabe6362946cd3b56b075368",
-            "name": "FELONIUS FIVE",
-            "bio": "FELONIUS AF",
-            "bandId": "band8fb63c1b77",
-            "owner": "fancyspectacles",
-            "members": [
-                "fancyspectacles",
-                "n0face",
-                "feloniousmonk",
-                "littlewing",
-                "omnijess"
-            ],
-            "rifftime": 1685315232910,
-            "riffCount": 2202
-        },
-        {
-            "jamId": "52ad701fd9808e4efeb87d6543d499c8b1aeb02c882a845939687b4a52882615",
-            "name": "remaining within",
-            "bio": "",
-            "bandId": "band4cbc45df89",
-            "owner": "lwlkc",
-            "members": [
-                "lwlkc",
-                "thevoidinclusive"
-            ],
-            "rifftime": 1683771092343,
-            "riffCount": 778
         },
         {
             "jamId": "1dd7aa6140c781eaf3949061a6f850401a0e08216a27ecc0c6f85cf38398f333",
@@ -550,21 +749,6 @@
             "riffCount": 14
         },
         {
-            "jamId": "469ce93e8b68ceadc23b7dcbbcaff7f4636553c763e80492944555ce8f8c740",
-            "name": "Trispectacular momentum",
-            "bio": "",
-            "bandId": "band96d8fffb9e",
-            "owner": "trinitou",
-            "members": [
-                "trinitou",
-                "fancyspectacles",
-                "njlang",
-                "feloniousmonk"
-            ],
-            "rifftime": 1682620244110,
-            "riffCount": 478
-        },
-        {
             "jamId": "215bd3eba6f5fa65cba81a951f0a84cb9d0af75d0b79ec4da89bfa1cf3a242a8",
             "name": "Fancyspectacles",
             "bio": "More noise from Fancy",
@@ -577,18 +761,6 @@
             "riffCount": 2588
         },
         {
-            "jamId": "48af8d57b0ffb89754ba3c6bb051c054136a13b971c9deb3cede9825502e880a",
-            "name": "One Cut",
-            "bio": "",
-            "bandId": "band9cab29554e",
-            "owner": "lwlkc",
-            "members": [
-                "lwlkc"
-            ],
-            "rifftime": 1682351308588,
-            "riffCount": 52
-        },
-        {
             "jamId": "7183f17c6244acd398e6afdc3bb3dc0195f63a7d32c422555e53cd8732f24b6d",
             "name": "cloud pipes",
             "bio": "",
@@ -599,18 +771,6 @@
             ],
             "rifftime": 1682349692907,
             "riffCount": 297
-        },
-        {
-            "jamId": "7648f3713454d490aaf0a4c8905801ea3d0f5d93aa78e6a5649d9a2c4ee8c1f8",
-            "name": "Red Sky Lullaby",
-            "bio": "Red Sky Lullaby's collectible Jam",
-            "bandId": "band5d9466e5c4",
-            "owner": "redskylullaby",
-            "members": [
-                "redskylullaby"
-            ],
-            "rifftime": 1681359539817,
-            "riffCount": 456
         },
         {
             "jamId": "3d2aca4406f4bdb8fa03c59094c5818c9ddc41f0dfcea01a968ca16e179ceca4",
@@ -640,22 +800,6 @@
             "riffCount": 9
         },
         {
-            "jamId": "39a6df2c803c564649d88265610734ff360f6f914c1725e871e94fc37d3146a3",
-            "name": "the nature of things",
-            "bio": "an exploration into the deeper channels of rhythm",
-            "bandId": "banda0ebc61aa0",
-            "owner": "deadkousin",
-            "members": [
-                "deadkousin",
-                "slowgaffle",
-                "caerickson",
-                "firephly",
-                "winkle89"
-            ],
-            "rifftime": 1679355056396,
-            "riffCount": 530
-        },
-        {
             "jamId": "413a1efe52844edadf9b647bfd74fad26c3df286ea7afa20c966d1d3512a8d51",
             "name": "Lilypad Projections",
             "bio": "ashtonmaxwell :: Firephly",
@@ -667,18 +811,6 @@
             ],
             "rifftime": 1679287812902,
             "riffCount": 485
-        },
-        {
-            "jamId": "304b299ba26bd9a444e67c84cfd61e7cf599754c96ae24fc70fea3f93dbb97cf",
-            "name": "Where Redwoods Meet The Sea",
-            "bio": "Atmospheres of expansive drifting universes and ambiguous moods. linktr.ee/firephly",
-            "bandId": "band704c526665",
-            "owner": "firephly",
-            "members": [
-                "firephly"
-            ],
-            "rifftime": 1679030188072,
-            "riffCount": 343
         },
         {
             "jamId": "727bd6e7077322f60042000786d782ac0aa38c7a4ef0c6b5f8a43dd3a602009e",
@@ -779,21 +911,6 @@
             ],
             "rifftime": 1677301800083,
             "riffCount": 66
-        },
-        {
-            "jamId": "484854f003f4864b9bb1d90bd7fbde0cc0aff6ca3fc5e61b0a7e6cdd7ec0284f",
-            "name": "Carnivale",
-            "bio": "",
-            "bandId": "band3f4b5759c7",
-            "owner": "m0nk",
-            "members": [
-                "m0nk",
-                "paul_cine",
-                "theau",
-                "herzihelmut"
-            ],
-            "rifftime": 1677300613816,
-            "riffCount": 745
         },
         {
             "jamId": "10e281d41262414cb994574e4ae16194e206729952f97d43e166b9ae1c8c8e4f",
@@ -898,19 +1015,6 @@
             "riffCount": 14
         },
         {
-            "jamId": "5c7df42944a9f4301defa4d38f5a04296f34d3f40bab69f97824293cce4fb176",
-            "name": "Sentient",
-            "bio": "",
-            "bandId": "bande6936984e6",
-            "owner": "firephly",
-            "members": [
-                "firephly",
-                "elling"
-            ],
-            "rifftime": 1676434675673,
-            "riffCount": 262
-        },
-        {
             "jamId": "ec03f629fa69ae91595b426de046f8d6f0edb718d8e4b0e3b970212e5bb7b4c",
             "name": "Ampsider Collective",
             "bio": "",
@@ -987,35 +1091,6 @@
             ],
             "rifftime": 1674265334039,
             "riffCount": 133
-        },
-        {
-            "jamId": "1c48c1666063658b8a82aa422ed7a365448c126f29016412ece33d02acce173f",
-            "name": "Studio 42 Tapes",
-            "bio": "",
-            "bandId": "band6a4e9ed11d",
-            "owner": "thevoidinclusive",
-            "members": [
-                "thevoidinclusive",
-                "theau"
-            ],
-            "rifftime": 1674192350509,
-            "riffCount": 248
-        },
-        {
-            "jamId": "16dceb9bc12a09271de62df0d4b8718d3a538938238df75ecd30a5432179caa3",
-            "name": "The Circle of Friends",
-            "bio": "Step onboard the wonder wheel for foggy hip hop grooves and dirty beats.",
-            "bandId": "band51b8104737",
-            "owner": "caerickson",
-            "members": [
-                "caerickson",
-                "anubot",
-                "stoic",
-                "njlang",
-                "andymac"
-            ],
-            "rifftime": 1674190710740,
-            "riffCount": 3383
         },
         {
             "jamId": "75931df991500c2ebd6dca5af447f745f235362b93f7d1fc49c3fcfab51ca579",
@@ -1110,22 +1185,6 @@
             ],
             "rifftime": 1672877599128,
             "riffCount": 105
-        },
-        {
-            "jamId": "18c7d15659c055c896378aebff5334954dd7bae9c35376dca914c3cac3d863e9",
-            "name": "The Sith Eternal Breaks",
-            "bio": "Low tempos, decayed breaks, moody, \ncinematic, big bass with open minor notes, as much field recording type stuff as possible. A musical journey of the political decay of the Sith Eternal hierarchy",
-            "bandId": "band6019162ed4",
-            "owner": "dsorce",
-            "members": [
-                "dsorce",
-                "firephly",
-                "foid",
-                "marky2coats",
-                "mostllyjustj"
-            ],
-            "rifftime": 1671823240344,
-            "riffCount": 3552
         },
         {
             "jamId": "50c36ad2fa13cdd883d868ce7c94a127a83477b7075d60807c9f147f441c3d47",
@@ -1285,18 +1344,6 @@
             ],
             "rifftime": 1671039384046,
             "riffCount": 1236
-        },
-        {
-            "jamId": "27489cb0b945097fd047038afa71c4a464ed0347e5dc67a1f680e2075f98368b",
-            "name": "MintyHelmut",
-            "bio": "",
-            "bandId": "band5f80c172c4",
-            "owner": "herzihelmut",
-            "members": [
-                "herzihelmut"
-            ],
-            "rifftime": 1671096536016,
-            "riffCount": 102
         },
         {
             "jamId": "2c9fe8195b627dcc7fafd9d9c66bdc29a9e88daa786f690010ccd043ed8cd690",
@@ -1689,30 +1736,6 @@
             "riffCount": 14
         },
         {
-            "jamId": "65e69f98c389fc272cd2d55bd7d1894f995641907734b558c2264470fd2cc2d0",
-            "name": "essssphere ",
-            "bio": "Who knows where this will lead... down the rabbit hole and into the essssphere ",
-            "bandId": "bandda806a4642",
-            "owner": "foid",
-            "members": [
-                "foid"
-            ],
-            "rifftime": 1665244559067,
-            "riffCount": 244
-        },
-        {
-            "jamId": "497ac7f4aea3edbe5aa342dbf994b49f18007ae6add8f161c3cbc4a01e9e90a3",
-            "name": "Horror Film Score",
-            "bio": "",
-            "bandId": "band71a706a40d",
-            "owner": "elling",
-            "members": [
-                "elling"
-            ],
-            "rifftime": 1665169993789,
-            "riffCount": 157
-        },
-        {
             "jamId": "589489d906604f9c1fb5b1602fb3e2f490fc83cb3ec38ed840ece713786790cf",
             "name": "YET MORE FANCY...",
             "bio": "Will riff for food...",
@@ -1977,18 +2000,6 @@
             ],
             "rifftime": 1663094278181,
             "riffCount": 6
-        },
-        {
-            "jamId": "35ae6e1de281b4c32f0015b62ebd3827ee33a998c94e96ecc457b0d6370445c",
-            "name": "birdbath virtual",
-            "bio": "virtual bird bath for your ears",
-            "bandId": "band584b4fddc3",
-            "owner": "williamsharkey",
-            "members": [
-                "williamsharkey"
-            ],
-            "rifftime": 1664433603696,
-            "riffCount": 888
         },
         {
             "jamId": "129ed35f9aab614333250eab099a4888b08f5ea65cf691219289fbe63ac2e4f7",
