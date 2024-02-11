@@ -162,6 +162,7 @@ struct VibePlan
         using UniquePtr = std::shared_ptr< Declaration >;
 
         std::string                         m_name;
+        std::string                         m_copyright;
         std::vector< Operation::UniquePtr > m_operations;
 
         // return any compilation failures in the set of operations, or Ok if we're ready to render
@@ -449,6 +450,7 @@ struct Vibes::State
         {
             auto planDecl = std::make_unique< VibePlan::Declaration >();
             planDecl->m_name = decl.name;
+            planDecl->m_copyright = decl.copyright;
 
             for ( const auto& op : decl.operations )
             {
@@ -659,9 +661,28 @@ void Vibes::State::doImGuiCtrlShader()
         
     }
 
+    auto& currentDeclaration = m_plan->m_declarations[m_selectionIndex];
+
+    {
+        ImGui::Spacing();
+        ImGui::SeparatorBreak();
+        ImGui::PushStyleColor( ImGuiCol_Text, colour::shades::toast.neutral() );
+        ImGui::TextWrapped( currentDeclaration->m_copyright.c_str() );
+        ImGui::PopStyleColor();
+        ImGui::SeparatorBreak();
+        ImGui::Spacing();
+    }
+
+    currentDeclaration->imgui( m_preprocessingState );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void Vibes::State::doImGuiCtrlGlobal()
+{
+    const float subgroupInsetSize = 16.0f;
+
     // shared shader configurations
     {
-        ImGui::SeparatorBreak();
         ImGui::TextUnformatted( "Random Seed" );
         const bool textAccept = ImGui::InputText( "##rngs", &m_randomString, ImGuiInputTextFlags_EnterReturnsTrue );
         if ( textAccept || ImGui::IsItemDeactivatedAfterEdit() )
@@ -675,34 +696,32 @@ void Vibes::State::doImGuiCtrlShader()
         }
     }
 
+    ImGui::Spacing();
     ImGui::SeparatorBreak();
-
-    auto& currentDeclaration = m_plan->m_declarations[m_selectionIndex];
-    currentDeclaration->imgui( m_preprocessingState );
-}
-
-// ---------------------------------------------------------------------------------------------------------------------
-void Vibes::State::doImGuiCtrlGlobal()
-{
-
     ImGui::Spacing();
+
     ImGui::TextUnformatted( "Rendering" );
-    ImGui::Spacing();
-
-    ImGui::Checkbox( "Auto Oversample", &m_autoOversample );
-    ImGui::SameLine();
-    ImGui::TextDisabled( "[?]" );
-    ImGui::CompactTooltip( "Run shaders at maximum resolution regardless of viewport size (will increase GPU usage, potentially considerably)" );
-
-    ImGui::Spacing();
-    if ( ImGui::Button( "Clear All Buffers" ) )
     {
-        for ( const auto& fbos : m_namedVibeFBOs )
-            fbos.second->bufferClear();
+        ImGui::Indent( subgroupInsetSize );
+        ImGui::Spacing();
+
+        ImGui::Checkbox( "Auto Oversample", &m_autoOversample );
+        ImGui::SameLine();
+        ImGui::TextDisabled( "[?]" );
+        ImGui::CompactTooltip( "Run shaders at maximum resolution regardless of viewport size (will increase GPU usage, potentially considerably)" );
+
+        ImGui::Spacing();
+        if ( ImGui::Button( "Clear All Buffers" ) )
+        {
+            for ( const auto& fbos : m_namedVibeFBOs )
+                fbos.second->bufferClear();
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled( "[?]" );
+        ImGui::CompactTooltip( "Forcibly blank all intermediary buffers" );
+
+        ImGui::Unindent( subgroupInsetSize );
     }
-    ImGui::SameLine();
-    ImGui::TextDisabled( "[?]" );
-    ImGui::CompactTooltip( "Forcibly blank all intermediary buffers" );
 
 }
 

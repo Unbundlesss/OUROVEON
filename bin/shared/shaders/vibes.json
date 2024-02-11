@@ -2,7 +2,7 @@
     "declarations": [
         {
             "name": "Threads",
-            "copyright" : "CC0 mrange",
+            "copyright" : "CC0 mrange, remixed by ishani",
             "operations": [
                 {
                     "name": "render",
@@ -31,8 +31,20 @@
             ]
         },
         {
+            "name": "Retina",
+            "copyright" : "hacked from shadertoy 4tlXWX",
+            "operations": [
+                {
+                    "name": "render",
+                    "fragment": "retina",
+                    "bufferInA": "work1",
+                    "bufferOut": "final"
+                }
+            ]
+        },
+        {
             "name": "Debug",
-            "copyright" : "ishani",
+            "copyright" : "diagnostics tool; CC0 ishani",
             "operations": [
                 {
                     "name": "render",
