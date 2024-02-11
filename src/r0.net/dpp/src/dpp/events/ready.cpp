@@ -47,7 +47,7 @@ std::mutex protect_the_loot;
  * @param raw Raw JSON string
  */
 void ready::handle(discord_client* client, json &j, const std::string &raw) {
-	client->log(dpp::ll_info, std::format("Shard {}/{} ready!", client->shard_id, client->max_shards));
+	client->log(dpp::ll_info, fmt::format("Shard {}/{} ready!", client->shard_id, client->max_shards));
 	client->sessionid = j["d"]["session_id"];
 
 	client->ready = true;

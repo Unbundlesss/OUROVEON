@@ -58,7 +58,7 @@ void thread_members_update::handle(discord_client* client, json& j, const std::s
 						tms.removed_ids.push_back(std::stoull(static_cast<std::string>(rm)));
 					}
 				} catch (const std::exception& e) {
-					client->creator->log(dpp::ll_error, std::format("thread_members_update: {}", e.what()));
+					client->creator->log(dpp::ll_error, fmt::format("thread_members_update: {}", e.what()));
 				}
 			}
 			client->creator->on_thread_members_update.call(tms);

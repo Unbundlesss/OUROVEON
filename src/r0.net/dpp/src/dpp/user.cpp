@@ -69,7 +69,7 @@ std::string user::get_avatar_url()  const {
 	/* XXX: Discord were supposed to change their CDN over to discord.com, they haven't.
 	 * At some point in the future this URL *will* change!
 	 */
-	return std::format("https://cdn.discordapp.com/avatars/{}/{}{}.{}",
+	return fmt::format("https://cdn.discordapp.com/avatars/{}/{}{}.{}",
 		this->id,
 		(has_animated_icon() ? "a_" : ""),
 		this->avatar.to_string(),

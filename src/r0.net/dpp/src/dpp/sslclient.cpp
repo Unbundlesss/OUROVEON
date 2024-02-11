@@ -136,7 +136,7 @@ void ssl_client::connect()
 	/* Resolve hostname to IP */
 	struct hostent *host;
 	if ((host = gethostbyname(hostname.c_str())) == nullptr)
-		throw dpp::exception(std::format("Couldn't resolve hostname '{}'", hostname));
+		throw dpp::exception(fmt::format("Couldn't resolve hostname '{}'", hostname));
 
 	addrinfo hints, *addrs;
 	
@@ -154,7 +154,7 @@ void ssl_client::connect()
 #else
 		std::string gai = gai_strerror( status );
 #endif // _MSC_VER
-		throw dpp::exception( std::format( "getaddrinfo (host={}, port={}): ", hostname, port, gai ) );
+		throw dpp::exception( fmt::format( "getaddrinfo (host={}, port={}): ", hostname, port, gai ) );
 	}
 
 	/* Attempt each address in turn, if there are multiple IP addresses on the hostname */
@@ -305,7 +305,7 @@ void ssl_client::read_loop()
 			}
 
 			if (SAFE_FD_ISSET(sfd, &efds) || sfd == -1) {
-				this->log(dpp::ll_error, std::format("Error on SSL connection: {}", strerror(errno)));
+				this->log(dpp::ll_error, fmt::format("Error on SSL connection: {}", strerror(errno)));
 				return;
 			}
 
@@ -394,7 +394,7 @@ void ssl_client::read_loop()
 		}
 	}
 	catch (const std::exception &e) {
-		log(ll_warning, std::format("Read loop ended: {}", e.what()));
+		log(ll_warning, fmt::format("Read loop ended: {}", e.what()));
 	}
 }
 

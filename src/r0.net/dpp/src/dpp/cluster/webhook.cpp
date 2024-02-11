@@ -86,7 +86,7 @@ void cluster::edit_webhook_with_token(const class webhook& wh, command_completio
 		jwh = json::parse(wh.build_json(true));
 	}
 	catch (const std::exception &e) {
-		log(ll_error, std::format("edit_webhook_with_token(): {}", e.what()));
+		log(ll_error, fmt::format("edit_webhook_with_token(): {}", e.what()));
 		return;
 	}
 	if (jwh.find("channel_id") != jwh.end()) {

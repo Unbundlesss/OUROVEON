@@ -156,7 +156,7 @@ std::string guild_member::get_avatar_url()  const {
 	 * At some point in the future this URL *will* change!
 	 */
 	if (!this->avatar.to_string().empty()) {
-		return std::format("https://cdn.discordapp.com/avatars/{}/{}{}.{}",
+		return fmt::format("https://cdn.discordapp.com/avatars/{}/{}{}.{}",
 			this->user_id,
 			(has_animated_guild_avatar() ? "a_" : ""),
 			this->avatar.to_string(),

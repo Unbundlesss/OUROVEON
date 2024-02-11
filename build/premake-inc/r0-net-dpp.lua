@@ -19,6 +19,8 @@ project "r0-dpp"
     SetDefaultBuildConfiguration()
     SetDefaultOutputDirectories("r0")
 
+    defines { "_WINSOCK_DEPRECATED_NO_WARNINGS" }
+
     ModuleRefInclude["dpp"]()
 
     ModuleRefInclude["json"]()

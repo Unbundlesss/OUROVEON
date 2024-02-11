@@ -66,7 +66,7 @@ cluster::~cluster()
 {
 	for ( const auto& kv : shards )
 	{
-		log( ll_info, std::format( "terminating shard {}", kv.first ) );
+		log( ll_info, fmt::format( "terminating shard {}", kv.first ) );
 		kv.second->close();
 		delete kv.second;
 	}
@@ -95,20 +95,20 @@ void cluster::auto_shard(const confirmation_callback_t &shardinfo) {
 	gateway g = std::get<gateway>(shardinfo.value);
 	numshards = g.shards;
 	if (g.shards) {
-		log(ll_info, std::format("Auto Shard: Bot requires {} shard{}", g.shards, (g.shards > 1) ? "s" : ""));
+		log(ll_info, fmt::format("Auto Shard: Bot requires {} shard{}", g.shards, (g.shards > 1) ? "s" : ""));
 		if (g.session_start_remaining < g.shards) {
-			log(ll_critical, std::format("Auto Shard: Discord indicates you cannot start any more sessions! Cluster startup aborted. Try again later."));
+			log(ll_critical, fmt::format("Auto Shard: Discord indicates you cannot start any more sessions! Cluster startup aborted. Try again later."));
 		} else {
-			log(ll_debug, std::format("Auto Shard: {} of {} session starts remaining", g.session_start_remaining, g.session_start_total));
+			log(ll_debug, fmt::format("Auto Shard: {} of {} session starts remaining", g.session_start_remaining, g.session_start_total));
 			cluster::start(true);
 		}
 	} else {
 		if (shardinfo.is_error()) {
-			log( ll_critical, std::format("Auto Shard: Could not get shard count ({} [code: {}]). Cluster startup aborted.", shardinfo.get_error().message, shardinfo.get_error().code));
+			log( ll_critical, fmt::format("Auto Shard: Could not get shard count ({} [code: {}]). Cluster startup aborted.", shardinfo.get_error().message, shardinfo.get_error().code));
 		} else {
 			log( ll_critical, "Auto Shard: Could not get shard count (unknown error, check your connection). Cluster startup aborted.");
 		}
-		cluster::boot_failure( std::format( "HTTP {} {}", shardinfo.http_info.status, shardinfo.http_info.body ) );
+		cluster::boot_failure( fmt::format( "HTTP {} {}", shardinfo.http_info.status, shardinfo.http_info.body ) );
 	}
 }
 
@@ -151,7 +151,7 @@ void cluster::start(bool return_after) {
 	} else {
 		start_time = time(NULL);
 
-		log(ll_debug, std::format("Starting with {} shards...", numshards));
+		log(ll_debug, fmt::format("Starting with {} shards...", numshards));
 
 		for (uint32_t s = 0; s < numshards; ++s) {
 			/* Filter out shards that arent part of the current cluster, if the bot is clustered */
@@ -162,7 +162,7 @@ void cluster::start(bool return_after) {
 					this->shards[s]->run();
 				}
 				catch (const std::exception &e) {
-					log(dpp::ll_critical, std::format("Could not start shard {}: {}", s, e.what()));
+					log(dpp::ll_critical, fmt::format("Could not start shard {}: {}", s, e.what()));
 				}
 				/* Stagger the shard startups */
 				std::this_thread::sleep_for(std::chrono::seconds(5));
@@ -214,7 +214,7 @@ void cluster::post_rest(const std::string &endpoint, const std::string &major_pa
 			}
 			catch (const std::exception &e) {
 				/* TODO: Do something clever to handle malformed JSON */
-				log(ll_error, std::format("post_rest() to {}: {}", endpoint, e.what()));
+				log(ll_error, fmt::format("post_rest() to {}: {}", endpoint, e.what()));
 				return;
 			}
 		}

@@ -100,9 +100,9 @@ namespace dpp {
 
 		std::string uptime::to_string() {
 			if (hours == 0 && days == 0) {
-				return std::format("{:02d}:{:02d}", mins, secs);
+				return fmt::format("{:02d}:{:02d}", mins, secs);
 			} else {
-				return std::format("{}{:02d}:{:02d}:{:02d}", (days ? std::format("{} day{}, ", days, (days > 1 ? "s" : "")) : ""), hours, mins, secs);
+				return fmt::format("{}{:02d}:{:02d}:{:02d}", (days ? fmt::format("{} day{}, ", days, (days > 1 ? "s" : "")) : ""), hours, mins, secs);
 			}
 		}
 
@@ -148,7 +148,7 @@ namespace dpp {
 			if (first == 0 && second == 0)
 				return "";
 			else
-				return std::format("{:016x}{:016x}", this->first, this->second);
+				return fmt::format("{:016x}{:016x}", this->first, this->second);
 		}
 
 		std::string debug_dump(uint8_t* data, size_t length) {
@@ -157,7 +157,7 @@ namespace dpp {
 			size_t extra = addr % 16;
 			if (extra != 0) {
 				addr -= extra;
-				out << std::format("[{:016X}] : ", addr);
+				out << fmt::format("[{:016X}] : ", addr);
 			}
 			for (size_t n = 0; n < extra; ++n) {
 				out << "-- ";
@@ -165,11 +165,11 @@ namespace dpp {
 			std::string ascii;
 			for (uint8_t* ptr = data; ptr < data + length; ++ptr) {
 				if (((size_t)ptr % 16) == 0) {
-					out << std::format("    {}\n[{:016X}] : ", ascii, (size_t)ptr);
+					out << fmt::format("    {}\n[{:016X}] : ", ascii, (size_t)ptr);
 					ascii.clear();
 				}
 				ascii.push_back(*ptr >= ' ' && *ptr <= '~' ? *ptr : '.');
-				out << std::format("{:02X} ", *ptr);
+				out << fmt::format("{:02X} ", *ptr);
 			}
 			out << "    " << ascii;
 			out << "\n";
@@ -178,13 +178,13 @@ namespace dpp {
 
 		std::string bytes(uint64_t c) {
 			if (c > 1099511627776) {	// 1TB
-				return std::format("{:.2f}T", (c / 1099511627776.0));
+				return fmt::format("{:.2f}T", (c / 1099511627776.0));
 			} else if (c > 1073741824) {	// 1GB
-				return std::format("{:.2f}G", (c / 1073741824.0));
+				return fmt::format("{:.2f}G", (c / 1073741824.0));
 			}  else if (c > 1048576) {	// 1MB
-				return std::format("{:.2f}M", (c / 1048576.0));
+				return fmt::format("{:.2f}M", (c / 1048576.0));
 			}  else if (c > 1024) {		// 1KB
-				return std::format("{:.2f}K", (c / 1024.0));
+				return fmt::format("{:.2f}K", (c / 1024.0));
 			} else {			// Bytes
 				return std::to_string(c);
 			}

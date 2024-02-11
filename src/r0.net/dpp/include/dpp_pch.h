@@ -7,10 +7,15 @@
 #include <cinttypes>
 #include <cstdio>
 #include <cstring>
-#include <format>
 #include <variant>
 #include <vector>
 #include <atomic>
+
+// {fmt}
+#include "fmt/core.h"
+#include "fmt/color.h"
+#include "fmt/chrono.h"
+#include "fmt/xchar.h"
 
 #include "nlohmann/json.hpp"
 

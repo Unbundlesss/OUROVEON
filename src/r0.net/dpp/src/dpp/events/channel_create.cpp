@@ -56,7 +56,7 @@ void channel_create::handle(discord_client* client, json &j, const std::string &
 	dpp::get_channel_cache()->store(c);
 	if (c->recipients.size()) {
 		for (auto & u : c->recipients) {
-			client->log(dpp::ll_debug, std::format("Got a DM channel {} for user {}", c->id, u));
+			client->log(dpp::ll_debug, fmt::format("Got a DM channel {} for user {}", c->id, u));
 			client->creator->set_dm_channel(u, c->id);
 		}
 	}
