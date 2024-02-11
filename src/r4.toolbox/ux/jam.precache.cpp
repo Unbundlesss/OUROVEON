@@ -165,7 +165,7 @@ void JamPrecacheState::imgui(
             {
                 ImGui::TextColored( colour::shades::toast.light(), "Click below to fetch the initial stem workload from the database." );
             }
-            if ( ImGui::IsMouseDoubleClicked( 1 ) )
+            if ( ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked( 1 ) )
             {
                 m_enableSiphonMode = true;
             }

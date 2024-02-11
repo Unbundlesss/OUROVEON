@@ -299,7 +299,7 @@ int OuroApp::EntrypointGUI()
                         ImGui::PushFont( m_mdFrontEnd->getFont( app::module::Frontend::FontChoice::LargeLogo ) );
                         ImGui::PushStyleColor( ImGuiCol_Text, ImGui::GetColorU32( ImGuiCol_NavHighlight ) );
                         ImGui::TextUnformatted( "OUROVEON " );
-                        if ( ImGui::IsMouseDoubleClicked( ImGuiMouseButton_Left ) )
+                        if ( ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked( ImGuiMouseButton_Left ) )
                             advancedOptionsBlock.bShow = true;
 
                         ImGui::PopStyleColor();
