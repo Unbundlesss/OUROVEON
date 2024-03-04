@@ -26,6 +26,7 @@
 #include "app/module.midi.h"
 
 #include "app/ouro.h"
+#include "math/rng.h"
 
 
 #include "ux/diskrecorder.h"
@@ -2358,6 +2359,28 @@ int LoreApp::EntrypointOuro()
                             }
                         }
                         else
+                        if ( cI == 1 )
+                        {
+                            // cheap little random scrambler, chooses some random mute states
+                            if ( ImGui::Button( "!" ) )
+                            {
+                                math::RNG32 rng;
+
+                                m_riffPlaybackAbstraction = {};
+
+                                for ( auto i = 0; i < 8; i++ )
+                                {
+                                    if ( (rng.genUInt32() & 1) == 1 )
+                                        m_riffPlaybackAbstraction.action( endlesss::types::RiffPlaybackAbstraction::Action::ToggleMute, i );
+                                }
+
+                                const auto newPermutation = m_riffPlaybackAbstraction.asPermutation();
+                                const auto operationID = mixPreview.enqueuePermutation( newPermutation );
+                                m_permutationOperationImGuiMap.add( operationID, 0 );
+                            }
+                            ImGui::CompactTooltip( "Choose random muted channels" );
+                        }
+                        else
                         {
                             ImGui::TableHeader( RiffViewTable[cI].m_title );
                         }
@@ -2388,9 +2411,11 @@ int LoreApp::EntrypointOuro()
                             ImGui::Scoped::FluxButton::State::On :
                             ImGui::Scoped::FluxButton::State::Off;
 
-                        if ( m_permutationOperationImGuiMap.hasValue( currentImGuiID ) )
+                        const bool isRandomisationPassHappening = m_permutationOperationImGuiMap.hasValue( 0 );
+                        if ( m_permutationOperationImGuiMap.hasValue( currentImGuiID ) || isRandomisationPassHappening )
                             buttonState = ImGui::Scoped::FluxButton::State::Flux;
 
+                        ImGui::Scoped::Disabled se( isRandomisationPassHappening );
                         ImGui::Scoped::FluxButton fluxButton( buttonState, buttonColour, ImVec4( 0, 0, 0, 1 ) );
                         if ( ImGui::Button( title ) || (forceOff && buttonState == ImGui::Scoped::FluxButton::State::On) )
                         {
