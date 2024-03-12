@@ -995,6 +995,15 @@ int BeamApp::EntrypointOuro()
         32,
         [this]( const endlesss::types::RiffIdentity& request, endlesss::types::RiffComplete& result) -> bool
         {
+            // most requests can be serviced direct from the DB
+            if ( m_warehouse->fetchSingleRiffByID( request.getRiffID(), result ) )
+            {
+                ABSL_ASSERT( result.jam.couchID == request.getJamID() );
+
+                endlesss::toolkit::Pipeline::applyRequestCustomNaming( request, result );
+                return true;
+            }
+
             return endlesss::toolkit::Pipeline::defaultNetworkResolver( *m_networkConfiguration, request, result );
         },
         [&mixEngine]( const endlesss::types::RiffIdentity& request, endlesss::live::RiffPtr& loadedRiff, const endlesss::types::RiffPlaybackPermutationOpt& playbackPermutationOpt )
