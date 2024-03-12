@@ -433,11 +433,17 @@ class Database {
       // statement according to the argument's type, using the correct SQL C
       // API function.
       int idx = 1;
-      auto bind_dispatcher = [stmt, &idx] (const auto &arg, auto &self) {
-
+      auto bind_dispatcher = [stmt, &idx] (const auto &arg, auto &self) 
+      {
         using arg_t = std::decay_t<decltype(arg)>;
+
         if constexpr (std::is_integral_v<arg_t>) {
           sqlite3_bind_int64(stmt, idx, arg);
+        // #HDD changes start; for carray binding
+        } else if constexpr (std::is_same_v<const int *, arg_t> ||
+                             std::is_same_v<int *, arg_t>) {
+          sqlite3_bind_pointer(stmt, idx, (void*)arg, "carray", SQLITE_STATIC);
+        // #HDD changes end
         } else if constexpr (std::is_same_v<double, arg_t> ||
                              std::is_same_v<float, arg_t>) {
             sqlite3_bind_double(stmt, idx, arg);
