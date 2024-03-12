@@ -321,10 +321,10 @@ bool ValueArrayComboBox(
 {
     ABSL_ASSERT( entryLabels.size() == entryValues.size() );
 
+    ImGui::AlignTextToFramePadding();
+
     ImGui::TextUnformatted( title );
     ImGui::SameLine();
-
-    ImGui::SetCursorPosY( ImGui::GetCursorPosY() - 3.0f );
 
     bool changed = false;
     if ( ImGui::BeginCombo( label, previewString.c_str() ) )
@@ -347,7 +347,6 @@ bool ValueArrayComboBox(
     if ( sameLineGap > 0 )
     {
         ImGui::SameLine( 0, sameLineGap );
-        ImGui::SetCursorPosY( ImGui::GetCursorPosY() - 3.0f );
     }
 
     return changed;
