@@ -230,6 +230,7 @@ struct Warehouse
     void requestJamSyncAbort( const types::JamCouchID& jamCouchID );
 
 
+
     // -----------------------------------------------------------------------------------------------------------------
     // Jam Export / Import
 
@@ -246,8 +247,9 @@ struct Warehouse
         const std::string_view fileExtension );
 
 
+
     // -----------------------------------------------------------------------------------------------------------------
-    // Riff Resolution
+    // Riffs
 
     // instead of hitting the Endlesss network, the warehouse may be able to fill in all the data required to 
     // bring a riff online; returns true if that was the case
@@ -261,9 +263,33 @@ struct Warehouse
         const int32_t stemIndex,    // 0-base stem index to modify
         const endlesss::types::StemCouchID& newStemID );
 
+    struct RiffKeySearchParameters
+    {
+        std::vector<int32_t>    m_scale;
+        std::vector<int32_t>    m_root;
+        bool                    m_ignoreAnnoyingPresets = true;
+    };
+
+    // used to find the ranges of rounded BPMs given scale/root choices, and how many riffs are associated with that BPM
+    // returns size of the populated bpmCounts vector
+    struct BPMCountTuple
+    {
+        uint32_t    m_BPM;
+        uint32_t    m_count;
+    };
+    enum class BPMCountSort
+    {
+        ByBPM,
+        ByCount
+    };
+    std::size_t filterRiffsByBPM( const RiffKeySearchParameters& keySearchParam, const BPMCountSort sortOn, std::vector< BPMCountTuple >& bpmCounts ) const;
+
+
+    bool fetchRandomRiffBySeed( const RiffKeySearchParameters& keySearchParam, const uint32_t BPM, const int32_t seedValue, endlesss::types::RiffComplete& result ) const;
+
 
     // -----------------------------------------------------------------------------------------------------------------
-    // Stem Operations
+    // Stems
 
     // given N stems, return a matching vector of origin jam IDs for each; if no jam ID can be determined, an empty ID is stored
     bool batchFindJamIDForStem( const endlesss::types::StemCouchIDs& stems, endlesss::types::JamCouchIDs& result ) const;
@@ -282,6 +308,7 @@ struct Warehouse
     // see if we have any notes for a stem ID (if it was removed from the database during a sync for some reason)
     // returns false if we have no record for this stem ID
     bool getNoteTypeForStem( const types::StemCouchID& stemCID, StemLedgerType& typeResult );
+
 
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -304,6 +331,22 @@ struct Warehouse
 
     // delete all tags for a jam as a batch operation
     void batchRemoveAllTags( const endlesss::types::JamCouchID& jamCID );
+
+
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Jam Virtualisation
+    // a way to allow us to create arbitrarily defined riffs from scratch; eg. for procedural generation experiments
+    // this uses a bespoke magic-named jam in the database where we can horse about and write custom data / purge stuff.
+    // these can be requested and interacted with by the pipeline code as if they were "real" riffs
+    //
+
+    static constexpr std::string_view cVirtualJamName = "virtual_jam";
+
+    // injects a new virtual riff, returning the Identity information to be able to enqueue it (should you wish)
+    endlesss::types::RiffIdentity createNewVirtualRiff( const endlesss::types::VirtualRiff& vriff );
+
+    void clearOutVirtualJamStorage();
 
 
     // -----------------------------------------------------------------------------------------------------------------

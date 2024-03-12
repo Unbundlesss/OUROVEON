@@ -14,6 +14,7 @@
 #include "base/text.transform.h"
 
 #include "data/yamlutil.h"
+#include "data/uuid.h"
 
 #include "math/rng.h"
 #include "spacetime/chronicle.h"
@@ -28,6 +29,8 @@
 
 #include "app/core.h"
 
+// carray.c
+extern "C" { int sqlite3_carray_init( sqlite3* db, char** pzErrMsg, const sqlite3_api_routines* pApi ); }
 
 namespace endlesss {
 namespace toolkit {
@@ -443,6 +446,8 @@ namespace riffs {
         CREATE INDEX        IF NOT EXISTS "Riff_IndexOwner2Time" ON "Riffs" ( "OwnerJamCID", "CreationTime" );)";  // w. stem index, accelerates contents report a bunch (300 -> 70ms)
     static constexpr char createIndex_7[] = R"(
         CREATE INDEX        IF NOT EXISTS "Riff_IndexOwner2Ver"  ON "Riffs" ( "OwnerJamCID", "AppVersion" );)";  // new stem indexing
+    static constexpr char createIndex_8[] = R"(
+        CREATE INDEX        IF NOT EXISTS "Riff_RootScaleBPM"    ON "Riffs" ( "Root", "Scale", "BPMrnd" );)";  // procgen random indexing
 
     static constexpr char deprecated_0[] = { DEPRECATE_INDEX "IndexRiff" };
     static constexpr char deprecated_1[] = { DEPRECATE_INDEX "IndexOwner" };
@@ -464,6 +469,7 @@ namespace riffs {
         Warehouse::SqlDB::query<createIndex_5>();
         Warehouse::SqlDB::query<createIndex_6>();
         Warehouse::SqlDB::query<createIndex_7>();
+        Warehouse::SqlDB::query<createIndex_8>();
 
         // deprecate
         Warehouse::SqlDB::query<deprecated_0>();
@@ -1100,8 +1106,44 @@ namespace ledger {
 
 } // namespace ledger
 
+namespace constants {
+} // namespace constants
+
 } // namespace sql
 
+// ---------------------------------------------------------------------------------------------------------------------
+// add a custom seeded RANDOM function to sqlite, allowing us to feed through specific random sequences
+//
+static void sqlite_SEEDED_RANDOM_dtor( void* p )
+{
+    math::RNG32* pRNG = static_cast<math::RNG32*>(p);
+    delete pRNG;
+}
+
+static void sqlite_SEEDED_RANDOM( sqlite3_context* context, int argc, sqlite3_value** argv )
+{
+    if ( argc == 1 && sqlite3_value_type( argv[0] ) == SQLITE_INTEGER )
+    {
+        // fetch the current RNG state from db context
+        math::RNG32* pRNG = static_cast<math::RNG32*>( sqlite3_get_auxdata( context, 0 ) );
+        if ( !pRNG )
+        {
+            // .. first time through, create the RNG state, stash it
+            const int32_t seed = sqlite3_value_int( argv[0] );
+            pRNG = new math::RNG32( static_cast<uint32_t>(seed) );
+            sqlite3_set_auxdata( context, 0, pRNG, sqlite_SEEDED_RANDOM_dtor );
+        }
+
+        // produce the next number in the sequence
+        const int64_t result = pRNG->genInt32();
+
+        sqlite3_result_int64( context, result );
+    }
+    else
+    {
+        sqlite3_result_error( context, "Invalid", 0 );
+    }
+}
 
 // ---------------------------------------------------------------------------------------------------------------------
 Warehouse::Warehouse( const app::StoragePaths& storagePaths, api::NetConfiguration::Shared& networkConfig, base::EventBusClient eventBus )
@@ -1121,16 +1163,30 @@ Warehouse::Warehouse( const app::StoragePaths& storagePaths, api::NetConfigurati
     m_databaseFile = ( storagePaths.cacheCommon / "warehouse.db3" ).string();
     SqlDB::post_connection_hook = []( sqlite3* db_handle )
     {
+        blog::database( FMTX( "post_connection_hook( 0x{:x} )" ), (uint64_t)db_handle );
+
         // https://www.sqlite.org/pragma.html#pragma_temp_store
         sqlite3_exec( db_handle, "pragma temp_store = memory", nullptr, nullptr, nullptr );
+
+        // add our RANDOM variant that takes a seed to allow for deterministic random queries
+        int32_t res = sqlite3_create_function( db_handle, "SEEDED_RANDOM", 1, SQLITE_UTF8, NULL, &sqlite_SEEDED_RANDOM, NULL, NULL );
+
+        // bolt in carray extension
+        int carrayRes = sqlite3_carray_init( db_handle, nullptr, nullptr );
+        blog::database( FMTX( "sqlite3_carray_init = {} ({})" ), carrayRes == SQLITE_OK ? "OK" : "Error", carrayRes );
     };
 
     // set the database up; creating tables & indices if we're starting fresh
-    sql::jams::runInit();
-    sql::riffs::runInit();
-    sql::tags::runInit();
-    sql::stems::runInit();
-    sql::ledger::runInit();
+    {
+        Warehouse::SqlDB::TransactionGuard txn;
+
+        sql::jams::runInit();
+        sql::riffs::runInit();
+        sql::tags::runInit();
+        sql::stems::runInit();
+        sql::ledger::runInit();
+    }
+
 
     // optimize on startup
     {
@@ -1452,10 +1508,123 @@ bool Warehouse::patchRiffStemRecord(
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+std::size_t Warehouse::filterRiffsByBPM( const RiffKeySearchParameters& keySearchParam, const BPMCountSort sortOn, std::vector< BPMCountTuple >& bpmCounts ) const
+{
+    static constexpr char _bpmGroupsByScaleAndRoot_ByRiffCount[] = R"(
+            select 
+              round(BPMrnd) as BPM, 
+              count(1) as RiffCount 
+            from 
+              riffs 
+            where 
+              scale in carray(?1, ?2) 
+              and root in carray(?3, ?4) 
+            group by 
+              BPM 
+            order by 
+              RiffCount desc;
+        )";
+    static constexpr char _bpmGroupsByScaleAndRoot_ByBPM[] = R"(
+            select 
+              round(BPMrnd) as BPM, 
+              count(1) as RiffCount 
+            from 
+              riffs 
+            where 
+              scale in carray(?1, ?2) 
+              and root in carray(?3, ?4) 
+            group by 
+              BPM 
+            order by 
+              BPM desc;
+        )";
+
+    ABSL_ASSERT( !keySearchParam.m_root.empty() && !keySearchParam.m_scale.empty() );
+
+    const int* roots = keySearchParam.m_root.data();
+    const int32_t rootsCount = static_cast< int32_t >( keySearchParam.m_root.size() );
+    const int* scales = keySearchParam.m_scale.data();
+    const int32_t scalesCount = static_cast<int32_t>(keySearchParam.m_scale.size());
+
+    bpmCounts.clear();
+
+    {
+        Warehouse::SqlDB::TransactionGuard txn;
+
+        float bpmRange;
+        uint32_t bpmCount;
+
+        if ( sortOn == BPMCountSort::ByBPM )
+        {
+            auto query = Warehouse::SqlDB::query<_bpmGroupsByScaleAndRoot_ByBPM>( scales, scalesCount, roots, rootsCount );
+            while ( query( bpmRange, bpmCount ) )
+            {
+                bpmCounts.emplace_back( (int32_t)bpmRange, bpmCount );
+            }
+        }
+        else
+        {
+            auto query = Warehouse::SqlDB::query<_bpmGroupsByScaleAndRoot_ByRiffCount>( scales, scalesCount, roots, rootsCount );
+            while ( query( bpmRange, bpmCount ) )
+            {
+                bpmCounts.emplace_back( (int32_t)bpmRange, bpmCount );
+            }
+        }
+    }
+
+    return bpmCounts.size();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+bool Warehouse::fetchRandomRiffBySeed( const RiffKeySearchParameters& keySearchParam, const uint32_t BPM, const int32_t seedValue, endlesss::types::RiffComplete& result ) const
+{
+    static constexpr char _randomFilteredRiff[] = R"(
+            select 
+              RiffCID 
+            from 
+              riffs 
+            where 
+              scale in carray(?1, ?2) 
+              and root in carray(?3, ?4) 
+              and round(BPMrnd) = ?5 
+              and (OwnerJamCID is not ?6) 
+            order by 
+              SEEDED_RANDOM(?7) 
+            limit 
+              1
+        )";
+
+    ABSL_ASSERT( !keySearchParam.m_root.empty() && !keySearchParam.m_scale.empty() );
+
+    const int* roots = keySearchParam.m_root.data();
+    const int32_t rootsCount = static_cast<int32_t>(keySearchParam.m_root.size());
+    const int* scales = keySearchParam.m_scale.data();
+    const int32_t scalesCount = static_cast<int32_t>(keySearchParam.m_scale.size());
+
+    {
+        Warehouse::SqlDB::TransactionGuard txn;
+
+        auto query = Warehouse::SqlDB::query<_randomFilteredRiff>( scales, scalesCount, roots, rootsCount, BPM, cVirtualJamName.data(), seedValue );
+
+        std::string_view riffCID;
+        if ( query( riffCID ) )
+        {
+            return fetchSingleRiffByID( endlesss::types::RiffCouchID{ riffCID }, result );
+        }
+    }
+    return false;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 bool Warehouse::batchFindJamIDForStem( const endlesss::types::StemCouchIDs& stems, endlesss::types::JamCouchIDs& result ) const
 {
     static constexpr char _ownerJamForStemID[] = R"(
-            select OwnerJamCID from stems where stemCID = ?1;
+            select 
+              OwnerJamCID 
+            from 
+              stems 
+            where 
+              stemCID = ?1;
         )";
 
     endlesss::types::JamCouchID emptyResult;
@@ -1625,6 +1794,90 @@ void Warehouse::batchRemoveAllTags( const endlesss::types::JamCouchID& jamCID )
     m_cbTagBatching( false );
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+endlesss::types::RiffIdentity Warehouse::createNewVirtualRiff( const endlesss::types::VirtualRiff& vriff )
+{
+    Warehouse::SqlDB::TransactionGuard txn;
+
+    // create a new UUID for our virtual riff
+    std::string baseRiffCID = data::generateUUID_V1( false );
+
+    // although these are technically hex strings, we never deal with them as numeric in the app;
+    // therefore sticking some very unhex characters in there as distinctions is fine as these IDs are entirely ouro-centric
+    baseRiffCID[0] = 'V';
+    baseRiffCID[1] = 'R';
+
+    const std::chrono::seconds timestampUnix = spacetime::getUnixTimeNow();
+
+
+    static constexpr char injectFullRiff[] = R"(
+            INSERT OR IGNORE INTO riffs(
+                riffCID,
+                OwnerJamCID,
+                CreationTime,
+                Root,
+                Scale,
+                BPS,
+                BPMrnd,
+                BarLength,
+                AppVersion,
+                Magnitude,
+                UserName,
+                StemCID_1,
+                StemCID_2,
+                StemCID_3,
+                StemCID_4,
+                StemCID_5,
+                StemCID_6,
+                StemCID_7,
+                StemCID_8,
+                GainsJSON
+                ) VALUES( ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20 );
+        )";
+
+    const auto gainsJsonText = fmt::format( R"([ {} ])", fmt::join( vriff.gains, ", " ) );
+
+    Warehouse::SqlDB::query<injectFullRiff>(
+        baseRiffCID.c_str(),
+        cVirtualJamName.data(),
+        static_cast<uint64_t>(timestampUnix.count()),
+        vriff.root,
+        vriff.scale,
+        vriff.BPMrnd / 60.0f,   // bps
+        vriff.BPMrnd,
+        vriff.barLength,
+        9999,   // app v
+        1.0f,   // magnitude; not really used anywhere
+        vriff.user.c_str(),
+        vriff.stemsOn[0] ? vriff.stems[0].c_str() : "",
+        vriff.stemsOn[1] ? vriff.stems[1].c_str() : "",
+        vriff.stemsOn[2] ? vriff.stems[2].c_str() : "",
+        vriff.stemsOn[3] ? vriff.stems[3].c_str() : "",
+        vriff.stemsOn[4] ? vriff.stems[4].c_str() : "",
+        vriff.stemsOn[5] ? vriff.stems[5].c_str() : "",
+        vriff.stemsOn[6] ? vriff.stems[6].c_str() : "",
+        vriff.stemsOn[7] ? vriff.stems[7].c_str() : "",
+        gainsJsonText.c_str()
+    );
+
+    return { 
+        endlesss::types::JamCouchID{ cVirtualJamName },
+        endlesss::types::RiffCouchID{ baseRiffCID }
+    };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void Warehouse::clearOutVirtualJamStorage()
+{
+    static constexpr char deleteRiffs[] = R"(
+        delete from riffs where OwnerJamCID = ?1;
+    )";
+
+    {
+        Warehouse::SqlDB::TransactionGuard txn;
+        Warehouse::SqlDB::query<deleteRiffs>( cVirtualJamName.data() );
+    }
+}
 
 // ---------------------------------------------------------------------------------------------------------------------
 void Warehouse::workerTogglePause()
@@ -2885,6 +3138,10 @@ bool ContentsReportTask::Work( TaskQueue& currentTasks )
         std::string_view jamCID;
         while ( query( jamCID ) )
         {
+            // ignore the magic virtual jam collection
+            if ( jamCID == Warehouse::cVirtualJamName )
+                continue;
+
             uniqueJamIDs.emplace( jamCID );
         }
     }
@@ -2925,6 +3182,10 @@ bool ContentsReportTask::Work( TaskQueue& currentTasks )
                        totalPopulatedStems,
                        totalUnpopulatedStems ) )
         {
+            // ignore the magic virtual jam collection
+            if ( jamCID == Warehouse::cVirtualJamName )
+                continue;
+
             uniqueJamIDs.erase( jamCID );   // this jam has sync data, remove it from the unique list as we'll be emitting data for it normally
 
             reportResult.m_jamCouchIDs.emplace_back( jamCID );

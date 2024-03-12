@@ -534,6 +534,34 @@ struct RiffTag
     }
 };
 
+// ---------------------------------------------------------------------------------------------------------------------
+// custom riff description, forming a 'virual' riff out of existing stem IDs and whatever manual definition we want;
+// this is a communication packet for building them into the Warehouse, see that code for more details
+//
+struct VirtualRiff
+{
+    VirtualRiff()
+    {
+        stemsOn.fill( false );
+        gains.fill( 0 );
+        stemBarLengths.fill( 4.0f );
+    }
+
+    std::string     user;
+
+    StemOn          stemsOn;                // bitfield of stem activation
+    StemCIDs        stems;
+    StemGains       gains;
+
+    std::array< float, 8 >
+                    stemBarLengths;         // used to cache bar lengths
+
+    uint32_t        root                = 0;
+    uint32_t        scale               = 0;
+    float           barLength           = 0;
+    float           BPMrnd              = 0;
+};
+
 } // namespace types
 } // namespace endlesss
 

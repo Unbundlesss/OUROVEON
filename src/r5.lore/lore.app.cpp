@@ -30,6 +30,7 @@
 
 
 #include "ux/diskrecorder.h"
+#include "ux/proc.weaver.h"
 #include "ux/jams.browser.h"
 #include "ux/jam.precache.h"
 #include "ux/jam.validate.h"
@@ -471,6 +472,7 @@ protected:
     std::unique_ptr< ux::SharedRiffView >   m_uxSharedRiffView;
     std::unique_ptr< ux::TagLine >          m_uxTagLine;
     std::unique_ptr< ux::RiffHistory >      m_uxRiffHistory;
+    std::unique_ptr< ux::Weaver >           m_uxProcWeaver;
 
 
 
@@ -2030,6 +2032,8 @@ int LoreApp::EntrypointOuro()
     m_uxSharedRiffView  = std::make_unique<ux::SharedRiffView>( m_networkConfiguration, getEventBusClient() );
     m_uxRiffHistory     = std::make_unique<ux::RiffHistory>( getEventBusClient() );
     m_uxTagLine         = std::make_unique<ux::TagLine>( getEventBusClient() );
+    m_uxProcWeaver      = std::make_unique<ux::Weaver>( getEventBusClient() );
+
 
     m_jamTaggingSaveLoadDir = m_storagePaths->outputApp;
 
@@ -2274,9 +2278,9 @@ int LoreApp::EntrypointOuro()
         m_mdMidi->processMessages( []( const app::midi::Message& ){ } );
 
         m_discordBotUI->imgui( *this );
+        m_uxProcWeaver->imgui( *this, *m_warehouse );
 
         mixPreview.imgui();
-
 
         {
 
