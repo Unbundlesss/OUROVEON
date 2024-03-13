@@ -7,7 +7,12 @@ ModuleRefInclude["sqlite3"] = function()
     {
         LibRoot.Sqlite,
     }
-    defines   { "SQLITE_ENABLE_FTS5", "SQLITE_ENABLE_JSON1" }
+    defines
+    {
+        "SQLITE_ENABLE_FTS5",
+        "SQLITE_ENABLE_JSON1",
+        "SQLITE_CORE"
+    }
 end
 
 -- ==============================================================================
