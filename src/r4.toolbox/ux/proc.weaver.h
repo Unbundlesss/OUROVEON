@@ -11,6 +11,7 @@
 
 #include "app/core.h"
 #include "base/utils.h"
+#include "net/bond.riffpush.h"
 #include "endlesss/core.types.h"
 #include "endlesss/core.services.h"
 
@@ -22,7 +23,7 @@ struct Weaver
     Weaver( base::EventBusClient eventBus );
     ~Weaver();
 
-    void imgui( app::CoreGUI& coreGUI, endlesss::toolkit::Warehouse& warehouse );
+    void imgui( app::CoreGUI& coreGUI, net::bond::RiffPushClient& bondClient, endlesss::toolkit::Warehouse& warehouse );
 
 private:
 

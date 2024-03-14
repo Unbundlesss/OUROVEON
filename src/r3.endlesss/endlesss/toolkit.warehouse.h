@@ -275,7 +275,8 @@ struct Warehouse
     struct BPMCountTuple
     {
         uint32_t    m_BPM;
-        uint32_t    m_count;
+        uint32_t    m_riffCount;
+        uint32_t    m_jamCount;
     };
     enum class BPMCountSort
     {

@@ -1191,7 +1191,7 @@ Warehouse::Warehouse( const app::StoragePaths& storagePaths, api::NetConfigurati
     // optimize on startup
     {
         spacetime::ScopedTimer stemTiming( "warehouse [optimize]" );
-        static constexpr char sqlOptimize[] = R"(pragma optimize)";
+        static constexpr char sqlOptimize[] = R"(pragma optimize;)";
         SqlDB::query<sqlOptimize>();
     }
 
@@ -1512,8 +1512,9 @@ std::size_t Warehouse::filterRiffsByBPM( const RiffKeySearchParameters& keySearc
 {
     static constexpr char _bpmGroupsByScaleAndRoot_ByRiffCount[] = R"(
             select 
-              round(BPMrnd) as BPM, 
-              count(1) as RiffCount 
+              round(BPMrnd) as BPM,
+              count(1) as RiffCount,
+              count(distinct OwnerJamCID) as UniqueJamCount
             from 
               riffs 
             where 
@@ -1526,8 +1527,9 @@ std::size_t Warehouse::filterRiffsByBPM( const RiffKeySearchParameters& keySearc
         )";
     static constexpr char _bpmGroupsByScaleAndRoot_ByBPM[] = R"(
             select 
-              round(BPMrnd) as BPM, 
-              count(1) as RiffCount 
+              round(BPMrnd) as BPM,
+              count(1) as RiffCount,
+              count(distinct OwnerJamCID) as UniqueJamCount
             from 
               riffs 
             where 
@@ -1553,21 +1555,22 @@ std::size_t Warehouse::filterRiffsByBPM( const RiffKeySearchParameters& keySearc
 
         float bpmRange;
         uint32_t bpmCount;
+        uint32_t jamCount;
 
         if ( sortOn == BPMCountSort::ByBPM )
         {
             auto query = Warehouse::SqlDB::query<_bpmGroupsByScaleAndRoot_ByBPM>( scales, scalesCount, roots, rootsCount );
-            while ( query( bpmRange, bpmCount ) )
+            while ( query( bpmRange, bpmCount, jamCount ) )
             {
-                bpmCounts.emplace_back( (int32_t)bpmRange, bpmCount );
+                bpmCounts.emplace_back( (int32_t)bpmRange, bpmCount, jamCount );
             }
         }
         else
         {
             auto query = Warehouse::SqlDB::query<_bpmGroupsByScaleAndRoot_ByRiffCount>( scales, scalesCount, roots, rootsCount );
-            while ( query( bpmRange, bpmCount ) )
+            while ( query( bpmRange, bpmCount, jamCount ) )
             {
-                bpmCounts.emplace_back( (int32_t)bpmRange, bpmCount );
+                bpmCounts.emplace_back( (int32_t)bpmRange, bpmCount, jamCount );
             }
         }
     }
