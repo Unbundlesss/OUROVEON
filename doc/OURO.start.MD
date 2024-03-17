@@ -1,10 +1,10 @@
-# LORE : Starting Up
+# OUROVEON : Starting Up
 
 ## System Requirements
 
 * Screen resolution of at least 1920 x 1080
 * OpenGL 3.2
-* MacOS 11+ or Windows 8.1+
+* MacOS 10.15+ or Windows 8.1+
 
 <br>
 
@@ -35,7 +35,7 @@ The *Framework Preflight* screen will be shown each time you start the app to al
 
 #### Data Storage 
 
-The first time you run **LORE** you will be asked to choose a folder to use as your *Data Storage* path. This is where **OUROVEON** apps stash and share data. All downloaded and cached stems will be stored under here, as well as recordings and exports.
+The first time you run **LORE** or **BEAM** you will be asked to choose a folder to use as your *Data Storage* path. This is where **OUROVEON** apps stash and share data. All downloaded and cached stems will be stored under here, as well as recordings and exports.
 
 ![initial setup screen](/doc/lore-081/initial-setup.png)
 
@@ -55,4 +55,4 @@ When you have logged in, you will have the opportunity to synchronise the local 
 
 $\textcolor{cyan}{\textsf{IMPORTANT}}$ : because this process takes time and network bandwidth, it is not done automatically each time the application runs. You should re-sync your cache by hitting 🔄 every so often so that the data stays roughly up to date. If you have recently joined new jams and can't find them in the *Jam Browser*, ensure you've recently updated this cache.
 
-Once everything is setup, click $\textcolor{orange}{\textsf{[Continue]}}$ to begin using **LORE**!
+Once everything is setup, click $\textcolor{orange}{\textsf{[Continue]}}$ to begin using the app!
