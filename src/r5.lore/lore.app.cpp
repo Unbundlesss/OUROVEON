@@ -2032,7 +2032,7 @@ int LoreApp::EntrypointOuro()
     m_uxSharedRiffView  = std::make_unique<ux::SharedRiffView>( m_networkConfiguration, getEventBusClient() );
     m_uxRiffHistory     = std::make_unique<ux::RiffHistory>( getEventBusClient() );
     m_uxTagLine         = std::make_unique<ux::TagLine>( getEventBusClient() );
-    m_uxProcWeaver      = std::make_unique<ux::Weaver>( getEventBusClient() );
+    m_uxProcWeaver      = std::make_unique<ux::Weaver>( *this, getEventBusClient() );
 
 
     m_jamTaggingSaveLoadDir = m_storagePaths->outputApp;

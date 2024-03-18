@@ -33,25 +33,10 @@ namespace ux {
 struct Weaver::State
 {
     // a list of presets that I don't really want to hear from anymore
-    static constexpr std::array cDreadfulPresetsThatIHate
-    {
-        "Eardrop",
-        "Cortado",
-        "Reveal",
-        "Strait",
-        "Hopes",
-        "Justme",
-        "Dreamkiss",
-        "Spring",
-        "Clunnn",
-        "Pianabot",
-        "Digisect",
-        "Strip",
-    };
     absl::flat_hash_set< std::string_view > m_dreadfulPresetsThatIHate;
 
 
-    State( base::EventBusClient eventBus )
+    State( const config::IPathProvider& pathProvider, base::EventBusClient eventBus )
         : m_eventBusClient( std::move( eventBus ) )
     {
         {
@@ -63,10 +48,19 @@ struct Weaver::State
         m_generatedChannelLock.fill( false );
         m_generatedChannelClearOut.fill( false );
 
-        // stash list of discardable presets as a hash set
-        m_dreadfulPresetsThatIHate.reserve( cDreadfulPresetsThatIHate.size() );
-        for ( const auto& preset : cDreadfulPresetsThatIHate )
-            m_dreadfulPresetsThatIHate.emplace( preset );
+        // load the weaver config file if we can
+        const auto dataLoad = config::load( pathProvider, m_weaverConfig );
+        if ( dataLoad == config::LoadResult::Success )
+        {
+            // stash list of discardable presets as a hash set
+            m_dreadfulPresetsThatIHate.reserve( m_weaverConfig.presetsWeHate.size() );
+            for ( const auto& preset : m_weaverConfig.presetsWeHate )
+                m_dreadfulPresetsThatIHate.emplace( preset );
+        }
+        else
+        {
+            blog::app( FMTX( "weaver : unable to load {}" ), m_weaverConfig.StorageFilename );
+        }
     }
 
     ~State()
@@ -103,6 +97,9 @@ struct Weaver::State
 
     using PerChannelIdentities = std::array< endlesss::types::RiffIdentity, 8 >;
 
+
+
+    config::Weaver                  m_weaverConfig;
 
     base::EventBusClient            m_eventBusClient;
 
@@ -394,7 +391,7 @@ void Weaver::State::imgui(
                                         {
                                             if ( m_ignoreAnnoyingPresets && m_dreadfulPresetsThatIHate.contains( randomRiff.stems[stemI].preset ) )
                                             {
-                                                blog::database( FMTX( "ignoring shit preset: {}" ), randomRiff.stems[stemI].preset );
+                                                blog::app( FMTX( "weaver : ignoring shit preset: {}" ), randomRiff.stems[stemI].preset );
                                                 continue;
                                             }
 
@@ -574,8 +571,8 @@ void Weaver::State::imgui(
 
 
 // ---------------------------------------------------------------------------------------------------------------------
-Weaver::Weaver( base::EventBusClient eventBus )
-    : m_state( std::make_unique<State>( std::move( eventBus ) ) )
+Weaver::Weaver( const config::IPathProvider& pathProvider, base::EventBusClient eventBus )
+    : m_state( std::make_unique<State>( pathProvider, std::move( eventBus ) ) )
 {
 }
 

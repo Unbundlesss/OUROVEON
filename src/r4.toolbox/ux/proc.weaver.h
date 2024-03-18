@@ -15,12 +15,36 @@
 #include "endlesss/core.types.h"
 #include "endlesss/core.services.h"
 
+#include "config/base.h"
+
+namespace config {
+
+struct IPathProvider;
+
+OURO_CONFIG( Weaver )
+{
+    // data routing
+    static constexpr auto StoragePath       = IPathProvider::PathFor::SharedData;
+    static constexpr auto StorageFilename   = "endlesss.weaver.json";
+
+    std::vector< std::string >  presetsWeHate;
+
+    template<class Archive>
+    void serialize( Archive& archive )
+    {
+        archive( CEREAL_NVP( presetsWeHate )
+        );
+    }
+};
+
+} // namespace config
+
 
 namespace ux {
 
 struct Weaver
 {
-    Weaver( base::EventBusClient eventBus );
+    Weaver( const config::IPathProvider& pathProvider, base::EventBusClient eventBus );
     ~Weaver();
 
     void imgui( app::CoreGUI& coreGUI, net::bond::RiffPushClient& bondClient, endlesss::toolkit::Warehouse& warehouse );
