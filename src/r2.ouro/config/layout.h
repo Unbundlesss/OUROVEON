@@ -25,8 +25,9 @@ OURO_CONFIG( Layout )
     // v4 | 0.8.0 changes       | 20230917
     // v5 | 0.8.1 BEAM update   | 20231022
     // v6 | 0.8.5 update        | 20240211
+    // v7 | 0.9.9 update        | 20240318
     //
-    static constexpr uint32_t CurrentGuiMasterRevision = 6;
+    static constexpr uint32_t CurrentGuiMasterRevision = 7;
 
     uint32_t        guiMasterRevision = 0;
 

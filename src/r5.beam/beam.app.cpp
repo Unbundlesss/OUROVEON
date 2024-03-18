@@ -30,7 +30,7 @@
 
 
 #define OUROVEON_BEAM           "BEAM"
-#define OUROVEON_BEAM_VERSION   OURO_FRAMEWORK_VERSION "-alpha"
+#define OUROVEON_BEAM_VERSION   OURO_FRAMEWORK_VERSION "-beta"
 
 using namespace std::chrono_literals;
 

@@ -64,7 +64,7 @@
 
 
 #define OUROVEON_LORE           "LORE"
-#define OUROVEON_LORE_VERSION   OURO_FRAMEWORK_VERSION "-alpha"
+#define OUROVEON_LORE_VERSION   OURO_FRAMEWORK_VERSION "-beta"
 
 
 // ---------------------------------------------------------------------------------------------------------------------
