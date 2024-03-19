@@ -1169,10 +1169,11 @@ Warehouse::Warehouse( const app::StoragePaths& storagePaths, api::NetConfigurati
         sqlite3_exec( db_handle, "pragma temp_store = memory", nullptr, nullptr, nullptr );
 
         // add our RANDOM variant that takes a seed to allow for deterministic random queries
-        int32_t res = sqlite3_create_function( db_handle, "SEEDED_RANDOM", 1, SQLITE_UTF8, NULL, &sqlite_SEEDED_RANDOM, NULL, NULL );
-
+        int32_t seededRes = sqlite3_create_function( db_handle, "SEEDED_RANDOM", 1, SQLITE_UTF8, NULL, &sqlite_SEEDED_RANDOM, NULL, NULL );
+        blog::database( FMTX( "sqlite3_create_function(SEEDED_RANDOM) = {} ({})" ), seededRes == SQLITE_OK ? "OK" : "Error", seededRes );
+        
         // bolt in carray extension
-        int carrayRes = sqlite3_carray_init( db_handle, nullptr, nullptr );
+        int32_t carrayRes = sqlite3_carray_init( db_handle, nullptr, nullptr );
         blog::database( FMTX( "sqlite3_carray_init = {} ({})" ), carrayRes == SQLITE_OK ? "OK" : "Error", carrayRes );
     };
 
@@ -1562,7 +1563,7 @@ std::size_t Warehouse::filterRiffsByBPM( const RiffKeySearchParameters& keySearc
             auto query = Warehouse::SqlDB::query<_bpmGroupsByScaleAndRoot_ByBPM>( scales, scalesCount, roots, rootsCount );
             while ( query( bpmRange, bpmCount, jamCount ) )
             {
-                bpmCounts.emplace_back( (int32_t)bpmRange, bpmCount, jamCount );
+                bpmCounts.emplace_back( BPMCountTuple{ (uint32_t)bpmRange, bpmCount, jamCount } );
             }
         }
         else
@@ -1570,7 +1571,7 @@ std::size_t Warehouse::filterRiffsByBPM( const RiffKeySearchParameters& keySearc
             auto query = Warehouse::SqlDB::query<_bpmGroupsByScaleAndRoot_ByRiffCount>( scales, scalesCount, roots, rootsCount );
             while ( query( bpmRange, bpmCount, jamCount ) )
             {
-                bpmCounts.emplace_back( (int32_t)bpmRange, bpmCount, jamCount );
+                bpmCounts.emplace_back( BPMCountTuple{ (uint32_t)bpmRange, bpmCount, jamCount } );
             }
         }
     }
