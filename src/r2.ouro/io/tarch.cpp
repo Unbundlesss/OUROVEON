@@ -165,9 +165,21 @@ absl::Status archiveFilesInDirectoryToTAR(
 
             std::error_code lwtError;
             const auto fileModTime          = fs::last_write_time( entryFullFilename, lwtError );
-            const auto fileModSystemTime    = std::chrono::clock_cast<std::chrono::system_clock>(fileModTime);
-            const auto fileModTimeT         = std::chrono::system_clock::to_time_t( fileModSystemTime );
-
+#if OURO_PLATFORM_WIN
+            const auto fileModSystemTime    = std::chrono::utc_clock::to_sys( std::chrono::file_clock::to_utc( fileModTime ) );
+#else
+            const auto fileModSystemTime    = std::chrono::file_clock::to_sys( fileModTime );
+#endif
+            const auto fileModTimeT         = std::chrono::system_clock::to_time_t(
+#if OURO_PLATFORM_OSX
+                                                                                   std::chrono::time_point_cast<std::chrono::microseconds>(
+#endif
+                                                                                   fileModSystemTime
+#if OURO_PLATFORM_OSX
+                                                                                   )
+#endif
+                                                                                   );
+            
             snprintf( tarHeader.mtime, sizeof( tarHeader.mtime ), "%011o", (int32_t)fileModTimeT );
 
             // get output name from relative path, ensure all separators are forward-slash
@@ -214,7 +226,7 @@ absl::Status archiveFilesInDirectoryToTAR(
                 // simple in/out pump of data from the file
                 std::size_t bytesRead = 0;
                 std::size_t bytesWritten = 0;
-                while ( bytesRead = fread( ioBuffer, 1, ioBufferSize, entryInputFile ), bytesRead > 0 )
+                while ( static_cast<void>(bytesRead = fread( ioBuffer, 1, ioBufferSize, entryInputFile )), bytesRead > 0 )
                 {
                     fwrite( ioBuffer, bytesRead, 1, tarOutputFile );
                     bytesWritten += bytesRead;
