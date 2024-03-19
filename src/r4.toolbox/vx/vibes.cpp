@@ -667,7 +667,7 @@ void Vibes::State::doImGuiCtrlShader()
         ImGui::Spacing();
         ImGui::SeparatorBreak();
         ImGui::PushStyleColor( ImGuiCol_Text, colour::shades::toast.neutral() );
-        ImGui::TextWrapped( currentDeclaration->m_copyright.c_str() );
+        ImGui::TextWrapped( "%s", currentDeclaration->m_copyright.c_str() );
         ImGui::PopStyleColor();
         ImGui::SeparatorBreak();
         ImGui::Spacing();
