@@ -19,6 +19,12 @@ newoption {
      default = "none"
 }
 
+newoption {
+    trigger = "teamid",
+    description = "Team ID for apple provisioning",
+    default = ""
+ }
+
 include "premake-inc/premake-build-vstudio.lua"
 
 
@@ -169,14 +175,62 @@ workspace ("ouroveon_" .. _ACTION)
         }
     filter {}
 
+    -- fine-tune Xcode settings; these are all based on the recommended/upgraded settings in Xcode 15.3
+    filter { "system:macosx" }
+    xcodebuildsettings 
+    {
+        ENABLE_HARDENED_RUNTIME = "YES",
+        LLVM_LTO = "YES_THIN",
+        DEAD_CODE_STRIPPING = "YES",
+        CLANG_ENABLE_OBJC_WEAK = "YES",
+
+        -- just to silence the upgrade-project notice
+        ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = "YES",
+
+        -- pass dev team ID in via command line
+        CODE_SIGN_STYLE = "Manual",
+        ["CODE_SIGN_IDENTITY[sdk=macosx*]"] = "Developer ID Application",
+        ["DEVELOPMENT_TEAM[sdk=macosx*]"] = _OPTIONS["teamid"],
+    }
+    filter {}
+    
+    filter { "system:macosx", "configurations:Debug" }
+    xcodebuildsettings 
+    {
+        ENABLE_TESTABILITY = "YES",
+    }
+    filter {}        
     filter { "system:macosx", "configurations:Release" }
     xcodebuildsettings 
     {
-        ["ENABLE_HARDENED_RUNTIME"] = "YES",
-        ["LLVM_LTO"] = "YES_THIN",
-        ["CODE_SIGN_IDENTITY"] = ""
+        CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = "YES",
+        CLANG_WARN_BOOL_CONVERSION = "YES",
+        CLANG_WARN_COMMA = "YES",
+        CLANG_WARN_CONSTANT_CONVERSION = "YES",
+        CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = "YES",
+        CLANG_WARN_EMPTY_BODY = "YES",
+        CLANG_WARN_ENUM_CONVERSION = "YES",
+        CLANG_WARN_INFINITE_RECURSION = "YES",
+        CLANG_WARN_INT_CONVERSION = "YES",
+        CLANG_WARN_NON_LITERAL_NULL_CONVERSION = "YES",
+        CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = "YES",
+        CLANG_WARN_OBJC_LITERAL_CONVERSION = "YES",
+        CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = "YES",
+        CLANG_WARN_RANGE_LOOP_ANALYSIS = "YES",
+        CLANG_WARN_STRICT_PROTOTYPES = "YES",
+        CLANG_WARN_SUSPICIOUS_MOVE = "YES",
+        CLANG_WARN_UNREACHABLE_CODE = "YES",
+        CLANG_WARN__DUPLICATE_METHOD_MATCH = "YES",
+
+        ENABLE_STRICT_OBJC_MSGSEND = "YES",
+		ENABLE_USER_SCRIPT_SANDBOXING = "YES",
+		GCC_NO_COMMON_BLOCKS = "YES",
+        GCC_WARN_64_TO_32_BIT_CONVERSION ="YES",
+        GCC_WARN_UNDECLARED_SELECTOR = "YES",
+		GCC_WARN_UNINITIALIZED_AUTOS = "YES",
+		GCC_WARN_UNUSED_FUNCTION = "YES",
     }
-    filter {}
+    filter {}    
 
     solutionitems {
         {
