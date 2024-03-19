@@ -2673,6 +2673,9 @@ time_zone::get_info_impl(sys_seconds tp, int tz_int) const
 std::ostream&
 operator<<(std::ostream& os, const time_zone& z)
 {
+// https://github.com/HowardHinnant/date/issues/799
+// apple-clang-17 cant resolve the << operator properly due to some c++20 conflict
+#if 0
     using namespace date;
     using namespace std::chrono;
     detail::save_ostream<char> _(os);
@@ -2721,6 +2724,7 @@ operator<<(std::ostream& os, const time_zone& z)
         if (indent.empty())
             indent = std::string(35, ' ');
     }
+#endif
     return os;
 }
 
@@ -2729,8 +2733,13 @@ operator<<(std::ostream& os, const time_zone& z)
 std::ostream&
 operator<<(std::ostream& os, const leap_second& x)
 {
+// https://github.com/HowardHinnant/date/issues/799
+// apple-clang-17 cant resolve the << operator properly due to some c++20 conflict
+#if 0
     using namespace date;
     return os << x.date_ << "  +";
+#endif
+    return os;
 }
 
 #if USE_OS_TZDB

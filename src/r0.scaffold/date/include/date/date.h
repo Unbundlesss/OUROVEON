@@ -4223,6 +4223,9 @@ operator<<(std::basic_ostream<CharT, Traits>& os, const sys_days& dp)
     return os << year_month_day(dp);
 }
 
+// https://github.com/HowardHinnant/date/issues/799
+// apple-clang-17 cant resolve the << operator properly due to some c++20 conflict
+#if 0
 template <class CharT, class Traits, class Duration>
 inline
 std::basic_ostream<CharT, Traits>&
@@ -4230,6 +4233,7 @@ operator<<(std::basic_ostream<CharT, Traits>& os, const local_time<Duration>& ut
 {
     return (os << sys_time<Duration>{ut.time_since_epoch()});
 }
+#endif
 
 namespace detail
 {
