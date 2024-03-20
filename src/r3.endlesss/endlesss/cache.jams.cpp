@@ -362,7 +362,10 @@ void Jams::postProcessNewData()
             m_idxSortedByName[jamTypeIndex].push_back( idx );
             m_idxSortedByRiffs[jamTypeIndex].push_back( idx );
 
-            m_jamCouchIDToJamIndexMap.try_emplace( dataArray->at(idx).m_jamCID, CacheIndex( jamType, idx ) );
+            // insert_or_assign allows overwrite; given the jam-type ordering, this means items that exist in our
+            // subscribed jams will correctly take precedence over ones in the generic public jam archive (as we are 
+            // updating the riff counts etc for those regularly, whereas we do not do so for the general jam archive at runtime)
+            m_jamCouchIDToJamIndexMap.insert_or_assign( dataArray->at(idx).m_jamCID, CacheIndex( jamType, idx ) );
         }
 
         std::sort( m_idxSortedByTime[jamTypeIndex].begin(), m_idxSortedByTime[jamTypeIndex].end(),
