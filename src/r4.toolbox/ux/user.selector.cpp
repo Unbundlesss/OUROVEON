@@ -25,6 +25,7 @@ bool UserSelector::imgui( const char* widgetID, const endlesss::toolkit::Populat
     const bool bIsInputEnterPressed  = ImGui::InputText( "##username_entry", &m_username, ImGuiInputTextFlags_EnterReturnsTrue );
     const bool bIsInputActive        = ImGui::IsItemActive();
     const bool bIsInputJustActivated = ImGui::IsItemActivated();
+    const bool bIsInputDeactivated   = ImGui::IsItemDeactivated() || ImGui::IsItemDeactivatedAfterEdit();
 
     const ImGuiWindowFlags popupWindowFlags = 0
         | ImGuiWindowFlags_NoTitleBar
@@ -33,6 +34,7 @@ bool UserSelector::imgui( const char* widgetID, const endlesss::toolkit::Populat
         | ImGuiWindowFlags_ChildWindow
         ;
 
+    bDataChanged |= bIsInputDeactivated;
     bDataChanged |= bIsInputEnterPressed;
 
     // activate popup when text input first gets activated
