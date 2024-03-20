@@ -3806,15 +3806,17 @@ int LoreApp::EntrypointOuro()
                         for ( size_t jamIdx = 0; jamIdx < m_warehouseContentsReport.m_jamCouchIDs.size(); jamIdx++ )
                         {
                             const std::size_t jI            = m_warehouseContentsSortedIndices[jamIdx];
-                            const int64_t unpopulated       = m_warehouseContentsReport.m_unpopulatedRiffs[jI];
-                            const int64_t populated         = m_warehouseContentsReport.m_populatedRiffs[jI];
+                            const int64_t unpopulatedRiffs  = m_warehouseContentsReport.m_unpopulatedRiffs[jI];
+                            const int64_t populatedRiffs    = m_warehouseContentsReport.m_populatedRiffs[jI];
+                            const int64_t unpopulatedStems  = m_warehouseContentsReport.m_unpopulatedStems[jI];
+                            const int64_t populatedStems    = m_warehouseContentsReport.m_populatedStems[jI];
 
                             const auto iterCurrentJamID     = m_warehouseContentsReport.m_jamCouchIDs[jI];
 
                             const auto knownCachedRiffCount = m_jamLibrary.loadKnownRiffCountForDatabaseID( iterCurrentJamID );
 
                             const bool bIsJamInFlux         = m_warehouseContentsReportJamInFlux[jI] || doesJamHaveActiveOperations( iterCurrentJamID );
-                            const bool bHasDataToSync       = ( unpopulated > 0 || knownCachedRiffCount > populated );
+                            const bool bHasDataToSync       = (unpopulatedRiffs > 0 || knownCachedRiffCount > populatedRiffs);
 
 
                             const auto& jamNameToFilterAgainst = m_warehouseContentsReportJamTitlesForSort[jI];
@@ -3893,34 +3895,29 @@ int LoreApp::EntrypointOuro()
                                 {
                                     ImGui::TableNextColumn();
                                     ImGui::AlignTextToFramePadding();
-                                    ImGui::Text( "%" PRIi64, populated );
+                                    ImGui::Text( "%" PRIi64, populatedRiffs );
 
-                                    if ( unpopulated > 0 )
+                                    if ( unpopulatedRiffs > 0 )
                                     {
                                         ImGui::SameLine( 0, 0 );
-                                        ImGui::TextColored( TextColourDownloading, " (+%" PRIi64 ")", unpopulated );
+                                        ImGui::TextColored( TextColourDownloading, " (+%" PRIi64 ")", unpopulatedRiffs );
                                     }
-                                    else if ( knownCachedRiffCount > populated )
+                                    else if ( knownCachedRiffCount > populatedRiffs )
                                     {
                                         ImGui::SameLine( 0, 0 );
-                                        ImGui::TextColored( TextColourDownloadable, " (" ICON_FA_ARROW_UP "%li)", knownCachedRiffCount - populated );
+                                        ImGui::TextColored( TextColourDownloadable, " (" ICON_FA_ARROW_UP "%li)", knownCachedRiffCount - populatedRiffs );
                                     }
                                 }
                                 // stems
                                 {
                                     ImGui::TableNextColumn();
                                     ImGui::AlignTextToFramePadding();
-                                    ImGui::Text( "%" PRIi64, populated );
+                                    ImGui::Text( "%" PRIi64, populatedStems );
 
+                                    if ( unpopulatedStems > 0 )
                                     {
-                                        const auto unpopulatedStems = m_warehouseContentsReport.m_unpopulatedStems[jI];
-                                        const auto populatedStems   = m_warehouseContentsReport.m_populatedStems[jI];
-
-                                        if ( unpopulatedStems > 0 )
-                                        {
-                                            ImGui::SameLine( 0, 0 );
-                                            ImGui::TextColored( TextColourDownloading, " (+%" PRIi64 ")", unpopulatedStems );
-                                        }
+                                        ImGui::SameLine( 0, 0 );
+                                        ImGui::TextColored( TextColourDownloading, " (+%" PRIi64 ")", unpopulatedStems );
                                     }
                                 }
                             }
