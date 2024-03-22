@@ -1182,6 +1182,101 @@ struct RiffStructureValidation
     bool fetch( const NetConfiguration& ncfg, const std::string& jamLongID, int32_t pageNumber, int32_t pageSize );
 };
 
+// ---------------------------------------------------------------------------------------------------------------------
+// fetch the current manifest of Clubs for the given user
+//
+struct MyClubs
+{
+    struct ClubChannel
+    {
+        std::string     m_name;
+        std::string     m_listenId;
+        std::string     m_owningClubId;
+    };
+    using ChannelsList = std::vector< ClubChannel >;
+
+
+    struct Profile
+    {
+        std::string                 name;
+        std::string                 description;
+
+        template<class Archive>
+        inline void serialize( Archive& archive )
+        {
+            archive( CEREAL_NVP( name )
+                   , CEREAL_NVP( description )
+            );
+        }
+    };
+
+    struct Jam
+    {
+        std::string                 listenId;
+        std::string                 name;
+
+        template<class Archive>
+        inline void serialize( Archive& archive )
+        {
+            archive( CEREAL_NVP( listenId )
+                   , CEREAL_NVP( name )
+            );
+        }
+    };
+
+    struct Club
+    {
+        std::string                 id;
+        Profile                     profile;
+        int32_t                     memberCount = 0;
+        bool                        isMember = false;
+
+        std::string                 creator;
+        std::vector< std::string >  moderators;
+        std::vector< std::string >  members;
+
+        std::vector< Jam >          jams;
+
+        template<class Archive>
+        inline void serialize( Archive& archive )
+        {
+            archive( CEREAL_NVP( id )
+                   , CEREAL_NVP( profile )
+                   , CEREAL_NVP( memberCount )
+                   , CEREAL_NVP( isMember )
+                   , CEREAL_NVP( creator )
+                   , CEREAL_NVP( moderators )
+                   , CEREAL_NVP( members )
+                   , CEREAL_NVP( jams )
+            );
+        }
+    };
+
+    struct Data
+    {
+        std::vector< Club >         clubs;
+
+        template<class Archive>
+        inline void serialize( Archive& archive )
+        {
+            archive( CEREAL_NVP( clubs )
+            );
+        }
+    };
+
+    bool        ok;
+    Data        data;
+
+    template<class Archive>
+    inline void serialize( Archive& archive )
+    {
+        archive( CEREAL_NVP( ok )
+               , CEREAL_NVP( data )
+        );
+    }
+
+    bool fetch( const NetConfiguration& ncfg );
+};
 
 namespace pull {
 
@@ -1243,7 +1338,23 @@ struct ShareRiffOnFeed
     ouro_nodiscard absl::Status action( const NetConfiguration& ncfg, std::string& resultUUID );
 };
 
+// ---------------------------------------------------------------------------------------------------------------------
+// used to 'share' to Clubs by riff copying
+struct RiffCopy
+{
+    std::string                         m_jamFullID_CopyTo;     // eg 3549a4b5387bcb96c6fc8c5a9d2eb797c09cd46e5c42862fbb8912c977a0fa59
+
+    // riff to copy from
+    endlesss::types::JamCouchID         m_jamCouchID;
+    endlesss::types::RiffCouchID        m_riffCouchID;
+
+    // on absl::ok, resultUUID holds the copied riff ID. i guess
+    ouro_nodiscard absl::Status action( const NetConfiguration& ncfg, std::string& resultUUID );
+};
+
+
 } // namespace push
 
 } // namespace api
 } // namespace endlesss
+

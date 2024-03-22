@@ -91,6 +91,10 @@ protected:
     // for IDs that we don't recognise as the normal jam library might be missing jams the user has left etc
     endlesss::types::JamIDToNameMap         m_jamHistoricalFromWarehouse;
 
+    // -----------------------------------------------------------------------------------------------------------------
+
+    endlesss::api::MyClubs::ChannelsList    m_clubsChannels;
+    bool                                    m_clubsIntegrationEnabled = false;
 
     // -----------------------------------------------------------------------------------------------------------------
 

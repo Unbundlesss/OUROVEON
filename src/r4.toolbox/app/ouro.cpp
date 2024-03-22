@@ -1015,6 +1015,7 @@ int OuroApp::EntrypointGUI()
             m_stemCacheLastPruneCheck.setToFuture( c_stemCachePruneCheckDuration );
             m_stemCachePruneTask.emplace( [this]() { m_stemCache.lockAndPrune( false ); } );
 
+            // create universal warehouse instance
             {
                 m_warehouse = std::make_unique<endlesss::toolkit::Warehouse>(
                     m_storagePaths.value(),
@@ -1024,6 +1025,28 @@ int OuroApp::EntrypointGUI()
                 m_warehouse->upsertJamDictionaryFromCache( m_jamLibrary );              // update warehouse list of jam IDs -> names from the current cache
                 m_warehouse->upsertJamDictionaryFromBNS( m_jamNameService );            // .. and same with the BNS entries
                 m_warehouse->extractJamDictionary( m_jamHistoricalFromWarehouse );      // pull full list of jam IDs -> names from warehouse as "historical" list
+            }
+
+            // pull the current Clubs membership; this call is fairly quick so we can do it each time we boot
+            {
+                endlesss::api::MyClubs myClubs;
+                m_clubsIntegrationEnabled = myClubs.fetch( *m_networkConfiguration );
+                if ( m_clubsIntegrationEnabled && myClubs.ok )
+                {
+                    // create list of each channel in each club, associated with their invite IDs
+                    for ( const auto& club : myClubs.data.clubs )
+                    {
+                        for ( const auto& channel : club.jams )
+                        {
+                            m_clubsChannels.emplace_back( fmt::format( FMTX( "{} : {}" ), club.profile.name, channel.name ), channel.listenId, club.id );
+                        }
+                    }
+                    blog::error::api( FMTX( "Loaded {} known Clubs channels" ), m_clubsChannels.size() );
+                }
+                else
+                {
+                    blog::error::api( FMTX( "Failed to fetch Clubs membership data" ) );
+                }
             }
 
             return absl::OkStatus();
@@ -1265,7 +1288,7 @@ void OuroApp::event_RequestToShareRiff( const events::RequestToShareRiff* eventD
         netCfg = getNetworkConfiguration(),
         state = ux::createModelRiffFeedShareState( eventData->m_identity ) ](const char* title)
     {
-        ux::modalRiffFeedShare( title, *state, netCfg, getTaskExecutor() );
+        ux::modalRiffFeedShare( title, *state, m_clubsChannels, netCfg, getTaskExecutor() );
     });
 }
 

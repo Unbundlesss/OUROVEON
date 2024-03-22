@@ -21,6 +21,7 @@ namespace ux {
     void modalRiffFeedShare(
         const char* title,                                      // a imgui label to use with ImGui::OpenPopup
         RiffFeedShareState& riffFeedShareState,                 // UI state 
+        const endlesss::api::MyClubs::ChannelsList& clubsChans, // list of clubs channels
         const endlesss::api::NetConfiguration::Shared& netCfg,  // network services
         tf::Executor& taskExecutor );                           // async support via tf
 

@@ -412,27 +412,6 @@ OURO_CONFIG( BandNameService )
 
 namespace cereal
 {
-    // specialisation for loading direct map of string:jamscan rather than cereal's default bloated way
-    #define SPECIALISE_FLAT_HASH_MAP_LOAD( _keyType, _valueType )                               \
-        template <class Archive, class C, class A> inline                                       \
-            void load( Archive& ar, absl::flat_hash_map<_keyType, _valueType, C, A>& map )      \
-        {                                                                                       \
-            map.clear();                                                                        \
-                                                                                                \
-            auto hint = map.begin();                                                            \
-            while ( true )                                                                      \
-            {                                                                                   \
-                const auto namePtr = ar.getNodeName();                                          \
-                                                                                                \
-                if ( !namePtr )                                                                 \
-                    break;                                                                      \
-                                                                                                \
-                _keyType key = _keyType( namePtr );                                             \
-                _valueType value; ar( value );                                                  \
-                hint = map.emplace_hint( hint, std::move( key ), std::move( value ) );          \
-            }                                                                                   \
-        }
-
     SPECIALISE_FLAT_HASH_MAP_LOAD( std::string, config::endlesss::PopulationPublics::JamScan );
     SPECIALISE_FLAT_HASH_MAP_LOAD( ::endlesss::types::JamCouchID, config::endlesss::BandNameService::Entry );
     SPECIALISE_FLAT_HASH_MAP_LOAD( std::string, uint32_t );

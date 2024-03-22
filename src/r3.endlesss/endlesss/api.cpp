@@ -711,6 +711,18 @@ bool RiffStructureValidation::fetch( const NetConfiguration& ncfg, const std::st
     return deserializeJson< RiffStructureValidation >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamLongID ), "public_riff_structure" );
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+bool MyClubs::fetch( const NetConfiguration& ncfg )
+{
+    auto client = createEndlesssHttpClient( ncfg, UserAgent::WebWithAuth );
+
+    auto res = ncfg.attempt( [&]() -> httplib::Result {
+        return client->Get( "/clubs/my-clubs" );
+        } );
+
+    return deserializeJson< MyClubs >( ncfg, res, *this, fmt::format( "{}", __FUNCTION__ ), "my_clubs" );
+}
+
 
 // ---------------------------------------------------------------------------------------------------------------------
 namespace push {
@@ -735,6 +747,7 @@ struct ShareRequestBody
     }
 };
 
+// ---------------------------------------------------------------------------------------------------------------------
 struct ShareRequestResponse
 {
     struct Data
@@ -765,6 +778,7 @@ struct ShareRequestResponse
 
 } // namespace push
 
+// ---------------------------------------------------------------------------------------------------------------------
 absl::Status push::ShareRiffOnFeed::action( const NetConfiguration& ncfg, std::string& resultUUID )
 {
     ABSL_ASSERT( !m_jamCouchID.empty() );
@@ -842,6 +856,102 @@ absl::Status push::ShareRiffOnFeed::action( const NetConfiguration& ncfg, std::s
     }
     
     return absl::UnknownError( fmt::format( FMTX( "Network request failed; Status {}, `{}`" ), res->status, res->body ) );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+struct RiffCopyBody
+{
+    std::string             jamId;              // extended ID
+    std::string             message;            // message to post with the riff
+    std::string             rifffId;            // riff couch ID from jamId to share
+
+    template<class Archive>
+    inline void serialize( Archive& archive )
+    {
+        archive( CEREAL_NVP( jamId )
+               , CEREAL_NVP( message )
+               , CEREAL_NVP( rifffId )
+        );
+    }
+};
+
+// ---------------------------------------------------------------------------------------------------------------------
+absl::Status push::RiffCopy::action( const NetConfiguration& ncfg, std::string& resultUUID )
+{
+    ABSL_ASSERT( !m_jamFullID_CopyTo.empty() );
+    ABSL_ASSERT( !m_jamCouchID.empty() );
+    ABSL_ASSERT( !m_riffCouchID.empty() );
+
+    std::string jamExtendedID;
+
+    // riff share call needs the full extended band ID, so go find that
+    endlesss::api::BandPermalinkMeta bandPermalink;
+    if ( bandPermalink.fetch( ncfg, m_jamCouchID ) )
+    {
+        if ( bandPermalink.errors.empty() )
+        {
+            if ( bandPermalink.data.extractLongJamIDFromPath( jamExtendedID ) )
+            {
+                blog::api( FMTX( "ShareRiff : resolved extended ID for [{}] : [{}]" ), m_jamCouchID, jamExtendedID );
+            }
+            else
+            {
+                return absl::UnavailableError( fmt::format( FMTX( "Could not find extended ID; {}" ), bandPermalink.data.path ) );
+            }
+        }
+        else
+        {
+            return absl::UnavailableError( fmt::format( FMTX( "Failed to fetch link data; {}" ), bandPermalink.errors[0] ) );
+        }
+    }
+    else
+    {
+        return absl::UnknownError( "BandPermalinkMeta network request failure" );
+    }
+
+
+    RiffCopyBody requestBodyData;
+    requestBodyData.jamId = jamExtendedID;
+    requestBodyData.rifffId = m_riffCouchID.value();
+
+    // encode request to JSON to post
+    std::string requestBodyJson;
+    try
+    {
+        std::ostringstream iss;
+        {
+            cereal::JSONOutputArchive archive( iss );
+            requestBodyData.serialize( archive );
+        }
+        requestBodyJson = iss.str();
+    }
+    catch ( cereal::Exception& cEx )
+    {
+        return absl::InternalError( cEx.what() );
+    }
+
+    // https://api.endlesss.fm/jam/3549a4b5387bcb96c6fc8c5a9d2eb797c09cd46e5c42862fbb8912c977a0fa59/rifffs/import
+
+    auto client = createEndlesssHttpClient( ncfg, UserAgent::WebWithAuth );
+
+    auto res = ncfg.attempt( [&]() -> httplib::Result {
+        return client->Post(
+            fmt::format( FMTX("/jam/{}/rifffs/import"), m_jamFullID_CopyTo ),
+            requestBodyJson,
+            cMimeApplicationJson );
+        });
+
+    ShareRequestResponse response;
+    const bool isOk = deserializeJson< ShareRequestResponse >( ncfg, res, response, fmt::format( "{}( {} )", __FUNCTION__, m_riffCouchID ), "riff_copy_import" );
+    if ( isOk )
+    {
+        ABSL_ASSERT( response.data.id == requestBodyData.rifffId );
+        resultUUID = response.data.id;
+        return absl::OkStatus();
+    }
+    
+    return absl::UnknownError( fmt::format( FMTX( "Network request failed; Status {}, `{}`" ), res->status, res->body ) );
+
 }
 
 } // namespace remote
