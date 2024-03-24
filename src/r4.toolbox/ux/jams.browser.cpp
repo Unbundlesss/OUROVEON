@@ -67,6 +67,7 @@ struct UniversalJamBrowserState
             m_diveJamNames.clear();
             m_diveUserRiffCounts.clear();
             m_diveUserPercentage.clear();
+            m_diveTotalRiffCounts.clear();
             {
                 const auto reserveSize = m_populationData.jampop.size();
                 m_diveUserContributions.reserve( reserveSize );
@@ -74,6 +75,7 @@ struct UniversalJamBrowserState
                 m_diveJamNames.reserve( reserveSize );
                 m_diveUserRiffCounts.reserve( reserveSize );
                 m_diveUserPercentage.reserve( reserveSize );
+                m_diveTotalRiffCounts.reserve( reserveSize );
             }
 
             const std::string& userSearch = m_diveUser.getUsername();
@@ -94,6 +96,7 @@ struct UniversalJamBrowserState
                         m_diveJamNames.emplace_back( jamPair.second.jam_name );
                         m_diveUserRiffCounts.emplace_back( userRiffPair.second );
                         m_diveUserPercentage.emplace_back( userPercentage );
+                        m_diveTotalRiffCounts.emplace_back( jamPair.second.riff_scanned );
                     }
                 }
             }
@@ -103,17 +106,20 @@ struct UniversalJamBrowserState
                 m_diveIndexSortedByName.clear();
                 m_diveIndexSortedByRiff.clear();
                 m_diveIndexSortedByContrib.clear();
+                m_diveIndexSortedByTotals.clear();
 
                 const auto reserveSize = m_diveJamIDs.size();
                 m_diveIndexSortedByName.reserve( reserveSize );
                 m_diveIndexSortedByRiff.reserve( reserveSize );
                 m_diveIndexSortedByContrib.reserve( reserveSize );
+                m_diveIndexSortedByTotals.reserve( reserveSize );
             }
             for ( size_t idx = 0; idx < m_diveJamIDs.size(); idx++ )
             {
                 m_diveIndexSortedByName.push_back( idx );
                 m_diveIndexSortedByRiff.push_back( idx );
                 m_diveIndexSortedByContrib.push_back( idx );
+                m_diveIndexSortedByTotals.push_back( idx );
             }
 
             // sort the indices by the data in question
@@ -131,6 +137,11 @@ struct UniversalJamBrowserState
                 [&]( const size_t lhs, const size_t rhs ) -> bool
                 {
                     return m_diveUserPercentage[ lhs ] > m_diveUserPercentage[ rhs ];
+                });
+            std::sort( m_diveIndexSortedByTotals.begin(), m_diveIndexSortedByTotals.end(),
+                [&]( const size_t lhs, const size_t rhs ) -> bool
+                {
+                    return m_diveTotalRiffCounts[ lhs ] > m_diveTotalRiffCounts[ rhs ];
                 });
         }
 
@@ -200,9 +211,11 @@ struct UniversalJamBrowserState
     std::vector< std::string >                  m_diveJamNames;
     std::vector< uint32_t >                     m_diveUserRiffCounts;
     std::vector< float >                        m_diveUserPercentage;
+    std::vector< uint32_t >                     m_diveTotalRiffCounts;
     std::vector< std::size_t >                  m_diveIndexSortedByName;
     std::vector< std::size_t >                  m_diveIndexSortedByRiff;
     std::vector< std::size_t >                  m_diveIndexSortedByContrib;
+    std::vector< std::size_t >                  m_diveIndexSortedByTotals;
     bool                                        m_diveConfigureInitialSort = true; // setup imgui table sort on first time through post-examine
 };
 
@@ -446,7 +459,7 @@ void modalUniversalJamBrowser(
 
                             if ( ImGui::BeginTable(
                                 "##ddJamTable",
-                                3,
+                                4,
                                 ImGuiTableFlags_Sortable       |
                                 ImGuiTableFlags_ScrollY        |
                                 ImGuiTableFlags_Borders        |
@@ -455,8 +468,9 @@ void modalUniversalJamBrowser(
                                 subRegionFill ) )
                             {
                                 ImGui::TableSetupColumn( "Name" );
-                                ImGui::TableSetupColumn( "Riffs", ImGuiTableColumnFlags_WidthFixed, 80.0f );
-                                ImGui::TableSetupColumn( "Of Total", ImGuiTableColumnFlags_WidthFixed, 110.0f );
+                                ImGui::TableSetupColumn( "User Riffs",  ImGuiTableColumnFlags_WidthFixed, 110.0f );
+                                ImGui::TableSetupColumn( "Of Total",    ImGuiTableColumnFlags_WidthFixed, 110.0f );
+                                ImGui::TableSetupColumn( "Total",       ImGuiTableColumnFlags_WidthFixed, 110.0f );
                                 ImGui::TableSetupScrollFreeze( 0, 1 );  // top row always visible
                                 ImGui::TableHeadersRow();
 
@@ -489,15 +503,17 @@ void modalUniversalJamBrowser(
                                             case 0: sortedIndex = browserState.m_diveIndexSortedByName[sortIndexDirection]; break;
                                             case 1: sortedIndex = browserState.m_diveIndexSortedByRiff[sortIndexDirection]; break;
                                             case 2: sortedIndex = browserState.m_diveIndexSortedByContrib[sortIndexDirection]; break;
+                                            case 3: sortedIndex = browserState.m_diveIndexSortedByTotals[sortIndexDirection]; break;
                                         }
                                     }
 
-                                    const auto& jamID        = browserState.m_diveJamIDs[sortedIndex];
-                                    const auto& jamName      = browserState.m_diveJamNames[sortedIndex];
-                                    const uint32_t userRiffs = browserState.m_diveUserRiffCounts[sortedIndex];
-                                    const float userPct      = browserState.m_diveUserPercentage[sortedIndex];
+                                    const auto& jamID           = browserState.m_diveJamIDs[sortedIndex];
+                                    const auto& jamName         = browserState.m_diveJamNames[sortedIndex];
+                                    const uint32_t userRiffs    = browserState.m_diveUserRiffCounts[sortedIndex];
+                                    const float userPct         = browserState.m_diveUserPercentage[sortedIndex];
+                                    const uint32_t totalRiffs   = browserState.m_diveTotalRiffCounts[sortedIndex];
 
-                                    const bool showAsDisabled = (behaviour.fnIsDisabled && behaviour.fnIsDisabled( jamID ));
+                                    const bool showAsDisabled   = (behaviour.fnIsDisabled && behaviour.fnIsDisabled( jamID ));
 
                                     ImGui::TableNextColumn();
                                     ImGui::PushID( (int32_t)index );
@@ -525,6 +541,9 @@ void modalUniversalJamBrowser(
 
                                     ImGui::TableNextColumn();
                                     ImGui::Text( "%.3f %%", userPct );
+
+                                    ImGui::TableNextColumn();
+                                    ImGui::Text( "%u", totalRiffs );
 
                                     ImGui::PopID();
                                 }
