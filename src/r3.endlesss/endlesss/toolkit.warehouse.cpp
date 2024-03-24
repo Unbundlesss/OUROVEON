@@ -1799,6 +1799,18 @@ void Warehouse::batchRemoveAllTags( const endlesss::types::JamCouchID& jamCID )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+bool Warehouse::isRiffIDVirtual( const endlesss::types::RiffCouchID& riffID )
+{
+    if ( riffID.size() > 2 &&
+         riffID.c_str()[0] == 'V' &&
+         riffID.c_str()[1] == 'R' )
+    {
+        return true;
+    }
+    return false;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 endlesss::types::RiffIdentity Warehouse::createNewVirtualRiff( const endlesss::types::VirtualRiff& vriff )
 {
     Warehouse::SqlDB::TransactionGuard txn;
@@ -1810,6 +1822,7 @@ endlesss::types::RiffIdentity Warehouse::createNewVirtualRiff( const endlesss::t
     // therefore sticking some very unhex characters in there as distinctions is fine as these IDs are entirely ouro-centric
     baseRiffCID[0] = 'V';
     baseRiffCID[1] = 'R';
+    ABSL_ASSERT( isRiffIDVirtual( endlesss::types::RiffCouchID{ baseRiffCID } ) );  // test the isRiffIDVirtual() fn flags this correctly
 
     const std::chrono::seconds timestampUnix = spacetime::getUnixTimeNow();
 

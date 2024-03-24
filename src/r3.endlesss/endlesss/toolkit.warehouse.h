@@ -347,6 +347,9 @@ struct Warehouse
     // injects a new virtual riff, returning the Identity information to be able to enqueue it (should you wish)
     endlesss::types::RiffIdentity createNewVirtualRiff( const endlesss::types::VirtualRiff& vriff );
 
+    // if the given riffID is marked as "virtual", a result of the createNewVirtualRiff() fn
+    static bool isRiffIDVirtual( const endlesss::types::RiffCouchID& riffID );
+
     void clearOutVirtualJamStorage();
 
 

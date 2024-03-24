@@ -170,7 +170,7 @@ void TagLine::State::imgui(
         for ( uint8_t toolIndex = 0; toolIndex < toolCount; ++toolIndex )
         {
             const auto toolID = static_cast< TagLineToolProvider::ToolID >( toolIndex );
-            const bool toolEnabled = toolProvider.isToolEnabled( toolID );
+            const bool toolEnabled = toolProvider.isToolEnabled( toolID, currentRiff );
             ImGui::Scoped::Enabled se( toolEnabled && currentRiffIsValid );
 
             std::string tooltipText;
@@ -264,6 +264,22 @@ void TagLine::imgui(
         tools = m_state.get();
 
     m_state->imgui( currentRiffPtr, warehouseAccess, *tools );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+bool TagLineToolProvider::isToolEnabled( const ToolID id, const endlesss::live::Riff* currentRiff ) const
+{
+    // check on virtual riffs, we can't do stuff like share or find them
+    if ( id == ToolID::NavigateTo || 
+         id == ToolID::ShareToFeed )
+    {
+        if ( currentRiff != nullptr )
+        {
+            return endlesss::toolkit::Warehouse::isRiffIDVirtual( currentRiff->m_riffData.riff.couchID ) == false;
+        }
+    }
+
+    return true;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

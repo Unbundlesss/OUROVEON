@@ -33,10 +33,7 @@ struct TagLineToolProvider
         return BuiltItToolIdTop;
     }
 
-    virtual bool isToolEnabled( const ToolID id ) const
-    {
-        return true;
-    }
+    virtual bool isToolEnabled( const ToolID id, const endlesss::live::Riff* currentRiffPtr ) const;
 
     virtual const char* getToolIcon( const ToolID id, std::string& tooltip ) const
     {
