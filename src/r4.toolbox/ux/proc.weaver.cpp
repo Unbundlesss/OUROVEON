@@ -351,7 +351,7 @@ void Weaver::State::generateNewRiff(
                                 randomRiff.riff.couchID,
                                 m_generatedResult.m_virtualRiff.stems[availableChannelIndex] );
 
-                            m_generatedResult.m_desc[availableChannelIndex] = fmt::format( FMTX( "{:36} {:2} | {}" ),
+                            m_generatedResult.m_desc[availableChannelIndex] = fmt::format( FMTX( "{:40} | {:2} | {}" ),
                                 randomRiff.jam.displayName,
                                 endlesss::constants::cRootNames[randomRiff.riff.root],
                                 exportTimeDelta );
@@ -601,7 +601,7 @@ void Weaver::State::imgui(
                     ImGui::TableNextColumn();
                     {
                         ImGui::AlignTextToFramePadding();
-                        ImGui::Dummy( { 3, 0 } );
+                        ImGui::Dummy( { 4, 0 } );
                         ImGui::SameLine( 0, 0 );
                         ImGui::TextUnformatted( ICON_FA_DICE_D20 );
                     }
