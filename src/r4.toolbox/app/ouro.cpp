@@ -1041,7 +1041,7 @@ int OuroApp::EntrypointGUI()
                             m_clubsChannels.emplace_back( fmt::format( FMTX( "{} : {}" ), club.profile.name, channel.name ), channel.listenId, club.id );
                         }
                     }
-                    blog::error::api( FMTX( "Loaded {} known Clubs channels" ), m_clubsChannels.size() );
+                    blog::api( FMTX( "Loaded {} known Clubs channels" ), m_clubsChannels.size() );
                 }
                 else
                 {
