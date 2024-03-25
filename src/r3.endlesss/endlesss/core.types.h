@@ -252,6 +252,15 @@ struct RiffComplete
 // block of custom names that can be slid into live jam/riff structures on resolve; then used for export/etc
 struct IdentityCustomNaming
 {
+    template<class Archive>
+    inline void serialize( Archive& archive )
+    {
+        archive( CEREAL_OPTIONAL_NVP( m_jamDisplayName )
+               , CEREAL_OPTIONAL_NVP( m_jamDescription )
+               , CEREAL_OPTIONAL_NVP( m_riffDescription )
+        );
+    }
+
     std::string     m_jamDisplayName;
     std::string     m_jamDescription;
     std::string     m_riffDescription;
@@ -286,6 +295,14 @@ struct RiffIdentity
         , m_customNaming( std::move(customNaming) )
     {}
 
+    template<class Archive>
+    inline void serialize( Archive& archive )
+    {
+        archive( CEREAL_NVP( m_jam )
+               , CEREAL_NVP( m_riff )
+               , CEREAL_NVP( m_customNaming )
+        );
+    }
 
     constexpr bool hasData() const
     {
@@ -560,6 +577,22 @@ struct VirtualRiff
     uint32_t        scale               = 0;
     float           barLength           = 0;
     float           BPMrnd              = 0;
+
+
+    template<class Archive>
+    inline void serialize( Archive& archive )
+    {
+        archive( CEREAL_NVP( user )
+               , CEREAL_NVP( stemsOn )
+               , CEREAL_NVP( stems )
+               , CEREAL_NVP( gains )
+               , CEREAL_NVP( stemBarLengths )
+               , CEREAL_NVP( root )
+               , CEREAL_NVP( scale )
+               , CEREAL_NVP( barLength )
+               , CEREAL_NVP( BPMrnd )
+        );
+    }
 };
 
 } // namespace types
