@@ -1563,7 +1563,7 @@ std::size_t Warehouse::filterRiffsByBPM( const RiffKeySearchParameters& keySearc
             auto query = Warehouse::SqlDB::query<_bpmGroupsByScaleAndRoot_ByBPM>( scales, scalesCount, roots, rootsCount );
             while ( query( bpmRange, bpmCount, jamCount ) )
             {
-                bpmCounts.emplace_back( BPMCountTuple{ (uint32_t)bpmRange, bpmCount, jamCount } );
+                bpmCounts.emplace_back( BPMCountTuple{ (uint32_t)std::round( bpmRange ), bpmCount, jamCount } );
             }
         }
         else
@@ -1571,7 +1571,7 @@ std::size_t Warehouse::filterRiffsByBPM( const RiffKeySearchParameters& keySearc
             auto query = Warehouse::SqlDB::query<_bpmGroupsByScaleAndRoot_ByRiffCount>( scales, scalesCount, roots, rootsCount );
             while ( query( bpmRange, bpmCount, jamCount ) )
             {
-                bpmCounts.emplace_back( BPMCountTuple{ (uint32_t)bpmRange, bpmCount, jamCount } );
+                bpmCounts.emplace_back( BPMCountTuple{ (uint32_t)std::round( bpmRange ), bpmCount, jamCount } );
             }
         }
     }

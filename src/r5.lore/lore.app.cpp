@@ -2278,7 +2278,7 @@ int LoreApp::EntrypointOuro()
         m_mdMidi->processMessages( []( const app::midi::Message& ){ } );
 
         m_discordBotUI->imgui( *this );
-        m_uxProcWeaver->imgui( *this, m_rpClient, *m_warehouse );
+        m_uxProcWeaver->imgui( *this, currentRiffPtr, m_rpClient, *m_warehouse );
 
         mixPreview.imgui();
 

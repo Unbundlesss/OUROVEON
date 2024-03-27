@@ -47,7 +47,11 @@ struct Weaver
     Weaver( const config::IPathProvider& pathProvider, base::EventBusClient eventBus );
     ~Weaver();
 
-    void imgui( app::CoreGUI& coreGUI, net::bond::RiffPushClient& bondClient, endlesss::toolkit::Warehouse& warehouse );
+    void imgui(
+        app::CoreGUI& coreGUI,
+        endlesss::live::RiffPtr& currentRiffPtr,      // currently playing riff, may be null
+        net::bond::RiffPushClient& bondClient,
+        endlesss::toolkit::Warehouse& warehouse );
 
 private:
 

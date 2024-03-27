@@ -70,12 +70,11 @@ void TagLine::State::event_RiffTagAction( const events::RiffTagAction* eventData
 void TagLine::State::imgui(
     endlesss::live::RiffPtr& currentRiffPtr,
     const endlesss::toolkit::Warehouse* warehouseAccess,
-    TagLineToolProvider& toolProvider
-)
+    TagLineToolProvider& toolProvider )
 {
     // take temporary copy of the shared pointer, in case it gets modified mid-tick by the mixer
+    // fetch a workable pointer to the currently playing riff, if we have one
     endlesss::live::RiffPtr localRiffPtr = currentRiffPtr;
-
     const auto currentRiff  = localRiffPtr.get();
     const bool currentRiffIsValid = ( currentRiff &&
                                       currentRiff->m_syncState == endlesss::live::Riff::SyncState::Success );

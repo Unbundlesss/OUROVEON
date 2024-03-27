@@ -34,6 +34,7 @@ function SetDefaultBuildConfiguration()
     filter "configurations:Debug"
         defines   { "DEBUG", "OURO_DEBUG=1", "OURO_RELEASE=0" }
         symbols   "FastLink"
+        editandcontinue "On"
         ispcVars {
             GenerateDebugInformation = true,
             Opt         = "disabled",
@@ -46,6 +47,7 @@ function SetDefaultBuildConfiguration()
         defines   { "NDEBUG", "OURO_DEBUG=0", "OURO_RELEASE=1" }
         flags     { "LinkTimeOptimization" }
         optimize  "Full"
+        editandcontinue "Off"
         ispcVars { 
             Opt         = "maximum",
             CPU         = "core2",

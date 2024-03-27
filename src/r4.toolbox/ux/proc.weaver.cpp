@@ -70,7 +70,11 @@ struct Weaver::State
 
     void event_MixerRiffChange( const events::MixerRiffChange* eventData );
 
-    void imgui( app::CoreGUI& coreGUI, net::bond::RiffPushClient& bondClient, endlesss::toolkit::Warehouse& warehouse );
+    void imgui(
+        app::CoreGUI& coreGUI,
+        endlesss::live::RiffPtr& currentRiffPtr,
+        net::bond::RiffPushClient& bondClient,
+        endlesss::toolkit::Warehouse& warehouse );
 
     // using the given RNG, generate a new simple seed string
     void regenerateSeedText( math::RNG32& rng )
@@ -95,6 +99,12 @@ struct Weaver::State
         endlesss::toolkit::Warehouse& warehouse,
         int32_t generateSingleChannelAtIndex = -1 );    // dynamic mask - can ask to just re-roll a single channel without modifying the other flags
 
+    void buildVirtualRiffFromLive(
+        const endlesss::live::Riff* liveRiff );
+
+    // take the current state of m_generatedResult, bundle it into the DB and send it out to be played
+    void finaliseAndSendVirtualRiff( endlesss::toolkit::Warehouse& warehouse );
+
     // expand root search using circle-of-fifths
     static void addAdjacentRootsFromCoT( endlesss::toolkit::Warehouse::RiffKeySearchParameters& keySearch, int32_t initialRoot )
     {
@@ -112,7 +122,8 @@ struct Weaver::State
             archive( CEREAL_NVP( m_virtualRiff )
                    , CEREAL_NVP( m_identities )
                    , CEREAL_NVP( m_ref )
-                   , CEREAL_NVP( m_desc )
+                   , CEREAL_NVP( m_jamName )
+                   , CEREAL_NVP( m_timeDelta )
             );
         }
 
@@ -122,7 +133,21 @@ struct Weaver::State
         // ui data
         PerChannelIdentities            m_identities;
         std::array< std::string, 8 >    m_ref;
-        std::array< std::string, 8 >    m_desc;
+        std::array< std::string, 8 >    m_jamName;
+        std::array< std::string, 8 >    m_timeDelta;
+
+        void clearChannel( std::size_t index )
+        {
+            m_virtualRiff.stemsOn[index]        = false;
+            m_virtualRiff.stemBarLengths[index] = 4;
+            m_virtualRiff.gains[index]          = 0;
+            m_virtualRiff.stems[index]          = {};
+
+            m_identities[index]     = {};
+            m_ref[index]            = {};
+            m_jamName[index]        = {};
+            m_timeDelta[index]      = {};
+        }
     };
 
 
@@ -141,6 +166,7 @@ struct Weaver::State
 
     uint32_t                        m_searchRoot = 0;
     uint32_t                        m_searchScale = 0;
+    int64_t                         m_deferredBPMSearch = -1;               // set to >0 to do a latent match on a searched root/scale in the next tick
 
     std::vector< endlesss::toolkit::Warehouse::BPMCountTuple >
                                     m_bpmCounts;
@@ -160,7 +186,7 @@ struct Weaver::State
     bool                            m_addAdjacentKeys           = true;     // if true, add nearby keys around circle-of-fifths to chosen root
     bool                            m_ignoreAnnoyingPresets     = true;     // fuck off, Eardrop
     bool                            m_autoSendToBOND            = false;    // automatically send committed riffs across BOND once we have word that they got loaded & dequeued
-    std::atomic_bool                m_formulationHappening      = false;
+    std::atomic_bool                m_generationInProgress      = false;
 };
 
 
@@ -187,7 +213,7 @@ void Weaver::State::generateNewRiff(
     const auto newSeed = absl::Hash<std::string>{}(m_proceduralSeed);
     blog::app( FMTX( "Procedural generation seeded from '{}' => {}\n" ), m_proceduralSeed, newSeed );
 
-    m_formulationHappening = true;
+    m_generationInProgress = true;
     coreGUI.getTaskExecutor().silent_async( [this, newSeed, generateSingleChannelAtIndex, &warehouse]
         {
             math::RNG32 rng( base::reduce64To32( newSeed ) );
@@ -229,14 +255,7 @@ void Weaver::State::generateNewRiff(
 
                 if ( clearOutChannel )
                 {
-                    m_generatedResult.m_virtualRiff.stemsOn[chI]        = false;
-                    m_generatedResult.m_virtualRiff.stemBarLengths[chI] = 4;
-                    m_generatedResult.m_virtualRiff.gains[chI]          = 0;
-                    m_generatedResult.m_virtualRiff.stems[chI]          = {};
-
-                    m_generatedResult.m_identities[chI]     = {};
-                    m_generatedResult.m_ref[chI]            = {};
-                    m_generatedResult.m_desc[chI]           = {};
+                    m_generatedResult.clearChannel( chI );
                 }
                 // if not removing them, still reconsider bar length of any locked ones
                 else
@@ -339,22 +358,19 @@ void Weaver::State::generateNewRiff(
                                 potentialStemGains[chosenStemIndex] * 0.8f,
                                 potentialStemGains[chosenStemIndex] );
 
+                            m_generatedResult.m_identities[availableChannelIndex] = { randomRiff.jam.couchID, randomRiff.riff.couchID };
+
                             usedStemIDs.emplace( potentialStemIDs[chosenStemIndex] );
 
                             // stash data about it for display on the UI
-                            const auto exportTimeUnix = spacetime::InSeconds( std::chrono::seconds( static_cast<uint64_t>(randomRiff.riff.creationTimeUnix) ) );
-                            const auto exportTimeDelta = spacetime::calculateDeltaFromNow( exportTimeUnix ).asPastTenseString( 2 );
-
-                            m_generatedResult.m_identities[availableChannelIndex] = { randomRiff.jam.couchID, randomRiff.riff.couchID };
-
                             m_generatedResult.m_ref[availableChannelIndex] = fmt::format( FMTX( "[R:{}]\n[S:{}]" ),
                                 randomRiff.riff.couchID,
                                 m_generatedResult.m_virtualRiff.stems[availableChannelIndex] );
 
-                            m_generatedResult.m_desc[availableChannelIndex] = fmt::format( FMTX( "{:40} | {:2} | {}" ),
-                                randomRiff.jam.displayName,
-                                endlesss::constants::cRootNames[randomRiff.riff.root],
-                                exportTimeDelta );
+                            m_generatedResult.m_jamName[availableChannelIndex] = randomRiff.jam.displayName;
+
+                            const auto exportTimeUnix = spacetime::InSeconds( std::chrono::seconds( static_cast<uint64_t>(randomRiff.riff.creationTimeUnix) ) );
+                            m_generatedResult.m_timeDelta[availableChannelIndex] = spacetime::calculateDeltaFromNow( exportTimeUnix ).asPastTenseString( 2 );
                         }
                     }
                 }
@@ -364,27 +380,89 @@ void Weaver::State::generateNewRiff(
                     break;
             }
 
-            // insert new virtual riff into warehouse, returning a new bespoke riff ID
-            const auto newVirtualIdentity = warehouse.createNewVirtualRiff( m_generatedResult.m_virtualRiff );
-                        
-            // log our requests to play this new riff and stash a note to send it over BOND if possible, if selected
-            m_enqueuedRiffIDs.emplace( newVirtualIdentity.getRiffID() );
-            if ( m_autoSendToBOND )
-                m_enqueuedRiffIDToAutoSendToBOND.emplace( newVirtualIdentity.getRiffID() );
+            finaliseAndSendVirtualRiff( warehouse );
 
-            // ping out to play it
-            m_eventBusClient.Send< ::events::EnqueueRiffPlayback >( newVirtualIdentity );
-
-            m_formulationHappening = false;
+            m_generationInProgress = false;
         });
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void Weaver::State::buildVirtualRiffFromLive(
+    const endlesss::live::Riff* liveRiff )
+{
+    ABSL_ASSERT( liveRiff );
+
+    m_generatedResult.m_virtualRiff.user        = liveRiff->m_riffData.riff.user;
+    m_generatedResult.m_virtualRiff.root        = liveRiff->m_riffData.riff.root;
+    m_generatedResult.m_virtualRiff.scale       = liveRiff->m_riffData.riff.scale;
+    m_generatedResult.m_virtualRiff.barLength   = liveRiff->m_riffData.riff.barLength;
+    m_generatedResult.m_virtualRiff.BPMrnd      = liveRiff->m_riffData.riff.BPMrnd;
+
+    // adopt the root/scale etc to match this incoming riff
+    m_searchRoot    = liveRiff->m_riffData.riff.root;
+    m_searchScale   = liveRiff->m_riffData.riff.scale;
+
+    // ask for a search and match on the next UI tick
+    m_deferredBPMSearch = (int64_t)std::round( liveRiff->m_riffData.riff.BPMrnd );
+
+    for ( uint32_t chI = 0; chI < 8; chI++ )
+    {
+        if ( liveRiff->m_riffData.riff.stemsOn[chI] )
+        {
+            m_generatedResult.m_virtualRiff.stemsOn[chI]        = true;
+            m_generatedResult.m_virtualRiff.stems[chI]          = liveRiff->m_riffData.riff.stems[chI];
+            m_generatedResult.m_virtualRiff.stemBarLengths[chI] = liveRiff->m_riffData.stems[chI].barLength;
+            m_generatedResult.m_virtualRiff.gains[chI]          = liveRiff->m_riffData.riff.gains[chI];
+
+            m_generatedResult.m_identities[chI] = { liveRiff->m_riffData.jam.couchID, liveRiff->m_riffData.riff.couchID };
+
+            m_generatedResult.m_ref[chI] = fmt::format( FMTX( "[R:{}]\n[S:{}]" ),
+                liveRiff->m_riffData.riff.couchID,
+                m_generatedResult.m_virtualRiff.stems[chI] );
+
+
+            m_generatedResult.m_jamName[chI] = liveRiff->m_riffData.jam.displayName;
+
+            const auto exportTimeUnix = spacetime::InSeconds( std::chrono::seconds( static_cast<uint64_t>(liveRiff->m_riffData.stems[chI].creationTimeUnix) ) );
+            m_generatedResult.m_timeDelta[chI] = spacetime::calculateDeltaFromNow( exportTimeUnix ).asPastTenseString( 2 );
+        }
+        else
+        {
+            m_generatedResult.clearChannel( chI );
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void Weaver::State::finaliseAndSendVirtualRiff( endlesss::toolkit::Warehouse& warehouse )
+{
+    // insert new virtual riff into warehouse, returning a new bespoke riff ID
+    const auto newVirtualIdentity = warehouse.createNewVirtualRiff( m_generatedResult.m_virtualRiff );
+
+    // log our requests to play this new riff and stash a note to send it over BOND if possible, if selected
+    m_enqueuedRiffIDs.emplace( newVirtualIdentity.getRiffID() );
+    if ( m_autoSendToBOND )
+        m_enqueuedRiffIDToAutoSendToBOND.emplace( newVirtualIdentity.getRiffID() );
+
+    // ping out to play it
+    m_eventBusClient.Send< ::events::EnqueueRiffPlayback >( newVirtualIdentity );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 void Weaver::State::imgui(
     app::CoreGUI& coreGUI,
+    endlesss::live::RiffPtr& currentRiffPtr,
     net::bond::RiffPushClient& bondClient,
     endlesss::toolkit::Warehouse& warehouse )
 {
+    // take temporary copy of the shared pointer, in case it gets modified mid-tick by the mixer
+    // fetch a workable pointer to the currently playing riff, if we have one
+    endlesss::live::RiffPtr localRiffPtr = currentRiffPtr;
+    const auto currentRiff  = localRiffPtr.get();
+    const bool currentRiffIsValid = ( currentRiff &&
+                                      currentRiff->m_syncState == endlesss::live::Riff::SyncState::Success );
+
+
     const float subgroupInsetSize = 16.0f;
 
     const auto resetSelection = [this]()
@@ -422,18 +500,6 @@ void Weaver::State::imgui(
         ImGui::SeparatorBreak();
         ImGui::Indent( subgroupInsetSize );
 
-        {
-            ImGui::TextUnformatted( "Result Ordering" );
-
-            ImGui::Indent( subgroupInsetSize );
-            if ( ImGui::RadioButton( "by BPM, Descending", &m_searchOrdering, 0 ) )
-                resetSelection();
-            if ( ImGui::RadioButton( "by Riff Count, Descending", &m_searchOrdering, 1 ) )
-                resetSelection();
-            ImGui::Unindent( subgroupInsetSize );
-            ImGui::Dummy( { 0, 10.0f } );
-        }
-
         ImGui::PushItemWidth( 80.0f );
 
         std::string rootPreview = ImGui::ValueArrayPreviewString(
@@ -452,7 +518,7 @@ void Weaver::State::imgui(
         }
 
         ImGui::PopItemWidth();
-        ImGui::SameLine( 0, 8.0f );
+        ImGui::SameLine( 0, 12.0f );
         if ( ImGui::Checkbox( " With Adjacent Keys", &m_addAdjacentKeys ) )
         {
             resetSelection();
@@ -478,7 +544,8 @@ void Weaver::State::imgui(
 
         ImGui::PopItemWidth();
 
-        if ( m_awaitingBpmSearch )
+
+        if ( m_awaitingBpmSearch || m_deferredBPMSearch > 0 )
         {
             endlesss::toolkit::Warehouse::RiffKeySearchParameters keySearch;
             keySearch.m_root.emplace_back( m_searchRoot );
@@ -499,13 +566,19 @@ void Weaver::State::imgui(
             for ( const auto& bpmCount : m_bpmCounts )
             {
                 m_bpmCountsTitles.emplace_back( fmt::format( FMTX( " {0:4} BPM ( {1} riffs, {2} jams )" ), bpmCount.m_BPM, bpmCount.m_riffCount, bpmCount.m_jamCount ) );
+                if ( m_deferredBPMSearch == bpmCount.m_BPM )
+                {
+                    m_bpmSelection = m_bpmCountsTitles.size() - 1;
+                }
             }
 
             m_awaitingBpmSearch = false;
+            m_deferredBPMSearch = 0;
         }
 
         if ( !m_bpmCounts.empty() )
         {
+            ImGui::Spacing();
             ImGui::AlignTextToFramePadding();
             ImGui::TextUnformatted( " BPM :");
             ImGui::SameLine();
@@ -527,17 +600,45 @@ void Weaver::State::imgui(
                 }
                 ImGui::EndCombo();
             }
+            {
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextUnformatted( "       Sort by" );
 
-            ImGui::SameLine( 0, 75.0f );
-            ImGui::Checkbox( " Ignore Tired Presets", &m_ignoreAnnoyingPresets );
+                ImGui::SameLine();
+                if ( ImGui::RadioButton( "BPM", &m_searchOrdering, 0 ) )
+                    resetSelection();
+                ImGui::SameLine();
+                if ( ImGui::RadioButton( "Riff Count", &m_searchOrdering, 1 ) )
+                    resetSelection();
+            }
+
+
 
             ImGui::Unindent( subgroupInsetSize );
+
+            ImGui::Spacing();
             ImGui::Spacing();
             ImGui::SeparatorBreak();
             ImGui::Spacing();
+            ImGui::Spacing();
+
+            ImGui::TextColored( colour::shades::callout.light(), "Generation" );
+            {
+                const float cSeedButtonWidth = 280.0f;
+                ImGui::RightAlignSameLine( cSeedButtonWidth );
+                ImGui::Scoped::Enabled se( currentRiffIsValid );
+                if ( ImGui::Button( ICON_FA_MAGNET " Seed from Currently Playing ", { cSeedButtonWidth, 0.0f }) )
+                {
+                    buildVirtualRiffFromLive( currentRiff );
+                }
+            }
+            ImGui::Spacing();
+            {
+                ImGui::Checkbox( " Ignore Tired Presets", &m_ignoreAnnoyingPresets );
+            }
 
             {
-                ImGui::Scoped::Disabled sd( m_formulationHappening.load() );
+                ImGui::Scoped::Disabled sd( m_generationInProgress.load() );
                 if ( ImGui::Button( " Formulate with Seed : " ) )
                 {
                     generateNewRiff( coreGUI, bondClient, warehouse );
@@ -561,25 +662,28 @@ void Weaver::State::imgui(
                     // mask out auto-bond option if we have no connection
                     m_autoSendToBOND &= BONDConnectionLive;
                 }
-                if ( m_formulationHappening || !m_enqueuedRiffIDs.empty() )
+                if ( m_generationInProgress || !m_enqueuedRiffIDs.empty() )
                 {
                     const float SpinnerSize = ImGui::GetTextLineHeight() * 0.5f;
                     ImGui::RightAlignSameLine( SpinnerSize * 3.0f );
                     ImGui::Spinner( "##playback_queued", true, SpinnerSize, 4.0f, 0.0f,
-                        m_formulationHappening ? colour::shades::slate.lightU32() : colour::shades::orange.lightU32() );
+                        m_generationInProgress ? colour::shades::slate.lightU32() : colour::shades::orange.lightU32() );
                 }
             }
 
             ImGui::Spacing();
             ImGui::Spacing();
 
-            if ( ImGui::BeginTable( "###generation_results", 5, ImGuiTableFlags_NoSavedSettings) )
+            if ( ImGui::BeginTable( "###generation_results", 8, ImGuiTableFlags_NoSavedSettings) )
             {
                 ImGui::TableSetupColumn( "Lock",        ImGuiTableColumnFlags_WidthFixed, 22 );
-                ImGui::TableSetupColumn( "Tooltip",     ImGuiTableColumnFlags_WidthFixed, 22 );
-                ImGui::TableSetupColumn( "Description", ImGuiTableColumnFlags_WidthStretch, 1.0f );
-                ImGui::TableSetupColumn( "ReRoll",      ImGuiTableColumnFlags_WidthFixed, 22 );
                 ImGui::TableSetupColumn( "ClearOut",    ImGuiTableColumnFlags_WidthFixed, 22 );
+                ImGui::TableSetupColumn( "Navigate",    ImGuiTableColumnFlags_WidthFixed, 22 );
+                ImGui::TableSetupColumn( "Key",         ImGuiTableColumnFlags_WidthFixed, 22 );
+                ImGui::TableSetupColumn( "Description", ImGuiTableColumnFlags_WidthStretch, 0.6f );
+                ImGui::TableSetupColumn( "Timeline",    ImGuiTableColumnFlags_WidthStretch, 0.4f );
+                ImGui::TableSetupColumn( "ReRoll",      ImGuiTableColumnFlags_WidthFixed, 22 );
+                ImGui::TableSetupColumn( "Delete",      ImGuiTableColumnFlags_WidthFixed, 22 );
 
                 // build some iconographic headers
                 {
@@ -593,11 +697,26 @@ void Weaver::State::imgui(
                         ImGui::TextUnformatted( ICON_FA_LOCK );
                     }
                     ImGui::TableNextColumn();
+                    {
+                        ImGui::AlignTextToFramePadding();
+                        ImGui::Dummy( { 3, 0 } );
+                        ImGui::SameLine( 0, 0 );
+                        ImGui::TextUnformatted( ICON_FA_BAN );
+                    }
+                    ImGui::TableNextColumn();
+                    ImGui::TableNextColumn();
+                    {
+                        ImGui::AlignTextToFramePadding();
+                        ImGui::Dummy( { 3, 0 } );
+                        ImGui::SameLine( 0, 0 );
+                        ImGui::TextUnformatted( ICON_FA_MUSIC );
+                    }
                     ImGui::TableNextColumn();
                     {
                         ImGui::SetNextItemWidth( -FLT_MIN );
                         ImGui::InputText( "##previous_seed", &m_proceduralPreviousSeed, ImGuiInputTextFlags_ReadOnly );
                     }
+                    ImGui::TableNextColumn();
                     ImGui::TableNextColumn();
                     {
                         ImGui::AlignTextToFramePadding();
@@ -610,7 +729,7 @@ void Weaver::State::imgui(
                         ImGui::AlignTextToFramePadding();
                         ImGui::Dummy( { 3, 0 } );
                         ImGui::SameLine( 0, 0 );
-                        ImGui::TextUnformatted( ICON_FA_BAN );
+                        ImGui::TextUnformatted( ICON_FA_TRASH_CAN );
                     }
 
                     ImGui::PopStyleVar();
@@ -623,6 +742,8 @@ void Weaver::State::imgui(
 
                     ImGui::TableNextColumn();
                     ImGui::Checkbox( "##channel_lock", &m_generatedChannelLock[chI] );
+                    ImGui::TableNextColumn();
+                    ImGui::Checkbox( "##channel_clear", &m_generatedChannelClearOut[chI] );
 
                     ImGui::TableNextColumn();
                     {
@@ -635,17 +756,39 @@ void Weaver::State::imgui(
                     }
 
                     ImGui::TableNextColumn();
-                    ImGui::SetNextItemWidth( -FLT_MIN );
-                    ImGui::InputText( "##gen_data", &m_generatedResult.m_desc[chI], ImGuiInputTextFlags_ReadOnly );
+                    if ( !m_generatedResult.m_jamName[chI].empty() )
+                        ImGui::TextUnformatted( endlesss::constants::cRootNames[m_generatedResult.m_virtualRiff.root] );
 
                     ImGui::TableNextColumn();
-                    if ( ImGui::Button( ICON_FA_ARROWS_SPIN ) )
+                    ImGui::SetNextItemWidth( -FLT_MIN );
+                    ImGui::InputText( "##jam_name", &m_generatedResult.m_jamName[chI], ImGuiInputTextFlags_ReadOnly );
+
+                    ImGui::TableNextColumn();
+                    ImGui::SetNextItemWidth( -FLT_MIN );
+                    ImGui::InputText( "##time_delta", &m_generatedResult.m_timeDelta[chI], ImGuiInputTextFlags_ReadOnly );
+
+
                     {
-                        generateNewRiff( coreGUI, bondClient, warehouse, chI );
+                        ImGui::Scoped::Disabled sd( m_generationInProgress.load() );
+
+                        ImGui::TableNextColumn();
+                        if ( ImGui::Button( ICON_FA_ARROWS_SPIN ) )
+                        {
+                            generateNewRiff( coreGUI, bondClient, warehouse, chI );
+                        }
+                        ImGui::TableNextColumn();
+                        if ( ImGui::Button( ICON_FA_XMARK ) )
+                        {
+                            m_generationInProgress = true;
+                            coreGUI.getTaskExecutor().silent_async( [this, chI, &warehouse]
+                                {
+                                    m_generatedResult.clearChannel( chI );
+                                    finaliseAndSendVirtualRiff( warehouse );
+                                    m_generationInProgress = false;
+                                });
+                        }
                     }
 
-                    ImGui::TableNextColumn();
-                    ImGui::Checkbox( "##channel_clear", &m_generatedChannelClearOut[chI] );
 
                     ImGui::PopID();
                 }
@@ -671,9 +814,13 @@ Weaver::~Weaver()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void Weaver::imgui( app::CoreGUI& coreGUI, net::bond::RiffPushClient& bondClient, endlesss::toolkit::Warehouse& warehouse )
+void Weaver::imgui(
+    app::CoreGUI& coreGUI,
+    endlesss::live::RiffPtr& currentRiffPtr,      // currently playing riff, may be null
+    net::bond::RiffPushClient& bondClient,
+    endlesss::toolkit::Warehouse& warehouse )
 {
-    m_state->imgui( coreGUI, bondClient, warehouse );
+    m_state->imgui( coreGUI, currentRiffPtr, bondClient, warehouse );
 }
 
 } // namespace ux
