@@ -447,7 +447,10 @@ namespace riffs {
     static constexpr char createIndex_7[] = R"(
         CREATE INDEX        IF NOT EXISTS "Riff_IndexOwner2Ver"  ON "Riffs" ( "OwnerJamCID", "AppVersion" );)";  // new stem indexing
     static constexpr char createIndex_8[] = R"(
-        CREATE INDEX        IF NOT EXISTS "Riff_RootScaleBPM"    ON "Riffs" ( "Root", "Scale", "BPMrnd" );)";  // procgen random indexing
+        CREATE INDEX        IF NOT EXISTS "Riff_RootScaleHash"   ON "Riffs" ( ( ( root << 8 ) | scale ) );)";  // finding riffs by bitwise merged root/scale value
+    static constexpr char createIndex_9[] = R"(
+        CREATE INDEX        IF NOT EXISTS "Riff_BPMAndOwner"   ON "Riffs" ( round(BPMrnd), "OwnerJamCID" );)";  // procgen searching without root/scale
+
 
     static constexpr char deprecated_0[] = { DEPRECATE_INDEX "IndexRiff" };
     static constexpr char deprecated_1[] = { DEPRECATE_INDEX "IndexOwner" };
@@ -470,6 +473,7 @@ namespace riffs {
         Warehouse::SqlDB::query<createIndex_6>();
         Warehouse::SqlDB::query<createIndex_7>();
         Warehouse::SqlDB::query<createIndex_8>();
+        Warehouse::SqlDB::query<createIndex_9>();
 
         // deprecate
         Warehouse::SqlDB::query<deprecated_0>();
@@ -1509,69 +1513,130 @@ bool Warehouse::patchRiffStemRecord(
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-std::size_t Warehouse::filterRiffsByBPM( const RiffKeySearchParameters& keySearchParam, const BPMCountSort sortOn, std::vector< BPMCountTuple >& bpmCounts ) const
+std::size_t Warehouse::filterRiffsByBPM( const endlesss::constants::RootScalePairs& keySearchPairs, const BPMCountSort sortOn, std::vector< BPMCountTuple >& bpmCounts ) const
 {
-    static constexpr char _bpmGroupsByScaleAndRoot_ByRiffCount[] = R"(
+    Warehouse::SqlDB::TransactionGuard txn;
+
+    bpmCounts.clear();
+
+    // basic no rules mode where we don't match on any key at all, just group by BPM
+    if ( keySearchPairs.searchMode == endlesss::constants::HarmonicSearch::NoRules )
+    {
+        static constexpr char _bpmGroupsByScaleAndRoot_ByRiffCount_NoRules[] = R"(
             select 
               round(BPMrnd) as BPM,
               count(1) as RiffCount,
               count(distinct OwnerJamCID) as UniqueJamCount
             from 
               riffs 
-            where 
-              scale in carray(?1, ?2) 
-              and root in carray(?3, ?4) 
             group by 
               BPM 
             order by 
               RiffCount desc;
         )";
-    static constexpr char _bpmGroupsByScaleAndRoot_ByBPM[] = R"(
+        static constexpr char _bpmGroupsByScaleAndRoot_ByBPM_NoRules[] = R"(
             select 
               round(BPMrnd) as BPM,
               count(1) as RiffCount,
               count(distinct OwnerJamCID) as UniqueJamCount
             from 
               riffs 
-            where 
-              scale in carray(?1, ?2) 
-              and root in carray(?3, ?4) 
             group by 
               BPM 
             order by 
               BPM desc;
         )";
 
-    ABSL_ASSERT( !keySearchParam.m_root.empty() && !keySearchParam.m_scale.empty() );
-
-    const int* roots = keySearchParam.m_root.data();
-    const int32_t rootsCount = static_cast< int32_t >( keySearchParam.m_root.size() );
-    const int* scales = keySearchParam.m_scale.data();
-    const int32_t scalesCount = static_cast<int32_t>(keySearchParam.m_scale.size());
-
-    bpmCounts.clear();
-
-    {
-        Warehouse::SqlDB::TransactionGuard txn;
-
-        float bpmRange;
-        uint32_t bpmCount;
-        uint32_t jamCount;
-
-        if ( sortOn == BPMCountSort::ByBPM )
         {
-            auto query = Warehouse::SqlDB::query<_bpmGroupsByScaleAndRoot_ByBPM>( scales, scalesCount, roots, rootsCount );
-            while ( query( bpmRange, bpmCount, jamCount ) )
+            float bpmRange;
+            uint32_t bpmCount;
+            uint32_t jamCount;
+
+            if ( sortOn == BPMCountSort::ByBPM )
             {
-                bpmCounts.emplace_back( BPMCountTuple{ (uint32_t)std::round( bpmRange ), bpmCount, jamCount } );
+                auto query = Warehouse::SqlDB::query<_bpmGroupsByScaleAndRoot_ByBPM_NoRules>();
+                while ( query( bpmRange, bpmCount, jamCount ) )
+                {
+                    bpmCounts.emplace_back( BPMCountTuple{ (uint32_t)std::round( bpmRange ), bpmCount, jamCount } );
+                }
+            }
+            else
+            {
+                auto query = Warehouse::SqlDB::query<_bpmGroupsByScaleAndRoot_ByRiffCount_NoRules>();
+                while ( query( bpmRange, bpmCount, jamCount ) )
+                {
+                    bpmCounts.emplace_back( BPMCountTuple{ (uint32_t)std::round( bpmRange ), bpmCount, jamCount } );
+                }
             }
         }
-        else
+
+    }
+    else
+    {
+        static constexpr char _bpmGroupsByScaleAndRoot_ByRiffCount[] = R"(
+            select 
+              round(BPMrnd) as BPM,
+              ( ( root << 8 ) | scale ) as rootScale,
+              count(1) as RiffCount,
+              count(distinct OwnerJamCID) as UniqueJamCount
+            from 
+              riffs 
+            where 
+              rootScale in carray( ?1, ?2 )
+            group by 
+              BPM 
+            order by 
+              RiffCount desc;
+        )";
+        static constexpr char _bpmGroupsByScaleAndRoot_ByBPM[] = R"(
+            select 
+              round(BPMrnd) as BPM,
+              ( ( root << 8 ) | scale ) as rootScale,
+              count(1) as RiffCount,
+              count(distinct OwnerJamCID) as UniqueJamCount
+            from 
+              riffs 
+            where 
+              rootScale in carray( ?1, ?2 )
+            group by 
+              BPM 
+            order by 
+              BPM desc;
+        )";
+
+        absl::InlinedVector< int32_t, 16 > rootScaleHashList;
+
+        // create the merged root/scale values to pass in as a search list, matching how they are encoded in the SQL : ((root << 8) | scale)
+        for ( const auto rspair : keySearchPairs.pairs )
         {
-            auto query = Warehouse::SqlDB::query<_bpmGroupsByScaleAndRoot_ByRiffCount>( scales, scalesCount, roots, rootsCount );
-            while ( query( bpmRange, bpmCount, jamCount ) )
+            const int32_t rshash = (rspair.root << 8) | rspair.scale;
+            rootScaleHashList.emplace_back( rshash );
+        }
+
+        const int32_t* rootScalePtr = rootScaleHashList.data();
+        const int32_t rootScaleCount = static_cast<int32_t>(rootScaleHashList.size());
+
+        {
+            float bpmRange;
+            int32_t _hash;
+            uint32_t bpmCount;
+            uint32_t jamCount;
+
+            if ( sortOn == BPMCountSort::ByBPM )
             {
-                bpmCounts.emplace_back( BPMCountTuple{ (uint32_t)std::round( bpmRange ), bpmCount, jamCount } );
+                auto query = Warehouse::SqlDB::query<_bpmGroupsByScaleAndRoot_ByBPM>( rootScalePtr, rootScaleCount );
+                while ( query( bpmRange, _hash, bpmCount, jamCount ) )
+                {
+                    bpmCounts.emplace_back( BPMCountTuple{ (uint32_t)std::round( bpmRange ), bpmCount, jamCount } );
+                }
+            }
+            else
+            {
+                auto query = Warehouse::SqlDB::query<_bpmGroupsByScaleAndRoot_ByRiffCount>( rootScalePtr, rootScaleCount );
+                while ( query( bpmRange, _hash, bpmCount, jamCount ) )
+                {
+                    bpmCounts.emplace_back( BPMCountTuple{ (uint32_t)std::round( bpmRange ), bpmCount, jamCount } );
+                }
             }
         }
     }
@@ -1580,42 +1645,92 @@ std::size_t Warehouse::filterRiffsByBPM( const RiffKeySearchParameters& keySearc
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-bool Warehouse::fetchRandomRiffBySeed( const RiffKeySearchParameters& keySearchParam, const uint32_t BPM, const int32_t seedValue, endlesss::types::RiffComplete& result ) const
+bool Warehouse::fetchRandomRiffBySeed( const endlesss::constants::RootScalePairs& keySearchPairs, const uint32_t BPM, const int32_t seedValue, endlesss::types::RiffComplete& result ) const
 {
+    Warehouse::SqlDB::TransactionGuard txn;
+
     static constexpr char _randomFilteredRiff[] = R"(
             select 
+              round(BPMrnd) as BPM,
+              ( ( root << 8 ) | scale ) as rootScale,
               RiffCID 
             from 
               riffs 
             where 
-              scale in carray(?1, ?2) 
-              and root in carray(?3, ?4) 
-              and round(BPMrnd) = ?5 
-              and (OwnerJamCID is not ?6) 
+              rootScale = ?1
+              and BPM = ?2
+              and (OwnerJamCID is not ?3) 
             order by 
-              SEEDED_RANDOM(?7) 
+              SEEDED_RANDOM(?4) 
+            limit 
+              1
+        )";
+    static constexpr char _randomFilteredRiff_NoRules[] = R"(
+            select 
+              round(BPMrnd) as BPM,
+              RiffCID 
+            from 
+              riffs 
+            where 
+              BPM = ?1
+              and (OwnerJamCID is not ?2) 
+            order by 
+              SEEDED_RANDOM(?3) 
             limit 
               1
         )";
 
-    ABSL_ASSERT( !keySearchParam.m_root.empty() && !keySearchParam.m_scale.empty() );
 
-    const int* roots = keySearchParam.m_root.data();
-    const int32_t rootsCount = static_cast<int32_t>(keySearchParam.m_root.size());
-    const int* scales = keySearchParam.m_scale.data();
-    const int32_t scalesCount = static_cast<int32_t>(keySearchParam.m_scale.size());
-
+    if ( keySearchPairs.searchMode == endlesss::constants::HarmonicSearch::NoRules )
     {
-        Warehouse::SqlDB::TransactionGuard txn;
+        auto query = Warehouse::SqlDB::query<_randomFilteredRiff_NoRules>( BPM, cVirtualJamName.data(), seedValue );
 
-        auto query = Warehouse::SqlDB::query<_randomFilteredRiff>( scales, scalesCount, roots, rootsCount, BPM, cVirtualJamName.data(), seedValue );
-
+        float bpmRange;
         std::string_view riffCID;
-        if ( query( riffCID ) )
+
+        if ( query( bpmRange, riffCID ) )
         {
             return fetchSingleRiffByID( endlesss::types::RiffCouchID{ riffCID }, result );
         }
     }
+    else
+    {
+        math::RNG32 rsRng( seedValue );
+
+        // pick a random key/root pair, create the hash value to pass in
+        const int32_t chosenPairIndex = rsRng.genInt32( 0, static_cast<int32_t>(keySearchPairs.pairs.size() - 1) );
+        const auto rspair = keySearchPairs.pairs[chosenPairIndex];
+        
+        const int32_t rshash = (rspair.root << 8) | rspair.scale;
+
+#if 0
+        for ( const auto& paired : keySearchPairs.pairs )
+        {
+            blog::database( FMTX( "fetchRandomRiffBySeed | {} {}" ),
+                endlesss::constants::cRootNames[paired.root],
+                endlesss::constants::cScaleNames[paired.scale] );
+        }
+        blog::database( FMTX( "                      | {} | {} {}" ),
+            rshash,
+            endlesss::constants::cRootNames[rspair.root],
+            endlesss::constants::cScaleNames[rspair.scale] );
+#endif
+
+        {
+
+            auto query = Warehouse::SqlDB::query<_randomFilteredRiff>( rshash, BPM, cVirtualJamName.data(), seedValue );
+
+            float bpmRange;
+            int32_t _hash;
+            std::string_view riffCID;
+
+            if ( query( bpmRange, _hash, riffCID ) )
+            {
+                return fetchSingleRiffByID( endlesss::types::RiffCouchID{ riffCID }, result );
+            }
+        }
+    }
+
     return false;
 }
 

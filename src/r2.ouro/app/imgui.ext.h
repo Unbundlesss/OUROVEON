@@ -323,8 +323,11 @@ bool ValueArrayComboBox(
 
     ImGui::AlignTextToFramePadding();
 
-    ImGui::TextUnformatted( title );
-    ImGui::SameLine();
+    if ( title != nullptr )
+    {
+        ImGui::TextUnformatted( title );
+        ImGui::SameLine();
+    }
 
     bool changed = false;
     if ( ImGui::BeginCombo( label, previewString.c_str() ) )

@@ -2222,10 +2222,12 @@ int LoreApp::EntrypointOuro()
                 // button to toggle end-chain mute on audio engine (but leave processing, WAV output etc intact)
                 const bool isMuted = m_mdAudio->isMuted();
                 {
-                    ImGui::Scoped::ToggleButton bypassOn( isMuted );
-                    if ( ImGui::Button( ICON_FA_VOLUME_XMARK, ImVec2( 48.0f, 48.0f ) ) )
                     {
-                        m_mdAudio->toggleMute();
+                        ImGui::Scoped::ToggleButton bypassOn( isMuted );
+                        if ( ImGui::Button( ICON_FA_VOLUME_XMARK, ImVec2( 48.0f, 48.0f ) ) )
+                        {
+                            m_mdAudio->toggleMute();
+                        }
                     }
                     ImGui::CompactTooltip( "Mute final audio output\nThis does not affect streaming or disk-recording" );
                 }

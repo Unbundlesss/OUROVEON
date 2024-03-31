@@ -105,12 +105,6 @@ struct Weaver::State
     // take the current state of m_generatedResult, bundle it into the DB and send it out to be played
     void finaliseAndSendVirtualRiff( endlesss::toolkit::Warehouse& warehouse );
 
-    // expand root search using circle-of-fifths
-    static void addAdjacentRootsFromCoT( endlesss::toolkit::Warehouse::RiffKeySearchParameters& keySearch, int32_t initialRoot )
-    {
-        keySearch.m_root.emplace_back( endlesss::constants::cRoot_CoT_CW[initialRoot] );
-        keySearch.m_root.emplace_back( endlesss::constants::cRoot_CoT_CCW[initialRoot] );
-    }
 
     using PerChannelIdentities = std::array< endlesss::types::RiffIdentity, 8 >;
 
@@ -121,9 +115,11 @@ struct Weaver::State
         {
             archive( CEREAL_NVP( m_virtualRiff )
                    , CEREAL_NVP( m_identities )
-                   , CEREAL_NVP( m_ref )
-                   , CEREAL_NVP( m_jamName )
-                   , CEREAL_NVP( m_timeDelta )
+                   , CEREAL_NVP( m_stemRef )
+                   , CEREAL_NVP( m_stemJamName )
+                   , CEREAL_NVP( m_stemTimeDelta )
+                   , CEREAL_NVP( m_stemRoot )
+                   , CEREAL_NVP( m_stemScale )
             );
         }
 
@@ -132,9 +128,11 @@ struct Weaver::State
 
         // ui data
         PerChannelIdentities            m_identities;
-        std::array< std::string, 8 >    m_ref;
-        std::array< std::string, 8 >    m_jamName;
-        std::array< std::string, 8 >    m_timeDelta;
+        std::array< std::string, 8 >    m_stemRef;
+        std::array< std::string, 8 >    m_stemJamName;
+        std::array< std::string, 8 >    m_stemTimeDelta;
+        std::array< int32_t, 8 >        m_stemRoot;
+        std::array< int32_t, 8 >        m_stemScale;
 
         void clearChannel( std::size_t index )
         {
@@ -143,10 +141,12 @@ struct Weaver::State
             m_virtualRiff.gains[index]          = 0;
             m_virtualRiff.stems[index]          = {};
 
-            m_identities[index]     = {};
-            m_ref[index]            = {};
-            m_jamName[index]        = {};
-            m_timeDelta[index]      = {};
+            m_identities[index]         = {};
+            m_stemRef[index]            = {};
+            m_stemJamName[index]        = {};
+            m_stemTimeDelta[index]      = {};
+            m_stemRoot[index]           = {};
+            m_stemScale[index]          = {};
         }
     };
 
@@ -181,9 +181,12 @@ struct Weaver::State
     std::array< bool, 8 >           m_generatedChannelLock;
     std::array< bool, 8 >           m_generatedChannelClearOut;
 
+
+    endlesss::constants::HarmonicSearch::Enum                               // other key/modes to include in a search to expand the potential space
+                                    m_harmonicSearch            = endlesss::constants::HarmonicSearch::CloselyRelated;
+
     bool                            m_awaitingVirualJamClear    = true;     // if true, purge all the virtual riff records from the warehouse to avoid it bloating infinitely
     bool                            m_awaitingBpmSearch         = true;     // BPM search runs each time we change search space parameters
-    bool                            m_addAdjacentKeys           = true;     // if true, add nearby keys around circle-of-fifths to chosen root
     bool                            m_ignoreAnnoyingPresets     = true;     // fuck off, Eardrop
     bool                            m_autoSendToBOND            = false;    // automatically send committed riffs across BOND once we have word that they got loaded & dequeued
     std::atomic_bool                m_generationInProgress      = false;
@@ -273,19 +276,21 @@ void Weaver::State::generateNewRiff(
             std::vector< float >            potentialStemBarLength;
 
             // setup a search query
-            endlesss::toolkit::Warehouse::RiffKeySearchParameters keySearch;
-            keySearch.m_root.emplace_back( m_generatedResult.m_virtualRiff.root );
-            keySearch.m_scale.emplace_back( m_generatedResult.m_virtualRiff.scale );
-            keySearch.m_ignoreAnnoyingPresets = m_ignoreAnnoyingPresets;
-
-            if ( m_addAdjacentKeys )
-                addAdjacentRootsFromCoT( keySearch, m_generatedResult.m_virtualRiff.root );
+            endlesss::constants::RootScalePair initialRootScale{ m_generatedResult.m_virtualRiff.root, m_generatedResult.m_virtualRiff.scale };
+            endlesss::constants::RootScalePairs adjacents;
+            {
+                adjacents.searchMode = m_harmonicSearch;
+                adjacents.pairs.emplace_back( initialRootScale );
+                endlesss::constants::computeTonalAdjacents(
+                    initialRootScale,
+                    adjacents );
+            }
 
             for ( uint32_t chI = 0; chI < 8; chI++ )
             {
                 endlesss::types::RiffComplete randomRiff;
                 if ( warehouse.fetchRandomRiffBySeed(
-                    keySearch,
+                    adjacents,
                     m_bpmCounts[m_bpmSelection].m_BPM,
                     rng.genInt32(),
                     randomRiff ) )
@@ -363,14 +368,17 @@ void Weaver::State::generateNewRiff(
                             usedStemIDs.emplace( potentialStemIDs[chosenStemIndex] );
 
                             // stash data about it for display on the UI
-                            m_generatedResult.m_ref[availableChannelIndex] = fmt::format( FMTX( "[R:{}]\n[S:{}]" ),
+                            m_generatedResult.m_stemRef[availableChannelIndex] = fmt::format( FMTX( "[R:{}]\n[S:{}]" ),
                                 randomRiff.riff.couchID,
                                 m_generatedResult.m_virtualRiff.stems[availableChannelIndex] );
 
-                            m_generatedResult.m_jamName[availableChannelIndex] = randomRiff.jam.displayName;
+                            m_generatedResult.m_stemJamName[availableChannelIndex] = randomRiff.jam.displayName;
 
                             const auto exportTimeUnix = spacetime::InSeconds( std::chrono::seconds( static_cast<uint64_t>(randomRiff.riff.creationTimeUnix) ) );
-                            m_generatedResult.m_timeDelta[availableChannelIndex] = spacetime::calculateDeltaFromNow( exportTimeUnix ).asPastTenseString( 2 );
+                            m_generatedResult.m_stemTimeDelta[availableChannelIndex] = spacetime::calculateDeltaFromNow( exportTimeUnix ).asPastTenseString( 2 );
+
+                            m_generatedResult.m_stemRoot[availableChannelIndex] = randomRiff.riff.root;
+                            m_generatedResult.m_stemScale[availableChannelIndex] = randomRiff.riff.scale;
                         }
                     }
                 }
@@ -416,15 +424,18 @@ void Weaver::State::buildVirtualRiffFromLive(
 
             m_generatedResult.m_identities[chI] = { liveRiff->m_riffData.jam.couchID, liveRiff->m_riffData.riff.couchID };
 
-            m_generatedResult.m_ref[chI] = fmt::format( FMTX( "[R:{}]\n[S:{}]" ),
+            m_generatedResult.m_stemRef[chI] = fmt::format( FMTX( "[R:{}]\n[S:{}]" ),
                 liveRiff->m_riffData.riff.couchID,
                 m_generatedResult.m_virtualRiff.stems[chI] );
 
 
-            m_generatedResult.m_jamName[chI] = liveRiff->m_riffData.jam.displayName;
+            m_generatedResult.m_stemJamName[chI] = liveRiff->m_riffData.jam.displayName;
 
             const auto exportTimeUnix = spacetime::InSeconds( std::chrono::seconds( static_cast<uint64_t>(liveRiff->m_riffData.stems[chI].creationTimeUnix) ) );
-            m_generatedResult.m_timeDelta[chI] = spacetime::calculateDeltaFromNow( exportTimeUnix ).asPastTenseString( 2 );
+            m_generatedResult.m_stemTimeDelta[chI] = spacetime::calculateDeltaFromNow( exportTimeUnix ).asPastTenseString( 2 );
+
+            m_generatedResult.m_stemRoot[chI] = liveRiff->m_riffData.riff.root;
+            m_generatedResult.m_stemScale[chI] = liveRiff->m_riffData.riff.scale;
         }
         else
         {
@@ -500,63 +511,75 @@ void Weaver::State::imgui(
         ImGui::SeparatorBreak();
         ImGui::Indent( subgroupInsetSize );
 
-        ImGui::PushItemWidth( 80.0f );
-
-        std::string rootPreview = ImGui::ValueArrayPreviewString(
-            endlesss::constants::cRootNames,
-            endlesss::constants::cRootValues,
-            m_searchRoot );
-
-        if ( ImGui::ValueArrayComboBox( "Root :", "##p_root",
-            endlesss::constants::cRootNames,
-            endlesss::constants::cRootValues,
-            m_searchRoot,
-            rootPreview,
-            12.0f ) )
         {
-            resetSelection();
-        }
+            ImGui::PushItemWidth( 80.0f );
 
-        ImGui::PopItemWidth();
+            std::string rootPreview = ImGui::ValueArrayPreviewString(
+                endlesss::constants::cRootNames,
+                endlesss::constants::cRootValues,
+                m_searchRoot );
+
+            if ( ImGui::ValueArrayComboBox( "Root :", "##p_root",
+                endlesss::constants::cRootNames,
+                endlesss::constants::cRootValues,
+                m_searchRoot,
+                rootPreview,
+                12.0f ) )
+            {
+                resetSelection();
+            }
+
+            ImGui::PopItemWidth();
+        }
         ImGui::SameLine( 0, 12.0f );
-        if ( ImGui::Checkbox( " With Adjacent Keys", &m_addAdjacentKeys ) )
         {
-            resetSelection();
+            ImGui::PushItemWidth( 233.0f );
+
+            std::string scalePreview = ImGui::ValueArrayPreviewString(
+                endlesss::constants::cScaleNames,
+                endlesss::constants::cScaleValues,
+                m_searchScale );
+
+            if ( ImGui::ValueArrayComboBox( nullptr, "##p_scale",
+                endlesss::constants::cScaleNames,
+                endlesss::constants::cScaleValues,
+                m_searchScale,
+                scalePreview,
+                .0f ) )
+            {
+                resetSelection();
+            }
+
+            ImGui::PopItemWidth();
         }
 
-        ImGui::SameLine( 0, 70.0f );
-        ImGui::PushItemWidth( 220.0f );
 
-        std::string scalePreview = ImGui::ValueArrayPreviewString(
-            endlesss::constants::cScaleNames,
-            endlesss::constants::cScaleValues,
-            m_searchScale );
-
-        if ( ImGui::ValueArrayComboBox( "Scale :", "##p_scale",
-            endlesss::constants::cScaleNames,
-            endlesss::constants::cScaleValues,
-            m_searchScale,
-            scalePreview,
-            .0f ) )
         {
-            resetSelection();
+            ImGui::SameLine( 0, 20.0f );
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted( "Harmonic Search Mode :" );
+            ImGui::SameLine();
+            ImGui::TextDisabled( "[?]" );
+            ImGui::CompactTooltip( "Include closely related keys or other interesting key/modes" );
         }
 
-        ImGui::PopItemWidth();
 
 
         if ( m_awaitingBpmSearch || m_deferredBPMSearch > 0 )
         {
-            endlesss::toolkit::Warehouse::RiffKeySearchParameters keySearch;
-            keySearch.m_root.emplace_back( m_searchRoot );
-            keySearch.m_scale.emplace_back( m_searchScale );
-            keySearch.m_ignoreAnnoyingPresets = m_ignoreAnnoyingPresets;
+            endlesss::constants::RootScalePair initialRootScale{ m_searchRoot, m_searchScale };
+            endlesss::constants::RootScalePairs adjacents;
+            {
+                adjacents.searchMode = m_harmonicSearch;
+                adjacents.pairs.emplace_back( initialRootScale );
+                endlesss::constants::computeTonalAdjacents(
+                    initialRootScale,
+                    adjacents );
 
-            if ( m_addAdjacentKeys )
-                addAdjacentRootsFromCoT( keySearch, m_searchRoot );
+            }
 
             warehouse.filterRiffsByBPM(
-                keySearch,
+                adjacents,
                 ( m_searchOrdering == 0 ) ? toolkit::Warehouse::BPMCountSort::ByBPM : toolkit::Warehouse::BPMCountSort::ByCount,
                 m_bpmCounts );
 
@@ -576,7 +599,6 @@ void Weaver::State::imgui(
             m_deferredBPMSearch = 0;
         }
 
-        if ( !m_bpmCounts.empty() )
         {
             ImGui::Spacing();
             ImGui::AlignTextToFramePadding();
@@ -585,21 +607,40 @@ void Weaver::State::imgui(
             ImGui::SetNextItemWidth( 325.0f );
 
             bool bpmChoiceChanged = false;
-            if ( ImGui::BeginCombo( "##p_bpm", m_bpmCountsTitles[m_bpmSelection].c_str()) )
+            if ( !m_bpmCounts.empty() )
             {
-                for ( std::size_t optI = 0; optI < m_bpmCountsTitles.size(); optI++ )
+                if ( ImGui::BeginCombo( "##p_bpm", m_bpmCountsTitles[m_bpmSelection].c_str() ) )
                 {
-                    const bool selected = optI == m_bpmSelection;
-                    if ( ImGui::Selectable( m_bpmCountsTitles[optI].c_str(), selected) )
+                    for ( std::size_t optI = 0; optI < m_bpmCountsTitles.size(); optI++ )
                     {
-                        m_bpmSelection = optI;
-                        bpmChoiceChanged = true;
+                        const bool selected = optI == m_bpmSelection;
+                        if ( ImGui::Selectable( m_bpmCountsTitles[optI].c_str(), selected ) )
+                        {
+                            m_bpmSelection = optI;
+                            bpmChoiceChanged = true;
+                        }
+                        if ( selected )
+                            ImGui::SetItemDefaultFocus();
                     }
-                    if ( selected )
-                        ImGui::SetItemDefaultFocus();
+                    ImGui::EndCombo();
                 }
-                ImGui::EndCombo();
             }
+            else
+            {
+                std::string customNote = " - No Riffs Found - ";
+                ImGui::InputText( "###note", &customNote, ImGuiInputTextFlags_ReadOnly );
+            }
+
+            {
+                ImGui::SameLine( 0, 18.0f );
+                ImGui::PushItemWidth( 280.0f );
+                if ( endlesss::constants::HarmonicSearch::ImGuiCombo( "##harmonic", m_harmonicSearch ) )
+                {
+                    resetSelection();
+                }
+                ImGui::PopItemWidth();
+            }
+
             {
                 ImGui::AlignTextToFramePadding();
                 ImGui::TextUnformatted( "       Sort by" );
@@ -747,25 +788,30 @@ void Weaver::State::imgui(
 
                     ImGui::TableNextColumn();
                     {
-                        ImGui::Scoped::Disabled sd( m_generatedResult.m_ref[chI].empty() );
+                        ImGui::Scoped::Disabled sd( m_generatedResult.m_stemRef[chI].empty() );
                         if ( ImGui::Button( ICON_FA_GRIP, {-1, 0}) )
                         {
                             m_eventBusClient.Send< ::events::RequestNavigationToRiff >( m_generatedResult.m_identities[chI] );
                         }
-                        ImGui::CompactTooltip( m_generatedResult.m_ref[chI] );
+                        ImGui::CompactTooltip( m_generatedResult.m_stemRef[chI] );
                     }
 
                     ImGui::TableNextColumn();
-                    if ( !m_generatedResult.m_jamName[chI].empty() )
-                        ImGui::TextUnformatted( endlesss::constants::cRootNames[m_generatedResult.m_virtualRiff.root] );
+                    {
+                        if ( !m_generatedResult.m_stemJamName[chI].empty() )
+                        {
+                            ImGui::TextUnformatted( endlesss::constants::cRootNames[m_generatedResult.m_stemRoot[chI]] );
+                            ImGui::CompactTooltip( endlesss::constants::cScaleNames[m_generatedResult.m_stemScale[chI]] );
+                        }
+                    }
 
                     ImGui::TableNextColumn();
                     ImGui::SetNextItemWidth( -FLT_MIN );
-                    ImGui::InputText( "##jam_name", &m_generatedResult.m_jamName[chI], ImGuiInputTextFlags_ReadOnly );
+                    ImGui::InputText( "##jam_name", &m_generatedResult.m_stemJamName[chI], ImGuiInputTextFlags_ReadOnly );
 
                     ImGui::TableNextColumn();
                     ImGui::SetNextItemWidth( -FLT_MIN );
-                    ImGui::InputText( "##time_delta", &m_generatedResult.m_timeDelta[chI], ImGuiInputTextFlags_ReadOnly );
+                    ImGui::InputText( "##time_delta", &m_generatedResult.m_stemTimeDelta[chI], ImGuiInputTextFlags_ReadOnly );
 
 
                     {

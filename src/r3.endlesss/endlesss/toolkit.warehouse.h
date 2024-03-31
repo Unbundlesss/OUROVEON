@@ -12,6 +12,7 @@
 #include "base/text.h"
 #include "base/operations.h"
 #include "spacetime/chronicle.h"
+#include "endlesss/core.constants.h"
 #include "endlesss/ids.h"
 #include "endlesss/api.h"
 
@@ -263,13 +264,6 @@ struct Warehouse
         const int32_t stemIndex,    // 0-base stem index to modify
         const endlesss::types::StemCouchID& newStemID );
 
-    struct RiffKeySearchParameters
-    {
-        std::vector<int32_t>    m_scale;
-        std::vector<int32_t>    m_root;
-        bool                    m_ignoreAnnoyingPresets = true;
-    };
-
     // used to find the ranges of rounded BPMs given scale/root choices, and how many riffs are associated with that BPM
     // returns size of the populated bpmCounts vector
     struct BPMCountTuple
@@ -283,10 +277,10 @@ struct Warehouse
         ByBPM,
         ByCount
     };
-    std::size_t filterRiffsByBPM( const RiffKeySearchParameters& keySearchParam, const BPMCountSort sortOn, std::vector< BPMCountTuple >& bpmCounts ) const;
+    std::size_t filterRiffsByBPM( const endlesss::constants::RootScalePairs& keySearchPairs, const BPMCountSort sortOn, std::vector< BPMCountTuple >& bpmCounts ) const;
 
 
-    bool fetchRandomRiffBySeed( const RiffKeySearchParameters& keySearchParam, const uint32_t BPM, const int32_t seedValue, endlesss::types::RiffComplete& result ) const;
+    bool fetchRandomRiffBySeed( const endlesss::constants::RootScalePairs& keySearchPairs, const uint32_t BPM, const int32_t seedValue, endlesss::types::RiffComplete& result ) const;
 
 
     // -----------------------------------------------------------------------------------------------------------------
