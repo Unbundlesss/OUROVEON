@@ -36,6 +36,7 @@ static constexpr std::array<const char*, 18 > cScaleNames =
   /* 17 */  "Chromatic"                 // 
 };
 
+// used when creating RootScalePair
 enum EnumScale : int8_t
 {
     ES_MajorIonian,
@@ -446,15 +447,21 @@ inline void computeTonalAdjacents( const RootScalePair rootScale, RootScalePairs
         {
             if ( addCloselyRelated )
             {
-                const int32_t closeKey1 = IncWrapRoot( 0 );             // C   -> C
-                results.pairs.emplace_back( closeKey1, ES_MajorIonian );
+                results.pairs.emplace_back( rootScale.root, ES_MajorIonian );
             }
         }
         break;
 
         case 9: // Suspended Pent
         {
-
+            if ( addCloselyRelated )
+            {
+                results.pairs.emplace_back( rootScale.root, ES_MajorIonian );
+            }
+            if ( addInteresting )
+            {
+                results.pairs.emplace_back( rootScale.root, ES_Dorian );
+            }
         }
         break;
 
@@ -500,21 +507,27 @@ inline void computeTonalAdjacents( const RootScalePair rootScale, RootScalePairs
         {
             if ( addCloselyRelated )
             {
-                const int32_t closeKey1 = IncWrapRoot( 0 );             // C   -> C
-                results.pairs.emplace_back( closeKey1, ES_MajorIonian );
+                results.pairs.emplace_back( rootScale.root, ES_MajorIonian );
             }
         }
         break;
 
         case 16: // Whole Tone
         {
-
+            if ( addInteresting )
+            {
+                results.pairs.emplace_back( rootScale.root, ES_Dorian );
+                results.pairs.emplace_back( rootScale.root, ES_Phrygian );
+            }
         }
         break;
 
         case 17: // Chromatic
         {
-
+            if ( addInteresting )
+            {
+                results.pairs.emplace_back( rootScale.root, ES_WholeTone );
+            }
         }
         break;
     }

@@ -106,6 +106,22 @@ struct Weaver::State
     void finaliseAndSendVirtualRiff( endlesss::toolkit::Warehouse& warehouse );
 
 
+    endlesss::constants::RootScalePairs getRootScalePairsForCurrentSearch() const
+    {
+        endlesss::constants::RootScalePairs adjacents;
+        {
+            endlesss::constants::RootScalePair initialRootScale{ m_searchRoot, m_searchScale };
+
+            adjacents.searchMode = m_harmonicSearch;
+            adjacents.pairs.emplace_back( initialRootScale );
+            endlesss::constants::computeTonalAdjacents(
+                initialRootScale,
+                adjacents );
+        }
+        return adjacents;
+    }
+
+
     using PerChannelIdentities = std::array< endlesss::types::RiffIdentity, 8 >;
 
     struct GeneratedResult
@@ -166,6 +182,7 @@ struct Weaver::State
 
     uint32_t                        m_searchRoot = 0;
     uint32_t                        m_searchScale = 0;
+    int64_t                         m_searchLockedBPM = 0;
     int64_t                         m_deferredBPMSearch = -1;               // set to >0 to do a latent match on a searched root/scale in the next tick
 
     std::vector< endlesss::toolkit::Warehouse::BPMCountTuple >
@@ -239,6 +256,10 @@ void Weaver::State::generateNewRiff(
             m_generatedResult.m_virtualRiff.scale = m_searchScale;
             m_generatedResult.m_virtualRiff.barLength = 4;
             m_generatedResult.m_virtualRiff.BPMrnd = static_cast<float>(m_bpmCounts[m_bpmSelection].m_BPM);
+
+            // overwrite with locked BPM value, if applied
+            if ( m_searchLockedBPM > 0 )
+                m_generatedResult.m_virtualRiff.BPMrnd = static_cast<float>(m_searchLockedBPM);
 
             // clean out any unlocked channels
             for ( uint32_t chI = 0; chI < 8; chI++ )
@@ -552,32 +573,43 @@ void Weaver::State::imgui(
 
             ImGui::PopItemWidth();
         }
+        ImGui::Spacing();
+        {
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted( "       Sort by" );
 
+            ImGui::SameLine();
+            if ( ImGui::RadioButton( "BPM", &m_searchOrdering, 0 ) )
+                resetSelection();
+            ImGui::SameLine();
+            if ( ImGui::RadioButton( "Riff Count", &m_searchOrdering, 1 ) )
+                resetSelection();
+        }
+
+        endlesss::constants::RootScalePairs adjacents = getRootScalePairsForCurrentSearch();
 
         {
-            ImGui::SameLine( 0, 20.0f );
+            ImGui::SameLine( 0, 120.0f );
             ImGui::AlignTextToFramePadding();
             ImGui::TextUnformatted( "Harmonic Search Mode :" );
             ImGui::SameLine();
             ImGui::TextDisabled( "[?]" );
-            ImGui::CompactTooltip( "Include closely related keys or other interesting key/modes" );
+            if ( ImGui::IsItemHovered( ImGuiHoveredFlags_DelayNormal ) )
+            {
+                std::string fullHarmonicTip = "Include closely related keys or other interesting key/modes; currently:\n";
+                for ( const auto& adj : adjacents.pairs )
+                {
+                    fullHarmonicTip += "\n";
+                    fullHarmonicTip += endlesss::constants::cRootNames[adj.root];
+                    fullHarmonicTip += " ";
+                    fullHarmonicTip += endlesss::constants::cScaleNames[adj.scale];
+                }
+                ImGui::CompactTooltip( fullHarmonicTip );
+            }
         }
-
-
 
         if ( m_awaitingBpmSearch || m_deferredBPMSearch > 0 )
         {
-            endlesss::constants::RootScalePair initialRootScale{ m_searchRoot, m_searchScale };
-            endlesss::constants::RootScalePairs adjacents;
-            {
-                adjacents.searchMode = m_harmonicSearch;
-                adjacents.pairs.emplace_back( initialRootScale );
-                endlesss::constants::computeTonalAdjacents(
-                    initialRootScale,
-                    adjacents );
-
-            }
-
             warehouse.filterRiffsByBPM(
                 adjacents,
                 ( m_searchOrdering == 0 ) ? toolkit::Warehouse::BPMCountSort::ByBPM : toolkit::Warehouse::BPMCountSort::ByCount,
@@ -589,7 +621,7 @@ void Weaver::State::imgui(
             for ( const auto& bpmCount : m_bpmCounts )
             {
                 m_bpmCountsTitles.emplace_back( fmt::format( FMTX( " {0:4} BPM ( {1} riffs, {2} jams )" ), bpmCount.m_BPM, bpmCount.m_riffCount, bpmCount.m_jamCount ) );
-                if ( m_deferredBPMSearch == bpmCount.m_BPM )
+                if ( m_deferredBPMSearch == bpmCount.m_BPM || m_searchLockedBPM == bpmCount.m_BPM )
                 {
                     m_bpmSelection = m_bpmCountsTitles.size() - 1;
                 }
@@ -598,9 +630,8 @@ void Weaver::State::imgui(
             m_awaitingBpmSearch = false;
             m_deferredBPMSearch = 0;
         }
-
+        ImGui::Spacing();
         {
-            ImGui::Spacing();
             ImGui::AlignTextToFramePadding();
             ImGui::TextUnformatted( " BPM :");
             ImGui::SameLine();
@@ -640,27 +671,45 @@ void Weaver::State::imgui(
                 }
                 ImGui::PopItemWidth();
             }
-
             {
+                // align with above
                 ImGui::AlignTextToFramePadding();
-                ImGui::TextUnformatted( "       Sort by" );
+                ImGui::TextUnformatted( "      " );
+                ImGui::SameLine();
 
-                ImGui::SameLine();
-                if ( ImGui::RadioButton( "BPM", &m_searchOrdering, 0 ) )
-                    resetSelection();
-                ImGui::SameLine();
-                if ( ImGui::RadioButton( "Riff Count", &m_searchOrdering, 1 ) )
-                    resetSelection();
+                // verbose way to get a lock-to-a-BPM option to keep things nailed to a tempo if desired
+                {
+                    // find a potential BPM to lock to - usually what is selected in the dropdown, if we have it
+                    int64_t targetLockBPM = static_cast<int64_t>( m_generatedResult.m_virtualRiff.BPMrnd );
+                    if ( !m_bpmCounts.empty() )
+                        targetLockBPM = m_bpmCounts[m_bpmSelection].m_BPM;
+
+                    // is the BPM already locked? show what we got and offer to unlatch it
+                    if ( m_searchLockedBPM > 0 )
+                    {
+                        bool lockedToBPM = true;
+                        if ( ImGui::Checkbox( fmt::format( FMTX( "Locked BPM to {}" ), m_searchLockedBPM ).c_str(), &lockedToBPM ) )
+                        {
+                            m_searchLockedBPM = 0;
+                        }
+                    }
+                    // not locked, show the option to do so
+                    else
+                    {
+                        bool lockedToBPM = false;
+                        if ( ImGui::Checkbox( fmt::format( FMTX( "Lock BPM to {}" ), targetLockBPM ).c_str(), &lockedToBPM ) )
+                        {
+                            m_searchLockedBPM = targetLockBPM;
+                        }
+                    }
+                }
             }
-
 
 
             ImGui::Unindent( subgroupInsetSize );
 
             ImGui::Spacing();
-            ImGui::Spacing();
             ImGui::SeparatorBreak();
-            ImGui::Spacing();
             ImGui::Spacing();
 
             ImGui::TextColored( colour::shades::callout.light(), "Generation" );

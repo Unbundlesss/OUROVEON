@@ -1647,8 +1647,6 @@ std::size_t Warehouse::filterRiffsByBPM( const endlesss::constants::RootScalePai
 // ---------------------------------------------------------------------------------------------------------------------
 bool Warehouse::fetchRandomRiffBySeed( const endlesss::constants::RootScalePairs& keySearchPairs, const uint32_t BPM, const int32_t seedValue, endlesss::types::RiffComplete& result ) const
 {
-    Warehouse::SqlDB::TransactionGuard txn;
-
     static constexpr char _randomFilteredRiff[] = R"(
             select 
               round(BPMrnd) as BPM,
@@ -1657,11 +1655,11 @@ bool Warehouse::fetchRandomRiffBySeed( const endlesss::constants::RootScalePairs
             from 
               riffs 
             where 
-              rootScale = ?1
-              and BPM = ?2
-              and (OwnerJamCID is not ?3) 
+              rootScale in carray( ?1, ?2 )
+              and BPM = ?3
+              and (OwnerJamCID is not ?4) 
             order by 
-              SEEDED_RANDOM(?4) 
+              SEEDED_RANDOM(?5) 
             limit 
               1
         )";
@@ -1683,6 +1681,8 @@ bool Warehouse::fetchRandomRiffBySeed( const endlesss::constants::RootScalePairs
 
     if ( keySearchPairs.searchMode == endlesss::constants::HarmonicSearch::NoRules )
     {
+        Warehouse::SqlDB::TransactionGuard txn;
+
         auto query = Warehouse::SqlDB::query<_randomFilteredRiff_NoRules>( BPM, cVirtualJamName.data(), seedValue );
 
         float bpmRange;
@@ -1695,13 +1695,17 @@ bool Warehouse::fetchRandomRiffBySeed( const endlesss::constants::RootScalePairs
     }
     else
     {
-        math::RNG32 rsRng( seedValue );
+        absl::InlinedVector< int32_t, 16 > rootScaleHashList;
 
-        // pick a random key/root pair, create the hash value to pass in
-        const int32_t chosenPairIndex = rsRng.genInt32( 0, static_cast<int32_t>(keySearchPairs.pairs.size() - 1) );
-        const auto rspair = keySearchPairs.pairs[chosenPairIndex];
-        
-        const int32_t rshash = (rspair.root << 8) | rspair.scale;
+        // create the merged root/scale values to pass in as a search list, matching how they are encoded in the SQL : ((root << 8) | scale)
+        for ( const auto rspair : keySearchPairs.pairs )
+        {
+            const int32_t rshash = (rspair.root << 8) | rspair.scale;
+            rootScaleHashList.emplace_back( rshash );
+        }
+
+        const int32_t* rootScalePtr = rootScaleHashList.data();
+        const int32_t rootScaleCount = static_cast<int32_t>(rootScaleHashList.size());
 
 #if 0
         for ( const auto& paired : keySearchPairs.pairs )
@@ -1717,8 +1721,9 @@ bool Warehouse::fetchRandomRiffBySeed( const endlesss::constants::RootScalePairs
 #endif
 
         {
+            Warehouse::SqlDB::TransactionGuard txn;
 
-            auto query = Warehouse::SqlDB::query<_randomFilteredRiff>( rshash, BPM, cVirtualJamName.data(), seedValue );
+            auto query = Warehouse::SqlDB::query<_randomFilteredRiff>( rootScalePtr, rootScaleCount, BPM, cVirtualJamName.data(), seedValue );
 
             float bpmRange;
             int32_t _hash;
