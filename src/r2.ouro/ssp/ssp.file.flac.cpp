@@ -71,7 +71,8 @@ struct FLACWriter::StreamInstance final : public FLAC::Encoder::File,
 
         if ( m_flacFileHandle != nullptr )
         {
-            fclose( m_flacFileHandle ); // NB this fires a double-close error when testing on Linux
+            // fclose( m_flacFileHandle ); 20240405 - disabled this trusting in the below:
+                                        // NB this fires a double-close error when testing on Linux
                                         // I think technically we can not fclose this, based on xiph docs
                                         // "The file becomes owned by the encoder and should not be manipulated by the client while encoding."
                                         // " Unless file is stdout, it will be closed when FLAC__stream_encoder_finish() is called. "
