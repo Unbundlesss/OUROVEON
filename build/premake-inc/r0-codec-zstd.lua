@@ -30,6 +30,12 @@ project "r0-zstd"
         LibRoot.Zstd .. "/**.c",
         LibRoot.Zstd .. "/**.h",
     }
+    filter "system:linux"
+        files
+        {
+            LibRoot.Zstd .. "/**.S",
+        }
+    filter {}
 
 ModuleRefLink["zstd"] = function()
     links { "r0-zstd" }
