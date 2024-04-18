@@ -5,6 +5,20 @@
 # sudo apt install libopus-dev libasound2-dev libjack-jackd2-dev jackd2
 # sudo apt install libssl-dev libsodium-dev libflac-dev libflac++-dev
 
+
+# Fedora 39
+# dnf install requirements
+#
+#       libX11-devel libXcursor-devel libXrandr-devel libXinerama-devel libXi-devel mesa-libGL-devel
+#       clang lld
+#       freetype-devel libXxf86vm-devel
+#       pipewire-jack-audio-connection-kit-devel alsa-lib-devel
+#       libopenenc-devel openssl-devel libsodim-devel flac-devel
+#
+# `-fuse-ld=lld` in LDFLAGS
+# requires `-L/usr/lib64/pipewire-0.3/jack` added to LDFLAGS to find the jack lib
+#
+
 ./premake-bin/linux/premake5 --file=premake.lua gmake2
 
 
