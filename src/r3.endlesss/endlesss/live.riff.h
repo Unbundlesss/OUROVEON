@@ -36,14 +36,19 @@ struct RiffProgression
 
     constexpr void reset()
     {
-        m_playbackPercentage = 0;
-        m_playbackBar        = 0;
-        m_playbackBarSegment = 0;
+        m_playbackPercentage        = 0;
+        m_playbackSegmentPercentage = 0;
+        m_playbackQuarterPercentage = 0;
+        m_playbackBar               = 0;
+        m_playbackBarSegment        = 0;
     }
 
     double      m_playbackPercentage;
+    double      m_playbackSegmentPercentage;
+    double      m_playbackQuarterPercentage;
     int32_t     m_playbackBar;
     int32_t     m_playbackBarSegment;
+    double      m_playbackQuarterTimeSec;
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -67,15 +72,23 @@ struct Riff
     {
         inline void ComputeProgressionAtSample( const uint64_t sampleIndex, RiffProgression& progression ) const
         {
-            const double         sampleTime = (double)sampleIndex * m_rcpSampleRate;
-            const double    riffWrappedTime = std::fmod( sampleTime, m_lengthInSec );
-            const double     riffPercentage = (riffWrappedTime / m_lengthInSec);
-            const double segmentWrappedTime = std::fmod( sampleTime, m_lengthInSecPerBar );
-            const double  segmentPercentage = (segmentWrappedTime / m_lengthInSecPerBar);
+            const double                 sampleTime = (double)sampleIndex * m_rcpSampleRate;
+            const double            riffWrappedTime = std::fmod( sampleTime, m_lengthInSec );
+            const double             riffPercentage = (riffWrappedTime / m_lengthInSec);
+            const double         segmentWrappedTime = std::fmod( sampleTime, m_lengthInSecPerBar );
+            const double          segmentPercentage = (segmentWrappedTime / m_lengthInSecPerBar);
 
-            progression.m_playbackPercentage = riffPercentage;
-            progression.m_playbackBar        = (uint32_t)std::floor( riffPercentage * m_barCount );
-            progression.m_playbackBarSegment = (int32_t)( segmentPercentage * (double)m_quarterBeats );
+            const double        quarterTime = m_lengthInSecPerBar / static_cast<double>(m_quarterBeats);
+            const double         quarterWrappedTime = std::fmod( sampleTime, quarterTime );
+            const double          quarterPercentage = (segmentWrappedTime / quarterTime);
+
+            progression.m_playbackPercentage        = riffPercentage;
+            progression.m_playbackSegmentPercentage = segmentPercentage;
+            progression.m_playbackQuarterPercentage = quarterPercentage;
+            progression.m_playbackBar               = (uint32_t)std::floor( riffPercentage * m_barCount );
+            progression.m_playbackBarSegment        = (int32_t)( segmentPercentage * (double)m_quarterBeats );
+
+            progression.m_playbackQuarterTimeSec    = ( progression.m_playbackQuarterPercentage - static_cast<double>(progression.m_playbackBarSegment) ) * quarterTime;
         }
 
         int32_t     m_quarterBeats = 0;     // X / 4 time signature

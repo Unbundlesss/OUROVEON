@@ -130,6 +130,8 @@ namespace fs = std::filesystem;
 #include "cereal/types/unordered_set.hpp"
 #include "cereal/types/unordered_map.hpp"
 #include "cereal/archives/json.hpp"
+#include "cereal/archives/binary.hpp"
+#include "cereal/archives/adapters.hpp"
 
 // cereal optional add-ins
 #include "optional_json.hpp"

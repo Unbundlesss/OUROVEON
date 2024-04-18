@@ -17,6 +17,7 @@
 #include "app/module.audio.h"
 
 namespace app { struct StoragePaths; }
+namespace ableton { class Link; }
 
 namespace mix {
 
@@ -33,7 +34,7 @@ struct Preview final : public app::module::MixerInterface,
     using AudioBuffer           = app::module::Audio::OutputBuffer;
     using AudioSignal           = app::module::Audio::OutputSignal;
 
-    Preview( const int32_t maxBufferSize, const int32_t sampleRate, base::EventBusClient& eventBusClient );
+    Preview( const int32_t maxBufferSize, const int32_t sampleRate, const std::chrono::microseconds outputLatency, base::EventBusClient& eventBusClient );
     ~Preview();
 
     // app::module::Audio::MixerInterface
@@ -65,12 +66,14 @@ struct Preview final : public app::module::MixerInterface,
         m_drainQueueAndStop = true;
     }
 
+    void enableAbletonLink( bool bEnabled );
 
-
-    inline void setLockTransitionToNextBar( bool onOff ) { m_lockTransitionToNextBar = onOff; }
-    inline bool getLockTransitionToNextBar() const       { return m_lockTransitionToNextBar; }
+    void setLockTransitionToNextBar( bool onOff ) { m_lockTransitionToNextBar = onOff; }
+    bool getLockTransitionToNextBar() const       { return m_lockTransitionToNextBar; }
 
 protected:
+
+    struct AbletonLinkControl;
 
     static constexpr size_t     txBlendBufferSize = 128;
     using TxBlendInterpArray    = std::array< float, txBlendBufferSize >;
@@ -112,6 +115,7 @@ protected:
 
     int32_t                         m_riffPlaybackNudge         = 0;
 
+    AbletonLinkControl*             m_abletonLinkControl        = nullptr;
 
     std::array< float, 8 >          m_txBlendCacheLeft;
     std::array< float, 8 >          m_txBlendCacheRight;
@@ -119,7 +123,6 @@ protected:
     std::array< float, 8 >          m_txBlendActiveRight;
     TxBlendInterpArray              m_txBlendInterp;
     uint32_t                        m_txBlendSamplesRemaining   = 0;
-
 
     endlesss::live::RiffProgression m_playbackProgression;
 
@@ -141,7 +144,7 @@ protected:
     {
         Invalid,
         BeginRecording,
-        StopRecording,
+        StopRecording
     };
     struct EngineCommandData final : public base::BasicCommandType<EngineCommand> { using BasicCommandType::BasicCommandType; };
     using CommandQueue = mcc::ReaderWriterQueue<EngineCommandData>;

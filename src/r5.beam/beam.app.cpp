@@ -28,12 +28,54 @@
 #include "effect/effect.stack.h"
 #include "net/bond.riffpush.h"
 
+#include <ableton/Link.hpp>
+#include <ableton/link/HostTimeFilter.hpp>
+
 
 #define OUROVEON_BEAM           "BEAM"
 #define OUROVEON_BEAM_VERSION   OURO_FRAMEWORK_VERSION "-beta"
 
 using namespace std::chrono_literals;
 
+// ---------------------------------------------------------------------------------------------------------------------
+struct BeamAbletonLinkControl
+{
+    BeamAbletonLinkControl()
+        : m_link( 120.0 )
+    {
+    }
+    ~BeamAbletonLinkControl()
+    {
+        m_link.enable( false );
+    }
+
+    using LinkHostTime = ableton::link::HostTimeFilter<ableton::link::platform::Clock>;
+
+    void Transaction_StopPlaying()
+    {
+        // if the current link state is "playing", snag and change the session to stop it
+        if ( m_linkIsPlaying )
+        {
+            auto linkSessionState = m_link.captureAudioSessionState();
+            {
+                linkSessionState.setIsPlaying(
+                    false,
+                    m_hostTimeFilter.sampleTimeToHostTime( m_sampleTime ) );
+
+                m_linkIsPlaying = false;
+            }
+            m_link.commitAudioSessionState( linkSessionState );
+        }
+    }
+
+
+    ableton::Link               m_link;
+    LinkHostTime                m_hostTimeFilter;
+    std::chrono::microseconds   m_outputLatency;
+    double                      m_sampleTime = 0;
+    int32_t                     m_authorativeInterval = -1;
+    bool                        m_linkIsPlaying = false;
+};
 
 // ---------------------------------------------------------------------------------------------------------------------
 struct MixEngine final : public app::module::MixerInterface,
@@ -191,8 +233,10 @@ struct MixEngine final : public app::module::MixerInterface,
 
     ProgressionConfiguration    m_progression;
 
+    BeamAbletonLinkControl      m_abletonLinkControl;
 
-    MixEngine( const int32_t maxBufferSize, const int32_t sampleRate, base::EventBusClient& eventBusClient )
+
+    MixEngine( const int32_t maxBufferSize, const int32_t sampleRate, const std::chrono::microseconds outputLatency, base::EventBusClient& eventBusClient )
         : RiffMixerBase( maxBufferSize, sampleRate, eventBusClient )
         , m_samplePosition( 0 )
         , m_transitionValue( 0 )
@@ -208,6 +252,7 @@ struct MixEngine final : public app::module::MixerInterface,
         , m_repcomSampleEnd( cSampleCountMax )
         , m_repcomState( RepComState::Unpaused )
     {
+        m_abletonLinkControl.m_outputLatency = outputLatency;
     }
 
     virtual ~MixEngine()
@@ -239,6 +284,11 @@ struct MixEngine final : public app::module::MixerInterface,
     inline void clearCurrentPlayback()
     {
         m_commandQueue.emplace( EngineCommand::ClearCurrentlyPlaying );
+    }
+
+    void enableAbletonLink( bool bEnabled )
+    {
+        m_abletonLinkControl.m_link.enable( bEnabled );
     }
 
 
@@ -481,6 +531,8 @@ void MixEngine::update(
         m_transitionValue       = 0.0f;
         m_repcomRepeatBar       = 0;
 
+        m_abletonLinkControl.m_authorativeInterval = 1;
+
         riffUnpackRequired      = true;
     };
 
@@ -627,6 +679,12 @@ void MixEngine::update(
             }
         }
 
+        // deal with LINK session update with nothing playing
+        {
+            m_abletonLinkControl.Transaction_StopPlaying();
+            m_abletonLinkControl.m_sampleTime += static_cast<double>(samplesToWrite);
+        }
+
         return;
     }
 
@@ -637,6 +695,7 @@ void MixEngine::update(
 
     // compute where we are (roughly) for the UI
     currentRiff->getTimingDetails().ComputeProgressionAtSample( m_samplePosition, m_playbackProgression );
+
 
 
     // update vst time structure with latest state
@@ -883,6 +942,57 @@ void MixEngine::update(
 
     m_stemDataAmalgamSamplesUsed += samplesToWrite;
 
+    // LINK logic
+    if ( currentRiff != nullptr )
+    {
+        const auto& timingData = currentRiff->getTimingDetails();
+
+        // compute timing state when update() began
+        endlesss::live::RiffProgression progressionAtEndOfUpdate;
+        currentRiff->getTimingDetails().ComputeProgressionAtSample(
+            m_samplePosition + samplesToWrite,
+            progressionAtEndOfUpdate );
+
+        const double timingQuantum = static_cast<double>(timingData.m_quarterBeats);
+
+        const auto hostTime = m_abletonLinkControl.m_hostTimeFilter.sampleTimeToHostTime( m_abletonLinkControl.m_sampleTime );
+        m_abletonLinkControl.m_sampleTime += static_cast<double>(samplesToWrite);
+
+        const auto bufferBeginAtOutput = hostTime + m_abletonLinkControl.m_outputLatency;
+
+        auto linkSessionState = m_abletonLinkControl.m_link.captureAudioSessionState();
+
+        // always write our tempo. we are the tempo.
+        linkSessionState.setTempo( timingData.m_bpm, bufferBeginAtOutput );
+
+        // on the arrival of a new riff when nothing was playing, tag IsPlaying in the session state and force
+        // a new 0-beat to match
+        if ( !m_abletonLinkControl.m_linkIsPlaying )
+        {
+            linkSessionState.setIsPlaying( true, bufferBeginAtOutput );
+            linkSessionState.forceBeatAtTime( 0, bufferBeginAtOutput, timingQuantum );
+            m_abletonLinkControl.m_linkIsPlaying = true;
+        }
+
+        if ( progressionAtEndOfUpdate.m_playbackBarSegment != m_playbackProgression.m_playbackBarSegment )
+        {
+            std::chrono::microseconds zeroBeatUsOffset( std::llround( progressionAtEndOfUpdate.m_playbackQuarterTimeSec * 1.0e6 ) );
+
+            if ( progressionAtEndOfUpdate.m_playbackBarSegment == 0 || m_abletonLinkControl.m_authorativeInterval >= 0 )
+                linkSessionState.forceBeatAtTime( progressionAtEndOfUpdate.m_playbackBarSegment, bufferBeginAtOutput + zeroBeatUsOffset, timingQuantum );
+            else
+                linkSessionState.requestBeatAtTime( progressionAtEndOfUpdate.m_playbackBarSegment, bufferBeginAtOutput + zeroBeatUsOffset, timingQuantum );
+
+            if ( m_abletonLinkControl.m_authorativeInterval >= 0 )
+            {
+                m_abletonLinkControl.m_authorativeInterval--;
+                blog::mix( FMTX( "authorativeInterval:{}" ), m_abletonLinkControl.m_authorativeInterval );
+            }
+        }
+
+        m_abletonLinkControl.m_link.commitAudioSessionState( linkSessionState );
+    }
+
     commit( outputBuffer, outputSignal, samplesToWrite );
 }
 
@@ -962,8 +1072,23 @@ int BeamApp::EntrypointOuro()
 
 
     // create and install the mixer engine
-    MixEngine mixEngine( m_mdAudio->getMaximumBufferSize(), m_mdAudio->getSampleRate(), m_appEventBusClient.value() );
+    MixEngine mixEngine(
+        m_mdAudio->getMaximumBufferSize(),
+        m_mdAudio->getSampleRate(),
+        m_mdAudio->getOutputLatencyMs(),
+        m_appEventBusClient.value() );
     m_mdAudio->blockUntil( m_mdAudio->installMixer( &mixEngine ) );
+
+    // LINK controls for the mixer
+    registerMainMenuEntry( 20, "LINK", [&mixEngine]()
+        {
+            static bool LinkEnableFlag = false;
+            if ( ImGui::MenuItem( "Ableton Link", nullptr, &LinkEnableFlag ) )
+            {
+                blog::app( FMTX( "Requesting LINK state : {}" ), LinkEnableFlag ? "enabled" : "disabled" );
+                mixEngine.enableAbletonLink( LinkEnableFlag );
+            }
+        });
 
 #if OURO_FEATURE_VST24
     // VSTs for audio engine

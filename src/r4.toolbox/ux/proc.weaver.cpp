@@ -10,6 +10,7 @@
 #include "pch.h"
 
 #include "base/paging.h"
+#include "base/fio.h"
 #include "base/eventbus.h"
 
 #include "app/imgui.ext.h"
@@ -24,6 +25,8 @@
 #include "mix/common.h"
 
 #include "ux/proc.weaver.h"
+
+#include "zstd.h"
 
 using namespace endlesss;
 
@@ -61,12 +64,89 @@ struct Weaver::State
         {
             blog::app( FMTX( "weaver : unable to load {}" ), m_weaverConfig.StorageFilename );
         }
+
+        // setup compression system for undo/redo packing; don't need high compression, ~6 + the trained dictionary
+        // gives us an average return of 4:1 compression in, uh, 0ms (in debug). given the size of our data, diminishing returns as the rate goes up
+        initCompressionSupport( pathProvider, 6 );
     }
 
     ~State()
     {
+        termCompressionSupport();
         APP_EVENT_UNBIND( MixerRiffChange );
     }
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+private:
+
+    static constexpr std::size_t cCompressionBufferSize = 32 * 1024;    // average generated json is 3-4k so we're giving enormous range here
+
+    // create zstd contexts, load our pre-trained dictionary for packing generated riff results
+    void initCompressionSupport( const config::IPathProvider& pathProvider, int32_t compressionLevel )
+    {
+        // work buffers considerably larger than any json we can ever generate
+        m_zstdCompressionBuffer   = static_cast<int8_t*>( rpmalloc( cCompressionBufferSize ) );
+        m_zstdDecompressionBuffer = static_cast<int8_t*>( rpmalloc( cCompressionBufferSize ) );
+
+        // load the Zstd trained codec dictionary if we can
+        const auto zstdDictionaryPath = pathProvider.getPath( config::IPathProvider::PathFor::SharedData ) / "dict" / "zstd.weaver";
+        absl::StatusOr< base::TBinaryFileBuffer > zstdDictionaryData = base::readBinaryFile( zstdDictionaryPath );
+
+        if ( zstdDictionaryData.ok() )
+        {
+            m_zstdCompressionContext    = ZSTD_createCCtx();
+            m_zstdDecompressionContext  = ZSTD_createDCtx();
+
+            m_zstdCompressionDict       = ZSTD_createCDict( std::data( zstdDictionaryData.value() ), std::size( zstdDictionaryData.value() ), compressionLevel );
+            m_zstdDecompressionDict     = ZSTD_createDDict( std::data( zstdDictionaryData.value() ), std::size( zstdDictionaryData.value() ) );
+        }
+        else
+        {
+            blog::app( FMTX( "weaver : cannot load compression dictionary [{}]" ), zstdDictionaryPath.string() );
+        }
+        if ( m_zstdCompressionContext   == nullptr ||
+             m_zstdCompressionDict      == nullptr ||
+             m_zstdDecompressionContext == nullptr ||
+             m_zstdDecompressionDict    == nullptr )
+        {
+            blog::app( FMTX( "weaver : unable to setup zstd" ) );
+            termCompressionSupport();
+        }
+        else
+        {
+            blog::app( FMTX( "weaver : using zstd {} compression" ), ZSTD_versionString() );
+        }
+    }
+
+    void termCompressionSupport()
+    {
+        rpfree( m_zstdCompressionBuffer );
+        m_zstdCompressionBuffer = nullptr;
+
+        rpfree( m_zstdDecompressionBuffer );
+        m_zstdDecompressionBuffer = nullptr;
+
+        ZSTD_freeCDict( m_zstdCompressionDict );
+        m_zstdCompressionDict = nullptr;
+
+        ZSTD_freeDDict( m_zstdDecompressionDict );
+        m_zstdCompressionDict = nullptr;
+
+        ZSTD_freeDCtx( m_zstdDecompressionContext );
+        m_zstdDecompressionContext = nullptr;
+
+        ZSTD_freeCCtx( m_zstdCompressionContext );
+        m_zstdCompressionContext = nullptr;
+    }
+
+    bool hasCompressionSupport() const
+    {
+        return m_zstdCompressionBuffer != nullptr;
+    }
+
+
+public:
 
     void event_MixerRiffChange( const events::MixerRiffChange* eventData );
 
@@ -103,7 +183,7 @@ struct Weaver::State
         const endlesss::live::Riff* liveRiff );
 
     // take the current state of m_generatedResult, bundle it into the DB and send it out to be played
-    void finaliseAndSendVirtualRiff( endlesss::toolkit::Warehouse& warehouse );
+    void enqeuePlaybackVirtualRiff( endlesss::toolkit::Warehouse& warehouse );
 
 
     endlesss::constants::RootScalePairs getRootScalePairsForCurrentSearch() const
@@ -126,10 +206,17 @@ struct Weaver::State
 
     struct GeneratedResult
     {
+        GeneratedResult()
+        {
+            for ( std::size_t chI = 0; chI < 8; chI++ )
+                clearChannel( chI );
+        }
+
         template<class Archive>
         inline void serialize( Archive& archive )
         {
             archive( CEREAL_NVP( m_virtualRiff )
+                   , CEREAL_NVP( m_virtualIdentity )
                    , CEREAL_NVP( m_identities )
                    , CEREAL_NVP( m_stemRef )
                    , CEREAL_NVP( m_stemJamName )
@@ -141,6 +228,9 @@ struct Weaver::State
 
         // generated riff
         endlesss::types::VirtualRiff    m_virtualRiff;
+
+        // generated IDs used to embed this data in the warehouse so it's visible to other systems (temporarily at least)
+        endlesss::types::RiffIdentity   m_virtualIdentity;
 
         // ui data
         PerChannelIdentities            m_identities;
@@ -166,8 +256,130 @@ struct Weaver::State
         }
     };
 
+private:
+
+    // undo/redo is conceptually pretty simple; we serialize the current result out to JSON
+    // (not binary as there are issues with cereal), then compress it with zstd and stash the result in a fixed length deque
+    // each one will take around 1kb compressed, max, not including housekeeping bits for the containing std::vector
+    static constexpr std::size_t    cMaxUndoRedoSteps = 512;
+
+    void serializeToCompressionDeque( bool bToUndoDeque )
+    {
+        if ( !hasCompressionSupport() )
+            return;
+
+        try
+        {
+            std::ostringstream iss;
+            {
+                cereal::JSONOutputArchive archive( iss, cereal::JSONOutputArchive::Options::NoIndent() );
+                m_generatedResult.serialize( archive );
+            }
+            std::string serialisedResult = iss.str();
+
+            const std::size_t compSize = ZSTD_compress_usingCDict(
+                m_zstdCompressionContext,
+                m_zstdCompressionBuffer,
+                cCompressionBufferSize,
+                std::data( serialisedResult ),
+                std::size( serialisedResult ) + 1,
+                m_zstdCompressionDict );
+
+            std::deque< CompressedChunk >& dequeToUse = bToUndoDeque ? m_generationUndoBuffer : m_generationRedoBuffer;
+
+            dequeToUse.emplace_back( m_zstdCompressionBuffer, m_zstdCompressionBuffer + compSize );
+            if ( dequeToUse.size() >= cMaxUndoRedoSteps )
+            {
+                dequeToUse.pop_front();
+            }
+        }
+        catch ( cereal::Exception& cEx )
+        {
+            blog::app( FMTX( "{} serialise failed {}" ), bToUndoDeque ? "undo" : "redo", cEx.what() );
+        }
+    }
+
+    bool deserializeFromCompressionDeque( bool bFromUndoDeque )
+    {
+        std::deque< CompressedChunk >& dequeToUse = bFromUndoDeque ? m_generationUndoBuffer : m_generationRedoBuffer;
+
+        // shouldn't be calling this if we don't have anything in the undo buffer
+        ABSL_ASSERT( !dequeToUse.empty() );
+        if ( dequeToUse.empty() )
+            return false;
+
+        const CompressedChunk& compressedDataFromDeque = dequeToUse.back();
+
+        const std::size_t dSize = ZSTD_decompress_usingDDict(
+            m_zstdDecompressionContext,
+            m_zstdDecompressionBuffer,
+            cCompressionBufferSize,
+            std::data( compressedDataFromDeque ),
+            std::size( compressedDataFromDeque ),
+            m_zstdDecompressionDict );
+
+        dequeToUse.pop_back();
+
+        if ( dSize == 0 )
+            return false;
+
+        // save current data to the opposing queue
+        serializeToCompressionDeque( !bFromUndoDeque );
+
+        try
+        {
+            std::istringstream is( (char*)m_zstdDecompressionBuffer );
+            cereal::JSONInputArchive archive( is );
+
+            m_generatedResult.serialize( archive );
+
+            return true;
+        }
+        catch ( cereal::Exception& cEx )
+        {
+            blog::app( FMTX( "{} deserialise failed {}" ), bFromUndoDeque ? "undo" : "redo", cEx.what());
+        }
+        return false;
+    }
+
+public:
+
+    void saveToUndo()
+    {
+        std::lock_guard<std::mutex> locked( m_generationUndoRedoMutex );
+        serializeToCompressionDeque( true );
+
+        // changes made, invalidating redo sequence
+        if ( !m_generationRedoBuffer.empty() )
+        {
+            blog::app( FMTX( "purging redo buffer of {} entries" ), m_generationRedoBuffer.size() );
+            m_generationRedoBuffer.clear();
+        }
+    }
+
+    bool doUndo()
+    {
+        return deserializeFromCompressionDeque( true );
+    }
+
+    bool doRedo()
+    {
+        return deserializeFromCompressionDeque( false );
+    }
+
 
     config::Weaver                  m_weaverConfig;
+
+
+    // zstd support for packing/unpacking undo/redo steps
+    ZSTD_CCtx*                      m_zstdCompressionContext    = nullptr;
+    ZSTD_CDict*                     m_zstdCompressionDict       = nullptr;
+    int8_t*                         m_zstdCompressionBuffer     = nullptr;
+    ZSTD_DCtx*                      m_zstdDecompressionContext  = nullptr;
+    ZSTD_DDict*                     m_zstdDecompressionDict     = nullptr;
+    int8_t*                         m_zstdDecompressionBuffer   = nullptr;
+    using CompressedChunk           = std::vector< int8_t >;
+
 
     base::EventBusClient            m_eventBusClient;
 
@@ -176,6 +388,11 @@ struct Weaver::State
     endlesss::types::RiffCouchIDSet m_enqueuedRiffIDToAutoSendToBOND;
 
     base::EventListenerID           m_eventLID_MixerRiffChange = base::EventListenerID::invalid();
+
+
+    std::mutex                      m_generationUndoRedoMutex;
+    std::deque< CompressedChunk >   m_generationUndoBuffer;
+    std::deque< CompressedChunk >   m_generationRedoBuffer;
 
 
     int32_t                         m_searchOrdering = 1;
@@ -231,7 +448,9 @@ void Weaver::State::generateNewRiff(
     int32_t generateSingleChannelAtIndex /*= -1*/ )
 {
     const auto newSeed = absl::Hash<std::string>{}(m_proceduralSeed);
-    blog::app( FMTX( "Procedural generation seeded from '{}' => {}\n" ), m_proceduralSeed, newSeed );
+    blog::app( FMTX( "Procedural generation seeded from '{}' => {}" ), m_proceduralSeed, newSeed );
+
+    saveToUndo();
 
     m_generationInProgress = true;
     coreGUI.getTaskExecutor().silent_async( [this, newSeed, generateSingleChannelAtIndex, &warehouse]
@@ -248,7 +467,6 @@ void Weaver::State::generateNewRiff(
             // .. just generating one?
             if ( generateSingleChannelAtIndex >= 0 )
                 channelsToFill = 1;
-
 
             // setup new vriff basis
             m_generatedResult.m_virtualRiff.user = "[weaver]";
@@ -409,7 +627,10 @@ void Weaver::State::generateNewRiff(
                     break;
             }
 
-            finaliseAndSendVirtualRiff( warehouse );
+            // stamp a new ID for our generated data
+            m_generatedResult.m_virtualIdentity = warehouse.createNewVirtualRiff( m_generatedResult.m_virtualRiff );
+
+            enqeuePlaybackVirtualRiff( warehouse );
 
             m_generationInProgress = false;
         });
@@ -466,18 +687,27 @@ void Weaver::State::buildVirtualRiffFromLive(
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void Weaver::State::finaliseAndSendVirtualRiff( endlesss::toolkit::Warehouse& warehouse )
+void Weaver::State::enqeuePlaybackVirtualRiff( endlesss::toolkit::Warehouse& warehouse )
 {
-    // insert new virtual riff into warehouse, returning a new bespoke riff ID
-    const auto newVirtualIdentity = warehouse.createNewVirtualRiff( m_generatedResult.m_virtualRiff );
+    // check if we have any stem data at all; if not, don't bother doing anything
+    bool hasAnyValidData = false;
+    for ( std::size_t chI = 0; chI < 8; chI++ )
+        hasAnyValidData |= m_generatedResult.m_identities[chI].hasData();
+
+    if ( !hasAnyValidData )
+    {
+        // just stop playback to simualte an empty riff enqueue
+        m_eventBusClient.Send< ::events::PanicStop >();
+        return;
+    }
 
     // log our requests to play this new riff and stash a note to send it over BOND if possible, if selected
-    m_enqueuedRiffIDs.emplace( newVirtualIdentity.getRiffID() );
+    m_enqueuedRiffIDs.emplace( m_generatedResult.m_virtualIdentity.getRiffID() );
     if ( m_autoSendToBOND )
-        m_enqueuedRiffIDToAutoSendToBOND.emplace( newVirtualIdentity.getRiffID() );
+        m_enqueuedRiffIDToAutoSendToBOND.emplace( m_generatedResult.m_virtualIdentity.getRiffID() );
 
     // ping out to play it
-    m_eventBusClient.Send< ::events::EnqueueRiffPlayback >( newVirtualIdentity );
+    m_eventBusClient.Send< ::events::EnqueueRiffPlayback >( m_generatedResult.m_virtualIdentity );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -722,9 +952,48 @@ void Weaver::State::imgui(
                     buildVirtualRiffFromLive( currentRiff );
                 }
             }
+
             ImGui::Spacing();
             {
                 ImGui::Checkbox( " Ignore Tired Presets", &m_ignoreAnnoyingPresets );
+            }
+            {
+
+                std::lock_guard<std::mutex> locked( m_generationUndoRedoMutex );
+                const bool hasUndo = !m_generationUndoBuffer.empty();
+                const bool hasRedo = !m_generationRedoBuffer.empty();
+                {
+                    ImGui::Scoped::Enabled se( hasUndo );
+                    ImGui::SameLine();
+                    if ( ImGui::Button( "Undo" ) )
+                    {
+                        if ( doUndo() )
+                        {
+                            m_generationInProgress = true;
+                            coreGUI.getTaskExecutor().silent_async( [this, &warehouse]
+                                {
+                                    enqeuePlaybackVirtualRiff( warehouse );
+                                    m_generationInProgress = false;
+                                });
+                        }
+                    }
+                }
+                {
+                    ImGui::Scoped::Enabled se( hasRedo );
+                    ImGui::SameLine();
+                    if ( ImGui::Button( "Redo" ) )
+                    {
+                        if ( doRedo() )
+                        {
+                            m_generationInProgress = true;
+                            coreGUI.getTaskExecutor().silent_async( [this, &warehouse]
+                                {
+                                    enqeuePlaybackVirtualRiff( warehouse );
+                                    m_generationInProgress = false;
+                                });
+                        }
+                    }
+                }
             }
 
             {
@@ -764,14 +1033,15 @@ void Weaver::State::imgui(
             ImGui::Spacing();
             ImGui::Spacing();
 
-            if ( ImGui::BeginTable( "###generation_results", 8, ImGuiTableFlags_NoSavedSettings) )
+            if ( ImGui::BeginTable( "###generation_results", 9, ImGuiTableFlags_NoSavedSettings) )
             {
                 ImGui::TableSetupColumn( "Lock",        ImGuiTableColumnFlags_WidthFixed, 22 );
                 ImGui::TableSetupColumn( "ClearOut",    ImGuiTableColumnFlags_WidthFixed, 22 );
                 ImGui::TableSetupColumn( "Navigate",    ImGuiTableColumnFlags_WidthFixed, 22 );
                 ImGui::TableSetupColumn( "Key",         ImGuiTableColumnFlags_WidthFixed, 22 );
-                ImGui::TableSetupColumn( "Description", ImGuiTableColumnFlags_WidthStretch, 0.6f );
-                ImGui::TableSetupColumn( "Timeline",    ImGuiTableColumnFlags_WidthStretch, 0.4f );
+                ImGui::TableSetupColumn( "Description", ImGuiTableColumnFlags_WidthStretch, 0.55f );
+                ImGui::TableSetupColumn( "Volumes",     ImGuiTableColumnFlags_WidthFixed, 50 );
+                ImGui::TableSetupColumn( "Timeline",    ImGuiTableColumnFlags_WidthStretch, 0.45f );
                 ImGui::TableSetupColumn( "ReRoll",      ImGuiTableColumnFlags_WidthFixed, 22 );
                 ImGui::TableSetupColumn( "Delete",      ImGuiTableColumnFlags_WidthFixed, 22 );
 
@@ -794,6 +1064,9 @@ void Weaver::State::imgui(
                         ImGui::TextUnformatted( ICON_FA_BAN );
                     }
                     ImGui::TableNextColumn();
+                    {
+
+                    }
                     ImGui::TableNextColumn();
                     {
                         ImGui::AlignTextToFramePadding();
@@ -805,6 +1078,13 @@ void Weaver::State::imgui(
                     {
                         ImGui::SetNextItemWidth( -FLT_MIN );
                         ImGui::InputText( "##previous_seed", &m_proceduralPreviousSeed, ImGuiInputTextFlags_ReadOnly );
+                    }
+                    ImGui::TableNextColumn();
+                    {
+                        ImGui::AlignTextToFramePadding();
+                        ImGui::Dummy( { 15, 0 } );
+                        ImGui::SameLine( 0, 0 );
+                        ImGui::TextUnformatted( ICON_FA_VOLUME_HIGH );
                     }
                     ImGui::TableNextColumn();
                     ImGui::TableNextColumn();
@@ -859,6 +1139,35 @@ void Weaver::State::imgui(
                     ImGui::InputText( "##jam_name", &m_generatedResult.m_stemJamName[chI], ImGuiInputTextFlags_ReadOnly );
 
                     ImGui::TableNextColumn();
+                    {
+                        // button to shift volume of a stem layer up/down by a multiplier
+                        const auto addVolumeButton = [&]( const char* label, const float valueMultiplier )
+                            {
+                                ImGui::Scoped::Disabled sd( m_generationInProgress.load() || m_generatedResult.m_stemJamName[chI].empty() );
+
+                                if ( ImGui::Button( label ) )
+                                {
+                                    m_generationInProgress = true;
+                                    coreGUI.getTaskExecutor().silent_async( [this, chI, valueMultiplier, &warehouse]
+                                        {
+                                            saveToUndo();
+
+                                            m_generatedResult.m_virtualRiff.gains[chI] *= valueMultiplier;
+                                            m_generatedResult.m_virtualIdentity = warehouse.createNewVirtualRiff( m_generatedResult.m_virtualRiff );
+
+                                            enqeuePlaybackVirtualRiff( warehouse );
+                                            m_generationInProgress = false;
+                                        } );
+                                }
+                            };
+
+                        addVolumeButton( ICON_FA_CIRCLE_MINUS, 0.75f );
+                        ImGui::SameLine( 0, 2 );
+                        addVolumeButton( ICON_FA_CIRCLE_PLUS, 1.25f );
+                    }
+
+
+                    ImGui::TableNextColumn();
                     ImGui::SetNextItemWidth( -FLT_MIN );
                     ImGui::InputText( "##time_delta", &m_generatedResult.m_stemTimeDelta[chI], ImGuiInputTextFlags_ReadOnly );
 
@@ -877,8 +1186,12 @@ void Weaver::State::imgui(
                             m_generationInProgress = true;
                             coreGUI.getTaskExecutor().silent_async( [this, chI, &warehouse]
                                 {
+                                    saveToUndo();
+                                    
                                     m_generatedResult.clearChannel( chI );
-                                    finaliseAndSendVirtualRiff( warehouse );
+                                    m_generatedResult.m_virtualIdentity = warehouse.createNewVirtualRiff( m_generatedResult.m_virtualRiff );
+
+                                    enqeuePlaybackVirtualRiff( warehouse );
                                     m_generationInProgress = false;
                                 });
                         }

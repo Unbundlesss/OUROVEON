@@ -129,6 +129,7 @@ struct Audio final
 
     ouro_nodiscard constexpr int32_t getSampleRate() const { ABSL_ASSERT( m_sampleRate > 0 ); return m_sampleRate; }
 
+    ouro_nodiscard std::chrono::microseconds getOutputLatencyMs() const { return m_outputLatencyMs; }
 
 
     struct ExposedState
@@ -259,6 +260,7 @@ private:
     int32_t                             m_paDeviceIndex     = -1;
     void*                               m_paStream          = nullptr;
     uint32_t                            m_sampleRate        = 0;
+    std::chrono::microseconds           m_outputLatencyMs;
     OutputBuffer*                       m_mixerBuffers      = nullptr;      // the aligned intermediate buffer, filled by the configurable mixer process
     bool                                m_threadInitOnce    = false;        // as PA controls the actual mix thread work, this is checked to let us do any once-on-init code inside the callback code
     bool                                m_mute              = false;

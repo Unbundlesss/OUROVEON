@@ -515,7 +515,7 @@ protected:
 
 
     using OperationsRunningOnJamIDs = absl::btree_multimap< endlesss::types::JamCouchID, base::OperationID >;
-    using OperationToSourceJamID = absl::flat_hash_map< base::OperationID, endlesss::types::JamCouchID >;
+    using OperationToSourceJamID    = absl::flat_hash_map< base::OperationID, endlesss::types::JamCouchID >;
 
     OperationsRunningOnJamIDs       m_operationsRunningOnJamIDs;
     OperationToSourceJamID          m_operationToSourceJamID;
@@ -601,6 +601,11 @@ protected:
         return operationID;
     }
 
+    void event_PanicStop( const events::PanicStop* eventData )
+    {
+        m_riffPipelineClearInProgress = true;
+        m_riffPipeline->requestClear();
+    }
 
     void event_MixerRiffChange( const events::MixerRiffChange* eventData )
     {
@@ -642,6 +647,7 @@ protected:
 
     base::BiMap< base::OperationID, ImGuiID >   m_permutationOperationImGuiMap;
 
+    base::EventListenerID                       m_eventLID_PanicStop         = base::EventListenerID::invalid();
     base::EventListenerID                       m_eventLID_MixerRiffChange   = base::EventListenerID::invalid();
     base::EventListenerID                       m_eventLID_OperationComplete = base::EventListenerID::invalid();
     base::EventListenerID                       m_eventLID_BNSWasUpdated     = base::EventListenerID::invalid();
@@ -1890,47 +1896,46 @@ private:
 
 #if OURO_DEBUG
 
-#define OURO_REACHABILITY_ALL_BNS 0
-
     bool addDeveloperMenuItems() override
     {
-        if ( ImGui::MenuItem( "Warehouse Jam Reachability Report" ) )
+        if ( ImGui::MenuItem( "Download All Shared Riffs" ) )
         {
             getTaskExecutor().silent_async( [this]()
                 {
-                    std::string reportText;
-                    std::string reportLine;
+                    endlesss::toolkit::Shares shareCache;
 
-#if OURO_REACHABILITY_ALL_BNS
-
-                    for ( const auto bns : m_jamNameService.entries )
+                    config::endlesss::PopulationGlobalUsers populationData;
+                    const auto dataLoad = config::load( *this, populationData );
+                    if ( dataLoad == config::LoadResult::Success )
                     {
-                        const auto iterCurrentJamID = bns.first;
-                        const auto iterJamName = bns.second.link_name;
-
-#else // OURO_REACHABILITY_ALL_BNS
-
-                    for ( size_t jamIdx = 0; jamIdx < m_warehouseContentsReport.m_jamCouchIDs.size(); jamIdx++ )
-                    {
-                        const std::size_t jI = m_warehouseContentsSortedIndices[jamIdx];
-                        const auto iterCurrentJamID = m_warehouseContentsReport.m_jamCouchIDs[jI];
-                        const auto iterJamName = m_warehouseContentsReportJamTitles[jI];
-
-#endif // OURO_REACHABILITY_ALL_BNS
-
-                        getEventBusClient().Send< ::events::AsyncTaskActivity >();
-
-                        endlesss::api::JamLatestState jamStateCheck;
-                        if ( !jamStateCheck.fetch( *m_networkConfiguration, iterCurrentJamID ) )
+                        for ( const auto& username : populationData.users )
                         {
-                            reportLine = fmt::format( FMTX( "{} failed ({})\n" ), iterCurrentJamID, iterJamName );
-                            reportText += reportLine;
+                            getTaskExecutor().run( shareCache.taskFetchLatest(
+                                *m_networkConfiguration,
+                                username,
+                                [this, username]( endlesss::toolkit::Shares::StatusOrData newData )
+                                {
+                                    if ( newData.ok() )
+                                    {
+                                        const auto savePath = fmt::format( FMTX( "E:\\Dev\\Keybase\\Archivissst\\archivissst\\Data\\_per_user_shared\\{}.json" ), username );
 
-                            blog::error::api( FMTX( " RR ! {}" ), reportLine );
+                                        std::ofstream is( savePath );
+                                        cereal::JSONOutputArchive archive( is );
+
+                                        (*newData)->serialize( archive );
+
+                                        blog::app( FMTX( "Saved {} shares : {}" ), (*newData)->m_count, username );
+                                    }
+                                    else
+                                    {
+                                        blog::error::app( FMTX( "No shares : {}" ), username );
+                                    }
+                                } )
+                            );
                         }
+
+                        getTaskExecutor().wait_for_all();
                     }
-                    ImGui::SetClipboardText( reportText.c_str() );
-                    m_appEventBus->send<::events::AddToastNotification>( ::events::AddToastNotification::Type::Info, "Test Complete", "Report copied to clipboard" );
                 });
         }
 
@@ -2042,13 +2047,28 @@ int LoreApp::EntrypointOuro()
 
 
     // create and install the mixer engine
-    mix::Preview mixPreview( m_mdAudio->getMaximumBufferSize(), m_mdAudio->getSampleRate(), m_appEventBusClient.value() );
+    mix::Preview mixPreview(
+        m_mdAudio->getMaximumBufferSize(),
+        m_mdAudio->getSampleRate(),
+        m_mdAudio->getOutputLatencyMs(),
+        m_appEventBusClient.value() );
     m_mdAudio->blockUntil( m_mdAudio->installMixer( &mixPreview ) );
 
+    // LINK controls for the mixer
+    registerMainMenuEntry( 20, "LINK", [&mixPreview]()
+        {
+            static bool LinkEnableFlag = false;
+            if ( ImGui::MenuItem( "Ableton Link", nullptr, &LinkEnableFlag  ) )
+            {
+                blog::app( FMTX( "Requesting LINK state : {}" ), LinkEnableFlag ? "enabled" : "disabled" );
+                mixPreview.enableAbletonLink( LinkEnableFlag );
+            }
+        });
 
     {
         base::EventBusClient m_eventBusClient( m_appEventBus );
 
+        APP_EVENT_BIND_TO( PanicStop );
         APP_EVENT_BIND_TO( MixerRiffChange );
         APP_EVENT_BIND_TO( OperationComplete );
         APP_EVENT_BIND_TO( BNSWasUpdated );
@@ -2150,6 +2170,7 @@ int LoreApp::EntrypointOuro()
     m_eventListenerRiffEnqueue = m_appEventBus->addListener( events::EnqueueRiffPlayback::ID, [this]( const base::IEvent& evt ) { onEvent_EnqueueRiffPlayback( evt ); } );
 
 
+
     // UI core loop begins
     while ( beginInterfaceLayout( (app::CoreGUI::ViewportFlags)(
         app::CoreGUI::VF_WithDocking   |
@@ -2237,8 +2258,7 @@ int LoreApp::EntrypointOuro()
                     ImGui::Scoped::ToggleButton isClearing( m_riffPipelineClearInProgress );
                     if ( ImGui::Button( ICON_FA_BAN, ImVec2( 48.0f, 48.0f ) ) )
                     {
-                        m_riffPipelineClearInProgress = true;
-                        m_riffPipeline->requestClear();
+                        m_appEventBus->send< ::events::PanicStop >();
                     }
                     ImGui::CompactTooltip( "Panic stop all playback, buffering, pre-fetching, etc" );
                 }
@@ -4110,6 +4130,7 @@ int LoreApp::EntrypointOuro()
     {
         base::EventBusClient m_eventBusClient( m_appEventBus );
 
+        APP_EVENT_UNBIND( PanicStop );
         APP_EVENT_UNBIND( MixerRiffChange );
         APP_EVENT_UNBIND( OperationComplete );
         APP_EVENT_UNBIND( BNSWasUpdated );

@@ -25,6 +25,8 @@
 #include "endlesss/live.stem.h"
 #include "endlesss/toolkit.riff.export.h"
 
+#include <ableton/Link.hpp>
+#include <ableton/link/HostTimeFilter.hpp>
 
 // ---------------------------------------------------------------------------------------------------------------------
 #define _PV_VIEW_STATES(_action)    \
@@ -36,12 +38,50 @@ DEFINE_PAGE_MANAGER( PreviewView, ICON_FA_WAVE_SQUARE " Playback Engine", "previ
 #undef _PV_VIEW_STATES
 
 
-
-
 namespace mix {
 
 // ---------------------------------------------------------------------------------------------------------------------
-Preview::Preview( const int32_t maxBufferSize, const int32_t sampleRate, base::EventBusClient& eventBusClient )
+struct Preview::AbletonLinkControl
+{
+    AbletonLinkControl()
+        : m_link( 120.0 )
+    {
+    }
+    ~AbletonLinkControl()
+    {
+        m_link.enable( false );
+    }
+
+    using LinkHostTime = ableton::link::HostTimeFilter<ableton::link::platform::Clock>;
+
+    void Transaction_StopPlaying()
+    {
+        // if the current link state is "playing", snag and change the session to stop it
+        if ( m_linkIsPlaying )
+        {
+            auto linkSessionState = m_link.captureAudioSessionState();
+            {
+                linkSessionState.setIsPlaying(
+                    false,
+                    m_hostTimeFilter.sampleTimeToHostTime( m_sampleTime ) );
+
+                m_linkIsPlaying = false;
+            }
+            m_link.commitAudioSessionState( linkSessionState );
+        }
+    }
+
+
+    ableton::Link               m_link;
+    LinkHostTime                m_hostTimeFilter;
+    std::chrono::microseconds   m_outputLatency;
+    double                      m_sampleTime = 0;
+    int32_t                     m_linkBar = -1;
+    bool                        m_linkIsPlaying = false;
+};
+
+// ---------------------------------------------------------------------------------------------------------------------
+Preview::Preview( const int32_t maxBufferSize, const int32_t sampleRate, const std::chrono::microseconds outputLatency, base::EventBusClient& eventBusClient )
     : RiffMixerBase( maxBufferSize, sampleRate, eventBusClient )
 {
     m_txBlendCacheLeft.fill( 0 );
@@ -55,11 +95,16 @@ Preview::Preview( const int32_t maxBufferSize, const int32_t sampleRate, base::E
     // precompute the lerp values for each blend sample in the buffer; based on constant-power fade through
     for ( std::size_t bI = 0; bI < txBlendBufferSize; bI++, blendValue += blendDelta * 2.0 )
         m_txBlendInterp[bI] = (float)std::sqrt( 0.5 * (1.0 - blendValue) );
+
+    m_abletonLinkControl = new AbletonLinkControl();
+    m_abletonLinkControl->m_outputLatency = outputLatency;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 Preview::~Preview()
 {
+    delete m_abletonLinkControl;
+    m_abletonLinkControl = nullptr;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -91,7 +136,7 @@ void Preview::renderCurrentRiff(
     // keep note of where we are mixing in terms of the 0..N sample count of the current riff
     const auto riffLengthInSamples      = currentRiff->m_timingDetails.m_lengthInSamples;
 
-    // ensure the curernt playback sample position for the riff isn't off the end
+    // ensure the current playback sample position for the riff isn't off the end
     while ( m_riffPlaybackSample >= riffLengthInSamples )
     {
         m_riffPlaybackSample -= riffLengthInSamples;
@@ -277,6 +322,10 @@ void Preview::update(
 {
     processCommandQueue();
 
+    // cache the current playback sample value before we do the next batch of operations, used to analyse what might have happened at the end of update()
+    const int64_t riffPlaybackSampleAtStartOfUpdate = m_riffPlaybackSample;
+
+
     // "drain and stop" flag; set on main thread, this will make the mixer drain off all the mix-side request queues
     // and set the current riff playing to null, leaving silence
     const bool shouldDrainAndStop = m_drainQueueAndStop.load();
@@ -361,6 +410,13 @@ void Preview::update(
         // the first riff enqueued to play after we've been idle will start from scratch rather
         // than just wherever the playback head had wandered onto in the background
         m_riffPlaybackSample = 0;
+
+        // deal with LINK session update with nothing playing
+        if ( m_abletonLinkControl )
+        {
+            m_abletonLinkControl->Transaction_StopPlaying();
+            m_abletonLinkControl->m_sampleTime += static_cast<double>(samplesToWrite);
+        }
 
         return;
     }
@@ -496,6 +552,13 @@ void Preview::update(
     if ( m_riffCurrent )
     {
         const auto& timingData = m_riffCurrent->getTimingDetails();
+
+        // compute timing state when update() began
+        endlesss::live::RiffProgression progressionAtStartOfUpdate;
+        timingData.ComputeProgressionAtSample(
+            riffPlaybackSampleAtStartOfUpdate,
+            progressionAtStartOfUpdate );
+
         timingData.ComputeProgressionAtSample(
             m_riffPlaybackSample,
             m_playbackProgression );
@@ -504,6 +567,68 @@ void Preview::update(
         m_timeInfo.tempo              = timingData.m_bpm;
         m_timeInfo.timeSigNumerator   = timingData.m_quarterBeats;
         m_timeInfo.timeSigDenominator = 4;
+
+        if ( progressionAtStartOfUpdate.m_playbackPercentage == 0 ||
+             m_playbackProgression.m_playbackPercentage == 0 ||
+             m_playbackProgression.m_playbackPercentage < progressionAtStartOfUpdate.m_playbackPercentage )
+        {
+            blog::mix( FMTX( "FULL WRAP" ) );
+        }
+
+
+        // LINK logic
+        if ( m_abletonLinkControl )
+        {
+            const double timingQuantum = static_cast<double>(timingData.m_quarterBeats);
+
+            const auto hostTime = m_abletonLinkControl->m_hostTimeFilter.sampleTimeToHostTime( m_abletonLinkControl->m_sampleTime );
+            m_abletonLinkControl->m_sampleTime += static_cast<double>(samplesToWrite);
+
+            const auto bufferBeginAtOutput = hostTime + m_abletonLinkControl->m_outputLatency;
+
+            auto linkSessionState = m_abletonLinkControl->m_link.captureAudioSessionState();
+
+            // always write our tempo. we are the tempo.
+            linkSessionState.setTempo( timingData.m_bpm, bufferBeginAtOutput );
+
+            // on the arrival of a new riff when nothing was playing, tag IsPlaying in the session state and force
+            // a new 0-beat to match
+            if ( !m_abletonLinkControl->m_linkIsPlaying )
+            {
+                linkSessionState.setIsPlaying( true, bufferBeginAtOutput );
+                linkSessionState.forceBeatAtTime( 0, bufferBeginAtOutput, timingQuantum );
+                m_abletonLinkControl->m_linkIsPlaying = true;
+            }
+
+            if ( m_playbackProgression.m_playbackBarSegment != progressionAtStartOfUpdate.m_playbackBarSegment )
+            {
+                std::chrono::microseconds zeroBeatUsOffset( std::llround( m_playbackProgression.m_playbackQuarterTimeSec * 1.0e6 ) );
+
+                if ( m_playbackProgression.m_playbackBarSegment == 0 )
+                    linkSessionState.forceBeatAtTime( m_playbackProgression.m_playbackBarSegment, bufferBeginAtOutput + zeroBeatUsOffset, timingQuantum );
+                else
+                    linkSessionState.requestBeatAtTime( m_playbackProgression.m_playbackBarSegment, bufferBeginAtOutput + zeroBeatUsOffset, timingQuantum );
+
+//                 blog::mix( FMTX( "BEAT {} : {}, {} : {} ~ {} : {:08}" ),
+//                     m_playbackProgression.m_playbackBarSegment,
+//                     progressionAtStartOfUpdate.m_playbackSegmentPercentage,
+//                     m_playbackProgression.m_playbackSegmentPercentage,
+//                     m_playbackProgression.m_playbackQuarterPercentage,
+//                     m_playbackProgression.m_playbackQuarterTimeSec,
+//                     zeroBeatUsOffset );
+            }
+
+            m_abletonLinkControl->m_link.commitAudioSessionState( linkSessionState );
+        }
+    }
+    else
+    {
+        // nothing to play, tell LINK about that
+        if ( m_abletonLinkControl )
+        {
+            m_abletonLinkControl->Transaction_StopPlaying();
+            m_abletonLinkControl->m_sampleTime += static_cast<double>(samplesToWrite);
+        }
     }
 
     // spool samples out to recorders if running
@@ -549,6 +674,13 @@ void Preview::imgui()
 
     for ( auto layer = 0U; layer < 8; layer++ )
         m_multiTrackOutputsToDestroyOnMainThread[layer].reset();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void Preview::enableAbletonLink( bool bEnabled )
+{
+    if ( m_abletonLinkControl )
+        m_abletonLinkControl->m_link.enable( bEnabled );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

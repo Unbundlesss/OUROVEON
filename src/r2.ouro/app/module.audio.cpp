@@ -134,6 +134,8 @@ absl::Status Audio::initOutput( const config::Audio& outputDevice, const config:
         return absl::UnavailableError( fmt::format( FMTX( "Audio engine error - Pa_StartStream failed [{}]" ), Pa_GetErrorText( err ) ) );
     }
 
+    m_outputLatencyMs = ( std::chrono::microseconds( llround( outputParameters.suggestedLatency * 1.0e6 ) ) );
+
     return absl::OkStatus();
 }
 
