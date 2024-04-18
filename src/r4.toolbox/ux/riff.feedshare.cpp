@@ -105,7 +105,7 @@ void RiffFeedShareState::imgui(
 
             ImGui::Spacing();
             ImGui::Spacing();
-            ImGui::TextColored( colour::shades::toast.light(), description.data() );
+            ImGui::TextColored( colour::shades::toast.light(), "%s", description.data() );
             ImGui::SeparatorBreak();
             ImGui::Spacing();
             ImGui::Spacing();
