@@ -94,7 +94,7 @@ protected:
     // -----------------------------------------------------------------------------------------------------------------
 
     endlesss::api::MyClubs::ChannelsList    m_clubsChannels;
-    bool                                    m_clubsIntegrationEnabled = false;
+    std::atomic_bool                        m_clubsIntegrationEnabled = false;  // if true, we have valid Clubs data fetched
 
     // -----------------------------------------------------------------------------------------------------------------
 

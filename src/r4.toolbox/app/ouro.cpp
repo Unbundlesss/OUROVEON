@@ -228,7 +228,7 @@ int OuroApp::EntrypointGUI()
         return m_configPerf.enableUnstableNetworkCompensation ?
             endlesss::api::NetConfiguration::NetworkQuality::Unstable :
             endlesss::api::NetConfiguration::NetworkQuality::Stable;
-    };
+        };
 
 
     // used if we need to pop a modal showing some error feedback
@@ -323,7 +323,7 @@ int OuroApp::EntrypointGUI()
 
                     const ImVec2 pathButtonSize( configWindowColumn1 - 35.0f, 32.0f );
                     ImGui::PushItemWidth( pathButtonSize.x );
-                    
+
                     ImGui::TextUnformatted( "Set Data Storage Root Path :" );
                     const bool textAccept = ImGui::InputText( "##DataPath", dataStoragePathBuffer, dataStoragePathBufferSize, ImGuiInputTextFlags_EnterReturnsTrue );
                     if ( textAccept || ImGui::IsItemDeactivatedAfterEdit() )
@@ -508,7 +508,7 @@ int OuroApp::EntrypointGUI()
                                 ImGui::CompactTooltip( "This app does not support 'No Authentication' Mode" );
                             else if ( endlesssAuthExpired )
                                 ImGui::CompactTooltip( "Enable to allow booting without valid Endlesss\nauthentication, limiting some features" );
-                            else 
+                            else
                                 ImGui::CompactTooltip( "'No Authentication' mode only available when signed-out of Endlesss" );
 
                             ImGui::Spacing();
@@ -546,7 +546,7 @@ int OuroApp::EntrypointGUI()
                                 colour::shades::callout.neutral(),
                                 "%u day(s), %u hours", expireDays, expireHours );
                         }
-                        
+
                         if ( endlesssAuthExpired )
                         {
                             if ( !endlesssWorkUnauthorised )
@@ -805,16 +805,16 @@ int OuroApp::EntrypointGUI()
                         ImGui::Indent( perBlockIndent );
 
                         const auto NicerIntEditPreamble = []( const char* title, const char* tooltip )
-                        {
-                            ImGui::TextDisabled( "[?]" );
-                            ImGui::CompactTooltip( tooltip );
-                            ImGui::SameLine();
-                            ImGui::TextUnformatted( title );
-                            ImGui::SameLine();
-                            const auto panelRegionAvailable = ImGui::GetContentRegionAvail();
-                            ImGui::Dummy( ImVec2( panelRegionAvailable.x - 200.0f, 0.0f ) );
-                            ImGui::SameLine();
-                        };
+                            {
+                                ImGui::TextDisabled( "[?]" );
+                                ImGui::CompactTooltip( tooltip );
+                                ImGui::SameLine();
+                                ImGui::TextUnformatted( title );
+                                ImGui::SameLine();
+                                const auto panelRegionAvailable = ImGui::GetContentRegionAvail();
+                                ImGui::Dummy( ImVec2( panelRegionAvailable.x - 200.0f, 0.0f ) );
+                                ImGui::SameLine();
+                            };
 
                         ImGui::PushItemWidth( 150.0f );
                         {
@@ -831,7 +831,7 @@ int OuroApp::EntrypointGUI()
                                 "Riff Live Instance Pool Size",
                                 "If possible, some riffs are kept alive in memory to speed-up transitions / avoid re-loading from disk.\nThis value controls how many we aim to limit that to.\nIncrease if you got RAM to burn."
                             );
-                            ImGui::InputInt( "##riff_live_inst", &m_configPerf.liveRiffInstancePoolSize, 8, 16);
+                            ImGui::InputInt( "##riff_live_inst", &m_configPerf.liveRiffInstancePoolSize, 8, 16 );
                         }
                         ImGui::PopItemWidth();
 
@@ -847,7 +847,7 @@ int OuroApp::EntrypointGUI()
                     {
                         m_mdFrontEnd->titleText( "Vibes" );
                         ImGui::Indent( perBlockIndent );
-                       
+
                         // fundamental enable/disable of all Vibes systems to avoid booting it or compiling any shaders (JIC)
                         {
                             ImGui::AlignTextToFramePadding();
@@ -1027,28 +1027,6 @@ int OuroApp::EntrypointGUI()
                 m_warehouse->extractJamDictionary( m_jamHistoricalFromWarehouse );      // pull full list of jam IDs -> names from warehouse as "historical" list
             }
 
-            // pull the current Clubs membership; this call is fairly quick so we can do it each time we boot
-            {
-                endlesss::api::MyClubs myClubs;
-                m_clubsIntegrationEnabled = myClubs.fetch( *m_networkConfiguration );
-                if ( m_clubsIntegrationEnabled && myClubs.ok )
-                {
-                    // create list of each channel in each club, associated with their invite IDs
-                    for ( const auto& club : myClubs.data.clubs )
-                    {
-                        for ( const auto& channel : club.jams )
-                        {
-                            m_clubsChannels.emplace_back( fmt::format( FMTX( "{} : {}" ), club.profile.name, channel.name ), channel.listenId, club.id );
-                        }
-                    }
-                    blog::api( FMTX( "Loaded {} known Clubs channels" ), m_clubsChannels.size() );
-                }
-                else
-                {
-                    blog::error::api( FMTX( "Failed to fetch Clubs membership data" ) );
-                }
-            }
-
             return absl::OkStatus();
         });
 
@@ -1150,8 +1128,46 @@ int OuroApp::EntrypointGUI()
             } );
     }
 
+    // run the Clubs data fetch in the background, unbounded; this seems to sometimes take an age and I don't want it
+    // slowing down our app startup. anything using this data needs to check if its valid
+    m_taskExecutor.silent_async( "clubs_sync", [this, &audioConfig]()
+        {
+            // assume we have no data by default
+            m_clubsIntegrationEnabled = false;
+
+            // pull the current Clubs membership; this call is fairly quick so we can do it each time we boot
+            {
+                endlesss::api::MyClubs myClubs;
+                const bool clubsDataFetched = myClubs.fetch( *m_networkConfiguration );
+                if ( clubsDataFetched && myClubs.ok )
+                {
+                    // create list of each channel in each club, associated with their invite IDs
+                    for ( const auto& club : myClubs.data.clubs )
+                    {
+                        for ( const auto& channel : club.jams )
+                        {
+                            m_clubsChannels.emplace_back( fmt::format( FMTX( "{} : {}" ), club.profile.name, channel.name ), channel.listenId, club.id );
+                        }
+                    }
+                    blog::api( FMTX( "Loaded {} known Clubs channels" ), m_clubsChannels.size() );
+
+                    // mark the data as good to go
+                    m_clubsIntegrationEnabled = true;
+                }
+                else
+                {
+                    blog::error::api( FMTX( "Failed to fetch Clubs membership data" ) );
+                }
+            }
+        });
+
+
+    // =================================================================================================================
     // all done, pass control over to next level
+    //
     int appResult = EntrypointOuro();
+    //
+    // =================================================================================================================
 
     // unhook events
     {

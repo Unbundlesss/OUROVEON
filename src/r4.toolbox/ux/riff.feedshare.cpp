@@ -101,7 +101,10 @@ void RiffFeedShareState::imgui(
             ImGui::SameLine();
             ImGui::RadioButton( "Feed ", &m_shareMode, (int32_t)ToFeed );
             ImGui::SameLine();
-            ImGui::RadioButton( "Clubs", &m_shareMode, (int32_t)ToClubs );
+            {
+                ImGui::Scoped::Disabled de( clubsChans.empty() );
+                ImGui::RadioButton( "Clubs", &m_shareMode, (int32_t)ToClubs );
+            }
 
             ImGui::Spacing();
             ImGui::Spacing();
