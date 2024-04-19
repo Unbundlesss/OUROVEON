@@ -1130,7 +1130,7 @@ int OuroApp::EntrypointGUI()
 
     // run the Clubs data fetch in the background, unbounded; this seems to sometimes take an age and I don't want it
     // slowing down our app startup. anything using this data needs to check if its valid
-    m_taskExecutor.silent_async( "clubs_sync", [this, &audioConfig]()
+    m_taskExecutor.silent_async( "clubs_sync", [this]()
         {
             // assume we have no data by default
             m_clubsIntegrationEnabled = false;
