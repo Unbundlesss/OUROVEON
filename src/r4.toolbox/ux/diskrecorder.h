@@ -31,9 +31,6 @@ void DiskRecorder( rec::IRecordable& recordable, const fs::path& recordingRootPa
         "[\"`-.__] ",
     };
 
-    // modifier to jump open the output directory in Explorer etc
-    const bool bOpenOutputDirectoryOnClick = ( ImGui::GetMergedModFlags() & ImGuiModFlags_Alt );
-   
     const auto recordableName   = recordable.getRecorderName();
     const auto recordableUID    = ImGui::GetID( recordableName.data() );
     const auto animCycleOffset  = recordableUID & 0xff;
