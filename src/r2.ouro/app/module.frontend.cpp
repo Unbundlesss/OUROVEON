@@ -223,6 +223,10 @@ absl::Status Frontend::create( const app::Core* appCore )
     {
         glfwSetWindowCenter( m_glfwWindow );
     }
+    {
+        m_isBorderless = m_feConfigCopy.isBorderless;
+        applyBorderless();
+    }
     // save the initial window pos/size, update (or create) the serialised version
     m_currentWindowGeometry = getWindowGeometry();
     m_windowGeometryChangedDelay = 0;
@@ -267,9 +271,6 @@ absl::Status Frontend::create( const app::Core* appCore )
         m_displayScale.set( displayScaleX );
         blog::app( "window display scale {}", m_displayScale.getDisplayScaleFactor() );
     }
-
-    m_isBorderless = true;
-    applyBorderless();
 
     blog::core( "bound OpenGL {} | GLSL {}",
         (char*)glGetString( GL_VERSION ),                       // casts as glGetString returns uchar
@@ -566,6 +567,7 @@ void Frontend::toggleBorderless()
 {
     m_isBorderless = !m_isBorderless;
     applyBorderless();
+    updateAndSaveFrontendConfig();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -593,12 +595,14 @@ void Frontend::updateAndSaveFrontendConfig()
     m_feConfigCopy.appPositionX     = m_currentWindowGeometry.m_positionX;
     m_feConfigCopy.appPositionY     = m_currentWindowGeometry.m_positionY;
     m_feConfigCopy.appPositionValid = true;
+    m_feConfigCopy.isBorderless     = m_isBorderless;
 
-    blog::core( FMTX( "window moved/resized [{}, {}] [{} x {}], saving changes ..." ),
+    blog::core( FMTX( "window state change; [{}, {}] [{} x {}] [{}], saving changes ..." ),
         m_feConfigCopy.appPositionX,
         m_feConfigCopy.appPositionY,
         m_feConfigCopy.appWidth,
-        m_feConfigCopy.appHeight
+        m_feConfigCopy.appHeight,
+        m_feConfigCopy.isBorderless ? "borderless" : "bordered"
     );
 
     ABSL_ASSERT( m_appCore.has_value() );

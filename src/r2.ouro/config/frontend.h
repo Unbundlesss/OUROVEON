@@ -29,6 +29,8 @@ OURO_CONFIG( Frontend )
     int32_t         appPositionY = 0;
     bool            appPositionValid = false;
 
+    bool            isBorderless = true;
+
     template<class Archive>
     void serialize( Archive& archive )
     {
@@ -37,6 +39,7 @@ OURO_CONFIG( Frontend )
                , CEREAL_OPTIONAL_NVP( appPositionX )
                , CEREAL_OPTIONAL_NVP( appPositionY )
                , CEREAL_OPTIONAL_NVP( appPositionValid )
+               , CEREAL_OPTIONAL_NVP( isBorderless )
         );
     }
 
