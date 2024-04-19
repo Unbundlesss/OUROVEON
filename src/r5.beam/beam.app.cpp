@@ -180,7 +180,8 @@ struct MixEngine final : public app::module::MixerInterface,
         StopRecording,
         UpdateProgressionConfiguration,     // pass ProgressionConfiguration*
         UpdateRepComConfiguration,          // pass RepComConfiguration*
-        ClearCurrentlyPlaying
+        ClearCurrentlyPlaying,
+        ClearAllScheduledTransitions
     };
     struct EngineCommandData : public base::BasicCommandType<EngineCommand> { using BasicCommandType::BasicCommandType; };
 
@@ -274,6 +275,11 @@ struct MixEngine final : public app::module::MixerInterface,
     inline void updateProgressionConfiguration( const ProgressionConfiguration* pConfig )
     {
         m_commandQueue.emplace( EngineCommand::UpdateProgressionConfiguration, (void*) pConfig );
+    }
+
+    void clearAllScheduledTransitions()
+    {
+        m_commandQueue.emplace( EngineCommand::ClearAllScheduledTransitions );
     }
 
     inline void updateRepComConfiguration( const RepComConfiguration* pConfig )
@@ -591,6 +597,15 @@ void MixEngine::update(
                 {
                     m_riffNext = {};
                     exchangeLiveRiff();
+                }
+                break;
+
+                case EngineCommand::ClearAllScheduledTransitions:
+                {
+                    // purge the queue
+                    RiffAndPermutation dumpRiff;
+                    while ( m_riffQueue.try_dequeue( dumpRiff ) )
+                    { }
                 }
                 break;
 
@@ -942,7 +957,7 @@ void MixEngine::update(
 
     m_stemDataAmalgamSamplesUsed += samplesToWrite;
 
-    // LINK logic
+    // LINK logic EXTREMELY WIP HACK
     if ( currentRiff != nullptr )
     {
         const auto& timingData = currentRiff->getTimingDetails();
@@ -1436,6 +1451,14 @@ int BeamApp::EntrypointOuro()
 
                     ImGui::PopStyleColor();
                 }
+                {
+                    ImGui::Scoped::Enabled se( itemsInRiffQueue );
+                    if ( ImGui::Button( ICON_FA_TRASH_CAN " Clear All Scheduled Transitions ", { -1.0f, 32.0f } ) )
+                    {
+                        mixEngine.clearAllScheduledTransitions();
+                    }
+                }
+
 
                 ImGui::Spinner( "##syncing", riffSyncInProgress, currentLineHeight * 0.4f, 3.0f, 0.0f, ImGui::GetColorU32( ImGuiCol_Text ) );
                 ImGui::SameLine();

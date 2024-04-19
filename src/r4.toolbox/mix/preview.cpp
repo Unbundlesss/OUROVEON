@@ -568,15 +568,8 @@ void Preview::update(
         m_timeInfo.timeSigNumerator   = timingData.m_quarterBeats;
         m_timeInfo.timeSigDenominator = 4;
 
-        if ( progressionAtStartOfUpdate.m_playbackPercentage == 0 ||
-             m_playbackProgression.m_playbackPercentage == 0 ||
-             m_playbackProgression.m_playbackPercentage < progressionAtStartOfUpdate.m_playbackPercentage )
-        {
-            blog::mix( FMTX( "FULL WRAP" ) );
-        }
 
-
-        // LINK logic
+        // LINK logic EXTREMELY WIP HACK
         if ( m_abletonLinkControl )
         {
             const double timingQuantum = static_cast<double>(timingData.m_quarterBeats);
