@@ -30,7 +30,7 @@ project "r0-zstd"
         LibRoot.Zstd .. "/**.c",
         LibRoot.Zstd .. "/**.h",
     }
-    filter "system:linux"
+    filter "action:not vs*" 
         files
         {
             LibRoot.Zstd .. "/**.S",
