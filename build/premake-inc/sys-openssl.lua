@@ -11,7 +11,7 @@ ModuleRefInclude["openssl"] = function()
     filter "system:macosx"
     externalincludedirs
     {
-        GetMacOSPackgesDir() .. "openssl@1.1/include/",
+        GetPrebuiltLibs_MacUniversal_Headers() .. "openssl@1.1/include/",
     }
     filter {}
 end

@@ -18,7 +18,7 @@ ModuleRefInclude["freetype"] = function()
     filter "system:macosx"
     externalincludedirs
     {
-        GetMacOSPackgesDir() .. "freetype/include/freetype2/",
+        GetPrebuiltLibs_MacUniversal_Headers() .. "freetype/include/freetype2/",
     }
     filter {}
 end

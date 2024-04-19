@@ -25,7 +25,7 @@ ModuleRefInclude["opus"] = function()
     filter "system:macosx"
     externalincludedirs
     {
-        GetMacOSPackgesDir() .. "opus/include/opus",
+        GetPrebuiltLibs_MacUniversal_Headers() .. "opus/include/opus",
     }
     filter {}    
 

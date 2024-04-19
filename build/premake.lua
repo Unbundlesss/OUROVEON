@@ -36,7 +36,6 @@ print( "Premake launch directory: " .. initialDir )
 
 local rootBuildGenerationDir = "_gen"
 local rootSourceDir = "src"
-local osxHomebrew = "/opt/homebrew/opt/"
 
 function GetSourceDir()
     return rootSourceDir
@@ -45,13 +44,16 @@ function SrcDir()
     return initialDir .. "/../" .. rootSourceDir .. "/"
 end
 
-function GetMacOSPackgesDir()
-    return osxHomebrew
+-- currently we ship a set of prebuilt libs for certain libraries on Mac that have been 
+-- merged into 'fat' x64/ARM versions
+function GetPrebuiltLibs_MacUniversal_Headers()
+    return initialDir .. "/../libs/macos/opt/"
 end
 function GetPrebuiltLibs_MacUniversal()
     return initialDir .. "/../libs/macos/universal-fat/"
 end
 
+-- .. and a smaller set of prebuilt libs on Windows that are too annoying to move into Premake
 function GetPrebuiltLibs_Win64()
     return initialDir .. "/../libs/windows/win64/"
 end

@@ -26,7 +26,7 @@ ModuleRefInclude["sodium"] = function()
     filter "system:macosx"
     externalincludedirs
     {
-        GetMacOSPackgesDir() .. "libsodium/include",
+        GetPrebuiltLibs_MacUniversal_Headers() .. "libsodium/include",
     }
     filter {}
 

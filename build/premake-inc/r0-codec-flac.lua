@@ -14,7 +14,7 @@ ModuleRefInclude["flac"] = function()
     filter {}
 
     filter "system:macosx"
-    externalincludedirs ( GetMacOSPackgesDir() .. "flac/include" )
+    externalincludedirs ( GetPrebuiltLibs_MacUniversal_Headers() .. "flac/include" )
     filter {}
 end
 
