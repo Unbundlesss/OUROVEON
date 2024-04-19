@@ -170,10 +170,12 @@ namespace detail {
 
         constexpr std::string_view midsep = " | ";
         constexpr std::string_view suffix = "\n";
-
+        
+#if OURO_ENABLE_COLOURED_LOGGING
         constexpr auto foreground1 = fmt::detail::make_foreground_color<char>( fmt::detail::color_type( _fg1 ) );
         constexpr auto foreground2 = fmt::detail::make_foreground_color<char>( fmt::detail::color_type( _fg2 ) );
-
+#endif // OURO_ENABLE_COLOURED_LOGGING
+        
         // size of buffer used by ansi_color_escape
         constexpr size_t size_of_text_style = 7u + 3u * 4u + 1u;
 
