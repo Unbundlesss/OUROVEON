@@ -1189,6 +1189,12 @@ struct MyClubs
 {
     struct ClubChannel
     {
+        ClubChannel( std::string name, std::string listenId, std::string owningClub )
+            : m_name( std::move(name) )
+            , m_listenId( std::move(listenId) )
+            , m_owningClubId( std::move(owningClub) )
+        {}
+        
         std::string     m_name;
         std::string     m_listenId;
         std::string     m_owningClubId;
