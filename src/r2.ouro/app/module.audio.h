@@ -257,7 +257,6 @@ private:
     std::atomic_uint32_t                m_mixThreadCommandsComplete = 0;
 
     // active output 
-    int32_t                             m_paDeviceIndex     = -1;
     void*                               m_paStream          = nullptr;
     uint32_t                            m_sampleRate        = 0;
     std::chrono::microseconds           m_outputLatencyMs;

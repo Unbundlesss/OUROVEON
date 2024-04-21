@@ -62,7 +62,6 @@ private:
 
     uint32_t            m_sampleRate        = 0;
     uint32_t            m_fftWindowSize     = 0;        // size of the FFT input/output block
-    uint32_t            m_frequencyBinSize  = 0;        // size of the active frequency bins in the output ( half the fft window )
 
     PFFFT_Setup*        m_pffftPlan         = nullptr;
 

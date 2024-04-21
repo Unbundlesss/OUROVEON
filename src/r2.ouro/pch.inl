@@ -27,10 +27,8 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <mutex>
+#include <source_location>
 #include <concepts>
-
-// shim for source_location support on compilers that have yet to natively support it (glares at Apple)
-#include "source_location/source_location.hpp"
 
 // abseil
 #include "absl/memory/memory.h"

@@ -174,9 +174,6 @@ bool datestampUnixExpiryFromNow( const uint64_t unix, uint32_t& outDays, uint32_
     std::time_t tA = (uint32_t)(unix);
     std::time_t tB = std::chrono::system_clock::to_time_t( std::chrono::system_clock::now() );
 
-    std::tm* tmA = std::gmtime( &tA );
-    std::tm* tmB = std::gmtime( &tB );
-
     auto ms = difftime( tA, tB );
 
     // in the past!

@@ -78,8 +78,7 @@ struct Riff
             const double         segmentWrappedTime = std::fmod( sampleTime, m_lengthInSecPerBar );
             const double          segmentPercentage = (segmentWrappedTime / m_lengthInSecPerBar);
 
-            const double        quarterTime = m_lengthInSecPerBar / static_cast<double>(m_quarterBeats);
-            const double         quarterWrappedTime = std::fmod( sampleTime, quarterTime );
+            const double                quarterTime = m_lengthInSecPerBar / static_cast<double>(m_quarterBeats);
             const double          quarterPercentage = (segmentWrappedTime / quarterTime);
 
             progression.m_playbackPercentage        = riffPercentage;

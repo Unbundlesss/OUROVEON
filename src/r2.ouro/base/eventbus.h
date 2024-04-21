@@ -60,7 +60,7 @@ struct IEvent
 };
 
 #define CREATE_EVENT_BEGIN(_evtname)    namespace events {                                                          \
-                                        struct _evtname final : public base::IEvent                            \
+                                        struct _evtname final : public base::IEvent                                 \
                                         {                                                                           \
                                             constexpr static base::EventID ID = base::EventID( #_evtname );         \
                                             const base::EventID& getID() const override { return ID; }
@@ -68,10 +68,10 @@ struct IEvent
 #define CREATE_EVENT_END()              }; }
 
 // register the given event type, reporting to the log if it fails
-#define APP_EVENT_REGISTER_SPECIFIC( _evtname, _maxQueuedEvents )                                                               \
-        checkedCoreCall( fmt::format( "{{{}}} register [{}]", source_location::current().function_name(), #_evtname), [this]    \
-            {                                                                                                                   \
-                return m_appEventBus->registerEventID( events::_evtname::ID, sizeof(::events::_evtname), _maxQueuedEvents );    \
+#define APP_EVENT_REGISTER_SPECIFIC( _evtname, _maxQueuedEvents )                                                                    \
+        checkedCoreCall( fmt::format( "{{{}}} register [{}]", std::source_location::current().function_name(), #_evtname), [this]    \
+            {                                                                                                                        \
+                return m_appEventBus->registerEventID( events::_evtname::ID, sizeof(::events::_evtname), _maxQueuedEvents );         \
             });
 
 #define APP_EVENT_REGISTER( _evtname )  APP_EVENT_REGISTER_SPECIFIC( _evtname, 512 )
@@ -87,10 +87,10 @@ struct IEvent
             event_##_eventType( riffChangeEvent );                                                                  \
         })
 
-#define APP_EVENT_UNBIND( _eventType )                                                                              \
-    checkedCoreCall( fmt::format( FMTX("{{{}}} : [{}]"), source_location::current().function_name(), #_eventType ), \
-        [&, this] {                                                                                                    \
-            return m_eventBusClient.removeListener( m_eventLID_##_eventType );                                      \
+#define APP_EVENT_UNBIND( _eventType )                                                                                   \
+    checkedCoreCall( fmt::format( FMTX("{{{}}} : [{}]"), std::source_location::current().function_name(), #_eventType ), \
+        [&, this] {                                                                                                      \
+            return m_eventBusClient.removeListener( m_eventLID_##_eventType );                                           \
         });
 
 

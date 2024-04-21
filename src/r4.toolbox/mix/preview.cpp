@@ -350,7 +350,7 @@ void Preview::update(
     }
 
     bool        riffEnqueued = ( m_riffQueue.peek() != nullptr );
-    const auto dequeNextRiff = [this, samplesToWrite, &riffEnqueued]()
+    const auto dequeNextRiff = [this, &riffEnqueued]()
     {
         RiffPtrOperation riffOperation;
         if ( !m_riffQueue.try_dequeue( riffOperation ) )

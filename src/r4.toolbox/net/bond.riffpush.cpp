@@ -295,7 +295,7 @@ struct RiffPushClient::State
             m_clientConnectionHandle.reset();
             m_clientState = BondState::Disconnected;
         });
-        m_client.set_message_handler( [this]( ConnectionHandle hdl, ServerEndpoint::message_ptr msg )
+        m_client.set_message_handler( []( ConnectionHandle hdl, ServerEndpoint::message_ptr msg )
         {
             blog::app( "[RiffPushClient] >> client msg : {}", msg->get_payload() );
         });

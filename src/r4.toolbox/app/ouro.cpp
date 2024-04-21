@@ -1119,7 +1119,6 @@ int OuroApp::EntrypointGUI()
                 if ( ImGui::MenuItem( "Trim / Repair ..." ) )
                 {
                     activateModalPopup( "Stem Cache Trim / Repair", [
-                        this,
                             state = ux::createCacheTrimState( m_storagePaths->cacheCommon )](const char* title)
                         {
                             ux::modalCacheTrim( title, *state );
