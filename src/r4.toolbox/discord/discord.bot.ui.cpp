@@ -215,7 +215,7 @@ void BotWithUI::imgui( app::CoreGUI& coreGUI )
                     const float minimumLatency = (float)stats.m_voiceBufferQueueState * ssp::OpusStream::cFrameTimeSec;
 
                     ImGui::Text( "Voice Buffer Queue : %3u ( + ~%.1fs latency )", stats.m_voiceBufferQueueState, minimumLatency );
-                    ImGui::Text( "Packet Size  (avg) : %4i bytes", (int32_t)m_avgPacketSize.m_average );
+                    ImGui::Text( "Packet Size  (avg) : %4" PRIi64 " bytes", m_avgPacketSize.getInt64() );
 
                     ImGui::PushItemWidth( discordViewWidth * 0.65f );
 

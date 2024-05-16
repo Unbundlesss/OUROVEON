@@ -4,8 +4,7 @@
 //  |_______|_______|___|__|_______|\_____/|_______|_______|__|____|
 //  \\ harry denholm \\ ishani            ishani.org/shelf/ouroveon/
 //
-//  Frontend controls initialistion of the rendering canvas and IMGUI 
-//  instance, along with the update and display hooks
+//  
 //
 
 #include "pch.h"
@@ -17,6 +16,7 @@
 #include "base/mathematics.h"
 #include "dsp/scope.h"
 
+#include "plug/utils.clap.h"
 #include "effect/vst2/host.h"
 #include "win32/errors.h"
 #include "win32/utils.h"
@@ -31,7 +31,224 @@ namespace app {
 namespace module {
 
 // ---------------------------------------------------------------------------------------------------------------------
-Audio::Audio() 
+namespace clap_detail {
+
+static const void* clapGetExtension( const struct clap_host* host, const char* extension_id ) noexcept
+{
+    CLAPEffect* clapEffect = static_cast<CLAPEffect*>(host->host_data);
+    ABSL_ASSERT( clapEffect != nullptr );
+
+    return clapEffect->m_audioModule->clapGetExtension( *clapEffect, extension_id );
+}
+
+static void clapRequestRestart( const struct clap_host* host ) noexcept
+{
+    CLAPEffect* clapEffect = static_cast<CLAPEffect*>(host->host_data);
+    ABSL_ASSERT( clapEffect != nullptr );
+
+    clapEffect->m_audioModule->clapRequestRestart( *clapEffect );
+}
+
+static void clapRequestProcess( const struct clap_host* host ) noexcept
+{
+    CLAPEffect* clapEffect = static_cast<CLAPEffect*>(host->host_data);
+    ABSL_ASSERT( clapEffect != nullptr );
+
+    clapEffect->m_audioModule->clapRequestProcess( *clapEffect );
+}
+
+static void clapRequestCallback( const struct clap_host* host ) noexcept
+{
+    CLAPEffect* clapEffect = static_cast<CLAPEffect*>(host->host_data);
+    ABSL_ASSERT( clapEffect != nullptr );
+
+    clapEffect->m_audioModule->clapRequestCallback( *clapEffect );
+}
+
+static void clapHostLog( const clap_host_t* host, clap_log_severity severity, const char* msg )
+{
+    static constexpr std::array< std::string_view, 7 > ClapSeverityString =
+    {
+        "  (Debug)",
+        "   (Info)",
+        "(Warning)",
+        "  (Error)",
+        "  (Fatal)",
+        "(Host-Misbehave)",
+        "(Plug-Misbehave)",
+    };
+
+    CLAPEffect* clapEffect = static_cast<CLAPEffect*>(host->host_data);
+    ABSL_ASSERT( clapEffect != nullptr );
+
+    switch ( severity )
+    {
+        default:
+            blog::plug( FMTX( "[CLAP:{}] (unknown) {}" ), clapEffect->m_displayName, msg );
+            break;
+
+        case CLAP_LOG_DEBUG:
+        case CLAP_LOG_INFO:
+            blog::plug( FMTX( "[CLAP:{}] {} {}" ), clapEffect->m_displayName, ClapSeverityString[(std::size_t)severity], msg );
+            break;
+
+        case CLAP_LOG_WARNING:
+        case CLAP_LOG_ERROR:
+        case CLAP_LOG_FATAL:
+        case CLAP_LOG_HOST_MISBEHAVING:
+        case CLAP_LOG_PLUGIN_MISBEHAVING:
+            blog::plug( FMTX( "[CLAP:{}] {} {}" ), clapEffect->m_displayName, ClapSeverityString[(std::size_t)severity], msg );
+            break;
+    }
+}
+
+static void clapLatencyChanged( const clap_host_t* host )
+{
+    CLAPEffect* clapEffect = static_cast<CLAPEffect*>(host->host_data);
+    ABSL_ASSERT( clapEffect != nullptr );
+
+    blog::debug::plug( FMTX( "[CLAP:{}] <host> => clapLatencyChanged" ), clapEffect->m_displayName );
+    clapEffect->getRuntimeInstance().updateLatency();
+}
+
+static bool clapIsRescanFlagSupported(const clap_host_t* host, uint32_t flag)
+{
+    return true;
+}
+
+static void clapRescan(const clap_host_t* host, uint32_t flags)
+{
+
+}
+
+static void clapParamRescan( const clap_host_t* host, clap_param_rescan_flags flags )
+{
+
+}
+
+static void clapParamClear( const clap_host_t* host, clap_id param_id, clap_param_clear_flags flags )
+{
+
+}
+
+static void clapParamRequestFlush(const clap_host_t* host)
+{
+
+}
+
+static void clapMarkDirty(const clap_host_t* host)
+{
+
+}
+
+static void clapGuiResizeHintsChanged(const clap_host_t* host)
+{
+}
+
+// Request the host to resize the client area to width, height.
+// Return true if the new size is accepted, false otherwise.
+// The host doesn't have to call set_size().
+//
+// Note: if not called from the main thread, then a return value simply means that the host
+// acknowledged the request and will process it asynchronously. If the request then can't be
+// satisfied then the host will call set_size() to revert the operation.
+// [thread-safe & !floating]
+static bool clapGuiRequestResize(const clap_host_t* host, uint32_t width, uint32_t height)
+{
+    CLAPEffect* clapEffect = static_cast<CLAPEffect*>(host->host_data);
+    ABSL_ASSERT( clapEffect != nullptr );
+
+    return clapEffect->getRuntimeInstance().uiRequestResize( width, height );
+}
+
+// Request the host to show the plugin gui.
+// Return true on success, false otherwise.
+// [thread-safe]
+static bool clapGuiRequestShow(const clap_host_t* host)
+{
+    CLAPEffect* clapEffect = static_cast<CLAPEffect*>(host->host_data);
+    ABSL_ASSERT( clapEffect != nullptr );
+
+    return clapEffect->getRuntimeInstance().uiRequestShow();
+}
+
+// Request the host to hide the plugin gui.
+// Return true on success, false otherwise.
+// [thread-safe]
+static bool clapGuiRequestHide(const clap_host_t* host)
+{
+    CLAPEffect* clapEffect = static_cast<CLAPEffect*>(host->host_data);
+    ABSL_ASSERT( clapEffect != nullptr );
+
+    return clapEffect->getRuntimeInstance().uiRequestHide();
+}
+
+// The floating window has been closed, or the connection to the gui has been lost.
+//
+// If was_destroyed is true, then the host must call clap_plugin_gui->destroy() to acknowledge
+// the gui destruction.
+// [thread-safe]
+static void clapGuiClosed(const clap_host_t* host, bool was_destroyed)
+{
+    CLAPEffect* clapEffect = static_cast<CLAPEffect*>(host->host_data);
+    ABSL_ASSERT( clapEffect != nullptr );
+
+    clapEffect->getRuntimeInstance().uiRequestClosed( was_destroyed );
+}
+
+static bool clapIsMainThread( const clap_host_t* host )
+{
+    CLAPEffect* clapEffect = static_cast<CLAPEffect*>(host->host_data);
+    ABSL_ASSERT( clapEffect != nullptr );
+
+    return clapEffect->m_audioModule->isMainThreadID( std::this_thread::get_id() );
+}
+
+static bool clapIsAudioThread( const clap_host_t* host )
+{
+    CLAPEffect* clapEffect = static_cast<CLAPEffect*>(host->host_data);
+    ABSL_ASSERT( clapEffect != nullptr );
+
+    return clapEffect->m_audioModule->isAudioThreadID( std::this_thread::get_id() );
+}
+
+} // namespace clap_detail
+
+// ---------------------------------------------------------------------------------------------------------------------
+Audio::Audio( const char* appName )
+    : m_clapHost {
+        CLAP_VERSION,
+        nullptr,
+        appName,
+        OURO_FRAMEWORK_CREDIT,
+        OURO_FRAMEWORK_URL,
+        OURO_FRAMEWORK_VERSION,
+        clap_detail::clapGetExtension,
+        clap_detail::clapRequestRestart,
+        clap_detail::clapRequestProcess,
+        clap_detail::clapRequestCallback }
+    , m_clapHostLog {
+        clap_detail::clapHostLog }
+    , m_clapHostLatency {
+        clap_detail::clapLatencyChanged }
+    , m_clapAudioPorts {
+        clap_detail::clapIsRescanFlagSupported,
+        clap_detail::clapRescan }
+    , m_clapHostParams {
+        clap_detail::clapParamRescan,
+        clap_detail::clapParamClear,
+        clap_detail::clapParamRequestFlush }
+    , m_clapHostState {
+        clap_detail::clapMarkDirty }
+    , m_clapHostGui {
+        clap_detail::clapGuiResizeHintsChanged,
+        clap_detail::clapGuiRequestResize,
+        clap_detail::clapGuiRequestShow,
+        clap_detail::clapGuiRequestHide,
+        clap_detail::clapGuiClosed }
+    , m_clapHostThreadCheck {
+        clap_detail::clapIsMainThread,
+        clap_detail::clapIsAudioThread }
 {
 }
 
@@ -41,7 +258,7 @@ Audio::~Audio()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-absl::Status Audio::create( const app::Core* appCore )
+absl::Status Audio::create( app::Core* appCore )
 {
     const auto baseStatus = Module::create( appCore );
     if ( !baseStatus.ok() )
@@ -73,6 +290,12 @@ absl::Status Audio::create( const app::Core* appCore )
         blog::core( "                      [ {} {}]", apiInfo->name, ( hostAPIdefault == hApi ) ? "(default) " : "" );
     }
 
+    // go collect & analyse local CLAP plugins in the background, building the library of known plugins
+    m_pluginStashClap = plug::stash::CLAP::createAndPopulateAsync( appCore->getTaskExecutorPlugins() );
+
+    // stash thread ID, used to check when things are running on main vs audio
+    m_mainThreadID = std::this_thread::get_id();
+
     return absl::OkStatus();
 }
 
@@ -97,11 +320,11 @@ absl::Status Audio::initOutput( const config::Audio& outputDevice, const config:
 {
     blog::core( "Establishing audio output using [{}] @ {}", outputDevice.lastDevice, outputDevice.sampleRate );
 
-    // cache sample rate
-    m_sampleRate = outputDevice.sampleRate;
+    // cache sample rate & buffer choice
+    m_outSampleRate = outputDevice.sampleRate;
 
     // create the rolling spectrum scope
-    m_scope = std::make_unique< dsp::Scope8 >( 1.0f / 60.0f, m_sampleRate, scopeSpectrumConfig );
+    m_scope = std::make_unique< dsp::Scope8 >( 1.0f / 60.0f, m_outSampleRate, scopeSpectrumConfig );
 
     PaStreamParameters outputParameters;
     if ( AudioDeviceQuery::generateStreamParametersFromDeviceConfig( outputDevice, outputParameters ) < 0 )
@@ -124,7 +347,13 @@ absl::Status Audio::initOutput( const config::Audio& outputDevice, const config:
         return absl::UnavailableError( fmt::format( FMTX( "Audio engine error - Pa_OpenStream failed [{}]" ), Pa_GetErrorText( err ) ) );
     }
 
-    m_mixerBuffers = new OutputBuffer( getMaximumBufferSize() );
+    m_outMaxBufferSize = outputDevice.bufferSize;
+    if ( m_outMaxBufferSize == 0 )
+        m_outMaxBufferSize = getMaximumBufferSize();    // when == 0 PortAudio (rather, the output device) will automatically adjust buffer sizes 
+                                                        // so we need to allocate a large-enough-to-handle-anything buffer instead even if most of it remains unused
+
+    m_mixerBuffers = new OutputBuffer( m_outMaxBufferSize );
+
 
     err = Pa_StartStream( m_paStream );
     if ( err != paNoError )
@@ -134,7 +363,19 @@ absl::Status Audio::initOutput( const config::Audio& outputDevice, const config:
         return absl::UnavailableError( fmt::format( FMTX( "Audio engine error - Pa_StartStream failed [{}]" ), Pa_GetErrorText( err ) ) );
     }
 
-    m_outputLatencyMs = ( std::chrono::microseconds( llround( outputParameters.suggestedLatency * 1.0e6 ) ) );
+    // stash the output latency reported as milliseconds, used by Ableton Link compensation
+    m_outLatencyMs = ( std::chrono::microseconds( llround( outputParameters.suggestedLatency * 1.0e6 ) ) );
+
+    // setup & bind clap processing structures
+    {
+        memset( &m_clapProcess, 0, sizeof( m_clapProcess ) );
+        memset( &m_clapProcessTransport, 0, sizeof( m_clapProcessTransport ) );
+
+        m_clapProcess.transport     = &m_clapProcessTransport;
+
+        m_clapProcess.in_events     = m_clapProcessEventsIn.clapInputEvents();
+        m_clapProcess.out_events    = m_clapProcessEventsOut.clapOutputEvents();
+    }
 
     return absl::OkStatus();
 }
@@ -155,7 +396,7 @@ void Audio::termOutput()
         m_mixerBuffers = nullptr;
     }
 
-    m_sampleRate = 0;
+    m_outSampleRate = 0;
 }
 
 
@@ -190,6 +431,9 @@ int Audio::PortAudioCallback(
     if ( !audioModule->m_threadInitOnce )
     {
         ouroveonThreadEntry( OURO_THREAD_PREFIX "AudioMix" );
+
+        audioModule->m_audioThreadID = std::this_thread::get_id();
+
         audioModule->m_threadInitOnce = true;
     }
 
@@ -214,20 +458,20 @@ void Audio::ProcessMixCommandsOnMixThread()
             case MixThreadCommand::SetMixerFunction:
                 m_mixerInterface = mixCmdData.getPtrAs<MixerInterface>();
                 break;
-            case MixThreadCommand::InstallVST:
-#if OURO_FEATURE_VST24
-                m_vstiStack.emplace_back( mixCmdData.getPtrAs<vst::Instance>() );
-#endif // OURO_FEATURE_VST24
+            case MixThreadCommand::InstallPlugin:
+#if OURO_FEATURE_NST24
+                m_pluginStack.emplace_back( mixCmdData.getPtrAs<nst::Instance>() );
+#endif // OURO_FEATURE_NST24
                 break;
-            case MixThreadCommand::ClearAllVSTs:
-#if OURO_FEATURE_VST24
-                m_vstiStack.clear();
-#endif // OURO_FEATURE_VST24
+            case MixThreadCommand::ClearAllPlugins:
+#if OURO_FEATURE_NST24
+                m_pluginStack.clear();
+#endif // OURO_FEATURE_NST24
                 break;
-            case MixThreadCommand::ToggleVSTBypass:
-#if OURO_FEATURE_VST24
-                m_vstBypass = !m_vstBypass;
-#endif // OURO_FEATURE_VST24
+            case MixThreadCommand::TogglePluginBypass:
+#if OURO_FEATURE_NST24
+                m_pluginBypass = !m_pluginBypass;
+#endif // OURO_FEATURE_NST24
                 break;
             case MixThreadCommand::ToggleMute:
                 m_mute = !m_mute;
@@ -274,6 +518,19 @@ void Audio::ProcessMixCommandsOnMixThread()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+void Audio::ProcessClapEventsOnMixThread()
+{
+    for ( uint32_t eventIndex = 0; eventIndex < static_cast<uint32_t>( m_clapProcessEventsOut.size() ); ++eventIndex )
+    {
+        clap_event_header* eventHeader = m_clapProcessEventsOut.get( eventIndex );
+        blog::plug( FMTX( "[CLAP] event-out : {} @ sample {}" ), plug::utils::clapEventTypeToString( eventHeader->type ), eventHeader->time );
+    }
+
+    m_clapProcessEventsOut.clear();
+    m_clapProcessEventsIn.clear();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 int Audio::PortAudioCallbackInternal( void* outputBuffer, unsigned long framesPerBuffer, const PaStreamCallbackTimeInfo* timeInfo )
 {
     ABSL_ASSERT( m_mixerBuffers );
@@ -296,7 +553,7 @@ int Audio::PortAudioCallbackInternal( void* outputBuffer, unsigned long framesPe
     }
 
     // set up the buffer pointers for the final stage of the process
-    float* inputs[8]
+    float* inputs[12]
     {
         m_mixerBuffers->m_workingLR[0],
         m_mixerBuffers->m_workingLR[1],
@@ -305,9 +562,13 @@ int Audio::PortAudioCallbackInternal( void* outputBuffer, unsigned long framesPe
         m_mixerBuffers->m_silence,
         m_mixerBuffers->m_silence,
         m_mixerBuffers->m_silence,
+        m_mixerBuffers->m_silence,
+        m_mixerBuffers->m_silence,
+        m_mixerBuffers->m_silence,
+        m_mixerBuffers->m_silence,
         m_mixerBuffers->m_silence
     };
-    float* outputs[8]
+    float* outputs[12]
     {
         m_mixerBuffers->m_finalOutputLR[0],
         m_mixerBuffers->m_finalOutputLR[1],
@@ -316,39 +577,99 @@ int Audio::PortAudioCallbackInternal( void* outputBuffer, unsigned long framesPe
         m_mixerBuffers->m_runoff,
         m_mixerBuffers->m_runoff,
         m_mixerBuffers->m_runoff,
+        m_mixerBuffers->m_runoff,
+        m_mixerBuffers->m_runoff,
+        m_mixerBuffers->m_runoff,
+        m_mixerBuffers->m_runoff,
         m_mixerBuffers->m_runoff
     };
 
-    // track performance pre-VST 
+    // track performance pre-plugin 
     m_state.mark( ExposedState::ExecutionStage::Mixer );
 
-    // if we don't use VSTs to process our samples into the output buffer, then we must eventually manually copy them raw; this tracks that
+    // if we don't use plugins to process our samples into the output buffer, then we must eventually manually copy them raw; this tracks that
     bool outputsWritten = false;
 
-#if OURO_FEATURE_VST24
-    if ( m_vstBypass == false )
+#if OURO_FEATURE_NST24
+#if 1
+    if ( m_pluginBypass == false )
     {
-        for ( auto vstInst : m_vstiStack )
+        for ( auto pluginInst : m_pluginStack )
         {
-            if ( vstInst &&
-                 vstInst->availableForUse() )
+            if ( pluginInst &&
+                 pluginInst->availableForUse() )
             {
-                vstInst->process( inputs, outputs, framesPerBuffer );
+                pluginInst->process( inputs, outputs, framesPerBuffer );
                 inputs[0] = outputs[0];
                 inputs[1] = outputs[1];
                 outputsWritten = true;
             }
         }
     }
-#endif // OURO_FEATURE_VST24
+#endif 
+#endif // OURO_FEATURE_NST24
 
-    m_state.mark( ExposedState::ExecutionStage::VSTs );
+    {
+        const app::AudioPlaybackTimeInfo* playbackTimeInfo = ( m_mixerInterface != nullptr ) ? m_mixerInterface->getPlaybackTimeInfo() : nullptr;
+
+        m_clapProcess.steady_time += static_cast<int64_t>( framesPerBuffer );
+        m_clapProcess.frames_count = static_cast<uint32_t>( framesPerBuffer );
+
+        if ( playbackTimeInfo != nullptr )
+        {
+            m_clapProcessTransport.flags = CLAP_TRANSPORT_HAS_TEMPO 
+                                         | CLAP_TRANSPORT_HAS_TIME_SIGNATURE;
+
+            m_clapProcessTransport.tempo        = playbackTimeInfo->tempo;
+            m_clapProcessTransport.tsig_num     = static_cast< uint16_t >( playbackTimeInfo->timeSigNumerator );
+            m_clapProcessTransport.tsig_denom   = static_cast< uint16_t >( playbackTimeInfo->timeSigDenominator );
+        }
+        else
+        {
+            m_clapProcessTransport.flags = 0;
+        }
+
+        if ( m_clapEffectTest != nullptr )
+        {
+            if ( m_clapEffectTest->m_ready && m_clapEffectTest->m_online != nullptr )
+            {
+                auto& inputBuffers  = m_clapEffectTest->getRuntimeInstance().getInputAudioBuffers();
+                for ( std::size_t bI = 0U; bI < inputBuffers.size(); bI++ )
+                {
+                    inputBuffers[bI].data32 = inputs;
+                }
+                m_clapProcess.audio_inputs          = &inputBuffers[0];
+                m_clapProcess.audio_inputs_count    = static_cast< uint32_t >( inputBuffers.size() );
+
+                auto& outputBuffers = m_clapEffectTest->getRuntimeInstance().getOutputAudioBuffers();
+                for ( std::size_t bI = 0U; bI < outputBuffers.size(); bI++ )
+                {
+                    outputBuffers[bI].data32 = outputs;
+                }
+                m_clapProcess.audio_outputs         = &outputBuffers[0];
+                m_clapProcess.audio_outputs_count   = static_cast< uint32_t >( outputBuffers.size() );
+
+
+                plug::online::Processing processing( m_clapEffectTest->m_online );
+
+                int32_t processingResult = processing( m_clapProcess );
+
+                inputs[0] = outputs[0];
+                inputs[1] = outputs[1];
+                outputsWritten = true;
+            }
+        }
+
+        ProcessClapEventsOnMixThread();
+    }
+
+    m_state.mark( ExposedState::ExecutionStage::Plugins );
 
     // by default we'll assume the results are still in the working buffers
     float* resultChannelLeft  = inputs[0];
     float* resultChannelRight = inputs[1];
 
-    // .. but if VSTs ran, we will use the resulting output buffers
+    // .. but if plugins ran, we will use the resulting output buffers
     if ( outputsWritten )
     {
         resultChannelLeft  = outputs[0];
@@ -439,25 +760,25 @@ uint64_t Audio::getRecordingDataUsage() const
 AsyncCommandCounter Audio::toggleEffectBypass()
 {
     const uint32_t commandCounter = m_mixThreadCommandsIssued++;
-    m_mixThreadCommandQueue.emplace( MixThreadCommand::ToggleVSTBypass );
+    m_mixThreadCommandQueue.emplace( MixThreadCommand::TogglePluginBypass );
     return AsyncCommandCounter{ commandCounter };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 bool Audio::isEffectBypassEnabled() const
 {
-#if OURO_FEATURE_VST24
-    return m_vstBypass;
+#if OURO_FEATURE_NST24
+    return m_pluginBypass;
 #else
     return false;
 #endif 
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-AsyncCommandCounter Audio::effectAppend( vst::Instance* vst )
+AsyncCommandCounter Audio::effectAppend( nst::Instance* nst )
 {
     const uint32_t commandCounter = m_mixThreadCommandsIssued++;
-    m_mixThreadCommandQueue.emplace( MixThreadCommand::InstallVST, vst );
+    m_mixThreadCommandQueue.emplace( MixThreadCommand::InstallPlugin, nst );
     return AsyncCommandCounter{ commandCounter };
 }
 
@@ -465,7 +786,7 @@ AsyncCommandCounter Audio::effectAppend( vst::Instance* vst )
 AsyncCommandCounter Audio::effectClearAll()
 {
     const uint32_t commandCounter = m_mixThreadCommandsIssued++;
-    m_mixThreadCommandQueue.emplace( MixThreadCommand::ClearAllVSTs );
+    m_mixThreadCommandQueue.emplace( MixThreadCommand::ClearAllPlugins );
     return AsyncCommandCounter{ commandCounter };
 }
 
@@ -507,6 +828,58 @@ void Audio::blockUntil( AsyncCommandCounter counter )
         std::this_thread::yield();
     }
 }
+
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Query an extension.
+// The returned pointer is owned by the host.
+// It is forbidden to call it before plugin->init().
+// You can call it within plugin->init() call, and after.
+// [thread-safe]
+const void* Audio::clapGetExtension( CLAPEffect& clapEffect, const char* extension_id ) noexcept
+{
+    blog::debug::plug( FMTX( "[CLAP:{}] clapGetExtension({})" ), clapEffect.m_displayName, extension_id );
+
+    if ( !std::strcmp( extension_id, CLAP_EXT_LOG ) )
+        return &m_clapHostLog;
+    if ( !std::strcmp( extension_id, CLAP_EXT_AUDIO_PORTS ) )
+        return &m_clapAudioPorts;
+    if ( !std::strcmp( extension_id, CLAP_EXT_PARAMS ) )
+        return &m_clapHostParams;
+    if ( !std::strcmp( extension_id, CLAP_EXT_STATE ) )
+        return &m_clapHostState;
+    if ( !std::strcmp( extension_id, CLAP_EXT_GUI ) )
+        return &m_clapHostGui;
+    if ( !std::strcmp( extension_id, CLAP_EXT_THREAD_CHECK ) )
+        return &m_clapHostThreadCheck;
+
+    return nullptr;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Request the host to deactivate and then reactivate the plugin.
+// The operation may be delayed by the host.
+// [thread-safe]
+void Audio::clapRequestRestart( CLAPEffect& clapEffect ) noexcept
+{
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Request the host to activate and start processing the plugin.
+// This is useful if you have external IO and need to wake up the plugin from "sleep".
+// [thread-safe]
+void Audio::clapRequestProcess( CLAPEffect& clapEffect ) noexcept
+{
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Request the host to schedule a call to plugin->on_main_thread(plugin) on the main thread.
+// [thread-safe]
+void Audio::clapRequestCallback( CLAPEffect& clapEffect ) noexcept
+{
+}
+
 
 } // namespace module
 

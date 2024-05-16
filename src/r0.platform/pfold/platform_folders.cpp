@@ -151,6 +151,9 @@ namespace sago {
 std::string GetWindowsProgramFiles() {
     return GetKnownWindowsFolder( FOLDERID_ProgramFilesX64, "ProgramFilesX64 could not be found" );
 }
+std::string GetWindowsProgramFilesCommon() {
+    return GetKnownWindowsFolder( FOLDERID_ProgramFilesCommon, "ProgramFilesCommon could not be found" );
+}
 } // namespace sago
 
 

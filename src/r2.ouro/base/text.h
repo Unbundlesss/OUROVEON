@@ -36,6 +36,10 @@ inline void trim( std::string& str, const std::string& trimChars )
 } 
 
 // ---------------------------------------------------------------------------------------------------------------------
+// carefully strip out invalid characters from a utf8 string stream, ensuring the result can be used as a valid
+// path on any of the platforms that we run on; any invalid characters will be replaced by a chosen character and
+// whitespace can be compacted if desired
+//
 inline void sanitiseNameForPath( const std::string_view source, std::string& dest, const char32_t replacementChar = '_', bool allowWhitespace = true )
 {
     dest.clear();

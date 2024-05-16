@@ -16,7 +16,7 @@ struct Module
 {
     virtual ~Module() {}
     
-    virtual absl::Status create( const app::Core* appCore ) 
+    virtual absl::Status create( app::Core* appCore ) 
     { 
         ABSL_ASSERT( appCore != nullptr );
         m_appCore = appCore; 

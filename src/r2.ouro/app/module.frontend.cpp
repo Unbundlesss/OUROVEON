@@ -145,7 +145,7 @@ enum FontSlots
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-absl::Status Frontend::create( const app::Core* appCore )
+absl::Status Frontend::create( app::Core* appCore )
 {
     const auto baseStatus = Module::create( appCore );
     if ( !baseStatus.ok() )
@@ -525,6 +525,7 @@ bool Frontend::appTick()
             updateAndSaveFrontendConfig();
     }
 
+    glfwMakeContextCurrent( m_glfwWindow );
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();

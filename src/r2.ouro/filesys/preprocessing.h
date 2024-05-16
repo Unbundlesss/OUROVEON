@@ -4,7 +4,7 @@
 //  |_______|_______|___|__|_______|\_____/|_______|_______|__|____|
 //  \\ harry denholm \\ ishani            ishani.org/shelf/ouroveon/
 //
-//  
+//  wrapper around the simplecpp preprocessing library
 //
 
 #pragma once
@@ -13,6 +13,7 @@ namespace simplecpp { struct DUI; }
 
 namespace filesys {
 
+// simplified frontend for loading a text file, preprocessing it using simplecpp and returning the processed result
 struct Preprocessing
 {
     Preprocessing();

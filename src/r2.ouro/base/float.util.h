@@ -12,7 +12,7 @@ namespace base {
 struct LUT
 {
     // clang-format off
-    // unsigned byte to float look-up table
+    // unsigned byte to float look-up table originally designed for compile-time usage with 8-bit colour conversion
     inline static constexpr std::array<float, 256> u8_to_float =
     {
         0.00000000f, 0.00392157f, 0.00784314f, 0.01176471f, 0.01568628f, 0.01960784f, 0.02352941f, 0.02745098f, 0.03137255f, 0.03529412f,

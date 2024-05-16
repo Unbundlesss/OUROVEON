@@ -71,7 +71,7 @@ private:
 // ---------------------------------------------------------------------------------------------------------------------
 struct ScopedTimer final : public Moment
 {
-    ScopedTimer( const char* context )
+    ScopedTimer( std::string_view context )
         : Moment()
         , m_context( context )
         , m_running( true )

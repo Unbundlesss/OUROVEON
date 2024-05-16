@@ -23,7 +23,7 @@ struct UUID_V1_Time
     } ts;
 };
 
-std::string generateUUID_V1( bool withHypens )
+std::string generateUUID_V1( bool bWithHyphens )
 {
     using namespace date;
     using namespace std::chrono;
@@ -89,7 +89,7 @@ std::string generateUUID_V1( bool withHypens )
 
     // 3d97c19b-74bd-11ee-a750-98ba22c5a8d6
 
-    const std::string separator = withHypens ? "-" : "";
+    const std::string separator = bWithHyphens ? "-" : "";
 
     result = fmt::format( FMTX( "{:02x}{:02x}{:02x}{:02x}{}{:02x}{:02x}{}{:02x}{:02x}{}{:02x}{:02x}{}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}" ),
         timePart.ts.bytes[3],

@@ -16,6 +16,7 @@
 
 namespace config {
 
+// ---------------------------------------------------------------------------------------------------------------------
 OURO_CONFIG( Audio )
 {
     // data routing
@@ -40,6 +41,8 @@ OURO_CONFIG( Audio )
     }
 };
 using AudioOptional = std::optional< Audio >;
+
+
 
 } // namespace config
 

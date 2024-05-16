@@ -23,31 +23,68 @@
 #include "dsp/scope.h"
 #include "effect/container.h"
 
+// clap plugin support
+#include "plug/stash.clap.h"
+#include "plug/plug.clap.h"
+#include "clap/clap.h"
+#include "clap/version.h"
+#include "clap/helpers/event-list.hh"
+
+
 // portaudio
 struct PaStreamCallbackTimeInfo;
 struct PaStreamParameters;
 
-
 namespace config { struct Audio; }
-namespace vst { class Instance; }
+namespace nst { class Instance; }
 namespace ssp { class WAVWriter; class FLACWriter; class OpusStream; }
 
 namespace app {
 
 struct StoragePaths;
+struct CoreGUI;
+struct AudioPlaybackTimeInfo;
 
 namespace module {
 
 struct MixerInterface;
+struct Audio;
 
-struct Audio final 
+// ---------------------------------------------------------------------------------------------------------------------
+struct CLAPEffect
+{
+    app::module::Audio*             m_audioModule = nullptr;        // pointer back to owning audio host
+    std::atomic_bool                m_ready = false;
+    std::string                     m_displayName;
+
+    plug::runtime::CLAP::Instance   m_runtime;
+    plug::online::CLAP::Instance    m_online;
+
+    clap_host                       m_host;
+
+    // depending if plugin is activated or not we may be fetching the runtime instance from the 
+    // original object or from inside the activated online one; this just wraps that and there
+    // should be no way for it not to return something (unless something has gone badly wrong)
+    plug::runtime::CLAP& getRuntimeInstance()
+    { 
+        if ( m_runtime )
+            return *( m_runtime.get() );
+        else if ( m_online )
+            return m_online->getRuntimeInstance();
+
+        ABSL_UNREACHABLE();
+    }
+};
+
+// ---------------------------------------------------------------------------------------------------------------------
+struct Audio final
              : public Module
              , public rec::IRecordable
              , public effect::IContainer
 {
     DECLARE_NO_COPY_NO_MOVE( Audio );
 
-    Audio();
+    Audio( const char* appName );
     ~Audio();
 
     using SampleProcessorInstances  = std::vector< ssp::SampleStreamProcessorInstance >;
@@ -55,8 +92,8 @@ struct Audio final
 
 
     // -----------------------------------------------------------------------------------------------------------------
-    // fp32 working buffers for the mix process, covering somewhere to build results, flip buffers for VST processing, 
-    // spares for padding VST inputs, etc. 
+    // fp32 working buffers for the mix process, covering somewhere to build results, flip buffers for plugin processing, 
+    // spares for padding plugin inputs, etc. 
     //
     struct OutputBuffer
     {
@@ -101,12 +138,12 @@ struct Audio final
 
         uint32_t                m_maxSamples;
         std::array<float*, 2>   m_workingLR;        // data is written here by the mixer function
-        std::array<float*, 2>   m_finalOutputLR;    // we use these as flip-flop working buffers for VST processing
-        float*                  m_silence;          // empty input channel available for use as VST input (for example)
-        float*                  m_runoff;           // empty output channel to pad out for VSTs using >2 outputs
+        std::array<float*, 2>   m_finalOutputLR;    // we use these as flip-flop working buffers for plugin processing
+        float*                  m_silence;          // empty input channel available for use as plugin input (for example)
+        float*                  m_runoff;           // empty output channel to pad out for plugins using >2 outputs
     };
 
-    // standard controls for how the final signal is processed before it is handed off to VST / etc
+    // standard controls for how the final signal is processed before it is handed off to plugin / etc
     struct OutputSignal
     {
         float   m_linearGain    = 1.0f;             // multiply result of 8x stem combination at end of mixers
@@ -114,11 +151,11 @@ struct Audio final
 
     // an arbitrary choice, as some things need an estimate upfront - and even once a portaudio stream is open the sample count
     // can potentially change. Choose something big to give us breathing room. 
-    ouro_nodiscard constexpr int32_t getMaximumBufferSize() const { return 1024 * 4; }
+    ouro_nodiscard constexpr int32_t getMaximumBufferSize() const { return 1024 * 16; }
 
 
     // Module
-    absl::Status create( const app::Core* appCore ) override;
+    absl::Status create( app::Core* appCore ) override;
     void destroy() override;
     virtual std::string getModuleName() const override { return "Audio"; };
 
@@ -127,9 +164,9 @@ struct Audio final
     ouro_nodiscard absl::Status initOutput( const config::Audio& outputDevice, const config::Spectrum& scopeSpectrumConfig );
     void termOutput();
 
-    ouro_nodiscard constexpr int32_t getSampleRate() const { ABSL_ASSERT( m_sampleRate > 0 ); return m_sampleRate; }
+    ouro_nodiscard constexpr int32_t getSampleRate() const { ABSL_ASSERT( m_outSampleRate > 0 ); return m_outSampleRate; }
 
-    ouro_nodiscard std::chrono::microseconds getOutputLatencyMs() const { return m_outputLatencyMs; }
+    ouro_nodiscard std::chrono::microseconds getOutputLatencyMs() const { return m_outLatencyMs; }
 
 
     struct ExposedState
@@ -140,7 +177,7 @@ struct Audio final
         {
             Start,
             Mixer,                  // mixer logic
-            VSTs,                   // external VST processing
+            Plugins,                // external audio plugin processing
             Scope,                  // streaming frequency analysis, fed back to visualisation / exchange
             Interleave,             // move results into PA buffers
             SampleProcessing,       // pushing new samples out to any attached processors, like record-to-disk or discord-transmit
@@ -150,7 +187,7 @@ struct Audio final
         {
             "Start",
             "Mixer",
-            "VSTs",
+            "Plugins",
             "Scope",
             "Interleave",
             "SampleProcessing"
@@ -218,15 +255,18 @@ struct Audio final
         return m_scope->getCurrentResult();
     }
 
+    ouro_nodiscard bool isMainThreadID( const std::thread::id& idToCheck ) const { return m_mainThreadID == idToCheck; }
+    ouro_nodiscard bool isAudioThreadID( const std::thread::id& idToCheck ) const { return m_audioThreadID == idToCheck; }
+
 private:
 
     enum class MixThreadCommand
     {
         Invalid,
         SetMixerFunction,
-        InstallVST,
-        ClearAllVSTs,
-        ToggleVSTBypass,
+        InstallPlugin,
+        ClearAllPlugins,
+        TogglePluginBypass,
         ToggleMute,
         AttachSampleProcessor,
         DetatchSampleProcessor
@@ -235,6 +275,7 @@ private:
     using MixThreadCommandQueue = mcc::ReaderWriterQueue<MixThreadCommandData>;
 
     void ProcessMixCommandsOnMixThread();
+    void ProcessClapEventsOnMixThread();
 
 
     static int PortAudioCallback(
@@ -256,10 +297,14 @@ private:
     std::atomic_uint32_t                m_mixThreadCommandsIssued   = 0;
     std::atomic_uint32_t                m_mixThreadCommandsComplete = 0;
 
+    std::thread::id                     m_audioThreadID;
+    std::thread::id                     m_mainThreadID;
+
     // active output 
     void*                               m_paStream          = nullptr;
-    uint32_t                            m_sampleRate        = 0;
-    std::chrono::microseconds           m_outputLatencyMs;
+    uint32_t                            m_outSampleRate     = 0;
+    uint32_t                            m_outMaxBufferSize  = 0;
+    std::chrono::microseconds           m_outLatencyMs;
     OutputBuffer*                       m_mixerBuffers      = nullptr;      // the aligned intermediate buffer, filled by the configurable mixer process
     bool                                m_threadInitOnce    = false;        // as PA controls the actual mix thread work, this is checked to let us do any once-on-init code inside the callback code
     bool                                m_mute              = false;
@@ -268,14 +313,15 @@ private:
 
     std::unique_ptr<dsp::Scope8>        m_scope;
 
-#if OURO_FEATURE_VST24
-    using VSTFxSlots = std::vector< vst::Instance* >;
 
-    VSTFxSlots                          m_vstiStack;                        // VST slots, executed in order
-    bool                                m_vstBypass = false;
-#endif // OURO_FEATURE_VST24
+#if OURO_FEATURE_NST24
+    using PluginEffectSlots = std::vector< nst::Instance* >;
 
-    std::atomic<float>                  m_outputSignalGain  = cycfi::q::lin_float( { -6.0f } );        // gain control applied after merging stems, pre-VST
+    PluginEffectSlots                   m_pluginStack;                      // plugin slots, executed in order
+    bool                                m_pluginBypass = false;
+#endif // OURO_FEATURE_NST24
+
+    std::atomic<float>                  m_outputSignalGain  = cycfi::q::lin_float( { -6.0f } );        // gain control applied after merging stems, pre-plugin processing
 
     MixerInterface*                     m_mixerInterface    = nullptr;
 
@@ -304,7 +350,7 @@ public:
     AsyncCommandCounter toggleEffectBypass() override;
     bool isEffectBypassEnabled() const override;
 
-    AsyncCommandCounter effectAppend( vst::Instance* vst ) override;
+    AsyncCommandCounter effectAppend( nst::Instance* nst ) override;
     AsyncCommandCounter effectClearAll() override;
 
 
@@ -316,6 +362,43 @@ public:
     AsyncCommandCounter detachSampleProcessor( ssp::StreamProcessorInstanceID sspID );
 
     void blockUntil( AsyncCommandCounter counter );
+
+
+private:
+
+
+    // CLAP support
+    clap_host                           m_clapHost;
+    clap_host_log                       m_clapHostLog;
+    clap_host_latency                   m_clapHostLatency;
+    clap_host_audio_ports               m_clapAudioPorts;
+    clap_host_params                    m_clapHostParams;
+    clap_host_state                     m_clapHostState;
+    clap_host_gui                       m_clapHostGui;
+    clap_host_thread_check              m_clapHostThreadCheck;
+    
+
+    CLAPEffect*                         m_clapEffectTest = nullptr;
+
+
+    clap::helpers::EventList            m_clapProcessEventsIn;
+    clap::helpers::EventList            m_clapProcessEventsOut;
+    clap_event_transport                m_clapProcessTransport;
+    clap_process                        m_clapProcess;
+
+    plug::stash::CLAP::Instance         m_pluginStashClap;
+
+
+public:
+    // routed calls from clap_host function table
+    const void* clapGetExtension( CLAPEffect& clapEffect, const char* extension_id ) noexcept;
+    void clapRequestRestart( CLAPEffect& clapEffect ) noexcept;
+    void clapRequestProcess( CLAPEffect& clapEffect ) noexcept;
+    void clapRequestCallback( CLAPEffect& clapEffect ) noexcept;
+
+public:
+
+    void imgui( app::CoreGUI& coreGUI );
 };
 
 // interface class used to plug sound output generators into the Audio instance; this is how a client app interacts with the audio engine
@@ -335,6 +418,8 @@ struct MixerInterface
 
     // optionally cast / return a rec::IRecordable interface to expose disk output functionality
     virtual rec::IRecordable* getRecordable() { return nullptr; }
+
+    virtual const app::AudioPlaybackTimeInfo* getPlaybackTimeInfo() const { return nullptr; }
 };
 
 } // namespace module
@@ -356,7 +441,7 @@ using AudioModule = std::unique_ptr<module::Audio>;
 
 
 // ---------------------------------------------------------------------------------------------------------------------
-// a shared memory block based on the timing data required to be fed into VSTs. I'm not really sure this is a good idea!
+// a shared memory block based on the timing data required to be fed into plugins. I'm not really sure this is a good idea!
 // mixers can be handed a pointer and update it to sync data direct to all live effects. REFACTOR THIS LATER
 //
 struct AudioPlaybackTimeInfo

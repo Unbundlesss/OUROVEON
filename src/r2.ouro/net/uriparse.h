@@ -4,6 +4,7 @@
 //  |_______|_______|___|__|_______|\_____/|_______|_______|__|____|
 //  \\ harry denholm \\ ishani            ishani.org/shelf/ouroveon/
 //
+//  wraps uriparser library for turning URI strings into their component parts
 //
 
 #pragma once

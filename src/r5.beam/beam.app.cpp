@@ -260,6 +260,9 @@ struct MixEngine final : public app::module::MixerInterface,
     {
     }
 
+    const app::AudioPlaybackTimeInfo* getPlaybackTimeInfo() const override { return getTimeInfoPtr(); }
+
+
     inline void addNextRiff( const endlesss::live::RiffPtr& nextRiff )
     {
         m_riffQueue.emplace( nextRiff );
@@ -1070,9 +1073,9 @@ protected:
 
     std::unique_ptr< ux::TagLine >          m_uxTagLine;
 
-#if OURO_FEATURE_VST24
+#if OURO_FEATURE_NST24
     std::unique_ptr< effect::EffectStack >  m_effectStack;
-#endif // OURO_FEATURE_VST24
+#endif // OURO_FEATURE_NST24
 
     std::unique_ptr< discord::BotWithUI >   m_discordBotUI;
 };
@@ -1105,11 +1108,11 @@ int BeamApp::EntrypointOuro()
             }
         });
 
-#if OURO_FEATURE_VST24
+#if OURO_FEATURE_NST24
     // VSTs for audio engine
     m_effectStack = std::make_unique<effect::EffectStack>( m_mdAudio.get(), mixEngine.getTimeInfoPtr(), "beam" );
     m_effectStack->load( m_appConfigPath );
-#endif // OURO_FEATURE_VST24
+#endif // OURO_FEATURE_NST24
 
     m_uxTagLine = std::make_unique<ux::TagLine>( getEventBusClient() );
 
@@ -1209,13 +1212,13 @@ int BeamApp::EntrypointOuro()
         }
 
 
-#if OURO_FEATURE_VST24
+#if OURO_FEATURE_NST24
         {
             ImGui::Begin( "Effects" );
             m_effectStack->imgui( *this );
             ImGui::End();
         }
-#endif // OURO_FEATURE_VST24
+#endif // OURO_FEATURE_NST24
 
         m_discordBotUI->imgui( *this );
 
@@ -1722,9 +1725,9 @@ int BeamApp::EntrypointOuro()
     m_mdAudio->blockUntil( m_mdAudio->installMixer( nullptr ) );
     m_mdAudio->blockUntil( m_mdAudio->effectClearAll() );
 
-#if OURO_FEATURE_VST24
+#if OURO_FEATURE_NST24
     m_effectStack->save( m_appConfigPath );
-#endif // OURO_FEATURE_VST24
+#endif // OURO_FEATURE_NST24
 
     return 0;
 }

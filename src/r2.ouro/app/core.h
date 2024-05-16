@@ -103,6 +103,7 @@ struct ICoreServices : public config::IPathProvider
     ouro_nodiscard virtual const endlesss::toolkit::Exchange&           getEndlesssExchange() const = 0;
     ouro_nodiscard virtual const endlesss::toolkit::PopulationQuery&    getEndlesssPopulation() const = 0;
     ouro_nodiscard virtual tf::Executor&                                getTaskExecutor() = 0;
+    ouro_nodiscard virtual tf::Executor&                                getTaskExecutorPlugins() = 0;
     ouro_nodiscard virtual sol::state_view&                             getLuaState() = 0;
     ouro_nodiscard virtual base::EventBusClient                         getEventBusClient() const = 0;
 };
@@ -196,7 +197,8 @@ protected:
     endlesss::api::NetConfiguration::Shared m_networkConfiguration;
 
     // multithreading bro ever heard of it
-    tf::Executor                            m_taskExecutor;
+    tf::Executor                            m_taskExecutor;                 // task dispatcher for the app
+    tf::Executor                            m_taskExecutorPlugins;          // task dispatcher used for plugins, both discovery and giving to CLAP thread pooling
 
     // application-wide lua state wrapper
     sol::state                              m_lua;
@@ -256,7 +258,7 @@ protected:
 
     void event_NetworkActivity( const events::NetworkActivity* eventData )
     {
-        m_avgNetActivity.m_average = 1.0;
+        m_avgNetActivity.set( 1.0 );
         m_avgNetPayloadValue += eventData->m_bytes;
         if ( eventData->m_bFailure )
             m_avgNetErrorCount++;
@@ -324,6 +326,7 @@ public:
     ouro_nodiscard const endlesss::toolkit::Exchange&           getEndlesssExchange() const override    { return m_endlesssExchange; }
     ouro_nodiscard const endlesss::toolkit::PopulationQuery&    getEndlesssPopulation() const override  { return m_endlesssPopulation;}
     ouro_nodiscard tf::Executor&                                getTaskExecutor() override              { return m_taskExecutor; }
+    ouro_nodiscard tf::Executor&                                getTaskExecutorPlugins() override       { return m_taskExecutorPlugins; }
     ouro_nodiscard sol::state_view&                             getLuaState() override                  { return m_lua; }
     ouro_nodiscard base::EventBusClient                         getEventBusClient() const override
     {

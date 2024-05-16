@@ -36,7 +36,7 @@
 #include <conio.h>
 #endif 
 
-#if OURO_FEATURE_VST24
+#if OURO_FEATURE_NST24
 #include "effect/vst2/host.h"
 #endif 
 
@@ -88,15 +88,22 @@ OuroveonThreadScope::~OuroveonThreadScope()
 //
 struct TaskFlowWorkerHook : public tf::WorkerInterface
 {
+    TaskFlowWorkerHook( std::string_view usage )
+        : m_usageString( usage )
+    {}
+
     void scheduler_prologue( tf::Worker& worker ) override
     {
-        ouroveonThreadEntry( fmt::format( FMTX( OURO_THREAD_PREFIX "TaskFlow:{}" ), worker.id() ).c_str() );
+        ouroveonThreadEntry( fmt::format( FMTX( OURO_THREAD_PREFIX "TF:{}:{}" ), m_usageString, worker.id() ).c_str() );
     }
 
     void scheduler_epilogue( tf::Worker& worker, std::exception_ptr ptr ) override
     {
         ouroveonThreadExit();
     }
+
+private:
+    std::string     m_usageString;
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -177,7 +184,8 @@ CoreStart::~CoreStart()
 Core::Core()
     : CoreStart()
     , m_networkConfiguration( std::make_shared<endlesss::api::NetConfiguration>() )
-    , m_taskExecutor( std::clamp( std::thread::hardware_concurrency(), 2U, OURO_THREAD_LIMIT ), std::make_shared<TaskFlowWorkerHook>() )
+    , m_taskExecutor(        std::clamp( std::thread::hardware_concurrency(), 2U, OURO_THREAD_LIMIT ), std::make_shared<TaskFlowWorkerHook>("app")  )
+    , m_taskExecutorPlugins( std::clamp( std::thread::hardware_concurrency(), 1U, 3U ),                std::make_shared<TaskFlowWorkerHook>("plug") )
 {
 }
 
@@ -227,6 +235,7 @@ int Core::Run()
 
     // sup
     blog::core( FMTX( "Hello from OUROVEON {} [{}]" ), GetAppNameWithVersion(), getOuroveonPlatform() );
+    blog::debug::core( FMTX( "DEBUG BUILD" ) );
 
     // scripting
     blog::core( FMTX( "initialising {}" ), LUA_VERSION );
@@ -241,7 +250,9 @@ int Core::Run()
     }
 
     // big and wide
-    blog::core( FMTX( "initialising taskflow {} with {} worker threads" ), tf::version(), m_taskExecutor.num_workers() );
+    blog::core( FMTX( "initialising taskflow {}" ), tf::version() );
+    blog::core( FMTX( " + {} primary worker threads" ), m_taskExecutor.num_workers() );
+    blog::core( FMTX( " + {} plugin pool threads" ), m_taskExecutorPlugins.num_workers() );
 
     // configure app event bus
     {
@@ -441,9 +452,9 @@ int Core::Run()
     // bring up global external registrations / services that will auto-unwind on exit
     win32::ScopedInitialiseCOM      scopedCOM;
 
-#if OURO_FEATURE_VST24
-    vst::ScopedInitialiseVSTHosting scopedVST;
-#endif // OURO_FEATURE_VST24
+#if OURO_FEATURE_NST24
+    nst::ScopedInitialiseNSTHosting scopedVST;
+#endif // OURO_FEATURE_NST24
 #endif // OURO_PLATFORM_WIN
 
 #if OURO_EXCHANGE_IPC
@@ -463,7 +474,7 @@ int Core::Run()
 
 
     // create our wrapper around PA; this doesn't connect to a device, just does initial startup & enumeration
-    m_mdAudio = std::make_unique<app::module::Audio>();
+    m_mdAudio = std::make_unique<app::module::Audio>( GetAppName() );
     {
         const auto audioStatus = m_mdAudio->create( this );
         if ( !audioStatus.ok() )
@@ -622,11 +633,11 @@ void Core::tickActivityUpdate()
     }
 
     m_avgNetActivity.update( 0 );
-    if ( m_avgNetActivity.m_average < 0.01 )    // clip at small values
-        m_avgNetActivity.m_average = 0.0;
+    if ( m_avgNetActivity.get() < 0.01 )    // clip at small values
+        m_avgNetActivity.set( 0.0 );
 
     // raise up "network is working" value linearly if activity window shows .. activity
-    if ( m_avgNetActivity.m_average > 0 )
+    if ( m_avgNetActivity.get() > 0 )
     {
         m_avgNetActivityLag += lagRate;
     }
@@ -1071,7 +1082,7 @@ bool CoreGUI::beginInterfaceLayout( const ViewportFlags viewportFlags )
                 const double audioEngineLoad = m_mdAudio->getAudioEngineCPULoadPercent();
                 m_audoLoadAverage.update( audioEngineLoad );
 
-                ImGui::Text( " CPU %03.0f%%", m_audoLoadAverage.m_average );
+                ImGui::Text( " CPU %03.0f%%", m_audoLoadAverage.get() );
             }
 
             for ( const auto& statusBlock : m_statusBarBlocksRight )
@@ -1098,8 +1109,15 @@ bool CoreGUI::beginInterfaceLayout( const ViewportFlags viewportFlags )
 
     ImGui::PushFont( m_mdFrontEnd->getFont( app::module::Frontend::FontChoice::FixedMain ) );
 
-    if ( m_showPerformanceWindow )
-        ImGuiPerformanceTracker();
+    // show built-in UI when we have docking & menus in play
+    if ( hasViewportFlag( viewportFlags, VF_WithMainMenu ) &&
+         hasViewportFlag( viewportFlags, VF_WithDocking ) )
+    {
+        if ( m_showPerformanceWindow )
+            ImGuiPerformanceTracker();
+
+        m_mdAudio->imgui( *this );
+    }
 
     // run active modal dialog callbacks
     for ( const auto& modalPair : m_modalsActive )
@@ -1242,7 +1260,7 @@ void CoreGUI::ImGuiPerformanceTracker()
         }
 
         static constexpr auto executionStages = app::module::Audio::ExposedState::cNumExecutionStages;
-        using PerfPoints = std::array< uint64_t, executionStages >;
+        using PerfPoints = std::array< int64_t, executionStages >;
 
         static int32_t maxCountdown = 256;       // ignore early [max] readings to disregard boot-up spikes
         static PerfPoints maxPerf = { 0, 0, 0, 0, 0 };
@@ -1251,7 +1269,7 @@ void CoreGUI::ImGuiPerformanceTracker()
 
         for ( auto cI = 1; cI < executionStages; cI++ )
         {
-            const uint64_t perfValue = (uint64_t)aeState.m_perfCounters[cI].m_average;
+            const int64_t perfValue = aeState.m_perfCounters[cI].getInt64();
 
             // only update max scores once initial grace period has passed
             if ( maxCountdown == 0 )
@@ -1278,17 +1296,17 @@ void CoreGUI::ImGuiPerformanceTracker()
             ImGui::PopStyleColor();
 
             ImGui::TableNextColumn(); ImGui::TextUnformatted( "Mixer" );
-            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalPerf[1] );
+            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIi64 " us", totalPerf[1] );
             ImGui::TableNextColumn(); ImGui::TextUnformatted( "VST" );
-            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalPerf[2] );
+            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIi64 " us", totalPerf[2] );
             ImGui::TableNextColumn(); ImGui::TextUnformatted( "Scope" );
-            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalPerf[3] );
+            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIi64 " us", totalPerf[3] );
             ImGui::TableNextColumn(); ImGui::TextUnformatted( "Interleave" );
-            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalPerf[4] );
+            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIi64 " us", totalPerf[4] );
             ImGui::TableNextColumn(); ImGui::TextUnformatted( "Recorder" );
-            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalPerf[5] );
+            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIi64 " us", totalPerf[5] );
             ImGui::TableNextColumn(); ImGui::TextUnformatted( "Total" );
-            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", totalSum );
+            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIi64 " us", totalSum );
             ImGui::TableNextColumn(); ImGui::TextUnformatted( "Load" );
             ImGui::TableNextColumn(); ImGui::Text( "%9.1f %%", m_mdAudio->getAudioEngineCPULoadPercent() );
 
@@ -1303,13 +1321,13 @@ void CoreGUI::ImGuiPerformanceTracker()
             ImGui::PopStyleColor();
 
             ImGui::TableNextColumn(); ImGui::TextUnformatted( "Mixer" );
-            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", maxPerf[1] );
+            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIi64 " us", maxPerf[1] );
             ImGui::TableNextColumn(); ImGui::TextUnformatted( "VST" );
-            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", maxPerf[2] );
+            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIi64 " us", maxPerf[2] );
             ImGui::TableNextColumn(); ImGui::TextUnformatted( "Interleave" );
-            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", maxPerf[3] );
+            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIi64 " us", maxPerf[3] );
             ImGui::TableNextColumn(); ImGui::TextUnformatted( "Recorder" );
-            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIu64 " us", maxPerf[4] );
+            ImGui::TableNextColumn(); ImGui::Text( "%9" PRIi64 " us", maxPerf[4] );
 
             ImGui::TableNextColumn();
             ImGui::Spacing();

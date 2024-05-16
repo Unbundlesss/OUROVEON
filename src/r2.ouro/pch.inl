@@ -9,6 +9,7 @@
 
 #define OURO_FRAMEWORK_VERSION    "0.9.9"
 #define OURO_FRAMEWORK_CREDIT     "ishani.org 2024"
+#define OURO_FRAMEWORK_URL        "https://ishani.org/shelf/ouroveon/"
 
 // ---------------------------------------------------------------------------------------------------------------------
 
@@ -27,10 +28,12 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <mutex>
+#include <shared_mutex>
 #include <source_location>
 #include <concepts>
 
 // abseil
+#include "absl/base/optimization.h"
 #include "absl/memory/memory.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
@@ -49,7 +52,7 @@
 #if OURO_DEBUG
 #define OURO_THREAD_LIMIT   (30U)
 #else
-#define OURO_THREAD_LIMIT   (8U)
+#define OURO_THREAD_LIMIT   (10U)
 #endif
 
 
@@ -161,78 +164,85 @@ namespace fs = std::filesystem;
 namespace blog {
 namespace detail {
 
-    template < const fmt::color _fg1, const fmt::color _fg2, typename S, typename... Args, FMT_ENABLE_IF( fmt::detail::is_string<S>::value )>
+    template < bool emit_in_release, const fmt::color _fg1, const fmt::color _fg2, typename S, typename... Args, FMT_ENABLE_IF( fmt::detail::is_string<S>::value )>
     void _printer( const std::string_view prefix, const S& format_str, const Args&... args ) noexcept
     {
-        const auto& vargs = fmt::make_format_args( args... );
-
-        constexpr std::string_view midsep = " | ";
-        constexpr std::string_view suffix = "\n";
-        
-#if OURO_ENABLE_COLOURED_LOGGING
-        constexpr auto foreground1 = fmt::detail::make_foreground_color<char>( fmt::detail::color_type( _fg1 ) );
-        constexpr auto foreground2 = fmt::detail::make_foreground_color<char>( fmt::detail::color_type( _fg2 ) );
-#endif // OURO_ENABLE_COLOURED_LOGGING
-        
-        // size of buffer used by ansi_color_escape
-        constexpr size_t size_of_text_style = 7u + 3u * 4u + 1u;
-
-        // format the input into our first buffer
-        static thread_local fmt::basic_memory_buffer<char> formatBuffer;
+        if constexpr ( ( emit_in_release && OURO_RELEASE ) || OURO_DEBUG )  // allow masking of output based on template arg and build config
         {
-            formatBuffer.clear();
-            fmt::detail::vformat_to( formatBuffer, fmt::detail::to_string_view( format_str ), vargs, {} );
+            const auto& vargs = fmt::make_format_args( args... );
+
+            constexpr std::string_view midsep = " | ";
+            constexpr std::string_view suffix = "\n";
+
+#if OURO_ENABLE_COLOURED_LOGGING
+            constexpr auto foreground1 = fmt::detail::make_foreground_color<char>( fmt::detail::color_type( _fg1 ) );
+            constexpr auto foreground2 = fmt::detail::make_foreground_color<char>( fmt::detail::color_type( _fg2 ) );
+#endif // OURO_ENABLE_COLOURED_LOGGING
+
+            // size of buffer used by ansi_color_escape
+            constexpr size_t size_of_text_style = 7u + 3u * 4u + 1u;
+
+            // format the input into our first buffer
+            static thread_local fmt::basic_memory_buffer<char> formatBuffer;
+            {
+                formatBuffer.clear();
+                fmt::detail::vformat_to( formatBuffer, fmt::detail::to_string_view( format_str ), vargs, {} );
+            }
+
+            // build the final output by appending components
+            static thread_local fmt::basic_memory_buffer<char> outputBuffer;
+            {
+                const auto size = formatBuffer.size() + 1;
+
+                const size_t bufferSize =
+                    (size_of_text_style * 5) +
+                    prefix.size() +
+                    size +
+                    suffix.size();
+
+                outputBuffer.try_reserve( bufferSize );
+                outputBuffer.clear();
+
+#if OURO_ENABLE_COLOURED_LOGGING
+                outputBuffer.append( foreground1.begin(), foreground1.end() );
+#endif // OURO_ENABLE_COLOURED_LOGGING
+
+                outputBuffer.append( prefix );
+
+#if OURO_ENABLE_COLOURED_LOGGING
+                fmt::detail::reset_color( outputBuffer );
+#endif // OURO_ENABLE_COLOURED_LOGGING
+
+                outputBuffer.append( midsep );
+
+#if OURO_ENABLE_COLOURED_LOGGING
+                outputBuffer.append( foreground2.begin(), foreground2.end() );
+#endif // OURO_ENABLE_COLOURED_LOGGING
+
+                outputBuffer.append( formatBuffer );
+                outputBuffer.append( suffix );
+
+#if OURO_ENABLE_COLOURED_LOGGING
+                fmt::detail::reset_color( outputBuffer );
+#endif // OURO_ENABLE_COLOURED_LOGGING
+                outputBuffer.push_back( '\0' );
+            }
+
+            std::cout << outputBuffer.data();
         }
-
-        // build the final output by appending components
-        static thread_local fmt::basic_memory_buffer<char> outputBuffer;
-        {
-            const auto size = formatBuffer.size() + 1;
-
-            const size_t bufferSize =
-                (size_of_text_style * 5) +
-                prefix.size() +
-                size +
-                suffix.size();
-
-            outputBuffer.try_reserve( bufferSize );
-            outputBuffer.clear();
-
-#if OURO_ENABLE_COLOURED_LOGGING
-            outputBuffer.append( foreground1.begin(), foreground1.end() );
-#endif // OURO_ENABLE_COLOURED_LOGGING
-
-            outputBuffer.append( prefix );
-
-#if OURO_ENABLE_COLOURED_LOGGING
-            fmt::detail::reset_color( outputBuffer );
-#endif // OURO_ENABLE_COLOURED_LOGGING
-
-            outputBuffer.append( midsep );
-
-#if OURO_ENABLE_COLOURED_LOGGING
-            outputBuffer.append( foreground2.begin(), foreground2.end() );
-#endif // OURO_ENABLE_COLOURED_LOGGING
-
-            outputBuffer.append( formatBuffer );
-            outputBuffer.append( suffix );
-
-#if OURO_ENABLE_COLOURED_LOGGING
-            fmt::detail::reset_color( outputBuffer );
-#endif // OURO_ENABLE_COLOURED_LOGGING
-            outputBuffer.push_back( '\0' );
-        }
-
-        std::cout << outputBuffer.data();
     }
 }
 
-#define ADD_BLOG( _name, _colour, _nameBold )                                                                                                                               \
-        template <typename S, typename... Args, FMT_ENABLE_IF( fmt::detail::is_string<S>::value )>                                                                     \
-        void _name( const S& format_str, const Args&... args ) { detail::_printer<fmt::color::white, (fmt::color)_colour,S,Args...>( _nameBold, format_str, args...); }     \
-        namespace error {                                                                                                                                                   \
-        template <typename S, typename... Args, FMT_ENABLE_IF( fmt::detail::is_string<S>::value )>                                                                     \
-        void _name( const S& format_str, const Args&... args ) { detail::_printer<fmt::color::red, fmt::color::orange_red,S,Args...>( _nameBold, format_str, args... ); }   \
+#define ADD_BLOG( _name, _colour, _nameBold )                                                                                                                                               \
+        template <typename S, typename... Args, FMT_ENABLE_IF( fmt::detail::is_string<S>::value )>                                                                                          \
+        void _name( const S& format_str, const Args&... args ) { detail::_printer<true, fmt::color::white, (fmt::color)_colour, S, Args...>( _nameBold, format_str, args...); }             \
+        namespace error {                                                                                                                                                                   \
+        template <typename S, typename... Args, FMT_ENABLE_IF( fmt::detail::is_string<S>::value )>                                                                                          \
+        void _name( const S& format_str, const Args&... args ) { detail::_printer<true, fmt::color::red, fmt::color::orange_red, S, Args...>( _nameBold, format_str, args... ); }           \
+        }                                                                                                                                                                                   \
+        namespace debug {                                                                                                                                                                   \
+        template <typename S, typename... Args, FMT_ENABLE_IF( fmt::detail::is_string<S>::value )>                                                                                          \
+        void _name( const S& format_str, const Args&... args ) { detail::_printer<false, fmt::color::hot_pink, fmt::color::light_pink, S, Args...>( _nameBold, format_str, args... ); }     \
         }
 
 ADD_BLOG( core,     0xFD971F,    "CORE" )
@@ -243,7 +253,7 @@ ADD_BLOG( cfg,      0xe6a637,    " CFG" )
 ADD_BLOG( cache,    0xe6d738,    "  C$" )
 ADD_BLOG( api,      0xa2e65a,    " API" )
 ADD_BLOG( database, 0x55e52d,    "  DB" )
-ADD_BLOG( vst,      0x78dce8,    " VST" )
+ADD_BLOG( plug,     0x78dce8,    "PLUG" )
 ADD_BLOG( discord,  0x885de6,    "DISC" )
 
 ADD_BLOG( mix,      0x5bcce6,    " MIX" )
@@ -299,8 +309,11 @@ ADD_BLOG( stem,     0xe65ea9,    "STEM" )
 #include "sqlite3.h"
 #include "SQLiteWrapper.h"
 
-// etc
+// utf8 handling
 #include "utf8.h"
+
+// fast hasing
+#include "komihash.h"
 
 // moodycamel concurrency
 #include "atomicops.h"
@@ -331,6 +344,9 @@ namespace mcc = moodycamel;
 
 // htrie
 #include <tsl/htrie_set.h>
+
+// CLAP plugins
+#include "clap/clap.h"
 
 
 // https://keisan.casio.com/calculator

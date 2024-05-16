@@ -4,8 +4,8 @@
 //  |_______|_______|___|__|_______|\_____/|_______|_______|__|____|
 //  \\ harry denholm \\ ishani            ishani.org/shelf/ouroveon/
 //
-//  spacetime is a namespace full of datetime/chrono/etc related stuff
-//  named as such to be clear separate and distinct, even if a little silly
+//  wraps uriparser library for turning URI strings into their component parts
+//
 
 #include "pch.h"
 

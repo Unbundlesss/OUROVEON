@@ -48,6 +48,7 @@ std::string win32_utf16_to_utf8(const wchar_t* wstr);
 }
 #ifdef _WIN32
 std::string GetWindowsProgramFiles();
+std::string GetWindowsProgramFilesCommon();
 #endif
 
 #endif  //DOXYGEN_SHOULD_SKIP_THIS

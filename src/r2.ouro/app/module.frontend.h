@@ -28,7 +28,7 @@ struct Frontend final : public Module
     virtual ~Frontend();
 
     // Module
-    absl::Status create( const app::Core* appCore ) override;
+    absl::Status create( app::Core* appCore ) override;
     void destroy() override;
     virtual std::string getModuleName() const override { return "Frontend"; };
 
@@ -77,6 +77,8 @@ struct Frontend final : public Module
         }
         return nullptr;
     }
+
+    GLFWwindow* getGLFWWindow() const { return m_glfwWindow; }
 
     void imguiRenderMarkdown( std::string_view markdownText ) const;
 

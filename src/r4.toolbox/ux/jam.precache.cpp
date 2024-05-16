@@ -350,7 +350,7 @@ void JamPrecacheState::imgui(
             }
             else
             {
-                const uint32_t averageSyncTimeMs = static_cast<uint32_t>(m_averageSyncTimeMillis.m_average);
+                const uint32_t averageSyncTimeMs = static_cast<uint32_t>(m_averageSyncTimeMillis.getInt64());
                 std::chrono::milliseconds perSyncMs( averageSyncTimeMs );
                 float perSyncSecF = static_cast<float>( perSyncMs.count() ) / 1000.0f;
                 

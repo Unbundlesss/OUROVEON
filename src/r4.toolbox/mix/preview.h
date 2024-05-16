@@ -46,6 +46,8 @@ struct Preview final : public app::module::MixerInterface,
 
     virtual void imgui() override;
 
+    const app::AudioPlaybackTimeInfo* getPlaybackTimeInfo() const override { return getTimeInfoPtr(); }
+
 
     // main thread requests for a new riff, added to queue for processing by mixer thread
     base::OperationID enqueueRiff( endlesss::live::RiffPtr& nextRiff )
@@ -65,6 +67,7 @@ struct Preview final : public app::module::MixerInterface,
     {
         m_drainQueueAndStop = true;
     }
+
 
     void enableAbletonLink( bool bEnabled );
 

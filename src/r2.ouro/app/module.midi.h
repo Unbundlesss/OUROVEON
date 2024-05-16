@@ -51,7 +51,7 @@ struct Midi : public Module
     ~Midi();
 
     // Module
-    absl::Status create( const app::Core* appCore ) override;
+    absl::Status create( app::Core* appCore ) override;
     void destroy() override;
     virtual std::string getModuleName() const override { return "Midi"; };
 

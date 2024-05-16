@@ -190,7 +190,7 @@ Midi::~Midi()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-absl::Status Midi::create( const app::Core* appCore )
+absl::Status Midi::create( app::Core* appCore )
 {
     const auto baseStatus = Module::create( appCore );
     if ( !baseStatus.ok() )

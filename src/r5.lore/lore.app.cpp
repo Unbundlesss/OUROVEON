@@ -462,10 +462,10 @@ protected:
     // discord bot & streaming panel 
     std::unique_ptr< discord::BotWithUI >   m_discordBotUI;
 
-#if OURO_FEATURE_VST24
+#if OURO_FEATURE_NST24
     // VST playground
     std::unique_ptr< effect::EffectStack >  m_effectStack;
-#endif // OURO_FEATURE_VST24
+#endif // OURO_FEATURE_NST24
     
     std::unique_ptr< vx::Vibes >            m_vibes;
 
@@ -2092,11 +2092,11 @@ int LoreApp::EntrypointOuro()
         });
 
 
-#if OURO_FEATURE_VST24
+#if OURO_FEATURE_NST24
     // VSTs for audio engine
     m_effectStack = std::make_unique<effect::EffectStack>( m_mdAudio.get(), mixPreview.getTimeInfoPtr(), "preview" );
     m_effectStack->load( m_appConfigPath );
-#endif // OURO_FEATURE_VST24
+#endif // OURO_FEATURE_NST24
 
 
     m_riffPipeline = std::make_unique< endlesss::toolkit::Pipeline >(
@@ -2285,13 +2285,13 @@ int LoreApp::EntrypointOuro()
             ImGui::End();
         }
         {
-#if OURO_FEATURE_VST24
+#if OURO_FEATURE_NST24
             if ( ImGui::Begin( ICON_FA_HURRICANE " Effect Chain###effect_chain" ) )
             {
                 m_effectStack->imgui( *this );
             }
             ImGui::End();
-#endif // OURO_FEATURE_VST24
+#endif // OURO_FEATURE_NST24
         }
 
         if ( m_vibes )
@@ -4165,11 +4165,11 @@ int LoreApp::EntrypointOuro()
     checkedCoreCall( "remove stem listener", [this] { return m_stemDataProcessor.disconnect( m_appEventBus ); } );
 
 
-#if OURO_FEATURE_VST24
+#if OURO_FEATURE_NST24
     // serialize effects
     m_effectStack->save( m_appConfigPath );
     m_effectStack.reset();
-#endif // OURO_FEATURE_VST24
+#endif // OURO_FEATURE_NST24
 
     return 0;
 }

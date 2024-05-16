@@ -40,18 +40,20 @@ inline void free16( void* ptr )
 
 } // namespace mem
 
+// ---------------------------------------------------------------------------------------------------------------------
 namespace base {
 
-// ---------------------------------------------------------------------------------------------------------------------
-template<class TContainer, class F>
-auto erase_where( TContainer& c, F&& f )
+// compact erasure of elements in a std container via a given unary predicate lambda
+template<class TContainer, class FPredicate>
+auto erase_where( TContainer& c, FPredicate&& f )
 {
     return c.erase( std::remove_if( c.begin(),
         c.end(),
-        std::forward<F>( f ) ),
+        std::forward<FPredicate>( f ) ),
         c.end() );
 }
 
+// move an element in a vector from one index to another, using std::rotate
 template <typename TVectorElement>
 void vector_move( std::vector<TVectorElement>& v, std::size_t oldIndex, std::size_t newIndex )
 {
@@ -62,6 +64,8 @@ void vector_move( std::vector<TVectorElement>& v, std::size_t oldIndex, std::siz
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// base class of Commands that can be sent between threads via lockfree queues
+//
 template< typename TCmdEnum > 
 struct BasicCommandType
 {
@@ -101,19 +105,27 @@ private:
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-template <int32_t _windowSize>
-struct RollingAverage
+// container for computing a rolling average across a given window size
+template <int32_t CWindowSize>
+class RollingAverage
 {
-    static constexpr double cNewValueWeight = 1.0 / (double)_windowSize;
+    static constexpr double cNewValueWeight = 1.0 / (double)CWindowSize;
     static constexpr double cOldValueWeight = 1.0 - cNewValueWeight;
 
     double  m_average       = 0.0;
     bool    m_initialSample = true;
 
-    constexpr inline void reset( double toDefault = 0.0 )
+public:
+
+    constexpr void reset( double toDefault = 0.0 )
     {
         m_average       = toDefault;
         m_initialSample = true;
+    }
+
+    constexpr void set( double toValue )
+    {
+        m_average = toValue;
     }
 
     constexpr inline void update( double v )
@@ -124,7 +136,19 @@ struct RollingAverage
             m_initialSample = false;
         }
         else
+        {
             m_average = ( v * cNewValueWeight ) + ( m_average * cOldValueWeight );
+        }
+    }
+
+    constexpr double get() const
+    {
+        return m_average;
+    }
+
+    constexpr int64_t getInt64() const
+    {
+        return static_cast<int64_t>( std::round( m_average ) );
     }
 };
 

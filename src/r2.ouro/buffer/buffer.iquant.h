@@ -14,6 +14,9 @@
 namespace base {
 
 // ---------------------------------------------------------------------------------------------------------------------
+// fixed size buffer used to store float signals that can then be easily quantised down to a target integer format, 
+// with implementations for 16b and 24b following
+//
 template< typename _quantisedType, uint32_t _quantBits >
 struct InterleavingQuantiseBuffer
 {

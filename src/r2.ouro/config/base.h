@@ -9,6 +9,7 @@
 
 #pragma once
 
+// use c++20 concepts to better verify config templates at compile time
 #define OURO_CONFIG_CONCEPTS 1
 
 namespace config {

@@ -135,7 +135,7 @@ int OuroApp::EntrypointGUI()
     {
         const std::string pulseOverview = pulseSlotsToString( " ", m_avgNetPulseHistory);
 
-        const auto kbAvgPayload = m_avgNetPayloadPerSec.m_average / 1024.0;
+        const auto kbAvgPayload = m_avgNetPayloadPerSec.get() / 1024.0;
         const auto networkState = fmt::format( FMTX( "{}  {:>6.1f} Kb/s " ), pulseOverview, kbAvgPayload );
 
         ImGui::TextUnformatted( networkState );
