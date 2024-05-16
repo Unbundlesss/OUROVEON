@@ -68,23 +68,23 @@ private:
     plug::KnownPlugin               m_knownPlugin;
 
     sys::DynLib::Instance           m_pluginLibrary;
-    const clap_plugin_entry*        m_pluginEntry           = nullptr;
-    const clap_plugin*              m_pluginInstance        = nullptr;
+    const clap_plugin_entry*        m_pluginEntry                = nullptr;
+    const clap_plugin*              m_pluginInstance             = nullptr;
 
-    const clap_plugin_audio_ports*  m_pluginAudioPorts      = nullptr;
-    const clap_plugin_gui*          m_pluginGui             = nullptr;
-    const clap_plugin_latency*      m_pluginLatency         = nullptr;
-    const clap_plugin_state*        m_pluginState           = nullptr;
+    const clap_plugin_audio_ports*  m_pluginAudioPorts           = nullptr;
+    const clap_plugin_gui*          m_pluginGui                  = nullptr;
+    const clap_plugin_latency*      m_pluginLatency              = nullptr;
+    const clap_plugin_state*        m_pluginState                = nullptr;
 
-    uint32_t                        m_pluginInputPortCount  = 0;
-    uint32_t                        m_pluginOutputPortCount = 0;
+    uint32_t                        m_pluginInputPortCount       = 0;
+    uint32_t                        m_pluginOutputPortCount      = 0;
     AudioBufferConfigs              m_pluginInputBuffers;
     AudioBufferConfigs              m_pluginOutputBuffers;
-    bool                            m_pluginValidEffect     = false;        // is this a plugin that supports stereo input and output
+    bool                            m_pluginValidEffect          = false;        // is this a plugin that supports stereo input and output
 
-    GLFWwindow*                     m_guiWindow             = nullptr;
+    GLFWwindow*                     m_guiWindow                  = nullptr;
     std::string                     m_guiWindowTitle;
-    UIState                         m_guiState              = UIState::Unsupported;
+    UIState                         m_guiState                   = UIState::Unsupported;
 
 public:
 

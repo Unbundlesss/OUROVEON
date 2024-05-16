@@ -36,6 +36,11 @@ struct KnownPlugin
 {
     using Instance = std::unique_ptr< KnownPlugin >;
 
+    enum SupportFlags
+    {
+        SF_ExplicitStereoSupport = 1 << 0       // plugin pinky-swears that it supports stereo audio
+    };
+
     KnownPlugin() = delete;
     KnownPlugin( const PluginSystemID& systemID )
         : m_systemID( systemID )
@@ -44,19 +49,17 @@ struct KnownPlugin
     // system ID denotes which known plugin format is in use, eg. CLAP
     PluginSystemID  m_systemID = PluginSystemID::invalid();
 
-    fs::path        m_fullLibraryPath;      // path to the original plugin library
-    ExteriorIndex   m_exteriorIndex;        // index from the owning stash, eg. index into a list of plugin pathnames
-    uint32_t        m_interiorIndex = 0;    // index inside the plugin library, for libraries that contain multiple plugins; otherwise just 0
+    fs::path        m_fullLibraryPath;          // path to the original plugin library
+    ExteriorIndex   m_exteriorIndex;            // index from the owning stash, eg. index into a list of plugin pathnames
+    uint32_t        m_interiorIndex = 0;        // index inside the plugin library, for libraries that contain multiple plugins; otherwise just 0
 
-    std::string     m_uid;                  // unique plugin identifier, used to refer to the plugin in serialisation
-    std::string     m_name;                 // public name
-    std::string     m_vendor;               // vendor
-    std::string     m_version;              // version string
-    std::string     m_sortable;             // combination of vendor/name etc to sort on
+    std::string     m_uid;                      // unique plugin identifier, used to refer to the plugin in serialisation
+    std::string     m_name;                     // public name
+    std::string     m_vendor;                   // vendor
+    std::string     m_version;                  // version string
+    std::string     m_sortable;                 // combination of vendor/name etc to sort on
 
-    // plugins that can be used should set m_isCompatible to true; otherwise they may be listed in "found plugins" lists
-    // to demonstrate we know about them - but they won't be allowed to be actually instantiated for processing
-    bool            m_isCompatible = false;
+    uint32_t        m_flags = 0;                // combination of SupportFlags
 };
 
 } // namespace plug

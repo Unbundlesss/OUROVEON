@@ -111,10 +111,10 @@ absl::Status CLAP::load( clap_host* clapHost ) noexcept
             }
 
             // collect the plugin extensions points for future use
-            getExtension( m_pluginAudioPorts,   CLAP_EXT_AUDIO_PORTS );
-            getExtension( m_pluginGui,          CLAP_EXT_GUI );
-            getExtension( m_pluginLatency,      CLAP_EXT_LATENCY );
-            getExtension( m_pluginState,        CLAP_EXT_STATE );
+            getExtension( m_pluginAudioPorts,           CLAP_EXT_AUDIO_PORTS );
+            getExtension( m_pluginGui,                  CLAP_EXT_GUI );
+            getExtension( m_pluginLatency,              CLAP_EXT_LATENCY );
+            getExtension( m_pluginState,                CLAP_EXT_STATE );
 
             // check that we can scan the audio ports
             if ( m_pluginAudioPorts == nullptr ||
@@ -131,90 +131,126 @@ absl::Status CLAP::load( clap_host* clapHost ) noexcept
             m_pluginInputPortCount  = m_pluginAudioPorts->count( m_pluginInstance, true );
             m_pluginOutputPortCount = m_pluginAudioPorts->count( m_pluginInstance, false );
 
-            const auto isSupportedPort = []( const clap_audio_port_info_t& portInfo )
+
+            const auto isSupportedPort = []( const clap_audio_port_info_t& portInfo, bool allowMono )
                 {
                     if ( portInfo.port_type == nullptr )
                         return false;
                     if ( strcmp( portInfo.port_type, CLAP_PORT_STEREO ) == 0 && portInfo.channel_count == 2 )
                         return true;
-                    if ( strcmp( portInfo.port_type, CLAP_PORT_MONO ) == 0 && portInfo.channel_count == 1 )
+                    if ( strcmp( portInfo.port_type, CLAP_PORT_MONO   ) == 0 && portInfo.channel_count == 1 && allowMono )
                         return true;
                     return false;
                 };
 
-            // if we find something that isn't a stereo or mono port, we probably can't deal with it
+            // if we find something that isn't a stereo or mono port, we probably can't deal with the plugin
             bool bInvalidPortFound = false;
 
-            // scan for a stereo input port
-            bool bFoundValidStereoInput = false;
-            for ( uint32_t inputIndex = 0; inputIndex < m_pluginInputPortCount; inputIndex++ )
-            {
-                clap_audio_port_info_t portInfo;
-                m_pluginAudioPorts->get( m_pluginInstance, inputIndex, true, &portInfo );
-
-                bool bIsSupportedPort = isSupportedPort( portInfo );
-                if ( bIsSupportedPort )
+            //
+            // this lambda inspects either the input or output ports to ensure:
+            // * we have a main input and main output (expected on port index 0)
+            // * the input and output ports are stereo
+            // * we don't encounter any other ports the plugin delivers or expects that we can't currently handle
+            //
+            const auto detectValidPortSetup = [this, &bInvalidPortFound, &isSupportedPort]( bool bIsInput, std::string_view portDesc ) -> bool
                 {
-                    // our assumption is the main channel - index 0 - should be a stereo input for 
-                    // us to use this plugin as an effect processor
-                    if ( inputIndex == 0 && portInfo.channel_count == 2 )
-                        bFoundValidStereoInput = true;
-                }
-                else
-                {
-                    bInvalidPortFound = true;
-                }
+                    // fetch local data to use based on whether we are looking at inputs or outputs
+                    const uint32_t portCount                = bIsInput ? m_pluginInputPortCount : m_pluginOutputPortCount;
+                    AudioBufferConfigs& audioBufferConfigs  = bIsInput ? m_pluginInputBuffers   : m_pluginOutputBuffers;
 
-                // stash our processing buffer setup
-                {
-                    clap_audio_buffer_t inputBuffer;
-                    memset( &inputBuffer, 0, sizeof( inputBuffer ) );
-                    inputBuffer.channel_count = portInfo.channel_count;
-                    m_pluginInputBuffers.emplace_back( inputBuffer );
-                }
+                    // result value
+                    bool portWasValidated = false;
 
-                blog::debug::plug( FMTX( "[CLAP:{}] Input {} = {:15} | channels = {} | {}" ),
-                    m_knownPlugin.m_name,
-                    inputIndex,
-                    portInfo.name,
-                    portInfo.channel_count,
-                    ( portInfo.port_type != nullptr ) ? portInfo.port_type : "unknown" );
-            }
+                    // assuming we have any ports at all ..
+                    if ( portCount >= 1 )
+                    {
+                        // get the main port; as per the docs:
+                        // > This port is the main audio input or output.
+                        // > There can be only one main input and main output.
+                        // > Main port must be at index 0.
+                        {
+                            clap_audio_port_info_t portInfo;
+                            m_pluginAudioPorts->get( m_pluginInstance, 0, bIsInput, &portInfo );
 
-            // scan for a stereo output port
-            bool bFoundValidStereoOutput = false;
-            for ( uint32_t outputIndex = 0; outputIndex < m_pluginOutputPortCount; outputIndex++ )
-            {
-                clap_audio_port_info_t portInfo;
-                m_pluginAudioPorts->get( m_pluginInstance, outputIndex, false, &portInfo );
+                            if ( (portInfo.flags & CLAP_AUDIO_PORT_IS_MAIN) != 0 )
+                            {
+                                // did the plugin claim to be a stereo plugin in the factory features list?
+                                const bool bDeclaredStereoSupport = (m_knownPlugin.m_flags & plug::KnownPlugin::SF_ExplicitStereoSupport) != 0;
 
-                bool bIsSupportedPort = isSupportedPort( portInfo );
-                if ( bIsSupportedPort )
-                {
-                    // we also need a stereo output as the main index-0 channel
-                    if ( outputIndex == 0 && portInfo.channel_count == 2 )
-                        bFoundValidStereoOutput = true;
-                }
-                else
-                {
-                    bInvalidPortFound = true;
-                }
+                                // sometimes portInfo.port_type isn't set to "stereo", in those cases we'll just take
+                                // the plugins word for it from the 'features' list that this 2-channel port is stereo
+                                bool bBelieveInStereo = bDeclaredStereoSupport && portInfo.channel_count == 2;
 
-                // stash our processing buffer setup
-                {
-                    clap_audio_buffer_t outputBuffer;
-                    memset( &outputBuffer, 0, sizeof( outputBuffer ) );
-                    outputBuffer.channel_count = portInfo.channel_count;
-                    m_pluginOutputBuffers.emplace_back( outputBuffer );
-                }
+                                // verify this is a 2-port / stereo, that's what we support
+                                if ( bBelieveInStereo || isSupportedPort( portInfo, false ) )
+                                {
+                                    // found what we want!
+                                    portWasValidated = true;
 
-                blog::debug::plug( FMTX( "[CLAP:{}] Output {} = {:15} | channels = {} | {}" ),
-                    m_knownPlugin.m_name,
-                    outputIndex,
-                    portInfo.name,
-                    portInfo.channel_count,
-                    (portInfo.port_type != nullptr) ? portInfo.port_type : "unknown" );
-            }
+                                    // save the audio buffer config for this port
+                                    {
+                                        clap_audio_buffer_t audioBuffer;
+                                        memset( &audioBuffer, 0, sizeof( audioBuffer ) );
+                                        audioBuffer.channel_count = portInfo.channel_count;
+                                        audioBufferConfigs.emplace_back( audioBuffer );
+                                    }
+                                }
+                                else
+                                {
+                                    blog::debug::plug( FMTX( "[CLAP:{}] main {} port is not stereo ({} is '{}', {} channels), ignoring" ),
+                                        m_knownPlugin.m_name,
+                                        portDesc,
+                                        portInfo.name,
+                                        ( portInfo.port_type != nullptr ) ? portInfo.port_type : "null",
+                                        portInfo.channel_count );
+                                }
+                            }
+                            else
+                            {
+                                blog::error::plug( FMTX( "[CLAP:{}] main {} port is not at index 0, unsupported" ), m_knownPlugin.m_name, portDesc );
+                            }
+                        }
+
+                        // log out the rest of the ports and stash buffer configurations to fill during processing
+                        // (even if all we're passing will be silence)
+                        for ( uint32_t portIndex = 1; portIndex < portCount; portIndex++ )
+                        {
+                            clap_audio_port_info_t portInfo;
+                            m_pluginAudioPorts->get( m_pluginInstance, portIndex, bIsInput, &portInfo );
+
+                            {
+                                blog::debug::plug( FMTX( "[CLAP:{}] {:6} {} = {:15} | channels = {} | {}" ),
+                                    m_knownPlugin.m_name,
+                                    portDesc,
+                                    portIndex,
+                                    portInfo.name,
+                                    portInfo.channel_count,
+                                    (portInfo.port_type != nullptr) ? portInfo.port_type : "unknown" );
+
+                                bool bIsSupportedPort = isSupportedPort( portInfo, true );
+                                if ( !bIsSupportedPort )
+                                {
+                                    bInvalidPortFound = true;
+                                    blog::debug::plug( FMTX( "[CLAP:{}] found inoperable {} port {}, ignoring plugin" ), m_knownPlugin.m_name, portDesc, portIndex );
+                                }
+                                else
+                                {
+                                    clap_audio_buffer_t audioBuffer;
+                                    memset( &audioBuffer, 0, sizeof( audioBuffer ) );
+                                    audioBuffer.channel_count = portInfo.channel_count;
+                                    audioBufferConfigs.emplace_back( audioBuffer );
+                                }
+                            }
+                        }
+                    }
+
+                    return portWasValidated;
+                };
+
+            // analyse IO
+            const bool bFoundValidStereoInput   = detectValidPortSetup( true,  "input" );
+            const bool bFoundValidStereoOutput  = detectValidPortSetup( false, "output" );
+
 
             // record if this plugin meets our expectations for a processing plugin that 
             // consumes and produces a stereo feed
@@ -249,7 +285,7 @@ absl::Status CLAP::load( clap_host* clapHost ) noexcept
                     uiSupported &= ( m_pluginGui->show          != nullptr );
                     uiSupported &= ( m_pluginGui->hide          != nullptr );
 
-                    // report that we *could* have had a UI but the plugin is missing some hooks
+                    // report that we *could* have had a UI but the plugin is missing some required functions
                     if ( !uiSupported )
                     {
                         blog::debug::plug( FMTX( "[CLAP:{}] missing required clap_plugin_gui functions, disabling ui support" ), m_knownPlugin.m_name );

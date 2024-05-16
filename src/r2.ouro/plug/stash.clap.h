@@ -66,7 +66,7 @@ struct CLAP
         if ( !asyncAllTasksComplete() )
             return;
 
-        for ( const auto& knownIndex : m_knownPluginsValidSortedIndices )
+        for ( const auto& knownIndex : m_knownPluginsVerifiedSorted )
         {
             const auto& pluginInstance = m_knownPlugins[knownIndex.get()];
             callback( *pluginInstance, knownIndex );
@@ -99,7 +99,10 @@ private:
 
     void beginPopulateAsync( tf::Executor& taskExecutor );
 
-    bool checkKnownPluginIsValidForEffects( const plug::KnownPluginIndex& index ) const;
+    // returns absl::Ok if the plugin at the given index is (to our best guess) a valid effects processing plugin
+    // this involves loading the plugin somewhat via a dummy clap_host, so it should be done in the background
+    absl::Status checkKnownPluginIsValidForEffects( const plug::KnownPluginIndex& index ) const;
+
 
     std::atomic_bool                        m_asyncPopulationComplete;
     std::atomic_bool                        m_asyncAllProcessingComplete;
@@ -109,8 +112,8 @@ private:
     std::atomic_uint32_t                    m_pluginFilesHashed = 0;
 
     std::vector< KnownPlugin::Instance >    m_knownPlugins;
-    std::vector< bool >                     m_knownPluginsValidForEffects;
-    std::vector< plug::KnownPluginIndex >   m_knownPluginsValidSortedIndices;
+    std::vector< bool >                     m_knownPluginsVerified;
+    std::vector< plug::KnownPluginIndex >   m_knownPluginsVerifiedSorted;
 
     PluginUIDLookup                         m_knownPluginLookupByUID;
 };

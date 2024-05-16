@@ -205,6 +205,9 @@ void CLAP::beginPopulateAsync( tf::Executor& taskExecutor )
         {
             spacetime::ScopedTimer populateTiming( "CLAP plugin stash interrogation" );
 
+            m_knownPlugins.reserve( m_pluginFullPaths.size() * 2 );
+            m_knownPluginsVerified.reserve( m_pluginFullPaths.size() * 2 );
+
             m_pluginFilesHashed = 0;
             for ( std::size_t pluginFileIndex = 0; pluginFileIndex < m_pluginFullPaths.size(); pluginFileIndex ++ )
             {
@@ -241,28 +244,62 @@ void CLAP::beginPopulateAsync( tf::Executor& taskExecutor )
                         {
                             const clap_plugin_descriptor_t* clapPluginDescriptor = clapFactory->get_plugin_descriptor( clapFactory, clapPluginIndex );
 
-                            plug::KnownPlugin::Instance pluginRecord = std::make_unique<plug::KnownPlugin>( plug::Systems::CLAP );
+                            // first things first - check for basic compatibility with our CLAP version. if this fails, no point in continuing.
+                            const bool bIsCompatible = clap_version_is_compatible( clapPluginDescriptor->clap_version );
+                            if ( !bIsCompatible )
+                            {
+                                // not an error as such
+                                blog::plug( FMTX( "[CLAP] {:64} reports incompatiblity with this CLAP version" ), clapPluginDescriptor->id );
+                                continue;
+                            }
 
-                            pluginRecord->m_fullLibraryPath = pluginFile;
-                            pluginRecord->m_exteriorIndex   = plug::ExteriorIndex{ static_cast< int64_t >( pluginFileIndex ) };
-                            pluginRecord->m_interiorIndex   = clapPluginIndex;
-                            pluginRecord->m_uid             = clapPluginDescriptor->id;
-                            pluginRecord->m_name            = clapPluginDescriptor->name;
-                            pluginRecord->m_vendor          = clapPluginDescriptor->vendor;
-                            pluginRecord->m_version         = clapPluginDescriptor->version;
-                            pluginRecord->m_sortable        = fmt::format( FMTX("{} {} {}"),
-                                                                clapPluginDescriptor->vendor,
-                                                                clapPluginDescriptor->name,
-                                                                clapPluginDescriptor->version );
+                            // iterate the features list; this tells us the type and capabilities of the plugin. we are looking for
+                            // the audio-effect plugins specifically, and keeping note of the ones that explicitly declare stereo support
+                            // in case there is any confusion over ports later on
+                            bool featureIsAudioEffect       = false;
+                            bool featureDeclaresStereo      = false;
+                            auto featureIteration           = clapPluginDescriptor->features;
+                            while ( *featureIteration != nullptr )
+                            {
+                                const std::string_view featureString{ *featureIteration };
 
-                            pluginRecord->m_isCompatible    = clap_version_is_compatible( clapPluginDescriptor->clap_version );
+                                featureIsAudioEffect  |= featureString.find( CLAP_PLUGIN_FEATURE_AUDIO_EFFECT   ) != std::string::npos;
+                                featureDeclaresStereo |= featureString.find( CLAP_PLUGIN_FEATURE_STEREO         ) != std::string::npos;
 
-                            // store a lookup from the UID to the index into the plugin record array
-                            const plug::KnownPluginIndex knownPluginIndex = plug::KnownPluginIndex{ static_cast< int64_t >( m_knownPlugins.size() ) };
-                            m_knownPluginLookupByUID.emplace( pluginRecord->m_uid, knownPluginIndex );
+                                ++featureIteration;
+                            }
 
-                            m_knownPlugins.emplace_back( std::move( pluginRecord ) );
-                            m_knownPluginsValidForEffects.emplace_back( false );
+                            // plugin has been deemed .. (probably) acceptable
+                            if ( featureIsAudioEffect )
+                            {
+                                plug::KnownPlugin::Instance pluginRecord = std::make_unique<plug::KnownPlugin>( plug::Systems::CLAP );
+
+                                // transfer over all the details
+                                pluginRecord->m_fullLibraryPath = pluginFile;
+                                pluginRecord->m_exteriorIndex   = plug::ExteriorIndex{ static_cast< int64_t >( pluginFileIndex ) };
+                                pluginRecord->m_interiorIndex   = clapPluginIndex;
+                                pluginRecord->m_uid             = clapPluginDescriptor->id;
+                                pluginRecord->m_name            = clapPluginDescriptor->name;
+                                pluginRecord->m_vendor          = clapPluginDescriptor->vendor;
+                                pluginRecord->m_version         = clapPluginDescriptor->version;
+                                pluginRecord->m_sortable        = fmt::format( FMTX("{} {} {}"),
+                                                                    clapPluginDescriptor->vendor,
+                                                                    clapPluginDescriptor->name,
+                                                                    clapPluginDescriptor->version );
+
+                                blog::debug::plug( FMTX( "[CLAP] {:64} | {}" ), pluginRecord->m_uid, pluginRecord->m_sortable );
+
+                                // keep any notes from other feature declarations
+                                if ( featureDeclaresStereo )
+                                    pluginRecord->m_flags      |= plug::KnownPlugin::SF_ExplicitStereoSupport;
+
+                                // store a lookup from the UID to the index into the plugin record array
+                                const plug::KnownPluginIndex knownPluginIndex = plug::KnownPluginIndex{ static_cast< int64_t >( m_knownPlugins.size() ) };
+                                m_knownPluginLookupByUID.emplace( pluginRecord->m_uid, knownPluginIndex );
+
+                                m_knownPlugins.emplace_back( std::move( pluginRecord ) );
+                                m_knownPluginsVerified.emplace_back( false );
+                            }
                         }
 
                         // symmetric shut-down
@@ -287,8 +324,18 @@ void CLAP::beginPopulateAsync( tf::Executor& taskExecutor )
             {
                 subflow.emplace( [this, sI]()
                     {
-                        const bool bIsValid = checkKnownPluginIsValidForEffects( KnownPluginIndex{ sI } );
-                        m_knownPluginsValidForEffects[sI] = bIsValid;
+                        const KnownPluginIndex knownPluginIndex{ sI };
+
+                        const absl::Status pluginValidStatus = checkKnownPluginIsValidForEffects( knownPluginIndex );
+                        if ( pluginValidStatus.ok() )
+                        {
+                            m_knownPluginsVerified[sI] = true;
+                        }
+                        else
+                        {
+                            m_knownPluginsVerified[sI] = false;
+                            blog::debug::plug( FMTX( "[CLAP] {} not usable as effect plugin" ), getKnownPluginAtIndex( knownPluginIndex ).m_uid );
+                        }
                     });
             }
         });
@@ -297,17 +344,17 @@ void CLAP::beginPopulateAsync( tf::Executor& taskExecutor )
     // take the list of known-good plugins and sort them by name into an index list
     tf::Task taskSorting = stashProcessingTaskflow.emplace( [this]()
         {
-            m_knownPluginsValidSortedIndices.clear();
+            m_knownPluginsVerifiedSorted.clear();
 
             // create a list of all the valid indices we could display
             const int64_t knownPluginCount = static_cast< int64_t >( m_knownPlugins.size() );
             for ( int64_t sI = 0; sI < knownPluginCount; sI ++ )
             {
-                if ( m_knownPluginsValidForEffects[sI] )
-                    m_knownPluginsValidSortedIndices.push_back( KnownPluginIndex{ sI } );
+                if ( m_knownPluginsVerified[sI] )
+                    m_knownPluginsVerifiedSorted.push_back( KnownPluginIndex{ sI } );
             }
 
-            std::sort( m_knownPluginsValidSortedIndices.begin(), m_knownPluginsValidSortedIndices.end(),
+            std::sort( m_knownPluginsVerifiedSorted.begin(), m_knownPluginsVerifiedSorted.end(),
                 [this]( const KnownPluginIndex lhs, const KnownPluginIndex rhs ) -> bool
                 {
                     return base::StrToLwrExt( m_knownPlugins[lhs.get()]->m_sortable ) < base::StrToLwrExt( m_knownPlugins[rhs.get()]->m_sortable );
@@ -321,7 +368,7 @@ void CLAP::beginPopulateAsync( tf::Executor& taskExecutor )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-bool CLAP::checkKnownPluginIsValidForEffects( const plug::KnownPluginIndex& index ) const
+absl::Status CLAP::checkKnownPluginIsValidForEffects( const plug::KnownPluginIndex& index ) const
 {
     // create a null/dummy host to use for temporarily loading the plugin
     clap_host virtualHost
@@ -342,9 +389,12 @@ bool CLAP::checkKnownPluginIsValidForEffects( const plug::KnownPluginIndex& inde
     auto runtimeLoadStatus = plug::runtime::CLAP::load( *(m_knownPlugins[index.get()]), &virtualHost);
     if ( runtimeLoadStatus.ok() )
     {
-        return runtimeLoadStatus.value()->isValidEffectPlugin();
+        if ( runtimeLoadStatus.value()->isValidEffectPlugin() )
+            return absl::OkStatus();
+
+        return absl::InternalError( "plugin not discernible as valid effect processor" );
     }
-    return false;
+    return runtimeLoadStatus.status();
 }
 
 } // namespace stash
