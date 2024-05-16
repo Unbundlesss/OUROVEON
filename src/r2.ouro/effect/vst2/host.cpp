@@ -9,7 +9,7 @@
 
 #include "pch.h"
 
-#if OURO_FEATURE_VST24
+#if OURO_FEATURE_NST24
 
 #include "app/module.audio.h"
 #include "app/module.midi.msg.h"
@@ -24,90 +24,90 @@
 
 #include "effect/vst2/host.h"
 
-#include "vst_2_4/aeffectx.h"
+#include <nst24.h>
 
 // enable to dump out what the input and output pin properties are
-#define VST_IO_PROPERTY_VERBOSE 0
+#define NST_IO_PROPERTY_DEBUG_VERBOSE 0
 
 static const std::string c_flagFormatWhiteSpaces{ " |" };
 
 // ---------------------------------------------------------------------------------------------------------------------
-using VSTPluginMainFn = AEffect* (*) (audioMasterCallback audioMaster);
+using VSTPluginMainFn = CPlugEffect* (*) (NstOpcodeCallback audioMaster);
 
-inline std::string vstTimeInfoFlagsToString( VstTimeInfoFlags flags )
+inline std::string nstTimeInfoFlagsToString( NstTimeInfoFlags flags )
 {
     std::string result = "";
-    if ( ( flags & kVstTransportChanged     ) == kVstTransportChanged )     result += "TransportChanged | ";
-    if ( ( flags & kVstTransportPlaying     ) == kVstTransportPlaying )     result += "TransportPlaying | ";
-    if ( ( flags & kVstTransportCycleActive ) == kVstTransportCycleActive ) result += "TransportCycleActive | ";
-    if ( ( flags & kVstTransportRecording   ) == kVstTransportRecording )   result += "TransportRecording | ";
-    if ( ( flags & kVstAutomationWriting    ) == kVstAutomationWriting )    result += "AutomationWriting | ";
-    if ( ( flags & kVstAutomationReading    ) == kVstAutomationReading )    result += "AutomationReading | ";
-    if ( ( flags & kVstNanosValid           ) == kVstNanosValid )           result += "NanosValid | ";
-    if ( ( flags & kVstPpqPosValid          ) == kVstPpqPosValid )          result += "PpqPosValid | ";
-    if ( ( flags & kVstTempoValid           ) == kVstTempoValid )           result += "TempoValid | ";
-    if ( ( flags & kVstBarsValid            ) == kVstBarsValid )            result += "BarsValid | ";
-    if ( ( flags & kVstCyclePosValid        ) == kVstCyclePosValid )        result += "CyclePosValid | ";
-    if ( ( flags & kVstTimeSigValid         ) == kVstTimeSigValid )         result += "TimeSigValid | ";
-    if ( ( flags & kVstSmpteValid           ) == kVstSmpteValid )           result += "SmpteValid | ";
-    if ( ( flags & kVstClockValid           ) == kVstClockValid )           result += "ClockValid | ";
+    if ( ( flags & NstTIF_Transport_Changed         ) == NstTIF_Transport_Changed )      result += "TransportChanged | ";
+    if ( ( flags & NstTIF_Transport_Playing         ) == NstTIF_Transport_Playing )      result += "TransportPlaying | ";
+    if ( ( flags & NstTIF_Transport_Cycle_Active    ) == NstTIF_Transport_Cycle_Active ) result += "TransportCycleActive | ";
+    if ( ( flags & NstTIF_Transport_Recording       ) == NstTIF_Transport_Recording )    result += "TransportRecording | ";
+    if ( ( flags & NstTIF_Automation_Writing        ) == NstTIF_Automation_Writing )     result += "AutomationWriting | ";
+    if ( ( flags & NstTIF_Automation_Reading        ) == NstTIF_Automation_Reading )     result += "AutomationReading | ";
+    if ( ( flags & NstTIF_Nanos_Valid               ) == NstTIF_Nanos_Valid )            result += "NanosValid | ";
+    if ( ( flags & NstTIF_PpqPos_Valid              ) == NstTIF_PpqPos_Valid )           result += "PpqPosValid | ";
+    if ( ( flags & NstTIF_Tempo_Valid               ) == NstTIF_Tempo_Valid )            result += "TempoValid | ";
+    if ( ( flags & NstTIF_Bars_Valid                ) == NstTIF_Bars_Valid )             result += "BarsValid | ";
+    if ( ( flags & NstTIF_CyclePos_Valid            ) == NstTIF_CyclePos_Valid )         result += "CyclePosValid | ";
+    if ( ( flags & NstTIF_TimeSig_Valid             ) == NstTIF_TimeSig_Valid )          result += "TimeSigValid | ";
+    if ( ( flags & NstTIF_Smpte_Valid               ) == NstTIF_Smpte_Valid )            result += "SmpteValid | ";
+    if ( ( flags & NstTIF_Clock_Valid               ) == NstTIF_Clock_Valid )            result += "ClockValid | ";
 
     base::trimRight( result, c_flagFormatWhiteSpaces );
     return result;
 }
 
-inline std::string vstPinPropertiesFlagsToString( VstPinPropertiesFlags flags )
+inline std::string nstPinPropertiesFlagsToString( NstPinPropertiesFlags flags )
 {
     std::string result = "";
-    if ( ( flags & kVstPinIsActive          ) == kVstPinIsActive )          result += "Active | ";
-    if ( ( flags & kVstPinIsStereo          ) == kVstPinIsStereo )          result += "StereoLeft | ";
-    if ( ( flags & kVstPinUseSpeaker        ) == kVstPinUseSpeaker )        result += "UseSpeaker | ";
+    if ( ( flags & NstPPF_Pin_Is_Active          ) == NstPPF_Pin_Is_Active )             result += "Active | ";
+    if ( ( flags & NstPPF_Pin_Is_Stereo          ) == NstPPF_Pin_Is_Stereo )             result += "StereoLeft | ";
+    if ( ( flags & NstPPF_Pin_Use_Speaker        ) == NstPPF_Pin_Use_Speaker )           result += "UseSpeaker | ";
 
     base::trimRight( result, c_flagFormatWhiteSpaces );
     return result;
 }
 
-inline const char* vstOpcodeToString( const VstInt32 opcode )
+inline const char* nstOpcodeToString( const int32_t opcode )
 {
     switch ( opcode )
     {
-        case audioMasterGetTime:                   return "GetTime";
-        case audioMasterProcessEvents:             return "ProcessEvents";
-        case audioMasterIOChanged:                 return "IOChanged";
-        case audioMasterSizeWindow:                return "SizeWindow";
-        case audioMasterGetSampleRate:             return "GetSampleRate";
-        case audioMasterGetBlockSize:              return "GetBlockSize";
-        case audioMasterGetInputLatency:           return "GetInputLatency";
-        case audioMasterGetOutputLatency:          return "GetOutputLatency";
-        case audioMasterGetCurrentProcessLevel:    return "GetCurrentProcessLevel";
-        case audioMasterGetAutomationState:        return "GetAutomationState";
-        case audioMasterOfflineStart:              return "OfflineStart";
-        case audioMasterOfflineRead:               return "OfflineRead";
-        case audioMasterOfflineWrite:              return "OfflineWrite";
-        case audioMasterOfflineGetCurrentPass:     return "OfflineGetCurrentPass";
-        case audioMasterOfflineGetCurrentMetaPass: return "OfflineGetCurrentMetaPass";
-        case audioMasterGetVendorString:           return "GetVendorString";
-        case audioMasterGetProductString:          return "GetProductString";
-        case audioMasterGetVendorVersion:          return "GetVendorVersion";
-        case audioMasterVendorSpecific:            return "VendorSpecific";
-        case audioMasterCanDo:                     return "CanDo";
-        case audioMasterGetLanguage:               return "GetLanguage";
-        case audioMasterGetDirectory:              return "GetDirectory";
-        case audioMasterUpdateDisplay:             return "UpdateDisplay";
-        case audioMasterBeginEdit:                 return "BeginEdit";
-        case audioMasterEndEdit:                   return "EndEdit";
-        case audioMasterOpenFileSelector:          return "OpenFileSelector";
-        case audioMasterCloseFileSelector:         return "CloseFileSelector";
+        case NstOpcode_GetTime:                   return "GetTime";
+        case NstOpcode_ProcessEvents:             return "ProcessEvents";
+        case NstOpcode_IOChanged:                 return "IOChanged";
+        case NstOpcode_SizeWindow:                return "SizeWindow";
+        case NstOpcode_GetSampleRate:             return "GetSampleRate";
+        case NstOpcode_GetBlockSize:              return "GetBlockSize";
+        case NstOpcode_GetInputLatency:           return "GetInputLatency";
+        case NstOpcode_GetOutputLatency:          return "GetOutputLatency";
+        case NstOpcode_GetCurrentProcessLevel:    return "GetCurrentProcessLevel";
+        case NstOpcode_GetAutomationState:        return "GetAutomationState";
+        case NstOpcode_OfflineStart:              return "OfflineStart";
+        case NstOpcode_OfflineRead:               return "OfflineRead";
+        case NstOpcode_OfflineWrite:              return "OfflineWrite";
+        case NstOpcode_OfflineGetCurrentPass:     return "OfflineGetCurrentPass";
+        case NstOpcode_OfflineGetCurrentMetaPass: return "OfflineGetCurrentMetaPass";
+        case NstOpcode_GetVendorString:           return "GetVendorString";
+        case NstOpcode_GetProductString:          return "GetProductString";
+        case NstOpcode_GetVendorVersion:          return "GetVendorVersion";
+        case NstOpcode_VendorSpecific:            return "VendorSpecific";
+        case NstOpcode_CanDo:                     return "CanDo";
+        case NstOpcode_GetLanguage:               return "GetLanguage";
+        case NstOpcode_GetDirectory:              return "GetDirectory";
+        case NstOpcode_UpdateDisplay:             return "UpdateDisplay";
+        case NstOpcode_BeginEdit:                 return "BeginEdit";
+        case NstOpcode_EndEdit:                   return "EndEdit";
+        case NstOpcode_OpenFileSelector:          return "OpenFileSelector";
+        case NstOpcode_CloseFileSelector:         return "CloseFileSelector";
     }
     return "unknown_opcode";
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-namespace vst {
+namespace nst {
 
 bool Instance::DebugVerboseParameterLogging = false;
 
-static constexpr wchar_t const* _vstWindowClass = L"_VSTOuro";
+static constexpr wchar_t const* _nstWindowClass = L"_NSTOuro";
 
 // ---------------------------------------------------------------------------------------------------------------------
 struct Instance::Data
@@ -117,45 +117,45 @@ struct Instance::Data
 
     Data()
         : m_unifiedTimeInfo( nullptr )
-        , m_vstTimeSampleRateRcp( 1.0 )
+        , m_nstTimeSampleRateRcp( 1.0 )
         , m_midiInputChannels( 0 )
         , m_midiOutputChannels( 0 )
         , m_updateIOChannels( false )
         , m_sampleRate( 0 )
         , m_maximumBlockSize( 0 )
         , m_automationCallbackFn( nullptr )
-        , m_vstModule( nullptr )
-        , m_vstEntrypoint( nullptr )
-        , m_vstFilterInstance( nullptr )
-        , m_vstThreadHandle( nullptr )
-        , m_vstThreadAlive( false )
-        , m_vstThreadInitComplete( false )
-        , m_vstFailedToLoad( false )
-        , m_vstEditorState( EditorState::Idle )
-        , m_vstActivationState( ActivationState::Inactive )
-        , m_vstActivationQueue( 2 )
-        , m_vstEditorHWND( nullptr )
+        , m_nstModule( nullptr )
+        , m_nstEntrypoint( nullptr )
+        , m_nstFilterInstance( nullptr )
+        , m_nstThreadHandle( nullptr )
+        , m_nstThreadAlive( false )
+        , m_nstThreadInitComplete( false )
+        , m_nstFailedToLoad( false )
+        , m_nstEditorState( EditorState::Idle )
+        , m_nstActivationState( ActivationState::Inactive )
+        , m_nstActivationQueue( 2 )
+        , m_nstEditorHWND( nullptr )
     {
-        memset( &m_vstTimeInfo, 0, sizeof( m_vstTimeInfo ) );
+        memset( &m_nstTimeInfo, 0, sizeof( m_nstTimeInfo ) );
     }
 
-    static VstIntPtr __cdecl vstAudioMasterCallback( AEffect* effect, VstInt32 opcode, VstInt32 index, VstIntPtr value, void* ptr, float opt );
+    static int64_t __cdecl NstOpcodeCallback( CPlugEffect* effect, int32_t opcode, int32_t index, int64_t value, void* ptr, float opt );
 
-    static HWND vstCreateWindow( uint32_t width, uint32_t height, Instance::Data* dataPtr );
-    static LRESULT WINAPI vstMsgProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam );
-    static DWORD WINAPI vstThread( LPVOID lpParameter );
+    static HWND nstCreateWindow( uint32_t width, uint32_t height, Instance::Data* dataPtr );
+    static LRESULT WINAPI nstMsgProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam );
+    static DWORD WINAPI nstThread( LPVOID lpParameter );
 
-    void runOnVstThread();
-    VstIntPtr safeDispatch( VstInt32 opCode, VstInt32 index, VstIntPtr value, void* ptr, float opt );
+    void runOnPluginThread();
+    int64_t safeDispatch( int32_t opCode, int32_t index, int64_t value, void* ptr, float opt );
 
-    // called from vstMsgProc
+    // called from nstMsgProc
     void handleHostWindowClosing()
     {
-        blog::vst( " VST | editor closing" );
-        m_vstEditorState = Instance::Data::EditorState::Closing;
+        blog::plug( " NST | editor closing" );
+        m_nstEditorState = Instance::Data::EditorState::Closing;
     }
 
-    // flow for opening and closing the VST editor gracefully
+    // flow for opening and closing the plugin editor gracefully
     enum class EditorState
     {
         Idle,
@@ -167,7 +167,7 @@ struct Instance::Data
     };
     using EditorStateAtomic = std::atomic< EditorState >;
 
-    // flow for turning VST on/off via thread
+    // flow for turning plugin on/off via thread
     enum class ActivationState
     {
         Active,
@@ -191,12 +191,12 @@ struct Instance::Data
     }
 
 
-    static std::mutex       m_initMutex;                // used to sync some console output across VST start to avoid clashes
+    static std::mutex       m_initMutex;                // used to sync some console output across plugin start to avoid clashes
 
     const app::AudioPlaybackTimeInfo*  
                             m_unifiedTimeInfo;
-    VstTimeInfo             m_vstTimeInfo;
-    double                  m_vstTimeSampleRateRcp;
+    NstTimeInfo             m_nstTimeInfo;
+    double                  m_nstTimeSampleRateRcp;
 
     std::string             m_vendor;
     std::string             m_product;
@@ -212,18 +212,18 @@ struct Instance::Data
     ParameterIndexMapI2S    m_paramIndexMapI2S;
     AutomationCallbackFn    m_automationCallbackFn;
 
-    HMODULE                 m_vstModule;
-    VSTPluginMainFn         m_vstEntrypoint;
-    AEffect*                m_vstFilterInstance;
-    HANDLE                  m_vstThreadHandle;
-    std::atomic_bool        m_vstThreadAlive;
-    std::atomic_bool        m_vstThreadInitComplete;
-    std::atomic_bool        m_vstFailedToLoad;
+    HMODULE                 m_nstModule;
+    VSTPluginMainFn         m_nstEntrypoint;
+    CPlugEffect*            m_nstFilterInstance;
+    HANDLE                  m_nstThreadHandle;
+    std::atomic_bool        m_nstThreadAlive;
+    std::atomic_bool        m_nstThreadInitComplete;
+    std::atomic_bool        m_nstFailedToLoad;
 
-    EditorStateAtomic       m_vstEditorState;           // request to open/close
-    ActivationStateAtomic   m_vstActivationState;       // request to enable/disable (post boot)
-    ActivationQueue         m_vstActivationQueue;
-    HWND                    m_vstEditorHWND;
+    EditorStateAtomic       m_nstEditorState;           // request to open/close
+    ActivationStateAtomic   m_nstActivationState;       // request to enable/disable (post boot)
+    ActivationQueue         m_nstActivationQueue;
+    HWND                    m_nstEditorHWND;
 };
 
 std::mutex Instance::Data::m_initMutex;
@@ -235,7 +235,7 @@ void Instance::RegisterWndClass()
     {
         sizeof( WNDCLASSEX ),
         0,
-        Data::vstMsgProc,
+        Data::nstMsgProc,
         0L,
         0L,
         GetModuleHandle( nullptr ),
@@ -243,7 +243,7 @@ void Instance::RegisterWndClass()
         LoadCursor( nullptr, IDC_ARROW ),
         nullptr,
         nullptr,
-        _vstWindowClass,
+        _nstWindowClass,
         nullptr
     };
     ::RegisterClassEx( &wc );
@@ -252,7 +252,7 @@ void Instance::RegisterWndClass()
 // ---------------------------------------------------------------------------------------------------------------------
 void Instance::UnregisterWndClass()
 {
-    ::UnregisterClass( _vstWindowClass, GetModuleHandle( nullptr ) );
+    ::UnregisterClass( _nstWindowClass, GetModuleHandle( nullptr ) );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -268,83 +268,83 @@ Instance::Instance( const char* pluginPath, const float sampleRate, const uint32
 
     ABSL_ASSERT( unifiedTime != nullptr );
     m_data->m_unifiedTimeInfo           = unifiedTime;
-    m_data->m_vstTimeInfo.sampleRate    = sampleRate;
-    m_data->m_vstTimeSampleRateRcp      = 1.0 / sampleRate;
+    m_data->m_nstTimeInfo.sampleRate    = sampleRate;
+    m_data->m_nstTimeSampleRateRcp      = 1.0 / sampleRate;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 Instance::~Instance()
 {
-    m_data->m_vstThreadAlive = false;
-    ::WaitForSingleObject( m_data->m_vstThreadHandle, INFINITE );
+    m_data->m_nstThreadAlive = false;
+    ::WaitForSingleObject( m_data->m_nstThreadHandle, INFINITE );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-VstIntPtr __cdecl Instance::Data::vstAudioMasterCallback( AEffect* effect, VstInt32 opcode, VstInt32 index, VstIntPtr value, void* ptr, float opt )
+int64_t __cdecl Instance::Data::NstOpcodeCallback( CPlugEffect* effect, int32_t opcode, int32_t index, int64_t value, void* ptr, float opt )
 {
     static constexpr double cSixtyRcp = 1.0 / 60.0;
 
-    if ( opcode == audioMasterVersion )
-        return kVstVersion;
+    if ( opcode == NstOpcode_Version )
+        return 2400;
 
-    VstIntPtr result = 0;
+    int64_t result = 0;
     if ( effect == nullptr )
     {
-        if ( opcode == audioMasterGetVendorString       ||
-             opcode == audioMasterGetProductString      ||
-             opcode == audioMasterGetVendorVersion      ||
-             opcode == audioMasterGetCurrentProcessLevel )
+        if ( opcode == NstOpcode_GetVendorString       ||
+             opcode == NstOpcode_GetProductString      ||
+             opcode == NstOpcode_GetVendorVersion      ||
+             opcode == NstOpcode_GetCurrentProcessLevel )
         {
             // these are stateless so it's okay if effect is null; this has been seen happen on some iZo plugs
         }
         else
         {
             // .. but otherwise this is an error, we need the userdata in effect to reach back to our host instance
-            blog::error::vst( " - vstAudioMasterCallback effect is nullptr for opcode {} ({})", opcode, vstOpcodeToString( opcode ) );
+            blog::error::plug( " - NstOpcodeCallback effect is nullptr for opcode {} ({})", opcode, nstOpcodeToString( opcode ) );
             return 0;
         }
     }
 
     switch ( opcode )
     {
-        case audioMasterGetTime:
+        case NstOpcode_GetTime:
         {
             // PpqPosValid | TempoValid | BarsValid | CyclePosValid | TimeSigValid | SmpteValid | ClockValid |
-            Instance::Data* localData = (Instance::Data*)effect->user;
+            Instance::Data* localData = (Instance::Data*)effect->data_user;
             if ( localData )
             {
                 ABSL_ASSERT( localData->m_unifiedTimeInfo != nullptr );
                 const auto& unifiedTime = *localData->m_unifiedTimeInfo;
-                      auto& vstTime     =  localData->m_vstTimeInfo;
+                      auto& nstTime     =  localData->m_nstTimeInfo;
 
-                vstTime.samplePos           = unifiedTime.samplePos;
-                vstTime.tempo               = unifiedTime.tempo;
-                vstTime.sampleRate          = localData->m_sampleRate;
-                vstTime.ppqPos              = (vstTime.samplePos * localData->m_vstTimeSampleRateRcp) * (vstTime.tempo * cSixtyRcp);
-                vstTime.timeSigNumerator    = unifiedTime.timeSigNumerator;
-                vstTime.timeSigDenominator  = unifiedTime.timeSigDenominator;
-                vstTime.flags               = kVstTempoValid | kVstPpqPosValid | kVstTimeSigValid | kVstTransportPlaying;
+                nstTime.samplePos           = unifiedTime.samplePos;
+                nstTime.tempo               = unifiedTime.tempo;
+                nstTime.sampleRate          = localData->m_sampleRate;
+                nstTime.ppqPos              = (nstTime.samplePos * localData->m_nstTimeSampleRateRcp) * (nstTime.tempo * cSixtyRcp);
+                nstTime.timeSigNumerator    = unifiedTime.timeSigNumerator;
+                nstTime.timeSigDenominator  = unifiedTime.timeSigDenominator;
+                nstTime.flags               = NstTIF_Tempo_Valid | NstTIF_PpqPos_Valid | NstTIF_TimeSig_Valid | NstTIF_Transport_Playing;
 
-                return (VstIntPtr)&localData->m_vstTimeInfo;
+                return (int64_t)&localData->m_nstTimeInfo;
             }
             else
             {
-                return (VstIntPtr)nullptr;
+                return (int64_t)nullptr;
             }
         }
         break;
 
-        case audioMasterAutomate:
-        case audioMasterBeginEdit:
-        case audioMasterEndEdit:
+        case NstOpcode_Automate:
+        case NstOpcode_BeginEdit:
+        case NstOpcode_EndEdit:
         {
             // if there is an automation callback registered, ping it and then release it
-            Instance::Data* localData = (Instance::Data*)effect->user;
+            Instance::Data* localData = (Instance::Data*)effect->data_user;
             if ( localData )
             {
                 if ( Instance::DebugVerboseParameterLogging )
                 {
-                    blog::vst( "parameter #{} [{}] = {}",
+                    blog::plug( "parameter #{} [{}] = {}",
                         index, 
                         localData->lookupParameterName( index ), 
                         effect->getParameter( effect, index ) );
@@ -361,12 +361,12 @@ VstIntPtr __cdecl Instance::Data::vstAudioMasterCallback( AEffect* effect, VstIn
         }
         break;
 
-        case audioMasterGetCurrentProcessLevel:
-            return kVstProcessLevelRealtime;
+        case NstOpcode_GetCurrentProcessLevel:
+            return NstPL_Realtime;
             break;
 
         // still get this obsolete'd msg regularly; respond to identify what inputs we support
-        case 4 /*audioMasterPinConnected*/:
+        case 4 /*NstOpcode_PinConnected*/:
         {
             const bool askingAboutInput = (value != 0);
             if ( askingAboutInput )
@@ -375,33 +375,33 @@ VstIntPtr __cdecl Instance::Data::vstAudioMasterCallback( AEffect* effect, VstIn
                 return (index < 2) ? 0 : 1;
         }
 
-        case audioMasterCurrentId:
-            return effect->uniqueID;
+        case NstOpcode_CurrentId:
+            return effect->plug_uid;
 
-        case audioMasterIdle:
-            effect->dispatcher( effect, effEditIdle, 0, 0, nullptr, 0 );
+        case NstOpcode_Idle:
+            effect->dispatcher( effect, NstHtpOpcode_EditIdle, 0, 0, nullptr, 0 );
             break;
 
-        case audioMasterSizeWindow:
+        case NstOpcode_SizeWindow:
             {
-                Instance::Data* localData = (Instance::Data*)effect->user;
+                Instance::Data* localData = (Instance::Data*)effect->data_user;
                 if ( localData )
                 {
                     RECT wr = { 0, 0, (LONG)index, (LONG)value };
                     ::AdjustWindowRectEx( &wr, wStyle, FALSE, wStyleEx );
-                    ::SetWindowPos( localData->m_vstEditorHWND, nullptr, 0, 0, wr.right, wr.bottom, SWP_NOMOVE | SWP_NOREPOSITION | SWP_NOZORDER );
+                    ::SetWindowPos( localData->m_nstEditorHWND, nullptr, 0, 0, wr.right, wr.bottom, SWP_NOMOVE | SWP_NOREPOSITION | SWP_NOZORDER );
                 }
             }
             break;
 
-        case audioMasterCanDo:
+        case NstOpcode_CanDo:
             if ( ptr != nullptr )
-                blog::vst( " - audioMasterCanDo ({})", (const char*)ptr );
+                blog::plug( " - NstOpcode_CanDo ({})", (const char*)ptr );
             break;
 
-        case audioMasterIOChanged:
+        case NstOpcode_IOChanged:
             {
-                Instance::Data* localData = (Instance::Data*)effect->user;
+                Instance::Data* localData = (Instance::Data*)effect->data_user;
                 if ( localData )
                 {
                     localData->m_updateIOChannels = true;
@@ -409,44 +409,44 @@ VstIntPtr __cdecl Instance::Data::vstAudioMasterCallback( AEffect* effect, VstIn
             }
             return 1;
 
-        case audioMasterGetVendorString:
-            strcpy_s( (char*)ptr, kVstMaxVendorStrLen, "ishani.org" );
+        case NstOpcode_GetVendorString:
+            strcpy_s( (char*)ptr, 64, "ishani.org" );
             break;
-        case audioMasterGetProductString:
-            strcpy_s( (char*)ptr, kVstMaxVendorStrLen, "OUROVEON" );
+        case NstOpcode_GetProductString:
+            strcpy_s( (char*)ptr, 64, "OUROVEON" );
             break;
-        case audioMasterGetVendorVersion:
+        case NstOpcode_GetVendorVersion:
             return 0x666;
 
         default:
-            blog::vst( " - vstAudioMasterCallback unhandled opcode {} ({})", opcode, vstOpcodeToString(opcode) );
+            blog::plug( " - NstOpcodeCallback unhandled opcode {} ({})", opcode, nstOpcodeToString(opcode) );
             break;
     }
     return result;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-LRESULT WINAPI Instance::Data::vstMsgProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
+LRESULT WINAPI Instance::Data::nstMsgProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 {
-    Instance::Data* vstData = (Instance::Data*)::GetWindowLongPtr( hWnd, GWLP_USERDATA );
+    Instance::Data* instData = (Instance::Data*)::GetWindowLongPtr( hWnd, GWLP_USERDATA );
 
     switch ( msg )
     {
         case WM_CREATE:
         {
-            vstData = (Instance::Data*)((LPCREATESTRUCT)lParam)->lpCreateParams;
-            ABSL_ASSERT( vstData != nullptr );
-            ::SetWindowLongPtr( hWnd, GWLP_USERDATA, (LONG_PTR) vstData );
+            instData = (Instance::Data*)((LPCREATESTRUCT)lParam)->lpCreateParams;
+            ABSL_ASSERT( instData != nullptr );
+            ::SetWindowLongPtr( hWnd, GWLP_USERDATA, (LONG_PTR) instData );
 
-            vstData->m_vstEditorState = Instance::Data::EditorState::Open;
-            blog::vst( "opening editor for {}", vstData->m_product );
+            instData->m_nstEditorState = Instance::Data::EditorState::Open;
+            blog::plug( "opening editor for {}", instData->m_product );
         }
         break;
 
         case WM_DESTROY:
         {
-            ABSL_ASSERT( vstData != nullptr );
-            vstData->handleHostWindowClosing();
+            ABSL_ASSERT( instData != nullptr );
+            instData->handleHostWindowClosing();
         }
         break;
     }
@@ -454,15 +454,15 @@ LRESULT WINAPI Instance::Data::vstMsgProc( HWND hWnd, UINT msg, WPARAM wParam, L
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-HWND  Instance::Data::vstCreateWindow( uint32_t width, uint32_t height, Instance::Data* dataPtr )
+HWND  Instance::Data::nstCreateWindow( uint32_t width, uint32_t height, Instance::Data* dataPtr )
 {
     RECT wr = { 0, 0, (LONG)width, (LONG)height };
     ::AdjustWindowRectEx( &wr, wStyle, FALSE, wStyleEx );
 
     return ::CreateWindowEx(
         wStyleEx,
-        _vstWindowClass,
-        L"VST",
+        _nstWindowClass,
+        L"Plugin",
         wStyle,
         CW_USEDEFAULT,
         CW_USEDEFAULT,
@@ -475,52 +475,52 @@ HWND  Instance::Data::vstCreateWindow( uint32_t width, uint32_t height, Instance
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-DWORD WINAPI Instance::Data::vstThread( LPVOID lpParameter )
+DWORD WINAPI Instance::Data::nstThread( LPVOID lpParameter )
 {
     // pass control over to the instance data
-    auto* vstData = (Instance::Data*)lpParameter;
-    vstData->runOnVstThread();
+    auto* instData = (Instance::Data*)lpParameter;
+    instData->runOnPluginThread();
 
     return 0;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void Instance::Data::runOnVstThread()
+void Instance::Data::runOnPluginThread()
 {
     // support 2+2 in (stereo + sidechain) and stereo out
     const int32_t cTotalKnownInputs  = 4;
     const int32_t cTotalKnownOutputs = 2;
 
-    blog::vst( "trying to load [{}]", m_path );
+    blog::plug( "trying to load [{}]", m_path );
 
-    m_vstModule = LoadLibraryExA( m_path.c_str(), nullptr, 0 );
-    if ( m_vstModule != nullptr )
+    m_nstModule = LoadLibraryExA( m_path.c_str(), nullptr, 0 );
+    if ( m_nstModule != nullptr )
     {
-        m_vstEntrypoint = (VSTPluginMainFn)GetProcAddress( m_vstModule, "VSTPluginMain" );
-        if ( m_vstEntrypoint == nullptr )
+        m_nstEntrypoint = (VSTPluginMainFn)GetProcAddress( m_nstModule, "VSTPluginMain" );
+        if ( m_nstEntrypoint == nullptr )
         {
-            blog::error::vst( "VSTPluginMain entrypoint not found" );
-            FreeLibrary( m_vstModule );
+            blog::error::plug( "VSTPluginMain entrypoint not found" );
+            FreeLibrary( m_nstModule );
 
-            m_vstFailedToLoad = true;
+            m_nstFailedToLoad = true;
             return;
         }
     }
 
-    auto* vstFI = m_vstEntrypoint( vstAudioMasterCallback );
-    vstFI->user = this;
+    auto* vstFI = m_nstEntrypoint( NstOpcodeCallback );
+    vstFI->data_user = this;
 
-    m_vstFilterInstance = vstFI;
+    m_nstFilterInstance = vstFI;
 
-    VstIntPtr dispRet;
-    dispRet = safeDispatch( effOpen, 0, 0, nullptr, 0 );
+    int64_t dispRet;
+    dispRet = safeDispatch( NstHtpOpcode_Open, 0, 0, nullptr, 0 );
 
-    char vendorString[kVstMaxVendorStrLen]{ 0 };
-    dispRet = safeDispatch( effGetVendorString, 0, 0, vendorString, 0 );
+    char vendorString[64]{ 0 };
+    dispRet = safeDispatch( NstHtpOpcode_GetVendorString, 0, 0, vendorString, 0 );
     m_vendor = vendorString;
 
-    char productString[kVstMaxProductStrLen]{ 0 };
-    dispRet = safeDispatch( effGetProductString, 0, 0, productString, 0 );
+    char productString[64]{ 0 };
+    dispRet = safeDispatch( NstHtpOpcode_GetProductString, 0, 0, productString, 0 );
     m_product = productString;
 
     if ( m_product.empty() )
@@ -532,17 +532,17 @@ void Instance::Data::runOnVstThread()
     OuroveonThreadScope ots( fmt::format( OURO_THREAD_PREFIX "VST::{}", m_product ).c_str() );
 
 
-    const auto vstVersion = safeDispatch( effGetVstVersion, 0, 0, nullptr, 0 );
+    const auto vstVersion = safeDispatch( NstHtpOpcode_GetSysVersion, 0, 0, nullptr, 0 );
     if ( vstVersion >= 2 )
     {
-        VstSpeakerArrangement saInput, saOutput;
+        NstSpeakerArrangement saInput, saOutput;
         memset( &saInput, 0, sizeof( saInput ) );
         memset( &saOutput, 0, sizeof( saOutput ) );
 
         saInput.numChannels  = cTotalKnownInputs;
-        saInput.type         = kSpeakerArrStereo;
+        saInput.type         = 1; // stereo
         saOutput.numChannels = cTotalKnownOutputs;
-        saOutput.type        = kSpeakerArrStereo;
+        saOutput.type        = 1; // stereo
 
         for ( int i = 0; i < 8; i++ )
         {
@@ -551,132 +551,125 @@ void Instance::Data::runOnVstThread()
             saInput.speakers[i].radius    = saOutput.speakers[i].radius    = 0.0f;
             saInput.speakers[i].reserved  = saOutput.speakers[i].reserved  = 0.0f;
 
+            constexpr int32_t SpeakerID_Left = 1;
+            constexpr int32_t SpeakerID_Right = 2;
+
             switch ( i )
             {
                 case 0:
-                    saInput.speakers[i].type  = kSpeakerL;
-                    saOutput.speakers[i].type = kSpeakerL;
-                    strcpy_s( saInput.speakers[i].name, kVstMaxNameLen, "In-Left" );
-                    strcpy_s( saOutput.speakers[i].name, kVstMaxNameLen, "Out-Left" );
+                    saInput.speakers[i].type  = SpeakerID_Left;
+                    saOutput.speakers[i].type = SpeakerID_Left;
+                    strcpy_s( saInput.speakers[i].name, 64, "In-Left" );
+                    strcpy_s( saOutput.speakers[i].name, 64, "Out-Left" );
                     break;
                 case 1:
-                    saInput.speakers[i].type  = kSpeakerR;
-                    saOutput.speakers[i].type = kSpeakerR;
-                    strcpy_s( saInput.speakers[i].name, kVstMaxNameLen, "In-Right" );
-                    strcpy_s( saOutput.speakers[i].name, kVstMaxNameLen, "Out-Right" );
-                    break;
-                case 2:
-                    saInput.speakers[i].type = kSpeakerSl;  // ??
-                    strcpy_s( saInput.speakers[i].name, kVstMaxNameLen, "Sidechain-Left" );
-                    saOutput.speakers[i].type = kSpeakerUndefined;
-                    break;
-                case 3:
-                    saInput.speakers[i].type = kSpeakerSr;  // ??
-                    strcpy_s( saInput.speakers[i].name, kVstMaxNameLen, "Sidechain-Right" );
-                    saOutput.speakers[i].type = kSpeakerUndefined;
+                    saInput.speakers[i].type  = SpeakerID_Right;
+                    saOutput.speakers[i].type = SpeakerID_Right;
+                    strcpy_s( saInput.speakers[i].name, 64, "In-Right" );
+                    strcpy_s( saOutput.speakers[i].name, 64, "Out-Right" );
                     break;
                 default:
-                    saInput.speakers[i].type  = kSpeakerUndefined;
-                    saOutput.speakers[i].type = kSpeakerUndefined;
+                    saInput.speakers[i].type  = 0x7fffffff;
+                    saOutput.speakers[i].type = 0x7fffffff;
                     break;
             }
         }
-        safeDispatch( effSetSpeakerArrangement, 0, ToVstPtr( &saInput ), &saOutput, 0.0f );
+        safeDispatch( NstHtpOpcode_SetSpeakerArrangement, 0, ToNstPtr( &saInput ), &saOutput, 0.0f );
 
-        VstPinProperties ioPinProperties;
+        NstPinProperties ioPinProperties;
         for ( int32_t index = 0; index < cTotalKnownInputs; index ++ )
         {
-            safeDispatch( effGetInputProperties, index, 0, &ioPinProperties, 0 );
-#if VST_IO_PROPERTY_VERBOSE
-            blog::vst( " - Input  {} = [ {:24} ] : [ {:32} ]", index, ioPinProperties.label, vstPinPropertiesFlagsToString( (VstPinPropertiesFlags)ioPinProperties.flags ) );
-#endif // VST_IO_PROPERTY_VERBOSE
+            safeDispatch( NstHtpOpcode_GetInputProperties, index, 0, &ioPinProperties, 0 );
+#if NST_IO_PROPERTY_DEBUG_VERBOSE
+            blog::plug( " - Input  {} = [ {:24} ] : [ {:32} ]", index, ioPinProperties.label, nstPinPropertiesFlagsToString( (NstPinPropertiesFlags)ioPinProperties.flags ) );
+#endif // NST_IO_PROPERTY_DEBUG_VERBOSE
         }
 
         for ( int32_t index = 0; index < cTotalKnownOutputs; index ++ )
         {
-            safeDispatch( effGetOutputProperties, index, 0, &ioPinProperties, 0 );
-#if VST_IO_PROPERTY_VERBOSE
-            blog::vst( " - Output {} = [ {:24} ] : [ {:32} ]", index, ioPinProperties.label, vstPinPropertiesFlagsToString( (VstPinPropertiesFlags)ioPinProperties.flags ) );
-#endif // VST_IO_PROPERTY_VERBOSE
+            safeDispatch( NstHtpOpcode_GetOutputProperties, index, 0, &ioPinProperties, 0 );
+#if NST_IO_PROPERTY_DEBUG_VERBOSE
+            blog::plug( " - Output {} = [ {:24} ] : [ {:32} ]", index, ioPinProperties.label, nstPinPropertiesFlagsToString( (NstPinPropertiesFlags)ioPinProperties.flags ) );
+#endif // NST_IO_PROPERTY_DEBUG_VERBOSE
         }
     }
 
-    dispRet = safeDispatch( effSetSampleRate, 0, 0, nullptr, m_sampleRate );
-    dispRet = safeDispatch( effSetBlockSize,  0, m_maximumBlockSize, nullptr, 0 );
-    dispRet = safeDispatch( effSetProcessPrecision, 0, kVstProcessPrecision32, nullptr, 0.0f );
-    dispRet = safeDispatch( effSetSampleRate, 0, 0, nullptr, m_sampleRate );  // not a typo; some plugins like it before block-size, some after
+    dispRet = safeDispatch( NstHtpOpcode_SetSampleRate, 0, 0, nullptr, m_sampleRate );
+    dispRet = safeDispatch( NstHtpOpcode_SetBlockSize,  0, m_maximumBlockSize, nullptr, 0 );
+    dispRet = safeDispatch( NstHtpOpcode_SetProcessPrecision, 0, 0 /* single-precision mode */, nullptr, 0.0f);
+    dispRet = safeDispatch( NstHtpOpcode_SetSampleRate, 0, 0, nullptr, m_sampleRate );  // not a typo; some plugins like it before block-size, some after
 
 
     // update on first time through
     m_updateIOChannels = true;
 
-    m_vstThreadInitComplete = true;
+    m_nstThreadInitComplete = true;
 
     // extract parameters
     {
         std::scoped_lock syncConsoleOutput( m_initMutex );
-        blog::vst( "Loaded [ {} - {} ]", vendorString, productString );
+        blog::plug( "Loaded [ {} - {} ]", vendorString, productString );
 
         char paramLabel[255];
         for ( int32_t pI = 0; pI < vstFI->numParams; pI++ )
         {
-            safeDispatch( effGetParamName, pI, 0, paramLabel, 0 );
+            safeDispatch( NstHtpOpcode_GetParamName, pI, 0, paramLabel, 0 );
 
             m_paramIndexMapS2I.emplace( paramLabel, pI );
             m_paramIndexMapI2S.emplace( pI, paramLabel );
 #if 0
-            blog::vst( "  Param({}) = {}", pI, paramLabel );
+            blog::plug( "  Param({}) = {}", pI, paramLabel );
 #endif
         }
     }
 
-    while ( m_vstThreadAlive )
+    while ( m_nstThreadAlive )
     {
-        if ( m_vstActivationState == ActivationState::Deactivating )
+        if ( m_nstActivationState == ActivationState::Deactivating )
         {
-            dispRet = safeDispatch( effMainsChanged, 0, 0, nullptr, 0 );
-            m_vstActivationState = ActivationState::Inactive;
+            dispRet = safeDispatch( NstHtpOpcode_MainsChanged, 0, 0, nullptr, 0 );
+            m_nstActivationState = ActivationState::Inactive;
         }
-        else if ( m_vstActivationState == ActivationState::Activating )
+        else if ( m_nstActivationState == ActivationState::Activating )
         {
-            dispRet = safeDispatch( effMainsChanged, 0, 1, nullptr, 0 );
-            m_vstActivationState = ActivationState::Active;
+            dispRet = safeDispatch( NstHtpOpcode_MainsChanged, 0, 1, nullptr, 0 );
+            m_nstActivationState = ActivationState::Active;
         }
 
         // handle requests to open or close the UI
-        if ( m_vstEditorState == EditorState::WaitingToOpen )
+        if ( m_nstEditorState == EditorState::WaitingToOpen )
         {
-            m_vstEditorState = EditorState::Opening;
+            m_nstEditorState = EditorState::Opening;
 
-            ERect* editorRect;
-            safeDispatch( effEditGetRect, 0, 0, &editorRect, 0 );
+            NstRect* editorRect;
+            safeDispatch( NstHtpOpcode_EditGetRect, 0, 0, &editorRect, 0 );
 
-            m_vstEditorHWND = Instance::Data::vstCreateWindow(
+            m_nstEditorHWND = Instance::Data::nstCreateWindow(
                 editorRect->right - editorRect->left,
                 editorRect->bottom - editorRect->top,
                 this );
 
-            safeDispatch( effEditOpen, 0, 0, m_vstEditorHWND, 0 );
+            safeDispatch( NstHtpOpcode_EditOpen, 0, 0, m_nstEditorHWND, 0 );
         }
-        else if ( m_vstEditorState == EditorState::WaitingToClose )
+        else if ( m_nstEditorState == EditorState::WaitingToClose )
         {
             // this will trigger change to ::Closing
-            ::DestroyWindow( m_vstEditorHWND );
+            ::DestroyWindow( m_nstEditorHWND );
         }
-        else if ( m_vstEditorState == EditorState::Closing )
+        else if ( m_nstEditorState == EditorState::Closing )
         {
-            m_vstEditorState = EditorState::Idle;
-            m_vstEditorHWND = nullptr;
+            m_nstEditorState = EditorState::Idle;
+            m_nstEditorHWND = nullptr;
 
-            safeDispatch( effEditClose, 0, 0, nullptr, 0 );
+            safeDispatch( NstHtpOpcode_EditClose, 0, 0, nullptr, 0 );
         }
 
         // run the message loop for a while
         {
-            if ( m_vstEditorHWND != nullptr )
+            if ( m_nstEditorHWND != nullptr )
             {
                 int32_t maxDispatch = 10; // arbitrary message read limit to avoid getting stuck in an endless 
-                                          // message loop without checking in on all the other bits of the VST thread logic
+                                          // message loop without checking in on all the other bits of the plugin thread logic
 
                 MSG msg;
                 //default message processing
@@ -695,45 +688,45 @@ void Instance::Data::runOnVstThread()
 
          if ( m_updateIOChannels )
         {
-            m_midiInputChannels     = (int32_t)safeDispatch( effGetNumMidiInputChannels, 0, 0, nullptr, 0 );
-            m_midiOutputChannels    = (int32_t)safeDispatch( effGetNumMidiOutputChannels, 0, 0, nullptr, 0 );
+            m_midiInputChannels     = (int32_t)safeDispatch( NstHtpOpcode_GetNumMidiInputChannels, 0, 0, nullptr, 0 );
+            m_midiOutputChannels    = (int32_t)safeDispatch( NstHtpOpcode_GetNumMidiOutputChannels, 0, 0, nullptr, 0 );
             m_updateIOChannels      = false;
 
-            blog::vst( "MIDI Channels [{}] : In {} : Out {} ", productString, m_midiInputChannels, m_midiOutputChannels );
+            blog::plug( "MIDI Channels [{}] : In {} : Out {} ", productString, m_midiInputChannels, m_midiOutputChannels );
         }
 
 
         // process requests from main thread
         ActivationState requestedActivation;
-        if ( m_vstActivationQueue.try_dequeue( requestedActivation ) )
+        if ( m_nstActivationQueue.try_dequeue( requestedActivation ) )
         {
-            m_vstActivationState = requestedActivation;
+            m_nstActivationState = requestedActivation;
         }
     }
 
-    m_vstThreadInitComplete = false;
+    m_nstThreadInitComplete = false;
 
-    dispRet = safeDispatch( effClose, 0, 0, nullptr, 0 );
-    m_vstFilterInstance = nullptr;
+    dispRet = safeDispatch( NstHtpOpcode_Close, 0, 0, nullptr, 0 );
+    m_nstFilterInstance = nullptr;
 
-    FreeLibrary( m_vstModule );
+    FreeLibrary( m_nstModule );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-VstIntPtr Instance::Data::safeDispatch( VstInt32 opCode, VstInt32 index, VstIntPtr value, void* ptr, float opt )
+int64_t Instance::Data::safeDispatch( int32_t opCode, int32_t index, int64_t value, void* ptr, float opt )
 {
-    VstIntPtr result = 0;
+    int64_t result = 0;
 
     try
     {
-        if ( m_vstFilterInstance->dispatcher != nullptr )
+        if ( m_nstFilterInstance->dispatcher != nullptr )
         {
-            result = m_vstFilterInstance->dispatcher( m_vstFilterInstance, opCode, index, value, ptr, opt );
+            result = m_nstFilterInstance->dispatcher( m_nstFilterInstance, opCode, index, value, ptr, opt );
         }
     }
     catch ( ... )
     {
-        blog::error::vst( "exception in SafeDispatch( {}, {}, {}, {}, {} )", opCode, index, value, ptr, opt  );
+        blog::error::plug( "exception in SafeDispatch( {}, {}, {}, {}, {} )", opCode, index, value, ptr, opt  );
     }
 
     return result;
@@ -744,19 +737,19 @@ void Instance::beginLoadAsync()
 {
     // everything happens on the thread
     DWORD newThreadID;
-    m_data->m_vstThreadAlive  = true;
-    m_data->m_vstThreadHandle = ::CreateThread( nullptr, 0, Instance::Data::vstThread, m_data.get(), 0, &newThreadID );
-                                ::SetThreadPriority( m_data->m_vstThreadHandle, THREAD_PRIORITY_ABOVE_NORMAL );
+    m_data->m_nstThreadAlive  = true;
+    m_data->m_nstThreadHandle = ::CreateThread( nullptr, 0, Instance::Data::nstThread, m_data.get(), 0, &newThreadID );
+                                ::SetThreadPriority( m_data->m_nstThreadHandle, THREAD_PRIORITY_ABOVE_NORMAL );
 
-    blog::vst( "scheduled VST load on thread [{}]", newThreadID );
+    blog::plug( "scheduled plugin load on thread [{}]", newThreadID );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 bool Instance::loaded() const
 {
-    return ( m_data->m_vstFilterInstance != nullptr &&
-             m_data->m_vstThreadAlive &&
-             m_data->m_vstThreadInitComplete );
+    return ( m_data->m_nstFilterInstance != nullptr &&
+             m_data->m_nstThreadAlive &&
+             m_data->m_nstThreadInitComplete );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -768,7 +761,7 @@ bool Instance::availableForUse() const
 
 bool Instance::failedToLoad() const
 {
-    return m_data->m_vstFailedToLoad;
+    return m_data->m_nstFailedToLoad;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -803,19 +796,19 @@ const int32_t Instance::getUniqueID() const
     if ( !loaded() )
         return -1;
 
-    return m_data->m_vstFilterInstance->uniqueID;
+    return m_data->m_nstFilterInstance->plug_uid;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 bool Instance::isActive() const
 {
-    return ( m_data->m_vstActivationState == Instance::Data::ActivationState::Active );
+    return ( m_data->m_nstActivationState == Instance::Data::ActivationState::Active );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 void Instance::requestActivationChange( bool onOff )
 {
-    m_data->m_vstActivationQueue.enqueue( onOff ?
+    m_data->m_nstActivationQueue.enqueue( onOff ?
         Instance::Data::ActivationState::Activating :
         Instance::Data::ActivationState::Deactivating );
 }
@@ -823,34 +816,34 @@ void Instance::requestActivationChange( bool onOff )
 // ---------------------------------------------------------------------------------------------------------------------
 bool Instance::canChangeEditorState() const
 {
-    return ( m_data->m_vstEditorState == Instance::Data::EditorState::Idle ||
-             m_data->m_vstEditorState == Instance::Data::EditorState::Open );
+    return ( m_data->m_nstEditorState == Instance::Data::EditorState::Idle ||
+             m_data->m_nstEditorState == Instance::Data::EditorState::Open );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 bool Instance::openEditor()
 {
-    if ( m_data->m_vstEditorState != Instance::Data::EditorState::Idle )
+    if ( m_data->m_nstEditorState != Instance::Data::EditorState::Idle )
         return false;
 
-    m_data->m_vstEditorState = Instance::Data::EditorState::WaitingToOpen;
+    m_data->m_nstEditorState = Instance::Data::EditorState::WaitingToOpen;
     return true;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 bool Instance::closeEditor()
 {
-    if ( m_data->m_vstEditorState != Instance::Data::EditorState::Open )
+    if ( m_data->m_nstEditorState != Instance::Data::EditorState::Open )
         return false;
 
-    m_data->m_vstEditorState = Instance::Data::EditorState::WaitingToClose;
+    m_data->m_nstEditorState = Instance::Data::EditorState::WaitingToClose;
     return true;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 bool Instance::editorIsOpen() const
 {
-    return m_data->m_vstEditorState == Instance::Data::EditorState::Open;
+    return m_data->m_nstEditorState == Instance::Data::EditorState::Open;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -875,7 +868,7 @@ bool Instance::setParameter( const int32_t index, const float value )
     if ( availableForUse() && 
          index >= 0 )
     {
-        m_data->m_vstFilterInstance->setParameter( m_data->m_vstFilterInstance, index, value );
+        m_data->m_nstFilterInstance->setParameter( m_data->m_nstFilterInstance, index, value );
         return true;
     }
     return false;
@@ -899,9 +892,9 @@ bool Instance::hasAutomationHook() const
 std::string Instance::serialize()
 {
     void* chunkData = nullptr;
-    VstIntPtr chunkSize = m_data->m_vstFilterInstance->dispatcher( m_data->m_vstFilterInstance, effGetChunk, 0, 0, &chunkData, 0 );
+    int64_t chunkSize = m_data->m_nstFilterInstance->dispatcher( m_data->m_nstFilterInstance, NstHtpOpcode_GetChunk, 0, 0, &chunkData, 0 );
 
-    // VST supported getChunk, hooray
+    // plugin supported getChunk, hooray
     if ( chunkSize > 0 )
     {
         return cppcodec::base64_rfc4648::encode( (const char*)chunkData, chunkSize );
@@ -910,14 +903,14 @@ std::string Instance::serialize()
     // the manual fallback - fetch all the parameters we know about and save them to a JSON stream
     {
         std::string manualParamExport;
-        manualParamExport.reserve( m_data->m_vstFilterInstance->numParams * 64 );
+        manualParamExport.reserve( m_data->m_nstFilterInstance->numParams * 64 );
 
         // to differentiate us from the normal GetChunk data, prepend a clear magic ID we can look for on deserialize
         manualParamExport = OUROVEON_MAGIC_PARAMBLOCK_STR "{\n";
 
         for ( const auto& s2i : m_data->m_paramIndexMapS2I )
         {
-            const float currentValue = m_data->m_vstFilterInstance->getParameter( m_data->m_vstFilterInstance, s2i.second );
+            const float currentValue = m_data->m_nstFilterInstance->getParameter( m_data->m_nstFilterInstance, s2i.second );
 
             // save the values as hex-digit blobs to avoid any round-trip loss of precision
             uint32_t floatToHex;
@@ -925,10 +918,10 @@ std::string Instance::serialize()
 
             manualParamExport += fmt::format( "  \"{}\" : \"{:#x}\",\n", s2i.first, floatToHex );
         }
-        manualParamExport += fmt::format( "  \"_vst_version\" : {}\n", m_data->m_vstFilterInstance->version );
+        manualParamExport += fmt::format( "  \"_vst_version\" : {}\n", m_data->m_nstFilterInstance->plug_version );
         manualParamExport += "}\0\0\n";
 
-        blog::vst( ".. manual parameter serialize ({} bytes)", manualParamExport.size() );
+        blog::plug( ".. manual parameter serialize ({} bytes)", manualParamExport.size() );
 
         return cppcodec::base64_rfc4648::encode( (const char*)manualParamExport.c_str(), manualParamExport.size() + 1 );
     }
@@ -942,7 +935,7 @@ bool Instance::deserialize( const std::string& data )
         auto chunkData = cppcodec::base64_rfc4648::decode( data );
         if ( chunkData.size() <= 0 )
         {
-            blog::error::vst( "VSTInstance::deserialize data empty" );
+            blog::error::plug( "Instance::deserialize data empty" );
             return false;
         }
 
@@ -950,7 +943,7 @@ bool Instance::deserialize( const std::string& data )
         const size_t sizeOfOuroMagic = strlen( OUROVEON_MAGIC_PARAMBLOCK_STR );
         if ( memcmp( chunkData.data(), OUROVEON_MAGIC_PARAMBLOCK_STR, sizeOfOuroMagic ) == 0 )
         {
-            blog::vst( ".. manual parameter deserialize" );
+            blog::plug( ".. manual parameter deserialize" );
 
             // .. if it is, decode the JSON and walk the parameters, setting all the ones we can reliably find in our existing k:v name map
             const char* manualParamJson = (const char* )chunkData.data() + sizeOfOuroMagic;
@@ -968,23 +961,23 @@ bool Instance::deserialize( const std::string& data )
                     float newValue;
                     memcpy( &newValue, &floatAsHex, sizeof( uint32_t ) );
 
-                    m_data->m_vstFilterInstance->setParameter( m_data->m_vstFilterInstance, paramLookup->second, newValue );
+                    m_data->m_nstFilterInstance->setParameter( m_data->m_nstFilterInstance, paramLookup->second, newValue );
                 }
             }
         }
         else
         {
-            VstIntPtr chunkSize = m_data->m_vstFilterInstance->dispatcher( m_data->m_vstFilterInstance, effSetChunk, 0, chunkData.size(), chunkData.data(), 0 );
+            int64_t chunkSize = m_data->m_nstFilterInstance->dispatcher( m_data->m_nstFilterInstance, NstHtpOpcode_SetChunk, 0, chunkData.size(), chunkData.data(), 0 );
         }
     }
     catch ( nlohmann::json::parse_error& e )
     {
-        blog::error::vst( "VSTInstance::deserialize json parse failure, {}", e.what() );
+        blog::error::plug( "Instance::deserialize json parse failure, {}", e.what() );
         return false;
     }
     catch ( cppcodec::parse_error* e)
     {
-        blog::error::vst( "VSTInstance::deserialize failed, {}", e->what() );
+        blog::error::plug( "Instance::deserialize failed, {}", e->what() );
         return false;
     }
 
@@ -994,35 +987,9 @@ bool Instance::deserialize( const std::string& data )
 // ---------------------------------------------------------------------------------------------------------------------
 void Instance::process( float** inputs, float** outputs, const int32_t sampleFrames )
 {
-    m_data->m_vstFilterInstance->processReplacing( m_data->m_vstFilterInstance, inputs, outputs, sampleFrames );
+    m_data->m_nstFilterInstance->processReplacing( m_data->m_nstFilterInstance, inputs, outputs, sampleFrames );
 }
 
-/*
-void Instance::dispatchMidi( const app::midi::Message& midiMsg )
-{
-    if ( loaded() && m_data->m_midiInputChannels > 0 )
-    {
-        VstEvents events;
-        events.numEvents = 1;
-        events.reserved = 0;
+} // namespace nst
 
-        VstMidiEvent midiEvent;
-        memset( &midiEvent, 0, sizeof( VstMidiEvent ) );
-        midiEvent.type      = kVstMidiType;
-        midiEvent.byteSize  = sizeof( VstMidiEvent );
-        midiEvent.flags     = kVstMidiEventIsRealtime;
-
-        midiEvent.midiData[0] = app::midi::Message::typeAsByte( midiMsg.m_type );
-        midiEvent.midiData[1] = midiMsg.m_data0_u7;
-        midiEvent.midiData[2] = midiMsg.m_data1_u7;
-
-        events.events[0] = (VstEvent *)&midiEvent;
-
-        m_data->safeDispatch( effProcessEvents, 0, 0, &events, 0 );
-    }
-}
-*/
-
-} // namespace vst
-
-#endif // OURO_FEATURE_VST24
+#endif // OURO_FEATURE_NST24

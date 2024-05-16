@@ -3,8 +3,8 @@ function Root_PORTAUDIO()
     return SrcDir() .. "r0.hal/portaudio/"
 end
 
-function Root_Steinberg()
-    return SrcDir() .. "r0.closed/steinberg/"
+function Root_SteinbergAsioSDK()
+    return path.join( SrcDir(), "r0.hal", "asiosdk", asioSDKVersion() )
 end
 
 -- ==============================================================================
@@ -70,9 +70,9 @@ project "r0-portaudio"
     {
         Root_PORTAUDIO() .. "src/os/win",
 
-        Root_Steinberg() .. "asio_2_3_3/common",
-        Root_Steinberg() .. "asio_2_3_3/host",
-        Root_Steinberg() .. "asio_2_3_3/host/pc",
+        path.join( Root_SteinbergAsioSDK(), "common" ),
+        path.join( Root_SteinbergAsioSDK(), "host" ),
+        path.join( Root_SteinbergAsioSDK(), "host", "pc" ),
     }
     files 
     { 
@@ -85,9 +85,9 @@ project "r0-portaudio"
         Root_PORTAUDIO() .. "src/hostapi/wmme/*.c",
         Root_PORTAUDIO() .. "**.h",
 
-        Root_Steinberg() .. "asio_2_3_3/common/asio.cpp",
-        Root_Steinberg() .. "asio_2_3_3/host/asiodrivers.cpp",
-        Root_Steinberg() .. "asio_2_3_3/host/pc/asiolist.cpp",
+        path.join( Root_SteinbergAsioSDK(), "common", "asio.cpp" );
+        path.join( Root_SteinbergAsioSDK(), "host", "asiodrivers.cpp" );
+        path.join( Root_SteinbergAsioSDK(), "host", "pc", "asiolist.cpp" );
     }
     filter {}
 

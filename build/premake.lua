@@ -71,6 +71,14 @@ function GetBuildRootToken()
 end
 print ( "Build root token : " .. GetBuildRootToken() )
 
+
+-- ==============================================================================
+
+include "premake-inc/asiosdk.lua"
+
+-- ASIO sdk download and patching for Windows VS only
+checkASIOSDKDownload( rootBuildGenerationDir )
+
 -- ==============================================================================
 
 LibRoot = {}
@@ -118,8 +126,6 @@ workspace ("ouroveon_" .. _ACTION)
 
             "OURO_HAS_ISPC=1",
 
-            "OURO_FEATURE_VST24=1",
-
             -- for DPP; needs adjusting at the highest level before winsock is included
             "FD_SETSIZE=1024"
         }
@@ -146,8 +152,6 @@ workspace ("ouroveon_" .. _ACTION)
             "OURO_PLATFORM_LINUX=1",
 
             "OURO_HAS_ISPC=0",
-
-            "OURO_FEATURE_VST24=0",
         }
         buildoptions
         {
@@ -168,8 +172,6 @@ workspace ("ouroveon_" .. _ACTION)
             "OURO_PLATFORM_LINUX=0",
 
             "OURO_HAS_ISPC=0",
-
-            "OURO_FEATURE_VST24=0",
         }
         buildoptions
         {
@@ -295,7 +297,6 @@ group "r0-net"
 -- include "premake-inc/r0-net-nng.lua"
 include "premake-inc/r0-net-dpp.lua"
 include "premake-inc/r0-net-uriparser.lua"
-include "premake-inc/r0-net-link.lua"
 
 group ""
 group "r0-platform"

@@ -11,7 +11,7 @@
 
 #include "base/id.simple.h"
 
-namespace vst { class Instance; }
+namespace nst { class Instance; }
 
 namespace effect {
 
@@ -29,7 +29,7 @@ struct IContainer
 
     // add / remove effect instances
     // TODO refactor from vst:: specific
-    virtual AsyncCommandCounter effectAppend( vst::Instance* vst ) = 0;
+    virtual AsyncCommandCounter effectAppend( nst::Instance* nst ) = 0;
     virtual AsyncCommandCounter effectClearAll() = 0;
 };
 

@@ -9,11 +9,11 @@
 
 #pragma once
 
-#if OURO_FEATURE_VST24
+#if OURO_FEATURE_NST24
 
 #include "app/module.midi.msg.h"
 
-namespace vst { class Instance; }
+namespace nst { class Instance; }
 namespace app { struct AudioPlaybackTimeInfo; struct CoreGUI; }
 namespace data { struct DataBus; }
 
@@ -137,7 +137,7 @@ struct EffectStack
 
 
         // shunt DataBus values into parameters based on the mappings designed
-        void syncToDataBus( const data::DataBus& bus, vst::Instance* vsti ) const;
+        void syncToDataBus( const data::DataBus& bus, nst::Instance* vsti ) const;
 
 
         std::vector< ParameterBinding > bindings;
@@ -178,7 +178,7 @@ struct EffectStack
     void clear();
 
     // manually add a plugin by the given filename (usually called by chooseNewVST)
-    vst::Instance* addVST( const char* vstFilename, const int64_t vstLoadID, const bool haltUntilLoaded = false );
+    nst::Instance* addNST( const char* vstFilename, const int64_t vstLoadID, const bool haltUntilLoaded = false );
 
     // pop file selector to load a new plugin
     void chooseNewVST( app::CoreGUI& coreGUI );
@@ -219,7 +219,7 @@ private:
     int64_t                                             m_incrementalLoadId;    // incremented each time we add a VST, encoded into the instance
                                                                                 // it becomes what we use to identify each instance in the storage containers & UI
     std::vector< int64_t >                              m_order;                // list of the VSTs in play, in order of application in the audio engine
-    std::unordered_map< int64_t, vst::Instance* >       m_instances;            // lookup plugin instance by load-id
+    std::unordered_map< int64_t, nst::Instance* >       m_instances;            // lookup plugin instance by load-id
     std::unordered_map< int64_t, ParameterSet >         m_parameters;           // lookup extracted automated parameters by load-id
 
     std::string                                         m_lastBrowsedPath;      // last path we explored with file dialog, persisted in session json
@@ -227,4 +227,4 @@ private:
 
 } // namespace effect
 
-#endif // OURO_FEATURE_VST24
+#endif // OURO_FEATURE_NST24

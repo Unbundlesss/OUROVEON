@@ -108,6 +108,101 @@ ModuleHeaderOnlyFiles["websocketpp"] = function()
 end
 
 
+-- ------------------------------------------------------------------------------
+LibRoot.AbletonLink = SrcDir() .. "r0.net/link"
+ModuleRefInclude["link"] = function()
+
+    externalincludedirs
+    {
+        LibRoot.AbletonLink .. "/include",
+    }
+
+    filter "system:Windows"
+        defines 
+        {
+            "LINK_PLATFORM_WINDOWS=1",
+        }
+    filter {}
+    
+    filter "system:linux"
+        defines 
+        {
+            "LINK_PLATFORM_LINUX=1",
+        }
+    filter {}
+
+    filter "system:macosx"
+        defines 
+        {
+            "LINK_PLATFORM_MACOSX=1",
+        }
+    filter {}
+end
+
+ModuleHeaderOnlyFiles["link"] = function()
+    files 
+    { 
+        LibRoot.AbletonLink .. "/include/**.hpp",
+    }
+end
+
+
+-- ------------------------------------------------------------------------------
+ModuleRefInclude["nst24"] = function()
+
+    externalincludedirs
+    {
+        SrcDir() .. "r0.plug/nst24"
+    }
+
+    filter "system:Windows"
+        defines 
+        {
+            "OURO_FEATURE_NST24=1",
+        }
+    filter {}
+    
+    filter "system:linux"
+        defines 
+        {
+            "OURO_FEATURE_NST24=0",
+        }
+    filter {}
+
+    filter "system:macosx"
+        defines 
+        {
+            "OURO_FEATURE_NST24=0",
+        }
+    filter {}
+end
+
+ModuleHeaderOnlyFiles["nst24"] = function()
+    files 
+    { 
+        SrcDir() .. "r0.plug/nst24/*.h",
+    }
+end
+
+
+-- ------------------------------------------------------------------------------
+ModuleRefInclude["clap"] = function()
+
+    includedirs
+    {
+        SrcDir() .. "r0.plug/clap/include",
+        SrcDir() .. "r0.plug/clap-helpers/include",
+    }
+end
+
+ModuleHeaderOnlyFiles["clap"] = function()
+    files 
+    { 
+        SrcDir() .. "r0.plug/clap/include/**.h",
+        SrcDir() .. "r0.plug/clap-helpers/include/**.hxx",
+    }
+end
+
 
 -- ------------------------------------------------------------------------------
 
@@ -143,6 +238,7 @@ addSimpleHeaderOnly( true,  "taskflow",         "r0.async/taskflow/taskflow")
 addSimpleHeaderOnly( true,  "utf8",             "r0.data/utf8")
 addSimpleHeaderOnly( true,  "json",             "r0.data/json")
 addSimpleHeaderOnly( true,  "trie",             "r0.data/trie/include")
+addSimpleHeaderOnly( true,  "komihash",         "r0.data/komihash")
 addSimpleHeaderOnly( true,  "basen",            "r0.codec/basen")
 addSimpleHeaderOnly( true,  "q_lib",            "r0.dsp/q_lib/include")
 addSimpleHeaderOnly( true,  "sol",              "r0.scripting/sol-330")

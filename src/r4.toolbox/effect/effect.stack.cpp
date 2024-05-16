@@ -9,7 +9,7 @@
 
 #include "pch.h"
 
-#if OURO_FEATURE_VST24
+#if OURO_FEATURE_NST24
 
 #include "effect/effect.stack.h"
 #include "data/databus.h"
@@ -52,32 +52,32 @@ void EffectStack::load( const fs::path& appStashPath )
             std::ifstream is( sessionPath );
             cereal::JSONInputArchive archive( is );
 
-            // fetch last VSTs in use
+            // fetch last plugins in use
             sessionData.serialize( archive );
 
-            const auto vstCount = sessionData.vstPaths.size();
-            m_instances.reserve( vstCount );
-            m_parameters.reserve( vstCount );
+            const auto pluginCount = sessionData.vstPaths.size();
+            m_instances.reserve( pluginCount );
+            m_parameters.reserve( pluginCount );
 
-            // instantiate the VSTs in order
-            for ( auto vI = 0U; vI < vstCount; vI++ )
+            // instantiate the plugins in order
+            for ( auto vI = 0U; vI < pluginCount; vI++ )
             {
                 // fetch the original ID so that any parameter maps will match correctly; then also update the tracking variable so it starts beyond any we load
                 int64_t preservedID = sessionData.vstIDs[vI];
                 m_incrementalLoadId = std::max( m_incrementalLoadId, preservedID ) + 1;
 
                 // load VSTs and block until they have fully booted, as we need them alive to deserialize into
-                auto* vstInst = addVST( sessionData.vstPaths[vI].c_str(), preservedID, true );
+                auto* nstInst = addNST( sessionData.vstPaths[vI].c_str(), preservedID, true );
 
-                blog::cfg( "Loading VST session [{}] ...", vstInst->getProductName() );
+                blog::cfg( "Loading plugin session [{}] ...", nstInst->getProductName() );
 
                 // restore settings if they were stashed
                 if ( !sessionData.vstStateData[vI].empty() )
                 {
-                    vstInst->deserialize( sessionData.vstStateData[vI] );
+                    nstInst->deserialize( sessionData.vstStateData[vI] );
                 }
 
-                vstInst->requestActivationChange( sessionData.vstActive[vI] );
+                nstInst->requestActivationChange( sessionData.vstActive[vI] );
             }
 
             if ( !sessionData.lastBrowsedPath.empty() )
@@ -119,58 +119,58 @@ void EffectStack::clear()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-vst::Instance* EffectStack::addVST( const char* vstFilename, const int64_t vstLoadID, const bool haltUntilLoaded )
+nst::Instance* EffectStack::addNST( const char* vstFilename, const int64_t vstLoadID, const bool haltUntilLoaded )
 {
     const auto audioSampleRate = (float)m_effectContainer->getEffectSampleRate();
     const auto audioBufferSize = m_effectContainer->getEffectMaximumBufferSize();
 
-    vst::Instance* vstInst = new vst::Instance(
+    nst::Instance* nstInst = new nst::Instance(
         vstFilename,
         audioSampleRate,
         audioBufferSize,
         m_audioTimingInfoPtr );
 
     // disable by default
-    vstInst->requestActivationChange( false );
+    nstInst->requestActivationChange( false );
 
     // loading is done on a thread, along with all the initial setup; we shaln't be waiting for it
-    vstInst->beginLoadAsync();
+    nstInst->beginLoadAsync();
 
     // on the occasion this function needs to ensure the VST is fully booted before it returns, we wait patiently here
     if ( haltUntilLoaded )
     {
-        constexpr auto vstThreadBootWait = std::chrono::milliseconds( 100 );
+        constexpr auto nstThreadBootWait = std::chrono::milliseconds( 100 );
 
         int32_t retries = 100;   // #hdd data drive this timeout
-        while ( !vstInst->loaded() && retries > 0 )
+        while ( !nstInst->loaded() && retries > 0 )
         {
-            std::this_thread::sleep_for( vstThreadBootWait );
+            std::this_thread::sleep_for( nstThreadBootWait );
             retries--;
         }
 
         if ( retries <= 0 )
         {
-            blog::error::vst( "WARNING - VST thread may not have booted correctly [{}] for [{}], aborting", vstInst->getUniqueID(), vstFilename );
+            blog::error::plug( "WARNING - plugin thread may not have booted correctly [{}] for [{}], aborting", nstInst->getUniqueID(), vstFilename );
 
-            delete vstInst;
+            delete nstInst;
             return nullptr;
         }
     }
 
     {
         // add to the audio engine fx pile
-        m_effectContainer->effectAppend( vstInst );
+        m_effectContainer->effectAppend( nstInst );
 
         // assign a unique loading order ID
-        vstInst->setUserData( vstLoadID );
+        nstInst->setUserData( vstLoadID );
 
         // log in our local list
         m_order.push_back( vstLoadID );
-        m_instances.emplace( vstLoadID, vstInst );
+        m_instances.emplace( vstLoadID, nstInst );
         m_parameters.emplace( vstLoadID, ParameterSet{} );
     }
 
-    return vstInst;
+    return nstInst;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -189,7 +189,7 @@ void EffectStack::chooseNewVST( app::CoreGUI& coreGUI )
 
     std::ignore = coreGUI.activateFileDialog( std::move(fileDialog), [this]( ImGuiFileDialog& dlg )
     {
-        addVST( dlg.GetFilePathName().c_str(), m_incrementalLoadId++ );
+        addNST( dlg.GetFilePathName().c_str(), m_incrementalLoadId++ );
 
         m_lastBrowsedPath = dlg.GetCurrentPath();
     });
@@ -205,7 +205,7 @@ bool EffectStack::removeVST( const int64_t loadID )
     m_effectContainer->effectClearAll();
 
     // purge the VST from our lists
-    vst::Instance* instance = m_instances[loadID];
+    nst::Instance* instance = m_instances[loadID];
     m_instances.erase( loadID );
     m_parameters.erase( loadID );
     m_order.erase( std::remove( m_order.begin(), m_order.end(), loadID ), m_order.end() );
@@ -216,8 +216,8 @@ bool EffectStack::removeVST( const int64_t loadID )
     // .. rebuild the audio engine VST pile
     for ( auto vstID : m_order )
     {
-        auto vstInst = m_instances[vstID];
-        m_effectContainer->effectAppend( vstInst );
+        auto nstInst = m_instances[vstID];
+        m_effectContainer->effectAppend( nstInst );
     }
     return true;
 }
@@ -230,14 +230,14 @@ void EffectStack::saveSession( const fs::path& appStashPath )
     Session sessionData;
     for ( auto vstID : m_order )
     {
-        auto vstInst = m_instances[vstID];
+        auto nstInst = m_instances[vstID];
 
-        blog::cfg( "Saving VST session [{}] ...", vstInst->getProductName() );
+        blog::cfg( "Saving VST session [{}] ...", nstInst->getProductName() );
 
         sessionData.vstIDs.emplace_back( vstID );
-        sessionData.vstPaths.emplace_back( vstInst->getPath() );
-        sessionData.vstStateData.emplace_back( vstInst->serialize() );
-        sessionData.vstActive.emplace_back( vstInst->isActive() );
+        sessionData.vstPaths.emplace_back( nstInst->getPath() );
+        sessionData.vstStateData.emplace_back( nstInst->serialize() );
+        sessionData.vstActive.emplace_back( nstInst->isActive() );
     }
     sessionData.lastBrowsedPath = m_lastBrowsedPath;
 
@@ -338,7 +338,7 @@ void EffectStack::imgui(
             for ( auto orderIndex = 0; orderIndex < m_order.size(); orderIndex ++ )
             {
                 const auto vstIndex = m_order[orderIndex];
-                vst::Instance* vsti = m_instances[vstIndex];
+                nst::Instance* vsti = m_instances[vstIndex];
 
                 const auto vstUID = vsti->getUserData();
                 ImGui::PushID( (void*)vstUID );
@@ -487,8 +487,8 @@ void EffectStack::imgui(
             m_effectContainer->effectClearAll();
             for ( auto vstID : m_order )
             {
-                auto vstInst = m_instances[vstID];
-                m_effectContainer->effectAppend( vstInst );
+                auto nstInst = m_instances[vstID];
+                m_effectContainer->effectAppend( nstInst );
             }
         }
 
@@ -500,7 +500,7 @@ void EffectStack::imgui(
 
             if ( selectedVST != -1 )
             {
-                vst::Instance* vsti = m_instances[selectedVST];
+                nst::Instance* vsti = m_instances[selectedVST];
                 ParameterSet& paramSet = m_parameters[selectedVST];
 
                 ImGui::Spacing();
@@ -631,7 +631,7 @@ void EffectStack::imgui(
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void EffectStack::ParameterSet::syncToDataBus( const data::DataBus& bus, vst::Instance* vsti ) const
+void EffectStack::ParameterSet::syncToDataBus( const data::DataBus& bus, nst::Instance* vsti ) const
 {
     for ( const auto& pb : bindings )
     {
@@ -649,4 +649,4 @@ void EffectStack::ParameterSet::syncToDataBus( const data::DataBus& bus, vst::In
 
 } // namespace effect
 
-#endif // OURO_FEATURE_VST24
+#endif // OURO_FEATURE_NST24

@@ -4,15 +4,15 @@
 //  |_______|_______|___|__|_______|\_____/|_______|_______|__|____|
 //  \\ harry denholm \\ ishani            ishani.org/shelf/ouroveon/
 //
-//  VST 2.x plugin loading support
+//  plugin loading support that is NOT v s t 2 . 4 no sir
 //
 
 #pragma once
 
-#if OURO_FEATURE_VST24
+#if OURO_FEATURE_NST24
 
 namespace app { struct AudioPlaybackTimeInfo; namespace midi { struct Message; } }
-namespace vst {
+namespace nst {
 
 // ---------------------------------------------------------------------------------------------------------------------
 class Instance
@@ -28,9 +28,6 @@ public:
 
     Instance( const char* pluginPath, const float sampleRate, const uint32_t maximumBlockSize, const app::AudioPlaybackTimeInfo* unifiedTime );
     ~Instance();
-
-    // a hash of the plugin path
-    inline size_t getVSTUID() const { return m_uid; }
 
     // arbitrary user data
     inline void setUserData( uint64_t ud64 ) { m_userdata = ud64; }
@@ -72,7 +69,7 @@ public:
     std::string serialize();
     bool deserialize( const std::string& data );
 
-    // run the VST against some data
+    // run the plugin against some data
     void process(float** inputs, float** outputs, const int32_t sampleFrames);
 
 
@@ -87,12 +84,12 @@ private:
 
 // ---------------------------------------------------------------------------------------------------------------------
 // instantiate one of these in the app loop to get host window classes registered/unregistered
-struct ScopedInitialiseVSTHosting
+struct ScopedInitialiseNSTHosting
 {
-    ScopedInitialiseVSTHosting() { Instance::RegisterWndClass(); }
-    ~ScopedInitialiseVSTHosting() { Instance::UnregisterWndClass(); }
+    ScopedInitialiseNSTHosting() { Instance::RegisterWndClass(); }
+    ~ScopedInitialiseNSTHosting() { Instance::UnregisterWndClass(); }
 };
 
-} // namespace vst
+} // namespace nst
 
-#endif // OURO_FEATURE_VST24
+#endif // OURO_FEATURE_NST24
