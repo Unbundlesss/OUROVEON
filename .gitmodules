@@ -4,3 +4,9 @@
 [submodule "src/r0.scaffold/abseil"]
 	path = src/r0.scaffold/abseil
 	url = https://github.com/abseil/abseil-cpp
+[submodule "src/r0.plug/clap"]
+	path = src/r0.plug/clap
+	url = https://github.com/free-audio/clap
+[submodule "src/r0.plug/clap-helpers"]
+	path = src/r0.plug/clap-helpers
+	url = https://github.com/free-audio/clap-helpers
