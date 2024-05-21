@@ -158,6 +158,7 @@ struct Audio final
     absl::Status create( app::Core* appCore ) override;
     void destroy() override;
     virtual std::string getModuleName() const override { return "Audio"; };
+    virtual bool isPreflightSetupComplete() const override;
 
 
     // initialise chosen audio device, configure streaming scope processing

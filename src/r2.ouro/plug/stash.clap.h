@@ -87,21 +87,21 @@ struct CLAP
 
 protected: 
 
-    static constexpr uint64_t   cHashingVersionSeed = 0xF000;   // seed used when hashing, change to invalidate all stored hashes
-
     CLAP();
 
     static uint64_t hashfile( const fs::path& filepath );
 
 private:
 
+    static constexpr uint64_t   cHashingVersionSeed = 0xF000;   // seed used when hashing, change to invalidate all stored hashes
+
     using PluginUIDLookup = absl::flat_hash_map< std::string_view, plug::KnownPluginIndex >;
 
     void beginPopulateAsync( tf::Executor& taskExecutor );
 
-    // returns absl::Ok if the plugin at the given index is (to our best guess) a valid effects processing plugin
-    // this involves loading the plugin somewhat via a dummy clap_host, so it should be done in the background
-    absl::Status checkKnownPluginIsValidForEffects( const plug::KnownPluginIndex& index ) const;
+    // returns absl::Ok if the plugin at the given index is something we can work with - loading it into a dummy
+    // clap_host and examining port layout
+    absl::Status verifyPluginForEffectUsage( const plug::KnownPluginIndex& index ) const;
 
 
     std::atomic_bool                        m_asyncPopulationComplete;

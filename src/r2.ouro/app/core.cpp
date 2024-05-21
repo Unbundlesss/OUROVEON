@@ -473,7 +473,7 @@ int Core::Run()
 #endif // OURO_EXCHANGE_IPC
 
 
-    // create our wrapper around PA; this doesn't connect to a device, just does initial startup & enumeration
+    // create our wrapper around PA; this doesn't connect to a device, just does initial startup, enumeration, plugin duties
     m_mdAudio = std::make_unique<app::module::Audio>( GetAppName() );
     {
         const auto audioStatus = m_mdAudio->create( this );

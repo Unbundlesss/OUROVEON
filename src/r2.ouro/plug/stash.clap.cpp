@@ -22,6 +22,10 @@
 #include "clap/version.h"
 
 
+// enable for a lot more debug::plug diagnostic logs
+#define OURO_STASH_CLAP_VERY_VERBOSE 0
+
+
 namespace plug {
 namespace stash {
 
@@ -48,6 +52,8 @@ static void clapRequestCallback( const struct clap_host* host ) noexcept
 }
 
 } // namespace null
+
+using namespace std::chrono_literals;
 
 // ---------------------------------------------------------------------------------------------------------------------
 CLAP::CLAP()
@@ -110,12 +116,12 @@ uint64_t CLAP::hashfile( const fs::path& filepath )
 // ---------------------------------------------------------------------------------------------------------------------
 void CLAP::beginPopulateAsync( tf::Executor& taskExecutor )
 {
-    absl::InlinedVector< fs::path, 3 > clapSearchPaths;
+    absl::InlinedVector< fs::path, 4 > clapSearchPaths;
 
-    blog::plug( FMTX( "[CLAP] version {}.{}.{}" ), CLAP_VERSION_MAJOR, CLAP_VERSION_MINOR, CLAP_VERSION_REVISION );
+    blog::plug( FMTX( "[CLAP] SDK version {}.{}.{}" ), CLAP_VERSION_MAJOR, CLAP_VERSION_MINOR, CLAP_VERSION_REVISION );
 
     // first phase is synchronous, we collect up a list of all the plugin files from the 
-    // known CLAP install locations - then kick off background tasks to actually analyse that manifest
+    // known CLAP install locations - then kick off background tasks to actually analyse that collection
     {
         // per CLAP documentation:
         // ---------------------------------------------
@@ -199,6 +205,7 @@ void CLAP::beginPopulateAsync( tf::Executor& taskExecutor )
 
     tf::Taskflow stashProcessingTaskflow;
 
+    // -----------------------------------------------------------------------------------------------------------------
     // do the rest of the interrogation in a background thread, anything wanting to know about plugins
     // will need to check m_pluginPopulationRunning via isBusy()
     tf::Task taskProcessing = stashProcessingTaskflow.emplace( [this]( tf::Subflow& subflow )
@@ -258,13 +265,20 @@ void CLAP::beginPopulateAsync( tf::Executor& taskExecutor )
                             // in case there is any confusion over ports later on
                             bool featureIsAudioEffect       = false;
                             bool featureDeclaresStereo      = false;
+                            bool featureDeclaresMono        = false;
                             auto featureIteration           = clapPluginDescriptor->features;
                             while ( *featureIteration != nullptr )
                             {
                                 const std::string_view featureString{ *featureIteration };
 
+                                // look for feature strings and extract to boolean flags
                                 featureIsAudioEffect  |= featureString.find( CLAP_PLUGIN_FEATURE_AUDIO_EFFECT   ) != std::string::npos;
                                 featureDeclaresStereo |= featureString.find( CLAP_PLUGIN_FEATURE_STEREO         ) != std::string::npos;
+                                featureDeclaresMono   |= featureString.find( CLAP_PLUGIN_FEATURE_MONO           ) != std::string::npos;
+
+#if OURO_STASH_CLAP_VERY_VERBOSE
+                                blog::debug::plug( FMTX( "[CLAP] {:32} | feature : {}" ), clapPluginDescriptor->id, featureString );
+#endif // OURO_STASH_CLAP_VERY_VERBOSE
 
                                 ++featureIteration;
                             }
@@ -287,18 +301,24 @@ void CLAP::beginPopulateAsync( tf::Executor& taskExecutor )
                                                                     clapPluginDescriptor->name,
                                                                     clapPluginDescriptor->version );
 
-                                blog::debug::plug( FMTX( "[CLAP] {:64} | {}" ), pluginRecord->m_uid, pluginRecord->m_sortable );
+#if OURO_STASH_CLAP_VERY_VERBOSE
+                                blog::debug::plug( FMTX( "[CLAP] {:32} | registered {}" ), pluginRecord->m_uid, pluginRecord->m_sortable );
+#endif // OURO_STASH_CLAP_VERY_VERBOSE
 
                                 // keep any notes from other feature declarations
+                                pluginRecord->m_flags           = 0;
                                 if ( featureDeclaresStereo )
                                     pluginRecord->m_flags      |= plug::KnownPlugin::SF_ExplicitStereoSupport;
+                                if ( featureDeclaresMono )
+                                    pluginRecord->m_flags      |= plug::KnownPlugin::SF_ExplicitMonoSupport;
+                                
 
                                 // store a lookup from the UID to the index into the plugin record array
                                 const plug::KnownPluginIndex knownPluginIndex = plug::KnownPluginIndex{ static_cast< int64_t >( m_knownPlugins.size() ) };
                                 m_knownPluginLookupByUID.emplace( pluginRecord->m_uid, knownPluginIndex );
 
                                 m_knownPlugins.emplace_back( std::move( pluginRecord ) );
-                                m_knownPluginsVerified.emplace_back( false );
+                                m_knownPluginsVerified.emplace_back( false );   // by default we haven't yet "verified" this plugin, running some deeper analysis on its ports
                             }
                         }
 
@@ -315,6 +335,7 @@ void CLAP::beginPopulateAsync( tf::Executor& taskExecutor )
             m_asyncPopulationComplete = true;
         });
 
+    // -----------------------------------------------------------------------------------------------------------------
     // load and analyse the plugins in parallel; find ones that we can safely support in the effects chain - stereo in, stereo out
     // this then results in a list of "known possible" effects
     tf::Task taskFiltering = stashProcessingTaskflow.emplace( [this]( tf::Subflow& subflow )
@@ -322,11 +343,12 @@ void CLAP::beginPopulateAsync( tf::Executor& taskExecutor )
             const int64_t knownPluginCount = static_cast< int64_t >( m_knownPlugins.size() );
             for ( int64_t sI = 0; sI < knownPluginCount; sI ++ )
             {
+                // splay out verification as wide as the task manager provides
                 subflow.emplace( [this, sI]()
                     {
                         const KnownPluginIndex knownPluginIndex{ sI };
 
-                        const absl::Status pluginValidStatus = checkKnownPluginIsValidForEffects( knownPluginIndex );
+                        const absl::Status pluginValidStatus = verifyPluginForEffectUsage( knownPluginIndex );
                         if ( pluginValidStatus.ok() )
                         {
                             m_knownPluginsVerified[sI] = true;
@@ -341,7 +363,8 @@ void CLAP::beginPopulateAsync( tf::Executor& taskExecutor )
         });
     taskFiltering.succeed( taskProcessing );
 
-    // take the list of known-good plugins and sort them by name into an index list
+    // -----------------------------------------------------------------------------------------------------------------
+    // take the list of known-good plugins and sort them by name into an index list, ideal for display in a UI somewhere
     tf::Task taskSorting = stashProcessingTaskflow.emplace( [this]()
         {
             m_knownPluginsVerifiedSorted.clear();
@@ -354,6 +377,7 @@ void CLAP::beginPopulateAsync( tf::Executor& taskExecutor )
                     m_knownPluginsVerifiedSorted.push_back( KnownPluginIndex{ sI } );
             }
 
+            // sort the indices by the vendor|name string
             std::sort( m_knownPluginsVerifiedSorted.begin(), m_knownPluginsVerifiedSorted.end(),
                 [this]( const KnownPluginIndex lhs, const KnownPluginIndex rhs ) -> bool
                 {
@@ -364,18 +388,20 @@ void CLAP::beginPopulateAsync( tf::Executor& taskExecutor )
         });
     taskSorting.succeed( taskFiltering );
 
+
+    // kick off all the above in the background
     taskExecutor.run( std::move( stashProcessingTaskflow ) );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-absl::Status CLAP::checkKnownPluginIsValidForEffects( const plug::KnownPluginIndex& index ) const
+absl::Status CLAP::verifyPluginForEffectUsage( const plug::KnownPluginIndex& index ) const
 {
     // create a null/dummy host to use for temporarily loading the plugin
-    clap_host virtualHost
+    clap_host nullHost
     {
         CLAP_VERSION,
         nullptr,
-        "virtual",
+        "null",
         OURO_FRAMEWORK_CREDIT,
         OURO_FRAMEWORK_URL,
         OURO_FRAMEWORK_VERSION,
@@ -385,16 +411,30 @@ absl::Status CLAP::checkKnownPluginIsValidForEffects( const plug::KnownPluginInd
         host_null::clapRequestCallback
     };
 
-    // loading the plugin will do the initial port analysis to see if its something we can use
-    auto runtimeLoadStatus = plug::runtime::CLAP::load( *(m_knownPlugins[index.get()]), &virtualHost);
-    if ( runtimeLoadStatus.ok() )
+    // wrap this all in an exception handler "just in case" although I'm not sure anything in here should really
+    // be kicking out anything officially
+    try
     {
-        if ( runtimeLoadStatus.value()->isValidEffectPlugin() )
-            return absl::OkStatus();
+        // loading the plugin will do the initial port analysis to see if its something we can use
+        auto runtimeLoadStatus = plug::runtime::CLAP::load( *(m_knownPlugins[index.get()]), &nullHost );
+        if ( runtimeLoadStatus.ok() )
+        {
+            // check the ports are considered 'ok'
+            if ( runtimeLoadStatus.value()->portsVerifiedOk() )
+                return absl::OkStatus();
 
-        return absl::InternalError( "plugin not discernible as valid effect processor" );
+            return absl::InternalError( "plugin not discernible as valid effect processor" );
+        }
+        return runtimeLoadStatus.status();
     }
-    return runtimeLoadStatus.status();
+    catch ( std::exception& e )
+    {
+        return absl::InternalError( e.what() );
+    }
+    catch (...)
+    {
+        return absl::UnknownError( "unhandled exception during plugin load" );
+    }
 }
 
 } // namespace stash

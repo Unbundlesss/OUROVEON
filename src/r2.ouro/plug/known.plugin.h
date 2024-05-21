@@ -38,7 +38,8 @@ struct KnownPlugin
 
     enum SupportFlags
     {
-        SF_ExplicitStereoSupport = 1 << 0       // plugin pinky-swears that it supports stereo audio
+        SF_ExplicitStereoSupport    = 1 << 0,       // plugin declared stereo support in the clap features fields
+        SF_ExplicitMonoSupport      = 1 << 1,       // plugin declares mono support in the clap features fields
     };
 
     KnownPlugin() = delete;

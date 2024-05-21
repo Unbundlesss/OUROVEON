@@ -29,6 +29,7 @@ struct Module
     }
 
     virtual std::string getModuleName() const = 0;
+    virtual bool isPreflightSetupComplete() const { return true; }      // return true once the module is ready for use after the preflight phase
 
     std::optional< const app::Core* >     m_appCore;
 };

@@ -399,6 +399,16 @@ void Audio::termOutput()
     m_outSampleRate = 0;
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// returns true if the early boot-stage configuration of plugin support is done; the audio engine and plugin loading
+// shouldn't continue if this isn't complete as we need the basic manifest loaded upfront
+bool Audio::isPreflightSetupComplete() const
+{
+    if ( m_pluginStashClap == nullptr )
+        return false;
+
+    return m_pluginStashClap->asyncPopulateFinished();
+}
 
 // ---------------------------------------------------------------------------------------------------------------------
 double Audio::getAudioEngineCPULoadPercent() const
@@ -879,7 +889,6 @@ void Audio::clapRequestProcess( CLAPEffect& clapEffect ) noexcept
 void Audio::clapRequestCallback( CLAPEffect& clapEffect ) noexcept
 {
 }
-
 
 } // namespace module
 

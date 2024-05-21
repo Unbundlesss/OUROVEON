@@ -80,7 +80,7 @@ private:
     uint32_t                        m_pluginOutputPortCount      = 0;
     AudioBufferConfigs              m_pluginInputBuffers;
     AudioBufferConfigs              m_pluginOutputBuffers;
-    bool                            m_pluginValidEffect          = false;        // is this a plugin that supports stereo input and output
+    bool                            m_pluginPortsVerifiedOk      = false;        // 
 
     GLFWwindow*                     m_guiWindow                  = nullptr;
     std::string                     m_guiWindowTitle;
@@ -88,7 +88,7 @@ private:
 
 public:
 
-    constexpr bool isValidEffectPlugin() const { return m_pluginValidEffect; }
+    constexpr bool portsVerifiedOk() const { return m_pluginPortsVerifiedOk; }
 
     constexpr AudioBufferConfigs& getInputAudioBuffers() { return m_pluginInputBuffers; }
     constexpr AudioBufferConfigs& getOutputAudioBuffers() { return m_pluginOutputBuffers; }

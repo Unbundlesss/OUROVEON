@@ -23,6 +23,7 @@
 #include "app/module.audio.h"
 #include "app/module.frontend.h"
 #include "app/module.frontend.fonts.h"
+#include "app/module.midi.h"
 
 #include "mix/common.h"
 #include "mix/stem.amalgam.h"
@@ -261,6 +262,15 @@ int OuroApp::EntrypointGUI()
 
 
         std::string progressionInhibitionReason;
+
+        // hold on preflight setup if any module reports they are busy
+        if ( m_mdAudio->isPreflightSetupComplete() == false )
+            progressionInhibitionReason = "Waiting on audio module ...";
+        if ( m_mdFrontEnd->isPreflightSetupComplete() == false )
+            progressionInhibitionReason = "Waiting on front-end module ...";
+        if ( m_mdMidi->isPreflightSetupComplete() == false )
+            progressionInhibitionReason = "Waiting on MIDI module ...";
+
 
         const float  configWindowColumn1 = 500.0f;
         const float  configWindowColumn2 = 500.0f;

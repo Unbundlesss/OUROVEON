@@ -172,6 +172,14 @@ absl::Status CLAP::load( clap_host* clapHost ) noexcept
                             clap_audio_port_info_t portInfo;
                             m_pluginAudioPorts->get( m_pluginInstance, 0, bIsInput, &portInfo );
 
+                            blog::debug::plug( FMTX( "[CLAP:{}] {:6} {} = {:15} | channels = {} | {}" ),
+                                m_knownPlugin.m_name,
+                                portDesc,
+                                0,
+                                portInfo.name,
+                                portInfo.channel_count,
+                                (portInfo.port_type != nullptr) ? portInfo.port_type : "unknown" );
+
                             if ( (portInfo.flags & CLAP_AUDIO_PORT_IS_MAIN) != 0 )
                             {
                                 // did the plugin claim to be a stereo plugin in the factory features list?
@@ -254,10 +262,10 @@ absl::Status CLAP::load( clap_host* clapHost ) noexcept
 
             // record if this plugin meets our expectations for a processing plugin that 
             // consumes and produces a stereo feed
-            m_pluginValidEffect = ( bFoundValidStereoInput && bFoundValidStereoOutput ) && ( bInvalidPortFound == false );
-            blog::debug::plug( FMTX( "[CLAP:{}] pluginValidEffect = {} (in:{} | out:{} | invalid:{})" ),
+            m_pluginPortsVerifiedOk = ( bFoundValidStereoInput && bFoundValidStereoOutput ) && ( bInvalidPortFound == false );
+            blog::debug::plug( FMTX( "[CLAP:{}] m_pluginPortsVerifiedOk = {} (in:{} | out:{} | invalid:{})" ),
                 m_knownPlugin.m_name,
-                m_pluginValidEffect,
+                m_pluginPortsVerifiedOk,
                 bFoundValidStereoInput,
                 bFoundValidStereoOutput,
                 bInvalidPortFound );
