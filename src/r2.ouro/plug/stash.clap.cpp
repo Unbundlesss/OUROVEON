@@ -141,7 +141,10 @@ void CLAP::beginPopulateAsync( tf::Executor& taskExecutor )
         //
 #if OURO_PLATFORM_LINUX
         {
+            const fs::path linuxHomePath{ sago::getNixHome() };
 
+            clapSearchPaths.push_back( linuxHomePath / ".clap" );
+            clapSearchPaths.push_back( "/usr/lib/clap" );
         }
 #endif // OURO_PLATFORM_LINUX
 #if OURO_PLATFORM_WIN
@@ -158,7 +161,6 @@ void CLAP::beginPopulateAsync( tf::Executor& taskExecutor )
 
         }
 #endif // OURO_PLATFORM_OSX
-
 
         // go digging in the configured paths
         for ( const auto& searchPath : clapSearchPaths )

@@ -475,6 +475,7 @@ function CommonAppLink()
         "m",
         "pthread",
         "dl",
+        "atomic",
 
         "X11",
         "Xrandr",

@@ -26,8 +26,11 @@ export CC=/usr/bin/clang-17
 export CPP=/usr/bin/clang-cpp-17
 export CXX=/usr/bin/clang++-17
 
-export CXXFLAGS=" -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer -g "
-export LDFLAGS="-v -fsanitize=address -fsanitize=undefined -fuse-ld=lld-17 "
+#export CXXFLAGS=" -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer -g "
+#export LDFLAGS="-v -fsanitize=address -fsanitize=undefined -fuse-ld=lld-17 "
+
+export CXXFLAGS=" "
+export LDFLAGS="-v -fuse-ld=lld-17 "
 
 
 cd _gen

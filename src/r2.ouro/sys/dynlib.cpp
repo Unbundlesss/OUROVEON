@@ -33,7 +33,7 @@ absl::StatusOr< DynLib::Instance > DynLib::loadFromFile( const fs::path& library
 #if OURO_PLATFORM_WIN
     instanceResult->m_handle = ::LoadLibraryA( libraryPath.string().c_str() );
 #else // LINUX / MAC
-    instanceResult->m_handle = ::dlopen( libraryPath.string(), RTLD_LAZY );
+    instanceResult->m_handle = ::dlopen( libraryPath.string().c_str(), RTLD_LAZY );
 #endif 
 
     if ( instanceResult->m_handle == nullptr )
@@ -51,14 +51,14 @@ DynLib::~DynLib()
     {
 #if OURO_PLATFORM_WIN
         const BOOL bClosed = ::FreeLibrary( m_handle );
+        if ( static_cast<int32_t>( bClosed ) == 0 )
 #else // LINUX / MAC
         const int32_t bClosed = ::dlclose( m_handle );
+        if ( static_cast<int32_t>( bClosed ) != 0 )
 #endif 
-
-        if ( static_cast<int32_t>( bClosed ) == 0 )
         {
-            blog::error::app( FMTX( "failed to close library [%s]" ), m_originalPath.string() );
-            blog::error::app( FMTX( "error was [%s]" ), getLastError() );
+            blog::error::app( FMTX( "failed to close library [{}]" ), m_originalPath.string() );
+            blog::error::app( FMTX( "error was [{}]" ), getLastError() );
         }
         m_handle = nullptr;
     }
@@ -70,7 +70,10 @@ std::string DynLib::getLastError()
 #if OURO_PLATFORM_WIN
     return win32::FormatLastErrorCode();
 #else // LINUX / MAC
-    return std::string( ::dlerror() );
+    char* lastError = ::dlerror();
+    if ( lastError == nullptr )
+        return "Unknown";
+    return std::string( lastError );
 #endif 
 }
 

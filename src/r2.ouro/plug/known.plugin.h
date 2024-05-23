@@ -25,7 +25,6 @@ using KnownPluginIndex = base::id::Simple<_known_plugin_index, int64_t, 0, -1>;
 struct Systems final
 {
     Systems() = delete;
-    virtual void _abstract() = 0;
 
     // known plugin types the system can load
     static constexpr PluginSystemID CLAP{ 0x10 };

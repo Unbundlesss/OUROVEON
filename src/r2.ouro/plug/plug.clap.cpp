@@ -17,6 +17,20 @@
 #include "clap/clap.h"
 #include "clap/version.h"
 
+#if OURO_PLATFORM_LINUX
+#define GLFW_EXPOSE_NATIVE_X11
+#include "GLFW/glfw3native.h"
+
+// Xlib and its demended #defines
+#undef Status
+#undef Bool
+
+#elif OURO_PLATFORM_OSX
+#define GLFW_EXPOSE_NATIVE_COCOA
+#include "GLFW/glfw3native.h"
+
+#endif // OURO_PLATFORM_*
+
 
 namespace plug {
 namespace runtime {

@@ -72,6 +72,11 @@ static std::string getHome() {
 	return res;
 }
 
+// #hdd
+namespace sago {
+std::string getNixHome() { return getHome(); }
+} // namespace sago	
+
 #endif
 
 #ifdef _WIN32
