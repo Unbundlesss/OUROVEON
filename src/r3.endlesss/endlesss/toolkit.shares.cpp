@@ -65,6 +65,8 @@ tf::Taskflow Shares::taskFetchLatest(
                     
                     newData->m_timestamps.emplace_back( timestampUnix );
 
+                    newData->m_stems.emplace_back( riffData.loops );
+
                     newData->m_count++;
                 }
             }

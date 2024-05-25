@@ -11,6 +11,7 @@
 
 #include "config/base.h"
 #include "endlesss/ids.h"
+#include "endlesss/core.types.h"
 #include "spacetime/chronicle.h"
 
 namespace config {
@@ -351,6 +352,9 @@ OURO_CONFIG( SharedRiffsCache )
     std::vector< bool >             m_private;          // will only turn up when browsing your own shares, true if this was something not shared to the public feed
     std::vector< bool >             m_personal;         // riff shared from personal (non-band#####) jam space
 
+    using StemCollection = std::vector< ::endlesss::api::ResultStemDocument >;
+    std::vector< StemCollection >   m_stems;
+
     template<class Archive>
     inline void serialize( Archive& archive )
     {
@@ -366,6 +370,7 @@ OURO_CONFIG( SharedRiffsCache )
                , CEREAL_NVP( m_timestamps )
                , CEREAL_NVP( m_private )
                , CEREAL_NVP( m_personal )
+               , CEREAL_OPTIONAL_NVP( m_stems )
         );
     }
 };
