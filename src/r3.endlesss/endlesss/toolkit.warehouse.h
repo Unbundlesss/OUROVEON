@@ -282,6 +282,9 @@ struct Warehouse
 
     bool fetchRandomRiffBySeed( const endlesss::constants::RootScalePairs& keySearchPairs, const uint32_t BPM, const int32_t seedValue, endlesss::types::RiffComplete& result ) const;
 
+    // get the last known committed riff in the given jam, return the timestamp
+    uint32_t getOldestRiffUnixTimestampFromJam( const types::JamCouchID& jamCouchID ) const;
+
 
     // -----------------------------------------------------------------------------------------------------------------
     // Stems

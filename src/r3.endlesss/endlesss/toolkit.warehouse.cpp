@@ -1742,6 +1742,33 @@ bool Warehouse::fetchRandomRiffBySeed( const endlesss::constants::RootScalePairs
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+uint32_t Warehouse::getOldestRiffUnixTimestampFromJam( const types::JamCouchID& jamCouchID ) const
+{
+    static constexpr char _oldestRiffInAJam[] = R"(
+            select 
+              CreationTime 
+            from 
+              riffs 
+            where 
+              OwnerJamCID = ?1
+            order by 
+              CreationTime desc 
+            limit 1
+        )";
+
+    Warehouse::SqlDB::TransactionGuard txn;
+    auto query = Warehouse::SqlDB::query<_oldestRiffInAJam>( jamCouchID.value() );
+
+    uint32_t unixTimestamp = 0;
+    if ( !query( unixTimestamp ) )
+    {
+        blog::error::database( FMTX( "unable to get oldest riff from jam [{}]" ), jamCouchID );
+    }
+
+    return unixTimestamp;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 bool Warehouse::batchFindJamIDForStem( const endlesss::types::StemCouchIDs& stems, endlesss::types::JamCouchIDs& result ) const
 {
     static constexpr char _ownerJamForStemID[] = R"(
