@@ -303,7 +303,7 @@ void modalUniversalJamBrowser(
             const bool showAsDisabled = ( behaviour.fnIsDisabled && behaviour.fnIsDisabled(jamData.m_jamCID) );
 
             ImGui::TableNextColumn();
-            ImGui::PushID( jamData.m_displayName.c_str() );
+            ImGui::PushID( jamData.m_jamCID.c_str() );
 
             // icon to show jam description as tooltip hover
             if ( jamData.m_description.empty() )
