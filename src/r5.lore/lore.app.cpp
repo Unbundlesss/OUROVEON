@@ -3556,10 +3556,20 @@ int LoreApp::EntrypointOuro()
                             {
                                 const std::size_t jI = m_warehouseContentsSortedIndices[jamIdx];
 
-                                reportResult += fmt::format( FMTX( "{:60} | {:6} riffs | {:6} stems\n" ),
-                                    m_warehouseContentsReportJamTitles[jI],
+                                std::string csvFilteredTitle = m_warehouseContentsReportJamTitles[jI];
+                                std::replace( csvFilteredTitle.begin(), csvFilteredTitle.end(), '@', '_' );
+
+                                const uint32_t oldestRiffTimestamp = m_warehouse->getOldestRiffUnixTimestampFromJam( m_warehouseContentsReport.m_jamCouchIDs[jI] );
+
+                                const auto oldestTimeUnix = spacetime::InSeconds( std::chrono::seconds( static_cast<uint64_t>(oldestRiffTimestamp) ) );
+                                const auto oldestTimeDelta = spacetime::calculateDeltaFromNow( oldestTimeUnix ).asPastTenseString( 3 );
+
+                                reportResult += fmt::format( FMTX( "{}@ {}@ {}@ {}@ {}\n" ),
+                                    csvFilteredTitle,
                                     m_warehouseContentsReport.m_populatedRiffs[jI],
-                                    m_warehouseContentsReport.m_populatedStems[jI]
+                                    m_warehouseContentsReport.m_populatedStems[jI],
+                                    oldestTimeDelta,
+                                    spacetime::datestampStringFromUnix( oldestRiffTimestamp )
                                     );
                             }
                             ImGui::SetClipboardText( reportResult.c_str() );
