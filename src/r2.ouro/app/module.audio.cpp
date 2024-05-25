@@ -30,6 +30,8 @@
 namespace app {
 namespace module {
 
+#if OURO_HAS_CLAP
+
 // ---------------------------------------------------------------------------------------------------------------------
 namespace clap_detail {
 
@@ -214,8 +216,11 @@ static bool clapIsAudioThread( const clap_host_t* host )
 
 } // namespace clap_detail
 
+#endif // OURO_HAS_CLAP
+
 // ---------------------------------------------------------------------------------------------------------------------
 Audio::Audio( const char* appName )
+#if OURO_HAS_CLAP
     : m_clapHost {
         CLAP_VERSION,
         nullptr,
@@ -249,6 +254,7 @@ Audio::Audio( const char* appName )
     , m_clapHostThreadCheck {
         clap_detail::clapIsMainThread,
         clap_detail::clapIsAudioThread }
+#endif // OURO_HAS_CLAP
 {
 }
 
@@ -290,8 +296,12 @@ absl::Status Audio::create( app::Core* appCore )
         blog::core( "                      [ {} {}]", apiInfo->name, ( hostAPIdefault == hApi ) ? "(default) " : "" );
     }
 
+#if OURO_HAS_CLAP
+
     // go collect & analyse local CLAP plugins in the background, building the library of known plugins
     m_pluginStashClap = plug::stash::CLAP::createAndPopulateAsync( appCore->getTaskExecutorPlugins() );
+
+#endif // OURO_HAS_CLAP
 
     // stash thread ID, used to check when things are running on main vs audio
     m_mainThreadID = std::this_thread::get_id();
@@ -366,6 +376,7 @@ absl::Status Audio::initOutput( const config::Audio& outputDevice, const config:
     // stash the output latency reported as milliseconds, used by Ableton Link compensation
     m_outLatencyMs = ( std::chrono::microseconds( llround( outputParameters.suggestedLatency * 1.0e6 ) ) );
 
+#if OURO_HAS_CLAP
     // setup & bind clap processing structures
     {
         memset( &m_clapProcess, 0, sizeof( m_clapProcess ) );
@@ -376,6 +387,7 @@ absl::Status Audio::initOutput( const config::Audio& outputDevice, const config:
         m_clapProcess.in_events     = m_clapProcessEventsIn.clapInputEvents();
         m_clapProcess.out_events    = m_clapProcessEventsOut.clapOutputEvents();
     }
+#endif // OURO_HAS_CLAP
 
     return absl::OkStatus();
 }
@@ -404,10 +416,18 @@ void Audio::termOutput()
 // shouldn't continue if this isn't complete as we need the basic manifest loaded upfront
 bool Audio::isPreflightSetupComplete() const
 {
+#if OURO_HAS_CLAP
+
     if ( m_pluginStashClap == nullptr )
         return false;
 
     return m_pluginStashClap->asyncPopulateFinished();
+
+#else // OURO_HAS_CLAP
+
+    return true;
+
+#endif 
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -527,6 +547,8 @@ void Audio::ProcessMixCommandsOnMixThread()
     }
 }
 
+#if OURO_HAS_CLAP
+
 // ---------------------------------------------------------------------------------------------------------------------
 void Audio::ProcessClapEventsOnMixThread()
 {
@@ -539,6 +561,8 @@ void Audio::ProcessClapEventsOnMixThread()
     m_clapProcessEventsOut.clear();
     m_clapProcessEventsIn.clear();
 }
+
+#endif // OURO_HAS_CLAP
 
 // ---------------------------------------------------------------------------------------------------------------------
 int Audio::PortAudioCallbackInternal( void* outputBuffer, unsigned long framesPerBuffer, const PaStreamCallbackTimeInfo* timeInfo )
@@ -619,6 +643,7 @@ int Audio::PortAudioCallbackInternal( void* outputBuffer, unsigned long framesPe
 #endif 
 #endif // OURO_FEATURE_NST24
 
+#if OURO_HAS_CLAP
     {
         const app::AudioPlaybackTimeInfo* playbackTimeInfo = ( m_mixerInterface != nullptr ) ? m_mixerInterface->getPlaybackTimeInfo() : nullptr;
 
@@ -672,6 +697,7 @@ int Audio::PortAudioCallbackInternal( void* outputBuffer, unsigned long framesPe
 
         ProcessClapEventsOnMixThread();
     }
+#endif // OURO_HAS_CLAP
 
     m_state.mark( ExposedState::ExecutionStage::Plugins );
 
@@ -840,6 +866,7 @@ void Audio::blockUntil( AsyncCommandCounter counter )
 }
 
 
+#if OURO_HAS_CLAP
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Query an extension.
@@ -889,6 +916,8 @@ void Audio::clapRequestProcess( CLAPEffect& clapEffect ) noexcept
 void Audio::clapRequestCallback( CLAPEffect& clapEffect ) noexcept
 {
 }
+
+#endif // OURO_HAS_CLAP
 
 } // namespace module
 

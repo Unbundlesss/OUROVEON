@@ -276,8 +276,9 @@ private:
     using MixThreadCommandQueue = mcc::ReaderWriterQueue<MixThreadCommandData>;
 
     void ProcessMixCommandsOnMixThread();
+#if OURO_HAS_CLAP
     void ProcessClapEventsOnMixThread();
-
+#endif // OURO_HAS_CLAP
 
     static int PortAudioCallback(
         const void* inputBuffer,
@@ -367,6 +368,7 @@ public:
 
 private:
 
+#if OURO_HAS_CLAP
 
     // CLAP support
     clap_host                           m_clapHost;
@@ -396,6 +398,8 @@ public:
     void clapRequestRestart( CLAPEffect& clapEffect ) noexcept;
     void clapRequestProcess( CLAPEffect& clapEffect ) noexcept;
     void clapRequestCallback( CLAPEffect& clapEffect ) noexcept;
+
+#endif // OURO_HAS_CLAP
 
 public:
 

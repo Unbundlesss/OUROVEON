@@ -22,6 +22,9 @@ namespace module {
 // ---------------------------------------------------------------------------------------------------------------------
 void Audio::imgui( app::CoreGUI& coreGUI )
 {
+
+#if OURO_HAS_CLAP
+
     if ( ImGui::Begin( ICON_FA_PLUG " Signal Path###audiomodule_signal" ) )
     {
         if ( m_clapEffectTest )
@@ -87,6 +90,8 @@ void Audio::imgui( app::CoreGUI& coreGUI )
         }
     }
     ImGui::End();
+
+#endif // OURO_HAS_CLAP
 
 }
 
