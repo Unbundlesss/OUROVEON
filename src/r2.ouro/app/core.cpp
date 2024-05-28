@@ -262,7 +262,7 @@ int Core::Run()
         // register basic event IDs
         APP_EVENT_REGISTER( AddErrorPopup );
         APP_EVENT_REGISTER( AddToastNotification );
-        APP_EVENT_REGISTER_SPECIFIC( OperationComplete, 64 * 1024 );
+        APP_EVENT_REGISTER_SPECIFIC( OperationComplete, 64 * 1024 );    // enqueue an entire (techno) jam - then cancel it. can generate a lot of aborted events D:
         APP_EVENT_REGISTER( PanicStop );
         APP_EVENT_REGISTER( StemDataAmalgamGenerated );
 
@@ -277,7 +277,7 @@ int Core::Run()
         APP_EVENT_REGISTER( AsyncTaskActivity );
         APP_EVENT_REGISTER( RiffTagAction );
         APP_EVENT_REGISTER( RequestNavigationToRiff );
-        APP_EVENT_REGISTER( RequestToShareRiff );
+        APP_EVENT_REGISTER_SPECIFIC( RequestToShareRiff, 4096 );        // in case we kick off all-shared-riff exports on some of the goons with thousands of shrea
     }
     {
         base::EventBusClient m_eventBusClient( m_appEventBus );
