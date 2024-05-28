@@ -10,6 +10,7 @@
 
 #include <string>
 
+
 namespace base {
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -48,6 +49,8 @@ inline void sanitiseNameForPath( const std::string_view source, std::string& des
     const char* w = source.data();
     const char* sourceEnd = w + source.length();
 
+    bool endsWithWhitespace = false;
+
     // decode the source as a UTF8 stream to preserve any interesting, valid characters
     while ( w != sourceEnd )
     {
@@ -62,40 +65,51 @@ inline void sanitiseNameForPath( const std::string_view source, std::string& des
         // strip out problematic pathname characters
         switch ( cp )
         {
-        case '/':
-        case '?':
-        case '<':
-        case '>':
-        case '\\':
-        case ':':
-        case '*':
-        case '|':
-        case '\"':
-        case '~':
-        case '.':
-            cp = replacementChar;
-            break;
-
-        default:
-            break;
-        }
-
-        if ( !allowWhitespace )
-        {
-            switch ( cp )
-            {
-            case ' ':
-            case '\t':
-            case '\n':
+            case '/':
+            case '?':
+            case '<':
+            case '>':
+            case '\\':
+            case ':':
+            case '*':
+            case '|':
+            case '\"':
+            case '~':
+            case '.':
                 cp = replacementChar;
                 break;
 
             default:
                 break;
+        }
+
+        switch ( cp )
+        {
+            case ' ':
+            case '\t':
+            case '\n':
+            {
+                if ( !allowWhitespace )
+                {
+                    cp = replacementChar;
+                }
+                endsWithWhitespace = true;
             }
+            break;
+
+            default:
+            {
+                endsWithWhitespace = false;
+            }
+            break;
         }
 
         utf8::append( cp, dest );
+    }
+
+    if ( endsWithWhitespace )
+    {
+        dest += "_";
     }
 }
 
