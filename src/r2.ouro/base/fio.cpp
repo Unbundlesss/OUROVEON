@@ -51,9 +51,10 @@ namespace base
             const auto size = stream.tellg();
             stream.seekg( 0, std::ios::beg );
 
-            contents.resize( size );
+            contents.resize( std::size_t(size) );
 
             stream.read( std::data( contents ), std::size( contents ) );
+            contents.push_back( 0 ); // insert a final null in case the load ran to the edge of the buffer; avoids assert firing below in some cases
 
             // trim back down any trailing null bytes; CRLF conversion will mean that the tellg() value reported
             // above may be quite a bit larger than the result that is read in.
