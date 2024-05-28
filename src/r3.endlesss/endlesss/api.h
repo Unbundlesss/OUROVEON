@@ -903,7 +903,7 @@ struct SharedRiffsByUser
                    , CEREAL_NVP( loops )
                    , CEREAL_OPTIONAL_NVP( image_url )
                    , CEREAL_NVP( image )
-                   , cereal::make_nvp( "private", is_private )
+                   , cereal::make_optional_nvp( "private", is_private )
             );
         }
     };
