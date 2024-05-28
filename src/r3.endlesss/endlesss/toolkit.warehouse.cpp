@@ -43,7 +43,7 @@ std::string Warehouse::createExportFilenameForJam( const types::JamCouchID& jamC
     std::string sanitisedJamName;
     base::sanitiseNameForPath( jamName, sanitisedJamName, '_', false );
 
-    return fmt::format( FMTX( "orx.{}.{}.{}" ), jamCouchID, base::StrToLwrExt( sanitisedJamName ), fileExtension );
+    return fmt::format( FMTX( "orx.{}.{}.{}" ), base::StrToLwrExt( sanitisedJamName ), jamCouchID, fileExtension );
 }
 
 
