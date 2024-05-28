@@ -62,7 +62,7 @@ void Pipeline::requestClear()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void Pipeline::applyRequestCustomNaming(
+void Pipeline::applyCustomIdentityData(
     const endlesss::types::RiffIdentity& request,
     endlesss::types::RiffComplete& result )
 {
@@ -74,6 +74,9 @@ void Pipeline::applyRequestCustomNaming(
 
     if ( request.hasCustomRiffDescription() )
         result.riff.description = request.getCustomNaming().m_riffDescription;
+
+    if ( request.hasAttachedImageURL() )
+        result.riff.attachedImageURL = request.getAttachedImageURL();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -130,7 +133,7 @@ bool Pipeline::resolveStandardRiff(
         }
     }
     
-    applyRequestCustomNaming( request, result );
+    applyCustomIdentityData( request, result );
     return true;
 }
 
@@ -164,7 +167,7 @@ bool Pipeline::resolveSharedRiff(
     result.jam.displayName = fmt::format( FMTX( "{}_{}" ), endlesss::types::Constants::SharedRiffJam(), riffData.rifff.userName ); // encode the username we have for sake of export
 
     // log the given title from the shared-riff as an extra bit of jam metadata
-    result.jam.description = riffData.title;
+    result.jam.description = fmt::format( FMTX( "{}.{}" ), riffData.action_timestamp, riffData.title );
 
     result.riff = endlesss::types::Riff( result.jam.couchID, riffData.rifff );
 
@@ -182,7 +185,7 @@ bool Pipeline::resolveSharedRiff(
         }
     }
 
-    applyRequestCustomNaming( request, result );
+    applyCustomIdentityData( request, result );
     return true;
 }
 

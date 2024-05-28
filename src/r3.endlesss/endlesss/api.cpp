@@ -128,6 +128,14 @@ void NetConfiguration::enableFullNetworkDiagnostics()
     m_api.debugVerboseNetLog = true;
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+void NetConfiguration::enableLastMinuteQuirkFixes()
+{
+    blog::app( FMTX( "NetConfiguration::enableLastMinuteQuirkFixes()" ) );
+
+    m_api.debugLastMinuteQuirkFixes = true;
+}
+
 
 // ---------------------------------------------------------------------------------------------------------------------
 std::string NetConfiguration::generateRandomLoadBalancerCookie() const
@@ -163,7 +171,7 @@ std::string NetConfiguration::getVerboseCaptureFilename( std::string_view contex
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// there was an
+// there was an ...
 httplib::Result NetConfiguration::attempt( const std::function<httplib::Result()>& operation ) const
 {
     int32_t retries = getRequestRetries();
@@ -191,6 +199,32 @@ httplib::Result NetConfiguration::attempt( const std::function<httplib::Result()
     }
 
     return opResult;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+endlesss::types::JamCouchID NetConfiguration::checkAndSanitizeJamCouchID( const endlesss::types::JamCouchID& jamID ) const
+{
+    // this shouldn't be possible, so check on it JIC
+    ABSL_ASSERT( !jamID.empty() );
+    if ( jamID.empty() )
+        return jamID;
+
+    // check if this is a personal jam request; if so, we need to escape the username for couchbase
+    std::string jamNameSanitised = jamID.value();
+    if ( jamNameSanitised.rfind( "band", 0 ) != 0 ) // is this couch ID beginning with band#### .. if so, we don't have to worry about it
+    {
+        // but otherwise this is a personal jam, so - for usernames with hyphens, we have to escape them for use with couchbase
+        // there are other symbols we should probably escape but I don't know of any users using them or if they are even allowed during user sign-up
+        const std::string jamNameSanitisedCb = std::regex_replace( jamNameSanitised, std::regex( "-" ), "(2d)" );
+
+        blog::debug::api( FMTX( "checkAndSanitizeJamCouchID() username '{}' -> '{}'" ), jamNameSanitised, jamNameSanitisedCb );
+
+        return endlesss::types::JamCouchID( jamNameSanitisedCb );
+    }
+    else
+    {
+        return jamID;   // no changes
+    }
 }
 
 
@@ -294,53 +328,61 @@ std::unique_ptr<httplib::SSLClient> createEndlesssHttpClient( const NetConfigura
 // ---------------------------------------------------------------------------------------------------------------------
 bool JamProfile::fetch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID )
 {
+    const endlesss::types::JamCouchID& jamDatabaseID_Sanitised = ncfg.checkAndSanitizeJamCouchID( jamDatabaseID );
+
     auto client = createEndlesssHttpClient( ncfg, UserAgent::Couchbase );
 
     auto res = ncfg.attempt( [&]() -> httplib::Result {
-        return client->Get( fmt::format( "/user_appdata${}/Profile", jamDatabaseID ).c_str() );
+        return client->Get( fmt::format( "/user_appdata${}/Profile", jamDatabaseID_Sanitised ).c_str() );
         });
 
-    return deserializeJson< JamProfile >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ), "jam_profile" );
+    return deserializeJson< JamProfile >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID_Sanitised ), "jam_profile" );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 bool JamChanges::fetch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID )
 {
+    const endlesss::types::JamCouchID& jamDatabaseID_Sanitised = ncfg.checkAndSanitizeJamCouchID( jamDatabaseID );
+
     auto client = createEndlesssHttpClient( ncfg, UserAgent::Couchbase );
 
     auto res = ncfg.attempt( [&]() -> httplib::Result {
         return client->Post(
-            fmt::format( "/user_appdata${}/_changes?descending=true&limit=1", jamDatabaseID ).c_str(),
+            fmt::format( "/user_appdata${}/_changes?descending=true&limit=1", jamDatabaseID_Sanitised ).c_str(),
             keyBody,
             cMimeApplicationJson );
         });
 
-    return deserializeJson< JamChanges >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ), "jam_changes" );
+    return deserializeJson< JamChanges >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID_Sanitised ), "jam_changes" );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 bool JamChanges::fetchSince( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID, const std::string& seqSince )
 {
+    const endlesss::types::JamCouchID& jamDatabaseID_Sanitised = ncfg.checkAndSanitizeJamCouchID( jamDatabaseID );
+
     auto client = createEndlesssHttpClient( ncfg, UserAgent::Couchbase );
 
     auto res = ncfg.attempt( [&]() -> httplib::Result {
         return client->Post(
-            fmt::format( "/user_appdata${}/_changes?since={}", jamDatabaseID, seqSince ).c_str(),
+            fmt::format( "/user_appdata${}/_changes?since={}", jamDatabaseID_Sanitised, seqSince ).c_str(),
             keyBody,
             cMimeApplicationJson );
         });
 
-    return deserializeJson< JamChanges >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ), "jam_changes_since" );
+    return deserializeJson< JamChanges >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID_Sanitised ), "jam_changes_since" );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 bool JamLatestState::fetch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID )
 {
+    const endlesss::types::JamCouchID& jamDatabaseID_Sanitised = ncfg.checkAndSanitizeJamCouchID( jamDatabaseID );
+
     auto client = createEndlesssHttpClient( ncfg, UserAgent::Couchbase );
 
     auto res = ncfg.attempt( [&]() -> httplib::Result {
         return client->Get(
-            fmt::format( "/user_appdata${}/_design/types/_view/rifffLoopsByCreateTime?descending=true&limit=1", jamDatabaseID ).c_str() );
+            fmt::format( "/user_appdata${}/_design/types/_view/rifffLoopsByCreateTime?descending=true&limit=1", jamDatabaseID_Sanitised ).c_str() );
         });
 
     return deserializeJson< JamLatestState >( ncfg, res, *this, __FUNCTION__, "jam_latest_state" );
@@ -351,9 +393,11 @@ bool JamFullSnapshot::fetch( const NetConfiguration& ncfg, const endlesss::types
 {
     auto client = createEndlesssHttpClient( ncfg, UserAgent::Couchbase );
 
+    const endlesss::types::JamCouchID& jamDatabaseID_Sanitised = ncfg.checkAndSanitizeJamCouchID( jamDatabaseID );
+
     auto res = ncfg.attempt( [&]() -> httplib::Result {
         return client->Get(
-            fmt::format( "/user_appdata${}/_design/types/_view/rifffLoopsByCreateTime?descending=true", jamDatabaseID ).c_str() );
+            fmt::format( "/user_appdata${}/_design/types/_view/rifffLoopsByCreateTime?descending=true", jamDatabaseID_Sanitised ).c_str() );
         });
 
     return deserializeJson< JamFullSnapshot >( ncfg, res, *this, __FUNCTION__, "jam_full_snapshot" );
@@ -364,8 +408,10 @@ bool JamRiffCount::fetch( const NetConfiguration& ncfg, const endlesss::types::J
 {
     auto client = createEndlesssHttpClient( ncfg, UserAgent::Couchbase );
 
+    const endlesss::types::JamCouchID& jamDatabaseID_Sanitised = ncfg.checkAndSanitizeJamCouchID( jamDatabaseID );
+
     auto res = ncfg.attempt( [&]() -> httplib::Result {
-        return client->Get( fmt::format( "/user_appdata${}/_design/types/_view/rifffsByCreateTime", jamDatabaseID ).c_str() );
+        return client->Get( fmt::format( "/user_appdata${}/_design/types/_view/rifffsByCreateTime", jamDatabaseID_Sanitised ).c_str() );
         } );
 
     return deserializeJson< JamRiffCount >( ncfg, res, *this, __FUNCTION__, "jam_riff_count" );
@@ -374,6 +420,8 @@ bool JamRiffCount::fetch( const NetConfiguration& ncfg, const endlesss::types::J
 // ---------------------------------------------------------------------------------------------------------------------
 bool RiffDetails::fetch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID, const endlesss::types::RiffCouchID& riffDocumentID )
 {
+    const endlesss::types::JamCouchID& jamDatabaseID_Sanitised = ncfg.checkAndSanitizeJamCouchID( jamDatabaseID );
+
     // manually form a json body with the single document filter
     auto keyBody = fmt::format( R"({{ "keys" : [ "{}" ]}})", riffDocumentID );
 
@@ -382,17 +430,19 @@ bool RiffDetails::fetch( const NetConfiguration& ncfg, const endlesss::types::Ja
     // post the query, we expect a single document stream back
     auto res = ncfg.attempt( [&]() -> httplib::Result {
         return client->Post(
-            fmt::format( "/user_appdata${}/_all_docs?include_docs=true", jamDatabaseID ).c_str(),
+            fmt::format( "/user_appdata${}/_all_docs?include_docs=true", jamDatabaseID_Sanitised ).c_str(),
             keyBody,
             cMimeApplicationJson );
         });
 
-    return deserializeJson< RiffDetails >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ), "riff_details" );
+    return deserializeJson< RiffDetails >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID_Sanitised ), "riff_details" );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 bool RiffDetails::fetchBatch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID, const endlesss::types::RiffCouchIDs& riffDocumentIDs )
 {
+    const endlesss::types::JamCouchID& jamDatabaseID_Sanitised = ncfg.checkAndSanitizeJamCouchID( jamDatabaseID );
+
     // expand all riff ids into a json array
     auto keyBody = fmt::format( R"({{ "keys" : [ "{}" ]}})", fmt::join( riffDocumentIDs, R"(", ")" ) );
 
@@ -401,17 +451,32 @@ bool RiffDetails::fetchBatch( const NetConfiguration& ncfg, const endlesss::type
     // post the query, we expect multiple rows of documents in return
     auto res = ncfg.attempt( [&]() -> httplib::Result {
         return client->Post(
-            fmt::format( "/user_appdata${}/_all_docs?include_docs=true", jamDatabaseID ).c_str(),
+            fmt::format( "/user_appdata${}/_all_docs?include_docs=true", jamDatabaseID_Sanitised ).c_str(),
             keyBody,
             cMimeApplicationJson );
         });
 
-    return deserializeJson< RiffDetails >( ncfg, res, *this, fmt::format("{}( {} )", __FUNCTION__, jamDatabaseID ), "riff_details_batch" );
+    if ( ncfg.api().debugLastMinuteQuirkFixes )
+    {
+        // last minute shit found in Ash's solo jam - the stem playback value "on" would - for ONE RIFF - turn up as a 0 or 1 rather than a bool value like
+        // literally everything else aaaaaaaaaaaaaaaaa
+        return deserializeJson< RiffDetails >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID_Sanitised ), "riff_details_batch", []( std::string& bodyText )
+            {
+                bodyText = std::regex_replace( bodyText, std::regex( "\"on\":0," ), "\"on\":false," );
+                bodyText = std::regex_replace( bodyText, std::regex( "\"on\":1," ), "\"on\":true," );
+            });
+    }
+    else
+    {
+        return deserializeJson< RiffDetails >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID_Sanitised ), "riff_details_batch" );
+    }
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 bool StemTypeCheck::fetchBatch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID, const endlesss::types::StemCouchIDs& stemDocumentIDs )
 {
+    const endlesss::types::JamCouchID& jamDatabaseID_Sanitised = ncfg.checkAndSanitizeJamCouchID( jamDatabaseID );
+
     // expand all stem ids into a json array
     auto keyBody = fmt::format( R"({{ "keys" : [ "{}" ]}})", fmt::join( stemDocumentIDs, R"(", ")" ) );
 
@@ -420,17 +485,19 @@ bool StemTypeCheck::fetchBatch( const NetConfiguration& ncfg, const endlesss::ty
     // fetch all the stem data docs but only do a very minimal parse for 'type' fields
     auto res = ncfg.attempt( [&]() -> httplib::Result {
         return client->Post(
-            fmt::format( "/user_appdata${}/_all_docs?include_docs=true", jamDatabaseID ).c_str(),
+            fmt::format( "/user_appdata${}/_all_docs?include_docs=true", jamDatabaseID_Sanitised ).c_str(),
             keyBody,
             cMimeApplicationJson );
         });
 
-    return deserializeJson< StemTypeCheck >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ), "stem_type_check_batch" );
+    return deserializeJson< StemTypeCheck >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID_Sanitised ), "stem_type_check_batch" );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 bool StemDetails::fetchBatch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID, const endlesss::types::StemCouchIDs& stemDocumentIDs )
 {
+    const endlesss::types::JamCouchID& jamDatabaseID_Sanitised = ncfg.checkAndSanitizeJamCouchID( jamDatabaseID );
+
     // expand all stem ids into a json array
     auto keyBody = fmt::format( R"({{ "keys" : [ "{}" ]}})", fmt::join( stemDocumentIDs, R"(", ")" ) );
 
@@ -439,12 +506,12 @@ bool StemDetails::fetchBatch( const NetConfiguration& ncfg, const endlesss::type
     // fetch data about all the stems in bulk
     auto res = ncfg.attempt( [&]() -> httplib::Result {
         return client->Post(
-            fmt::format( "/user_appdata${}/_all_docs?include_docs=true", jamDatabaseID ).c_str(),
+            fmt::format( "/user_appdata${}/_all_docs?include_docs=true", jamDatabaseID_Sanitised ).c_str(),
             keyBody,
             cMimeApplicationJson );
         });
 
-    return deserializeJson< StemDetails >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ), "stem_details_batch" );
+    return deserializeJson< StemDetails >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID_Sanitised ), "stem_details_batch" );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -482,23 +549,29 @@ bool SubscribedJams::fetch( const NetConfiguration& ncfg, const std::string& use
 {
     auto client = createEndlesssHttpClient( ncfg, UserAgent::ClientService );
 
-    auto res = ncfg.attempt( [&]() -> httplib::Result {
-        return client->Get( fmt::format( "/user_appdata${}/_design/membership/_view/getMembership", userName ).c_str() );
-        } );
+    // for usernames with hyphens, we have to escape them for use with couchbase
+    // there are other symbols we should probably escape but I don't know of any users using them or if they are even allowed during user sign-up
+    std::string sanitisedUserName = std::regex_replace( userName, std::regex( "-" ), "(2d)" );
 
-    return deserializeJson< SubscribedJams >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, userName ), "subscribed_jams" );
+    auto res = ncfg.attempt( [&]() -> httplib::Result {
+        return client->Get( fmt::format( "/user_appdata${}/_design/membership/_view/getMembership", sanitisedUserName ).c_str() );
+        });
+
+    return deserializeJson< SubscribedJams >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, sanitisedUserName ), "subscribed_jams" );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 bool BandPermalinkMeta::fetch( const NetConfiguration& ncfg, const endlesss::types::JamCouchID& jamDatabaseID )
 {
+    const endlesss::types::JamCouchID& jamDatabaseID_Sanitised = ncfg.checkAndSanitizeJamCouchID( jamDatabaseID );
+
     auto client = createEndlesssHttpClient( ncfg, UserAgent::WebWithoutAuth );
 
     auto res = ncfg.attempt( [&]() -> httplib::Result {
-        return client->Get( fmt::format( "/api/band/{}/permalink", jamDatabaseID ).c_str() );
+        return client->Get( fmt::format( "/api/band/{}/permalink", jamDatabaseID_Sanitised ).c_str() );
         });
 
-    return deserializeJson< BandPermalinkMeta >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID ), "band_permalink_meta" );
+    return deserializeJson< BandPermalinkMeta >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamDatabaseID_Sanitised ), "band_permalink_meta" );
 }
 
 bool BandPermalinkMeta::Data::extractLongJamIDFromPath( std::string& outResult )

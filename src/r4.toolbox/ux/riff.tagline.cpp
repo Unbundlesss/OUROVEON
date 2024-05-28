@@ -268,9 +268,13 @@ void TagLine::imgui(
 // ---------------------------------------------------------------------------------------------------------------------
 bool TagLineToolProvider::isToolEnabled( const ToolID id, const endlesss::live::Riff* currentRiff ) const
 {
+
     // check on virtual riffs, we can't do stuff like share or find them
-    if ( id == ToolID::NavigateTo || 
-         id == ToolID::ShareToFeed )
+    if ( id == ToolID::NavigateTo 
+#if OURO_HAS_NDLS_SHARING
+        || id == ToolID::ShareToFeed 
+#endif // OURO_HAS_NDLS_SHARING
+        )
     {
         if ( currentRiff != nullptr )
         {
@@ -304,6 +308,7 @@ void TagLineToolProvider::handleToolExecution( const ToolID id, base::EventBusCl
         }
         break;
 
+#if OURO_HAS_NDLS_SHARING
         case ShareToFeed:
         {
             // send an event to trigger sharing to the feed, let the app handle how
@@ -311,6 +316,7 @@ void TagLineToolProvider::handleToolExecution( const ToolID id, base::EventBusCl
             eventBusClient.Send< ::events::RequestToShareRiff >( riffToNavigate );
         }
         break;
+#endif // OURO_HAS_NDLS_SHARING
 
         default:
             ABSL_ASSERT( 0 );

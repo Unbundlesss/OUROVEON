@@ -23,7 +23,9 @@ struct TagLineToolProvider
     {
         RiffExport,         // emit export-to-disk events
         NavigateTo,         // emit navigate-to-riff events
+#if OURO_HAS_NDLS_SHARING
         ShareToFeed,        // emit share-to-feed events
+#endif // OURO_HAS_NDLS_SHARING
 
         BuiltItToolIdTop    // end ID for built-in tool IDs
     };
@@ -41,7 +43,9 @@ struct TagLineToolProvider
         {
             case RiffExport:    tooltip = "Export this riff to disk";               return ICON_FA_FLOPPY_DISK;
             case NavigateTo:    tooltip = "Try to navigate to this riff";           return ICON_FA_GRIP;
+#if OURO_HAS_NDLS_SHARING
             case ShareToFeed:   tooltip = "Share this riff to your Endlesss feed";  return ICON_FA_RSS;
+#endif // OURO_HAS_NDLS_SHARING
 
             default:
                 ABSL_ASSERT( 0 );

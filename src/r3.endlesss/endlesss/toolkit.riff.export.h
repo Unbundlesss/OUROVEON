@@ -117,10 +117,11 @@ struct RiffExportDestination
 
 // run export process, returns the files that are created (or would be created, in DryRun mode)
 std::vector<fs::path> exportRiff(
-    const RiffExportMode            exportMode,         // the plan
-    const RiffExportDestination&    destination,        // where & how it's going
-    const RiffExportAdjustments&    adjustments,        // anything else to do to it
-    const endlesss::live::RiffPtr&  riffPtr );          // the what
+    endlesss::api::NetConfiguration&    netCfg,             // network access, if required for any external assets
+    const RiffExportMode                exportMode,         // the plan
+    const RiffExportDestination&        destination,        // where & how it's going
+    const RiffExportAdjustments&        adjustments,        // anything else to do to it
+    const endlesss::live::RiffPtr&      riffPtr );          // the what
 
 } // namespace xp
 } // namespace toolkit

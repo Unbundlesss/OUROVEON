@@ -66,8 +66,8 @@ struct Pipeline
     // request to purge all currently enqueued pipeline requests
     void requestClear();
 
-    // if present, apply IdentityCustomNaming data to the RiffComplete
-    static void applyRequestCustomNaming(
+    // if present, apply IdentityCustomNaming or any other tweaks to the RiffComplete from the RiffIdentity
+    static void applyCustomIdentityData(
         const endlesss::types::RiffIdentity& request,
         endlesss::types::RiffComplete& result );
 

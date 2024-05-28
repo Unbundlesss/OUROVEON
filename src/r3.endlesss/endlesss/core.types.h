@@ -386,6 +386,10 @@ struct Riff
     // search / sort / export / etc as required. Example: tag ordering metadata
     std::string     description;
 
+    // another transient, ouroveon-encoded piece of data - optional URL of a cover image for this riff.
+    // prime example being the image uploaded for a shared riff which we might want to display or export alongside the stems
+    std::string     attachedImageURL;
+
     std::string     user;
 
     StemOn          stemsOn;                // bitfield of stem activation
@@ -527,14 +531,23 @@ struct RiffIdentity
     bool hasCustomJamDisplayName() const { return !m_customNaming.m_jamDisplayName.empty(); }
     bool hasCustomJamDescription() const { return !m_customNaming.m_jamDescription.empty(); }
     bool hasCustomRiffDescription() const { return !m_customNaming.m_riffDescription.empty(); }
-
+    
     const IdentityCustomNaming& getCustomNaming() const { return m_customNaming; }
+
+    // controls for setting an image attachment for this riff (eg. shared riff cover images)
+    void setAttachedImageURL( std::string_view imageURL ) { m_attachedImage = imageURL; }
+    void clearAttachedImageURL() { m_attachedImage.clear(); }
+    bool hasAttachedImageURL() const { return !m_attachedImage.empty(); }
+    const std::string& getAttachedImageURL() const { return m_attachedImage; }
+
 
 private:
     endlesss::types::JamCouchID     m_jam;
     endlesss::types::RiffCouchID    m_riff;
 
-    IdentityCustomNaming            m_customNaming;
+    std::string                     m_attachedImage;        // (optional) URL to the image associated with the riff; eg. custom image with a shared riff
+    IdentityCustomNaming            m_customNaming;         // (optional) modifications to display names and descriptions, 
+                                                            //            usually for refining the export pipeline for shared riffs
 };
 
 // ---------------------------------------------------------------------------------------------------------------------

@@ -111,6 +111,8 @@ struct ICoreServices : public config::IPathProvider
 // exposure of custom render injection callbacks as interface
 struct ICoreCustomRendering
 {
+    virtual ~ICoreCustomRendering() {}
+
     using RenderInjectionCallback = std::function< void() >;
 
     enum class RenderPoint
@@ -121,6 +123,18 @@ struct ICoreCustomRendering
 
     // render callbacks are only valid for a single frame, client code should re-add them constantly if required
     virtual void registerRenderCallback( const RenderPoint rp, const RenderInjectionCallback& callback ) = 0;
+};
+
+// a little api interface for pushing a base RiffIdentity out to be resolved and exported by an async resolver pipeline
+struct IRiffExportDispatcher
+{
+    static constexpr base::OperationVariant OV_RiffExport{ 0xBA };
+
+    // take a riff identity and send it off for resolve + export to disk; the operation ID 
+    virtual base::OperationID dispatchRiffExportAsync( const endlesss::types::RiffIdentity& identity ) = 0;
+
+    // given an op ID from dispatchAsyncRiffExport(), returns true if it's still running
+    virtual bool isDispatchedRiffExportRunning( base::OperationID& operationID ) const = 0;
 };
 
 

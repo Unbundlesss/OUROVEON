@@ -73,7 +73,7 @@ public:
     // modify loaded config::endlesss::rAPI data with advanced option toggles
     // call after init()
     void enableFullNetworkDiagnostics();
-    void enableStemVersionBypass();
+    void enableLastMinuteQuirkFixes();
 
 
     ouro_nodiscard constexpr const config::endlesss::rAPI& api()  const { ABSL_ASSERT( hasAccess( Access::Public ) );        return m_api;  }
@@ -171,6 +171,9 @@ public:
     {
         m_eventBusClient->Send< ::events::NetworkActivity >( ::events::NetworkActivity::failure() );
     }
+
+
+    endlesss::types::JamCouchID checkAndSanitizeJamCouchID( const endlesss::types::JamCouchID& jamID ) const;
 
 private:
 

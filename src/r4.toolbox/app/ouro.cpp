@@ -47,6 +47,7 @@ struct AdvancedOptionsBlock
 {
     bool    bShow = false;
     bool    bEnableNetworkLogging = false;
+    bool    bEnableLastMinuteQuirkFixes = false;
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -302,6 +303,7 @@ int OuroApp::EntrypointGUI()
                     {
                         ImGui::TextUnformatted( "Advanced Toggles" );
                         ImGui::Checkbox( " Enable Network Diagnostics", &advancedOptionsBlock.bEnableNetworkLogging );
+                        ImGui::Checkbox( " Enable Last Minute Fixes", &advancedOptionsBlock.bEnableLastMinuteQuirkFixes );
                         ImGui::Checkbox( " Cache Management Tools", &bEnableCacheManagementMenu );
                     }
                     else
@@ -549,8 +551,12 @@ int OuroApp::EntrypointGUI()
                             ImGui::CompactTooltip( "Log out" );
 
                             ImGui::SameLine( 0, 12.0f );
-
-                            ImGui::TextUnformatted( "Authentication expires in" );
+                            
+                            ImGui::TextColored(
+                                colour::shades::tag_lvl_1.neutral(),
+                                "%s", endlesssAuth.user_id.c_str() );
+                            ImGui::SameLine();
+                            ImGui::TextUnformatted( "access expires in" );
                             ImGui::SameLine();
                             ImGui::TextColored(
                                 colour::shades::callout.neutral(),
@@ -958,6 +964,8 @@ int OuroApp::EntrypointGUI()
     {
         if ( advancedOptionsBlock.bEnableNetworkLogging )
             m_networkConfiguration->enableFullNetworkDiagnostics();
+        if ( advancedOptionsBlock.bEnableLastMinuteQuirkFixes )
+            m_networkConfiguration->enableLastMinuteQuirkFixes();
     }
 
     // save any config data blocks
@@ -1137,6 +1145,8 @@ int OuroApp::EntrypointGUI()
             } );
     }
 
+#if OURO_HAS_NDLS_SHARING
+
     // run the Clubs data fetch in the background, unbounded; this seems to sometimes take an age and I don't want it
     // slowing down our app startup. anything using this data needs to check if its valid
     m_taskExecutor.silent_async( "clubs_sync", [this]()
@@ -1169,6 +1179,8 @@ int OuroApp::EntrypointGUI()
                 }
             }
         });
+
+#endif // OURO_HAS_NDLS_SHARING
 
 
     // =================================================================================================================
@@ -1281,7 +1293,9 @@ void OuroApp::event_ExportRiff( const events::ExportRiff* eventData )
         m_configExportOutput.spec
     );
 
+    auto netCfg = getNetworkConfiguration();
     const auto exportedFiles = endlesss::toolkit::xp::exportRiff(
+        *netCfg,
         endlesss::toolkit::xp::RiffExportMode::Stems,
         destination,
         eventData->m_adjustments,
@@ -1308,6 +1322,8 @@ void OuroApp::event_ExportRiff( const events::ExportRiff* eventData )
 // ---------------------------------------------------------------------------------------------------------------------
 void OuroApp::event_RequestToShareRiff( const events::RequestToShareRiff* eventData )
 {
+#if OURO_HAS_NDLS_SHARING
+
     activateModalPopup( "Share Riff", [
         this,
         netCfg = getNetworkConfiguration(),
@@ -1315,6 +1331,15 @@ void OuroApp::event_RequestToShareRiff( const events::RequestToShareRiff* eventD
     {
         ux::modalRiffFeedShare( title, *state, m_clubsChannels, netCfg, getTaskExecutor() );
     });
+
+#else 
+
+    ABSL_ASSERT( 0 );
+    m_appEventBus->send<::events::AddToastNotification>( ::events::AddToastNotification::Type::Error,
+        "Sharing to Endlesss Disabled",
+        "You shouldn't have been able to do this");
+
+#endif // OURO_HAS_NDLS_SHARING
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

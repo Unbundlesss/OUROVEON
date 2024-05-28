@@ -429,6 +429,7 @@ struct JamVisualisation
 
 // ---------------------------------------------------------------------------------------------------------------------
 struct LoreApp final : public app::OuroApp,
+                       public app::IRiffExportDispatcher,
                        public ux::TagLineToolProvider
 {
     LoreApp()
@@ -554,7 +555,6 @@ protected:
 
 
 
-    static constexpr base::OperationVariant OV_RiffExport{ 0xBA };
     static constexpr base::OperationVariant OV_RiffPlayback{ 0xBB };
 
     using RiffExportOperations = base::BiMap< base::OperationID, endlesss::types::RiffCouchID >;
@@ -562,13 +562,21 @@ protected:
     RiffPipeline                    m_riffExportPipeline;
     RiffExportOperations            m_riffExportOperationsMap;
 
-    void enqueueRiffForExport( const endlesss::types::RiffIdentity& identity )
+    base::OperationID dispatchRiffExportAsync( const endlesss::types::RiffIdentity& identity ) override
     {
         const auto operationID = base::Operations::newID( OV_RiffExport );
 
         m_riffExportOperationsMap.add( operationID, identity.getRiffID() );
         m_riffExportPipeline->requestRiff( { identity, operationID } );
+
+        return operationID;
     }
+
+    bool isDispatchedRiffExportRunning( base::OperationID& operationID ) const override
+    {
+        return m_riffExportOperationsMap.hasKey( operationID );
+    }
+
 
 
 
@@ -2110,7 +2118,7 @@ int LoreApp::EntrypointOuro()
             {
                 ABSL_ASSERT( result.jam.couchID == request.getJamID() );
 
-                endlesss::toolkit::Pipeline::applyRequestCustomNaming( request, result );
+                endlesss::toolkit::Pipeline::applyCustomIdentityData( request, result );
                 return true;
             }
 
@@ -2152,7 +2160,7 @@ int LoreApp::EntrypointOuro()
             // most requests can be serviced direct from the DB
             if ( m_warehouse->fetchSingleRiffByID( request.getRiffID(), result ) )
             {
-                endlesss::toolkit::Pipeline::applyRequestCustomNaming( request, result );
+                endlesss::toolkit::Pipeline::applyCustomIdentityData( request, result );
                 return true;
             }
 
@@ -3204,7 +3212,7 @@ int LoreApp::EntrypointOuro()
                                 if ( !m_jamTagExportPrefix.empty() )
                                     customNaming.m_jamDescription = m_jamTagExportPrefix;
 
-                                enqueueRiffForExport( { riffTag.m_jam, riffTag.m_riff, std::move( customNaming ) } );
+                                dispatchRiffExportAsync( { riffTag.m_jam, riffTag.m_riff, std::move( customNaming ) } );
                             }
                         }
                         // add option for additional subdirectory inserted between jam and riff stack when exporting
@@ -3498,6 +3506,20 @@ int LoreApp::EntrypointOuro()
         }
         {
             const fs::path cWarehouseExportPath = m_storagePaths->outputApp / "$database_exports";
+            const auto checkWarehouseExportDirectoryExists = [&]()
+                {
+                    const auto exportPathStatus = filesys::ensureDirectoryExists( cWarehouseExportPath );
+                    if ( !exportPathStatus.ok() )
+                    {
+                        m_appEventBus->send<::events::AddErrorPopup>(
+                            "Enable to create output directory",
+                            "Was unable to create database export directory, cannot save to disk"
+                        );
+                        return false;
+                    }
+                    return true;
+                };
+
             static const ImVec2 toolbarButtonSize{ 155.0f, 0.0f };
 
             static WarehouseView warehouseView( WarehouseView::Default );
@@ -3585,6 +3607,11 @@ int LoreApp::EntrypointOuro()
 
                         if ( ImGui::Button( " " ICON_FA_BOX_OPEN " Import Data", toolbarButtonSize) )
                         {
+                            // try and make the export directory if it doesn't already exist - because we ask the 
+                            // dialogue box below to default to browsing it and if it isn't there it chooses some other 
+                            // random place. 
+                            checkWarehouseExportDirectoryExists();
+
                             auto fileDialog = std::make_unique< ImGuiFileDialog >();
                             fileDialog->OpenDialog(
                                 "ImpFileDlg",
@@ -3604,6 +3631,11 @@ int LoreApp::EntrypointOuro()
                         ImGui::SameLine( 0, cButtonGapSize );
                         if ( ImGui::Button( " " ICON_FA_BOX_OPEN " Import Stems", toolbarButtonSize) )
                         {
+                            // try and make the export directory if it doesn't already exist - because we ask the 
+                            // dialogue box below to default to browsing it and if it isn't there it chooses some other 
+                            // random place. 
+                            checkWarehouseExportDirectoryExists();
+
                             auto fileDialog = std::make_unique< ImGuiFileDialog >();
                             fileDialog->OpenDialog(
                                 "ImpFileDlg",
@@ -3981,24 +4013,10 @@ int LoreApp::EntrypointOuro()
                                 // disable tools if we're syncing
                                 ImGui::Scoped::Disabled sd( bIsJamInFlux );
 
-                                const auto checkOutputDirValid = [&]()
-                                    {
-                                        const auto exportPathStatus = filesys::ensureDirectoryExists( cWarehouseExportPath );
-                                        if ( !exportPathStatus.ok() )
-                                        {
-                                            m_appEventBus->send<::events::AddErrorPopup>(
-                                                "Enable to create output directory",
-                                                "Was unable to create database export directory, cannot save to disk"
-                                            );
-                                            return false;
-                                        }
-                                        return true;
-                                    };
-
                                 if ( ImGui::Button( " " ICON_FA_BOX_ARCHIVE " Data    ") )
                                 {
                                     // make sure it exists, pop an error if that fails
-                                    if ( checkOutputDirValid() )
+                                    if ( checkWarehouseExportDirectoryExists() )
                                     {
                                         // tell warehouse to spool the database records out to disk
                                         const base::OperationID exportOperationID = m_warehouse->requestJamDataExport(
@@ -4015,7 +4033,7 @@ int LoreApp::EntrypointOuro()
                                 ImGui::SameLine();
                                 if ( ImGui::Button( " " ICON_FA_BOXES_PACKING " Stems   " ) )
                                 {
-                                    if ( checkOutputDirValid() )
+                                    if ( checkWarehouseExportDirectoryExists() )
                                     {
                                         const std::string exportFilenameTar = endlesss::toolkit::Warehouse::createExportFilenameForJam(
                                             iterCurrentJamID,
@@ -4125,7 +4143,7 @@ int LoreApp::EntrypointOuro()
         } // warehouse imgui 
 
         m_uxRiffHistory->imgui( *this );
-        m_uxSharedRiffView->imgui( *this, JamNameResolveProvider );
+        m_uxSharedRiffView->imgui( *this, JamNameResolveProvider, *this );
 
 
         maintainStemCacheAsync();

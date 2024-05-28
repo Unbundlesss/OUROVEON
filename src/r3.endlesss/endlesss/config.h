@@ -133,6 +133,8 @@ OURO_CONFIG( rAPI )
     // if true, stream all http response body text out to files before they are deserialised. will fill up your drive.
     bool                    debugVerboseNetDataCapture = false;
 
+    // panic mode to enable late fixes to quirks found during the week before service shutdown
+    bool                    debugLastMinuteQuirkFixes = false;
 
     template<class Archive>
     void serialize( Archive& archive )

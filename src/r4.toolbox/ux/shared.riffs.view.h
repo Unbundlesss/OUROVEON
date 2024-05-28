@@ -22,7 +22,10 @@ struct SharedRiffView
     SharedRiffView( endlesss::api::NetConfiguration::Shared& networkConfig, base::EventBusClient eventBus );
     ~SharedRiffView();
 
-    void imgui( app::CoreGUI& coreGUI, endlesss::services::JamNameResolveProvider& jamNameResolver );
+    void imgui(
+        app::CoreGUI& coreGUI,
+        endlesss::services::JamNameResolveProvider& jamNameResolver,
+        app::IRiffExportDispatcher& riffExportDispatcher );
 
 private:
 

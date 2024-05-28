@@ -10,6 +10,7 @@
 #include "pch.h"
 
 #include "base/text.h"
+#include "base/text.transform.h"
 #include "app/core.h"
 #include "filesys/fsutil.h"
 
@@ -40,10 +41,11 @@ inline void tokenReplacement( std::string& source, const std::string& find, cons
 
 // ---------------------------------------------------------------------------------------------------------------------
 std::vector<fs::path> exportRiff(
-    const RiffExportMode            exportMode,
-    const RiffExportDestination&    destination,
-    const RiffExportAdjustments&    adjustments,
-    const endlesss::live::RiffPtr&  riffPtr )
+    endlesss::api::NetConfiguration&    netCfg,
+    const RiffExportMode                exportMode,
+    const RiffExportDestination&        destination,
+    const RiffExportAdjustments&        adjustments,
+    const endlesss::live::RiffPtr&      riffPtr )
 {
     TokenReplacements tokenReplacements;
 
@@ -145,6 +147,78 @@ std::vector<fs::path> exportRiff(
         {
             blog::error::core( "exportRiff was unable to save metadata, {}", ex.what() );
             // not a fatal case
+        }
+
+        // only try for image downloads if we have Endlessss access - without it, we assume the CDN might be 
+        // unavailable too. this code was written in a bit of a panic during the shutdown week
+        if ( netCfg.hasAccess( endlesss::api::NetConfiguration::Access::Authenticated ) )
+        {
+            // wrap the whole lot in a filthy exception trap, last thing we want is some goofy bug in here
+            // breaking shared riff downloads
+            try
+            {
+                if ( !currentRiff->m_riffData.riff.attachedImageURL.empty() )
+                {
+                    const auto& imageUrl = currentRiff->m_riffData.riff.attachedImageURL;
+                    const base::UriParse parser( imageUrl );
+                    if ( !parser.isValid() )
+                    {
+                        blog::error::core( "[Riff Image Download] URL Parse fail : {}", imageUrl );
+                    }
+                    else
+                    {
+                        std::string imagePath = parser.path();
+
+                        auto dataClient = std::make_unique< httplib::SSLClient >( parser.host() );
+
+                        dataClient->set_ca_cert_path( netCfg.api().certBundleRelative.c_str() );
+                        dataClient->enable_server_certificate_verification( true );
+
+                        auto res = netCfg.attempt( [&]() -> httplib::Result {
+                            return dataClient->Get( parser.path() );
+                            } );
+
+                        if ( res->status != 200 )
+                        {
+                            blog::error::core( "[Riff Image Download] http GET failed, status {}", res->status );
+                        }
+                        else
+                        {
+                            std::string imageFilename = "cover_image";
+
+                            // lol help
+                            const std::string imageMIME = base::StrToLwrExt( res->get_header_value( "Content-Type" ) );
+                            if ( imageMIME == "image/gif" )
+                                imageFilename += ".gif";
+                            if ( imageMIME == "image/jpeg" )
+                                imageFilename += ".jpg";
+                            if ( imageMIME == "image/png" )
+                                imageFilename += ".png";
+
+                            auto imageCoverPath = rootPathU8 / imageFilename;
+
+#if OURO_PLATFORM_WIN
+                            FILE* fpImage = _wfopen( reinterpret_cast<const wchar_t*>(imageCoverPath.c_str()), L"wb" );
+#else
+                            FILE* fpImage = fopen( imageCoverPath.c_str(), "wb" );
+#endif
+                            if ( fpImage != nullptr )
+                            {
+                                fwrite( (void*)res->body.data(), 1, res->body.size(), fpImage );
+                                fclose( fpImage );
+                            }
+                            else
+                            {
+                                blog::error::core( "[Riff Image Download] unable to save to '{}'", imageCoverPath.string() );
+                            }
+                        }
+                    }
+                } // if has attached image
+            }
+            catch ( ... )
+            {
+                blog::error::core( "[Riff Image Download] unhandled exception saving the cover image" );
+            }
         }
     }
 

@@ -11,6 +11,7 @@
 
 #include "base/paging.h"
 #include "base/eventbus.h"
+#include "base/bimap.h"
 
 #include "app/imgui.ext.h"
 #include "app/module.frontend.fonts.h"
@@ -44,21 +45,29 @@ struct SharedRiffView::State
 
         APP_EVENT_BIND_TO( MixerRiffChange );
         APP_EVENT_BIND_TO( BNSWasUpdated );
+        APP_EVENT_BIND_TO( OperationComplete );
     }
 
     ~State()
     {
+        APP_EVENT_UNBIND( OperationComplete );
         APP_EVENT_UNBIND( BNSWasUpdated );
         APP_EVENT_UNBIND( MixerRiffChange );
     }
 
+    void event_OperationComplete( const events::OperationComplete* eventData );
     void event_MixerRiffChange( const events::MixerRiffChange* eventData );
     void event_BNSWasUpdated( const events::BNSWasUpdated* eventData );
 
 
     void imgui(
         app::CoreGUI& coreGUI,
-        endlesss::services::JamNameResolveProvider& jamNameResolver );
+        endlesss::services::JamNameResolveProvider& jamNameResolver,
+        app::IRiffExportDispatcher& riffExportDispatcher );
+
+    void modalBulkExport(
+        const char* title,
+        app::IRiffExportDispatcher& riffExportDispatcher );
 
 
     void onNewDataFetched( toolkit::Shares::StatusOrData newData );
@@ -70,6 +79,55 @@ struct SharedRiffView::State
         m_jamNameCacheUpdate = !m_jamNameResolvedArray.empty();
     }
 
+    enum class EAttachImage
+    {
+        AttachImage,
+        IgnoreImage
+    };
+
+    endlesss::types::RiffIdentity getEntryRiffIdentity( const std::size_t entryIndex, const bool asSharedRiff, const EAttachImage eAttachImage ) const
+    {
+        const auto dataPtr = *m_sharesData;
+
+        // assemble an appropriate riff identity for this entry in the table; used when queueing playback etc
+        // `asSharedRiff` controls which riff/jam identity to use; the 'shared' one is a special handling, the 
+        // riff ID and jam ID are specific for resolving the shared data and for playback outside of the origin
+        // jam (which may have been private)
+        // .. if `asSharedRiff` is false, we use the original riff ID and origin jam ID (for navigation in jam view, for example)
+        const bool bIsPersonalJam = dataPtr->m_jamIDs[entryIndex].empty();  // no jam name, it's the users'
+
+        const endlesss::types::JamCouchID originJam( 
+            bIsPersonalJam ? 
+                dataPtr->m_username : 
+                dataPtr->m_jamIDs[entryIndex] );
+
+        const endlesss::types::RiffCouchID sharedRiffToEnqueue( dataPtr->m_sharedRiffIDs[entryIndex].c_str() );
+        const endlesss::types::RiffCouchID originRiffToEnqueue( dataPtr->m_riffIDs[entryIndex] );
+
+        endlesss::types::IdentityCustomNaming customNaming;
+
+        // encode an export/display name from the active username that shared the riff
+        // .. there is no way to get that info during network resolve, so we have to tag it here
+        customNaming.m_jamDisplayName = fmt::format( FMTX( "{}_{}" ), endlesss::types::Constants::SharedRiffJam(), dataPtr->m_username );
+
+        auto identityResult = endlesss::types::RiffIdentity(
+            asSharedRiff ? endlesss::types::Constants::SharedRiffJam() : originJam,
+            asSharedRiff ? sharedRiffToEnqueue : originRiffToEnqueue,
+            std::move( customNaming )
+        );
+
+        if ( eAttachImage == EAttachImage::AttachImage )
+        {
+            // bolt on the image URL in case this riff gets exported and we wanna use it
+            identityResult.setAttachedImageURL( dataPtr->m_images[entryIndex] );
+        }
+
+        return identityResult;
+    }
+    
+
+    using SharedRiffExportOperations = base::BiMap< base::OperationID, endlesss::types::SharedRiffCouchID >;
+
 
     api::NetConfiguration::Shared   m_networkConfiguration;
     base::EventBusClient            m_eventBusClient;
@@ -80,13 +138,21 @@ struct SharedRiffView::State
     endlesss::types::RiffCouchID    m_currentlyPlayingRiffID;
     endlesss::types::RiffCouchIDSet m_enqueuedRiffIDs;
 
-    base::EventListenerID           m_eventLID_MixerRiffChange = base::EventListenerID::invalid();
-    base::EventListenerID           m_eventLID_BNSWasUpdated = base::EventListenerID::invalid();
+    base::EventListenerID           m_eventLID_OperationComplete    = base::EventListenerID::invalid();
+    base::EventListenerID           m_eventLID_MixerRiffChange      = base::EventListenerID::invalid();
+    base::EventListenerID           m_eventLID_BNSWasUpdated        = base::EventListenerID::invalid();
 
     ImGui::ux::UserSelector         m_user;
 
     toolkit::Shares                 m_sharesCache;
     toolkit::Shares::StatusOrData   m_sharesData;
+
+    SharedRiffExportOperations      m_sharedRiffExportOperationsMap;
+    std::size_t                     m_bulkExportIndex = 0;
+    bool                            m_bulkExportIncludeImages = true;
+    bool                            m_bulkExportRunning = false;
+    base::OperationID               m_bulkExportLastOp = base::OperationID::invalid();
+
     
     std::string                     m_lastSyncTimestampString;
 
@@ -101,6 +167,22 @@ struct SharedRiffView::State
     bool                            m_trySaveToCache = false;
 };
 
+
+// ---------------------------------------------------------------------------------------------------------------------
+void SharedRiffView::State::event_OperationComplete( const events::OperationComplete* eventData )
+{
+    const auto variant = base::Operations::variantFromID( eventData->m_id );
+
+    if ( variant == app::IRiffExportDispatcher::OV_RiffExport )
+    {
+        if ( m_sharedRiffExportOperationsMap.hasKey( eventData->m_id ) )
+        {
+            m_sharedRiffExportOperationsMap.remove( eventData->m_id );
+        }
+        if ( eventData->m_id == m_bulkExportLastOp )
+            m_bulkExportLastOp = base::OperationID::invalid();
+    }
+}
 
 // ---------------------------------------------------------------------------------------------------------------------
 void SharedRiffView::State::event_MixerRiffChange( const events::MixerRiffChange* eventData )
@@ -123,9 +205,87 @@ void SharedRiffView::State::event_BNSWasUpdated( const events::BNSWasUpdated* ev
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+void SharedRiffView::State::modalBulkExport( const char* title, app::IRiffExportDispatcher& riffExportDispatcher )
+{
+    const ImVec2 configWindowSize = ImVec2( 700.0f, 180.0f );
+    ImGui::SetNextWindowContentSize( configWindowSize );
+
+    const ImVec4 colourJamDisabled = GImGui->Style.Colors[ImGuiCol_TextDisabled];
+
+    ImGui::PushStyleColor( ImGuiCol_PopupBg, ImGui::GetStyleColorVec4( ImGuiCol_ChildBg ) );
+
+    if ( ImGui::BeginPopupModal( title, nullptr, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize ) )
+    {
+        const auto dataPtr = *m_sharesData;
+
+        const ImVec2 buttonSize( 220.0f, 32.0f );
+
+        ImGui::Checkbox( "Include Cover Art Images", &m_bulkExportIncludeImages );
+        ImGui::Spacing();
+        ImGui::Spacing();
+
+        float dispatchProgress = ( 1.0f / (float)dataPtr->m_count ) * (float)m_bulkExportIndex;
+        ImGui::Text( "Bulk Export Progress (%i riffs)", dataPtr->m_count );
+        ImGui::ProgressBar( dispatchProgress );
+
+        if ( !m_bulkExportRunning )
+        {
+            if ( ImGui::Button( "     Begin Export     " ) )
+            {
+                m_bulkExportIndex = 0;
+                m_bulkExportRunning = true;
+            }
+        }
+        else
+        {
+            ImGui::Scoped::ColourButton cb( colour::shades::errors, colour::shades::white );
+            if ( ImGui::Button( "   Cancel & Restart   " ) )
+            {
+                m_bulkExportIndex = 0;
+                m_bulkExportRunning = false;
+            }
+        }
+
+        if ( m_bulkExportRunning )
+        {
+            ImGui::SameLine();
+            ImGui::Spinner( "##syncing", true, ImGui::GetTextLineHeight() * 0.4f, 3.0f, 0.0f, ImGui::GetColorU32( ImGuiCol_Text ) );
+
+            if ( m_bulkExportLastOp.isValid() == false )
+            {
+                const EAttachImage eAttachImage = m_bulkExportIncludeImages ? EAttachImage::AttachImage : EAttachImage::IgnoreImage;
+
+                const auto& sharedRiffKey = dataPtr->m_sharedRiffIDs[m_bulkExportIndex];
+                const auto operationID = riffExportDispatcher.dispatchRiffExportAsync( getEntryRiffIdentity( m_bulkExportIndex, true, eAttachImage ) );
+
+                m_bulkExportLastOp = operationID;
+                m_sharedRiffExportOperationsMap.add( operationID, sharedRiffKey );
+
+                m_bulkExportIndex++;
+                if ( m_bulkExportIndex >= dataPtr->m_count )
+                {
+                    m_bulkExportRunning = false;
+                }
+            }
+        }
+
+        ImGui::Spacing();
+        ImGui::Spacing();
+
+        if ( ImGui::BottomRightAlignedButton( m_bulkExportRunning ? "  Close (Pause)  " : "      Close      ", buttonSize ) )
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
+    }
+    ImGui::PopStyleColor();
+}
+
+
+// ---------------------------------------------------------------------------------------------------------------------
 void SharedRiffView::State::imgui(
     app::CoreGUI& coreGUI,
-    endlesss::services::JamNameResolveProvider& jamNameResolver )
+    endlesss::services::JamNameResolveProvider& jamNameResolver,
+    app::IRiffExportDispatcher& riffExportDispatcher )
 {
     // try to restore from the cache if requested; usually on the first time through, done here as we need CoreGUI / path provider
     if ( m_tryLoadFromCache )
@@ -268,7 +428,18 @@ void SharedRiffView::State::imgui(
                         ImGui::TextColored( colour::shades::callout.neutral(), ICON_FA_CIRCLE_EXCLAMATION " showing data for user '%s', re-sync required", dataPtr->m_username.c_str() );
 
                     // add button that brings any currently playing riff into view inside the table
-                    ImGui::RightAlignSameLine( 28.0f );
+                    ImGui::RightAlignSameLine( 100.0f );
+                    {
+                        if ( ImGui::Button( ICON_FA_FLOPPY_DISK " ALL" ) )
+                        {
+                            coreGUI.activateModalPopup( "Bulk Export All Shared", [&, this]( const char* title )
+                                {
+                                    modalBulkExport( title, riffExportDispatcher );
+                                });
+                        }
+                        ImGui::CompactTooltip( "Start exporting ALL the shared riffs" );
+                    }
+                    ImGui::SameLine(0, 10.0f);
                     {
                         ImGui::Scoped::Enabled scrollButtonAvailable( m_currentlyPlayingSharedRiff );
                         bScrollToPlaying = ImGui::IconButton( ICON_FA_ARROWS_DOWN_TO_LINE );
@@ -283,7 +454,7 @@ void SharedRiffView::State::imgui(
                     {
                         ImGui::PushStyleVar( ImGuiStyleVar_ItemSpacing, { 4.0f, 0.0f } );
 
-                        if ( ImGui::BeginTable( "##shared_riff_table", 5,
+                        if ( ImGui::BeginTable( "##shared_riff_table", 6,
                             ImGuiTableFlags_ScrollY |
                             ImGuiTableFlags_Borders |
                             ImGuiTableFlags_RowBg   |
@@ -293,6 +464,7 @@ void SharedRiffView::State::imgui(
 
                             ImGui::TableSetupColumn( "Play", ImGuiTableColumnFlags_WidthFixed,  32.0f );
                             ImGui::TableSetupColumn( "Name", ImGuiTableColumnFlags_WidthStretch, 0.5f );
+                            ImGui::TableSetupColumn( "Save", ImGuiTableColumnFlags_WidthFixed,  32.0f );    // export to disk
                             ImGui::TableSetupColumn( "Web",  ImGuiTableColumnFlags_WidthFixed,  32.0f );    // launch web player
                             ImGui::TableSetupColumn( "Find", ImGuiTableColumnFlags_WidthFixed,  32.0f );    // instigate navigation in jam view, if possible
                             ImGui::TableSetupColumn( m_jamNameCacheUpdate ? cJamNameWorkerTitles[loopedSpinnerIndex] : cJamNameWorkerTitles[0],
@@ -306,31 +478,7 @@ void SharedRiffView::State::imgui(
                                 const bool bIsPlaying       = dataPtr->m_riffIDs[entry] == m_currentlyPlayingRiffID;
                                 const bool bRiffWasEnqueued = m_enqueuedRiffIDs.contains( dataPtr->m_riffIDs[entry] );
 
-                                // assemble an appropriate riff identity for this entry in the table; used when queueing playback etc
-                                // `asSharedRiff` controls which riff/jam identity to use; the 'shared' one is a special handling, the 
-                                // riff ID and jam ID are specific for resolving the shared data and for playback outside of the origin
-                                // jam (which may have been private)
-                                // .. if `asSharedRiff` is false, we use the original riff ID and origin jam ID (for navigation in jam view, for example)
-                                const auto getEntryRiffIdentity = [&](bool asSharedRiff) -> endlesss::types::RiffIdentity
-                                {
-                                    const bool bIsPersonalJam = dataPtr->m_jamIDs[entry].empty();  // no jam name, it's the users'
-                                    const endlesss::types::JamCouchID originJam( bIsPersonalJam ? dataPtr->m_username : dataPtr->m_jamIDs[entry] );
 
-                                    const endlesss::types::RiffCouchID sharedRiffToEnqueue( dataPtr->m_sharedRiffIDs[entry].c_str() );
-                                    const endlesss::types::RiffCouchID originRiffToEnqueue( dataPtr->m_riffIDs[entry] );
-
-                                    endlesss::types::IdentityCustomNaming customNaming;
-                                    
-                                    // encode an export/display name from the active username that shared the riff
-                                    // .. there is no way to get that info during network resolve, so we have to tag it here
-                                    customNaming.m_jamDisplayName = fmt::format( FMTX( "{}_{}" ), endlesss::types::Constants::SharedRiffJam(), dataPtr->m_username );
-
-                                    return endlesss::types::RiffIdentity(
-                                        asSharedRiff ? endlesss::types::Constants::SharedRiffJam() : originJam,
-                                        asSharedRiff ? sharedRiffToEnqueue : originRiffToEnqueue,
-                                        std::move( customNaming )
-                                    );
-                                };
 
                                 // keep track of if any of the shared riffs are considered active, used to enable scroll-to-playing button above
                                 // (done backwards due to nature of imguis)
@@ -352,7 +500,7 @@ void SharedRiffView::State::imgui(
                                         ImGui::Scoped::ToggleButton highlightButton( bIsPlaying, true );
                                         if ( ImGui::PrecisionButton( bRiffWasEnqueued ? ICON_FA_CIRCLE_CHEVRON_DOWN : ICON_FA_PLAY, buttonSizeMidTable, 1.0f ) )
                                         {
-                                            m_eventBusClient.Send< ::events::EnqueueRiffPlayback >( getEntryRiffIdentity( true ) );
+                                            m_eventBusClient.Send< ::events::EnqueueRiffPlayback >( getEntryRiffIdentity( entry, true, EAttachImage::IgnoreImage ) );
 
                                             // enqueue the riff ID, not the *shared* riff ID as the default riff ID is what will
                                             // be flowing back through "riff now being played" messages
@@ -377,6 +525,19 @@ void SharedRiffView::State::imgui(
                                 ImGui::TableNextColumn();
                                 {
                                     ImGui::Dummy( { 0, 0 } );
+                                    
+                                    const auto& sharedRiffKey = dataPtr->m_sharedRiffIDs[entry];
+
+                                    ImGui::Scoped::Disabled sd( m_sharedRiffExportOperationsMap.hasValue( sharedRiffKey ) );
+                                    if ( ImGui::PrecisionButton( ICON_FA_FLOPPY_DISK, buttonSizeMidTable, 1.0f ) )
+                                    {
+                                        const auto operationID = riffExportDispatcher.dispatchRiffExportAsync( getEntryRiffIdentity( entry, true, EAttachImage::AttachImage ) );
+                                        m_sharedRiffExportOperationsMap.add( operationID, sharedRiffKey );
+                                    }
+                                }
+                                ImGui::TableNextColumn();
+                                {
+                                    ImGui::Dummy( { 0, 0 } );
                                     if ( ImGui::PrecisionButton( ICON_FA_LINK, buttonSizeMidTable, 1.0f ) )
                                     {
                                         // cross-platform launch a browser to navigate to the Endlesss riff web player
@@ -390,7 +551,7 @@ void SharedRiffView::State::imgui(
                                     if ( ImGui::PrecisionButton( ICON_FA_GRIP, buttonSizeMidTable, 1.0f ) )
                                     {
                                         // dispatch a request to navigate this this riff, if we can find it
-                                        m_eventBusClient.Send< ::events::RequestNavigationToRiff >( getEntryRiffIdentity( false ) );
+                                        m_eventBusClient.Send< ::events::RequestNavigationToRiff >( getEntryRiffIdentity( entry, false, EAttachImage::IgnoreImage ) );
                                     }
                                 }
                                 ImGui::TableNextColumn();
@@ -506,9 +667,12 @@ SharedRiffView::~SharedRiffView()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void SharedRiffView::imgui( app::CoreGUI& coreGUI, endlesss::services::JamNameResolveProvider& jamNameResolver )
+void SharedRiffView::imgui(
+    app::CoreGUI& coreGUI,
+    endlesss::services::JamNameResolveProvider& jamNameResolver,
+    app::IRiffExportDispatcher& riffExportDispatcher )
 {
-    m_state->imgui( coreGUI, jamNameResolver );
+    m_state->imgui( coreGUI, jamNameResolver, riffExportDispatcher );
 }
 
 } // namespace ux

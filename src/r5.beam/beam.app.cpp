@@ -1143,7 +1143,7 @@ int BeamApp::EntrypointOuro()
             {
                 ABSL_ASSERT( result.jam.couchID == request.getJamID() );
 
-                endlesss::toolkit::Pipeline::applyRequestCustomNaming( request, result );
+                endlesss::toolkit::Pipeline::applyCustomIdentityData( request, result );
                 return true;
             }
 
