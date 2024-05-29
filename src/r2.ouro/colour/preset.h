@@ -34,6 +34,12 @@ struct Preset
         v.w = alpha;
         return v;
     }
+    ouro_nodiscard constexpr uint32_t lightU32A( float alpha = 1.0f ) const
+    {
+        ImVec4 v = m_light;
+        v.w = alpha;
+        return float4ToU32( v );
+    }
     ouro_nodiscard constexpr uint32_t lightU32() const { return m_lightU32; }
 
     ouro_nodiscard constexpr ImVec4 neutral( float alpha = 1.0f ) const
@@ -42,6 +48,12 @@ struct Preset
         v.w = alpha;
         return v;
     }
+    ouro_nodiscard constexpr uint32_t neutralU32A( float alpha = 1.0f ) const
+    {
+        ImVec4 v = m_neutral;
+        v.w = alpha;
+        return float4ToU32( v );
+    }
     ouro_nodiscard constexpr uint32_t neutralU32() const { return m_neutralU32; }
 
     ouro_nodiscard constexpr ImVec4 dark( float alpha = 1.0f ) const
@@ -49,6 +61,12 @@ struct Preset
         ImVec4 v = m_dark;
         v.w = alpha;
         return v;
+    }
+    ouro_nodiscard constexpr uint32_t darkU32A( float alpha = 1.0f ) const
+    {
+        ImVec4 v = m_dark;
+        v.w = alpha;
+        return float4ToU32( v );
     }
     ouro_nodiscard constexpr uint32_t darkU32() const { return m_darkU32; }
 
