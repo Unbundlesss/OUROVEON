@@ -178,7 +178,11 @@ std::vector<fs::path> exportRiff(
                             return dataClient->Get( parser.path() );
                             } );
 
-                        if ( res->status != 200 )
+                        if ( res == nullptr )
+                        {
+                            blog::error::core( "[Riff Image Download] http GET failed entirely" );
+                        }
+                        else if ( res->status != 200 )
                         {
                             blog::error::core( "[Riff Image Download] http GET failed, status {}", res->status );
                         }
