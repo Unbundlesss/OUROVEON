@@ -105,8 +105,9 @@ Stem::~Stem()
     mem::free16( m_channel[0] );
     mem::free16( m_channel[1] );
 
-    m_sampleCount = 0;
-    m_state       = State::Empty;
+    m_sampleCount       = 0;
+    m_state             = State::Empty;
+    m_stateHttpStatus   = 0;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -645,6 +646,7 @@ bool Stem::attemptRemoteFetch( const api::NetConfiguration& ncfg, const uint32_t
     {
         blog::error::stem( "HEAD [{}] client failure with error : {}", slashedKey, endlesss::api::getHttpLibErrorString(precheckError) );
         m_state = State::Failed_Http;
+        m_stateHttpStatus = precheckResult->status;
         return false;
     }
 
@@ -652,6 +654,7 @@ bool Stem::attemptRemoteFetch( const api::NetConfiguration& ncfg, const uint32_t
     {
         blog::error::stem( "HEAD [{}] response [{}]", slashedKey, precheckResult->status );
         m_state = State::Failed_Http;
+        m_stateHttpStatus = precheckResult->status;
         return false;
     }
 
@@ -731,6 +734,7 @@ bool Stem::attemptRemoteFetch( const api::NetConfiguration& ncfg, const uint32_t
     {
         blog::error::stem( "fetch ogg failed [{}{}] | {}", httpUrl, slashedKey, res->status );
         m_state = State::Failed_Http;
+        m_stateHttpStatus = res->status;
         return false;
     }
 

@@ -194,6 +194,12 @@ struct Stem
                  m_state == State::Failed_CacheDirectory );
     }
 
+    // NB this value will be 0 in all cases where we have no useful http status to cache, only useful if the state is Failed_Http
+    ouro_nodiscard constexpr uint32_t httpFailureStatus() const
+    {
+        return m_stateHttpStatus;
+    }
+
     ouro_nodiscard constexpr Compression getCompressionFormat() const
     {
         return m_compressionFormat;
@@ -259,8 +265,9 @@ private:
     // #TODO move into accessors
 public:
     const types::Stem               m_data;
-    ImU32                           m_colourU32;        // converted from m_data and cached
+    ImU32                           m_colourU32;            // converted from m_data and cached
     State                           m_state;
+    uint32_t                        m_stateHttpStatus = 0;  // saves the HTTP status if m_state is Failed_Http and it makes any sense to save it; 0 otherwise
 
     uint32_t                        m_sampleRate;
     int32_t                         m_sampleCount;
