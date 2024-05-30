@@ -666,6 +666,8 @@ protected:
     std::string                                 m_currentViewedJamName;
 
     std::optional< endlesss::types::RiffIdentity >  m_currentViewedJamScrollToRiff = std::nullopt;
+    std::optional< endlesss::types::RiffIdentity >  m_currentRiffToPing = std::nullopt;
+    float                                           m_currentRiffToPingTimer = 0;
 
 
 // data and callbacks used to react to changes from the warehouse
@@ -2803,6 +2805,10 @@ int LoreApp::EntrypointOuro()
                                             );
                                         }
 
+                                        // note the riff to "ping" on the view to help identify non-playing riffs
+                                        m_currentRiffToPing = m_currentViewedJamScrollToRiff;
+                                        m_currentRiffToPingTimer = 4.0f;
+
                                         m_currentViewedJamScrollToRiff = std::nullopt;
                                     }
 
@@ -2896,6 +2902,27 @@ int LoreApp::EntrypointOuro()
                                             draw_list->AddRectFilled( pos + riffRectXY, pos + riffRectXY + jamGridCell, jamCellColourEnqueue );
                                             draw_list->AddRectFilled( pos + riffRectXY, pos + riffRectXY + jamGridCell, jamCellColourLoading, 4.0f );
                                         }
+                                    }
+
+                                    // handle a ping happening on a riff to call attention to it
+                                    if ( m_currentRiffToPing.has_value() )
+                                    {
+                                        // pulse the ping and fade it out in the final second
+                                        m_currentRiffToPingTimer -= ImGui::GetIO().DeltaTime;
+                                        const float pingAlpha = std::clamp( m_currentRiffToPingTimer, 0.0f, 1.0f );
+                                        const float pingPulse = ( 1.0f + static_cast<float>( std::sin( ImGui::GetTime() * 8.0f ) ) ) * 0.5f;
+
+                                        const auto& activeRectIt = m_jamSliceSketch->m_riffToBitmapOffset.find( m_currentRiffToPing->getRiffID() );
+                                        if ( activeRectIt != m_jamSliceSketch->m_riffToBitmapOffset.end() )
+                                        {
+                                            const auto& riffRectXY = activeRectIt->second;
+                                            draw_list->AddRectFilled( pos + riffRectXY, pos + riffRectXY + jamGridCell, colour::shades::black.neutralU32A( pingAlpha ) );
+                                            draw_list->AddCircleFilled( pos + riffRectXY + jamGridCellCenter, jamGridCellHalf * 0.8f, colour::shades::white.neutralU32A( pingAlpha * pingPulse ) );
+                                        }
+
+                                        // once we're out of time, clear out the riff reference
+                                        if ( m_currentRiffToPingTimer <= 0.0f )
+                                            m_currentRiffToPing = std::nullopt;
                                     }
                                 }
                                 ImGui::PopStyleVar();
