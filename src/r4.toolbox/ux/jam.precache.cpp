@@ -82,7 +82,8 @@ struct JamPrecacheState
     std::atomic_uint32_t            m_statsStemsAlreadyInCache = 0;
     std::atomic_uint32_t            m_statsStemsDownloaded = 0;
     std::atomic_uint32_t            m_statsStemsMissingFromDb = 0;
-    std::atomic_uint32_t            m_statsStemsFailedToDownload = 0;
+    std::atomic_uint32_t            m_statsStemsFailedToDownload = 0;           // some kind of stem download error, may be resolveable with re-download
+    std::atomic_uint32_t            m_statsStemsFailedToDownloadTerminal = 0;   // 403 errors - the stem is gone forever
 
     std::atomic_uint32_t            m_downloadsDispatched = 0;
 
@@ -314,6 +315,17 @@ void JamPrecacheState::imgui(
 #endif // OURO_DEBUG
                                         blog::error::app( FMTX( "failed to download stem to cache : [{}]" ), stemID );
                                         ++m_statsStemsFailedToDownload;
+
+                                        // check if we have a recorded HTTP status - and if it's a permission failure, 
+                                        // it shows the bug we have had where some stems on the CDN have become permanently unreachable
+                                        const uint32_t httpFailureStatus = stemLivePtr->httpFailureStatus();
+                                        if ( httpFailureStatus != 0 )
+                                        {
+                                            if ( httpFailureStatus == 403 )
+                                            {
+                                                m_statsStemsFailedToDownloadTerminal++;
+                                            }
+                                        }
                                     }
                                     else
                                     {
@@ -388,7 +400,12 @@ void JamPrecacheState::imgui(
             ImGui::TextColored( colour::shades::toast.light(), "[ %6i ] Stems already in cache (%.1f%%)", stemsInCache, stemsInCachePct );
             ImGui::TextColored( colour::shades::callout.light(), "[ %6i ] Stems downloaded (%.1f%%)", stemsDownloaded, downloadedPct );
             if ( m_statsStemsFailedToDownload > 0 )
-                ImGui::TextColored( colour::shades::errors.light(), "[ %6i ] Stems failed to download", m_statsStemsFailedToDownload.load() );
+                ImGui::TextColored( colour::shades::errors.neutral(), "[ %6i ] Stems failed to download", m_statsStemsFailedToDownload.load() );
+            if ( m_statsStemsFailedToDownloadTerminal > 0 )
+            {
+                ImGui::TextColored( colour::shades::errors.light(), "[ %6i ] Stems failed to download permanently [?]", m_statsStemsFailedToDownloadTerminal.load() );
+                ImGui::CompactTooltip( "These stems returned a 403 error code from the CDN\nThere is no way to recover them" );
+            }
             if ( m_statsStemsMissingFromDb > 0 )
                 ImGui::TextColored( colour::shades::errors.light(), "[ %6i ] Stems missing from Warehouse", m_statsStemsMissingFromDb.load() );
         }
