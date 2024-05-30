@@ -9,6 +9,7 @@
 
 #include "pch.h"
 
+#include "base/text.h"
 #include "base/hashing.h"
 #include "data/uuid.h"
 #include "spacetime/chronicle.h"
@@ -655,8 +656,59 @@ bool SharedRiffsByUser::commonRequest( const NetConfiguration& ncfg, const std::
         meaning that the parser can just get to the actual meat of the array and ignore the gaps
      */
 
-    return deserializeJson< SharedRiffsByUser >( ncfg, res, *this, requestContext, "shared_riffs_by_user", []( std::string& bodyText )
+#ifdef INSANE_LAST_MINUTE_FIXING_THE_SHARED_RIFF_JSON_GLITCHES
+    static uint32_t exportIndexDbg = 0;
+#endif // INSANE_LAST_MINUTE_FIXING_THE_SHARED_RIFF_JSON_GLITCHES
+
+    return deserializeJson< SharedRiffsByUser >( ncfg, res, *this, requestContext, "shared_riffs_by_user", [&requestContext]( std::string& bodyText )
         {
+#ifdef INSANE_LAST_MINUTE_FIXING_THE_SHARED_RIFF_JSON_GLITCHES
+            exportIndexDbg++;
+
+            {
+                std::string outputFileName;
+                base::sanitiseNameForPath( requestContext, outputFileName, '_', false );
+                FILE* fExport = fopen( fmt::format( FMTX( "E:\\_DA_DEBUGS\\{}={}.before.json" ), exportIndexDbg, outputFileName ).c_str(), "wt");
+                fprintf( fExport, "%s\n", bodyText.c_str() );
+                fclose( fExport );
+            }
+            std::string pretest = bodyText;
+#endif // INSANE_LAST_MINUTE_FIXING_THE_SHARED_RIFF_JSON_GLITCHES
+
+            // first pass regex removes stuff like
+            //      {                              <- we inject a 'dead' current object to pass parsing without wrecking the contents of lists
+            //         "current": null                  in the process of trying to snip them out
+            //      },
+            //
+            //      "isNote":false,
+            //      "$type":null,                  <- this weird null entry for things
+            //      "primaryColour":"ff4d9de0",
+            //      "creationDate":null            <- ditto
+            //      ...
+            //
+            // because cereal just hates nulls. as do i, now. we do this to avoid the hardwired null 
+            // snipper below hitting them out of sequence and leaving orphaned keys
+            //
+            // first - swap out null 'current' entries in playback chunks with *some* kind of valid 'current' object to parse
+            bodyText = std::regex_replace( bodyText, std::regex( R"("current":null)" ), R"("current":{"on":false,"gain":0.0})" );
+            // then go hammer remaining weird "key":null stuff, we get a few random ones like "$type":null turning up completely randomly
+            bodyText = std::regex_replace( bodyText, std::regex( R"("[$a-zA-Z]+":null,)" ), " " );
+
+            // okay and also lets get rid of "loops":[null, too because that simplifies our later null neutering
+            // we do (null,)+ to strip out any early sequences of nulls - the code later in this function takes care of mid-array and end-of-array instances
+            bodyText = std::regex_replace( bodyText, std::regex( R"("loops":\[(null,)+)" ), R"("loops":[)" );
+
+#ifdef INSANE_LAST_MINUTE_FIXING_THE_SHARED_RIFF_JSON_GLITCHES
+            if ( pretest != bodyText )
+            {
+                std::string outputFileName;
+                base::sanitiseNameForPath( requestContext, outputFileName, '_', false );
+                FILE* fExport = fopen( fmt::format( FMTX( "E:\\_DA_DEBUGS\\{}={}.after.json" ), exportIndexDbg, outputFileName ).c_str(), "wt" );
+                fprintf( fExport, "%s\n", bodyText.c_str() );
+                fclose( fExport );
+            }
+#endif // INSANE_LAST_MINUTE_FIXING_THE_SHARED_RIFF_JSON_GLITCHES
+
             const std::size_t bodySize = bodyText.size();
             if ( bodySize <= 16 )
                 return;
@@ -667,27 +719,6 @@ bool SharedRiffsByUser::commonRequest( const NetConfiguration& ncfg, const std::
             char* bodyStream = &bodyText[0];
             for ( auto i = 0; i < bodySize - 16; i++ )
             {
-                // snip out any nulled 'current:' objects, they are marked as optional NVPs in the json anyway
-                CHECK_CHAR(  0, '\"')
-                CHECK_CHAR(  1, 'c')
-                CHECK_CHAR(  2, 'u')
-                CHECK_CHAR(  3, 'r')
-                CHECK_CHAR(  4, 'r')
-                CHECK_CHAR(  5, 'e')
-                CHECK_CHAR(  6, 'n' )
-                CHECK_CHAR(  7, 't')
-                CHECK_CHAR(  8, '\"')
-                CHECK_CHAR(  9, ':')
-                CHECK_CHAR( 10, 'n')
-                CHECK_CHAR( 11, 'u')
-                CHECK_CHAR( 12, 'l')
-                CHECK_CHAR( 13, 'l' )
-                CHECK_CHAR( 14, ',')
-                {
-                    for ( auto rp = 0; rp <= 14; rp++ )
-                        bodyStream[i + rp] = ' ';
-                }
-
                 CHECK_CHAR( 0, '\"')
                 CHECK_CHAR( 1, 'l')
                 CHECK_CHAR( 2, 'o')
@@ -732,14 +763,17 @@ bool SharedRiffsByUser::commonRequest( const NetConfiguration& ncfg, const std::
                     }
                 }
 
-                // remove "null," if we're inside "loops" [ ]
+                // remove ",null" if we're inside "loops" [ ]
                 if ( bReplacementMode )
                 {
-                    CHECK_CHAR( 0, 'n' )
-                    CHECK_CHAR( 1, 'u' )
-                    CHECK_CHAR( 2, 'l' )
+                    // im so tired
+lol_jesus_christ_a_goto:
+
+                    CHECK_CHAR( 0, ',' )
+                    CHECK_CHAR( 1, 'n' )
+                    CHECK_CHAR( 2, 'u' )
                     CHECK_CHAR( 3, 'l' )
-                    CHECK_CHAR( 4, ',' )
+                    CHECK_CHAR( 4, 'l' )
                     {
                         bodyStream[i + 0] = ' ';
                         bodyStream[i + 1] = ' ';
@@ -747,26 +781,22 @@ bool SharedRiffsByUser::commonRequest( const NetConfiguration& ncfg, const std::
                         bodyStream[i + 3] = ' ';
                         bodyStream[i + 4] = ' ';
                         i += 4;
-                        continue;
-                    }
 
-                    // handle end-of-list case, no comma
-                    CHECK_CHAR( 0, 'n' )
-                    CHECK_CHAR( 1, 'u' )
-                    CHECK_CHAR( 2, 'l' )
-                    CHECK_CHAR( 3, 'l' )
-                    CHECK_CHAR( 4, ']' )
-                    {
-                        bodyStream[i - 1] = ' ';    // remove trailing comma
-                        bodyStream[i + 0] = ' ';
-                        bodyStream[i + 1] = ' ';
-                        bodyStream[i + 2] = ' ';
-                        bodyStream[i + 3] = ' ';
-                        i += 3;
-                        continue;
+                        goto lol_jesus_christ_a_goto;
                     }
                 }
             }
+
+#ifdef INSANE_LAST_MINUTE_FIXING_THE_SHARED_RIFF_JSON_GLITCHES
+            if ( pretest != bodyText )
+            {
+                std::string outputFileName;
+                base::sanitiseNameForPath( requestContext, outputFileName, '_', false );
+                FILE* fExport = fopen( fmt::format( FMTX( "E:\\_DA_DEBUGS\\{}={}.final.json" ), exportIndexDbg, outputFileName ).c_str(), "wt" );
+                fprintf( fExport, "%s\n", bodyText.c_str() );
+                fclose( fExport );
+            }
+#endif  // INSANE_LAST_MINUTE_FIXING_THE_SHARED_RIFF_JSON_GLITCHES
         });
 
     #undef CHECK_CHAR
