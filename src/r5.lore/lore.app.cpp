@@ -2028,10 +2028,17 @@ int LoreApp::EntrypointOuro()
     const bool bHasValidEndlesssAuth = m_networkConfiguration->hasAccess( endlesss::api::NetConfiguration::Access::Authenticated );
 
     // default to viewing logged-in user in the jam view highlight
+#if OURO_HAS_NDLS_ONLINE
     if ( bHasValidEndlesssAuth )
     {
         m_jamVisualisation.m_userHighlight1.m_user.setUsername( m_networkConfiguration->auth().user_id );
     }
+#else
+    {
+        // with no network config, take the "impersonator" username set during startup
+        m_jamVisualisation.m_userHighlight1.m_user.setUsername( m_configNoNet.impersonationUsername );
+    }
+#endif // OURO_HAS_NDLS_ONLINE
 
     if ( m_configPerf.enableVibesRenderer )
     {
@@ -3576,6 +3583,7 @@ int LoreApp::EntrypointOuro()
                                 m_warehouseContentsReport.m_totalPopulatedStems).c_str()
                         );
 
+#if OURO_HAS_NDLS_ONLINE
                         // button to start the sync process on every jam we know about
                         ImGui::RightAlignSameLine( toolbarButtonSize.x + cEdgeInsetSize );
                         if ( ImGui::Button( " " ICON_FA_ARROWS_ROTATE " Sync All", toolbarButtonSize ) )
@@ -3588,6 +3596,7 @@ int LoreApp::EntrypointOuro()
                             }
                         }
                         ImGui::CompactTooltip( "Trigger a sync for all jams\nThis may take a while if you have lots of jams!" );
+#endif // OURO_HAS_NDLS_ONLINE
                     }
                     else
                     if ( warehouseView == WarehouseView::ContentsManagement )
@@ -3725,6 +3734,7 @@ int LoreApp::EntrypointOuro()
 
                         ImGui::RightAlignSameLine( (toolbarButtonSize.x * 2.0f) + cButtonGapSize + cEdgeInsetSize );
 
+#if OURO_HAS_NDLS_ONLINE
                         if ( ImGui::Button( " " ICON_FA_CODE_MERGE " Conflicts...", toolbarButtonSize ) )
                         {
                             activateModalPopup( "Set Conflict Resolution Mode", [&, this]( const char* title )
@@ -3775,6 +3785,7 @@ int LoreApp::EntrypointOuro()
                             });
                         }
                         ImGui::CompactTooltip( "Configure logic for handling Riff ID conflicts during sync" );
+#endif // OURO_HAS_NDLS_ONLINE
 
                         ImGui::SameLine( 0, cButtonGapSize );
                         {
@@ -4114,6 +4125,7 @@ int LoreApp::EntrypointOuro()
                             {
                                 const char* jamBandID = iterCurrentJamID.c_str();
 
+#if OURO_HAS_NDLS_ONLINE
                                 {
                                     // disable tools if we're syncing
                                     ImGui::Scoped::Disabled sd( bIsJamInFlux );
@@ -4133,8 +4145,9 @@ int LoreApp::EntrypointOuro()
                                     }
                                     ImGui::CompactTooltip( "Display tools for validating the data in the warehouse against the Endlesss server" );
                                 }
-                                
                                 ImGui::SameLine();
+#endif // OURO_HAS_NDLS_ONLINE
+
                                 ImGui::AlignTextToFramePadding();
                                 ImGui::TextDisabled( "%s", jamBandID );
                                 if ( ImGui::IsItemClicked() )

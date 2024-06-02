@@ -5,6 +5,8 @@
 //  \\ harry denholm \\ ishani            ishani.org/shelf/ouroveon/
 //
 
+#pragma once
+
 #include "base/utils.h"
 #include "endlesss/core.types.h"
 #include "endlesss/toolkit.population.h"

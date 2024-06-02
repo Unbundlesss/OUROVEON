@@ -271,9 +271,9 @@ bool TagLineToolProvider::isToolEnabled( const ToolID id, const endlesss::live::
 
     // check on virtual riffs, we can't do stuff like share or find them
     if ( id == ToolID::NavigateTo 
-#if OURO_HAS_NDLS_SHARING
+#if OURO_HAS_NDLS_ONLINE
         || id == ToolID::ShareToFeed 
-#endif // OURO_HAS_NDLS_SHARING
+#endif // OURO_HAS_NDLS_ONLINE
         )
     {
         if ( currentRiff != nullptr )

@@ -46,8 +46,10 @@ namespace app {
 struct AdvancedOptionsBlock
 {
     bool    bShow = false;
+#if OURO_HAS_NDLS_ONLINE
     bool    bEnableNetworkLogging = false;
     bool    bEnableLastMinuteQuirkFixes = false;
+#endif // OURO_HAS_NDLS_ONLINE
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -122,7 +124,7 @@ int OuroApp::EntrypointGUI()
         ImGui::PopStyleColor();
     });
 
-    // network activity display
+    // background task activity display
     const auto sbbAsyncTaskActivity = registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Right, 100.0f, [this]()
     {
         if ( m_asyncTaskActivityIntensity > 0 )
@@ -132,6 +134,8 @@ int OuroApp::EntrypointGUI()
             ImGui::TextUnformatted( pulseOverview.c_str() );
         }
     });
+
+#if OURO_HAS_NDLS_ONLINE
     // network activity display
     const auto sbbNetworkActivity = registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Right, 300.0f, [this]()
     {
@@ -142,13 +146,18 @@ int OuroApp::EntrypointGUI()
 
         ImGui::TextUnformatted( networkState );
     });
-
+#endif // OURO_HAS_NDLS_ONLINE
 
     // load any saved configs
     config::endlesss::Auth endlesssAuth;
     /* const auto authLoadResult    = */ config::load( *this, endlesssAuth );
 
     // #HDD check and do something with config load results?
+
+    // "no-network" config bits, doesn't matter if it doesn't exist
+    if ( config::load( *this, m_configNoNet ) == config::LoadResult::Success )
+        m_noNetImpersonationUser.setUsername( m_configNoNet.impersonationUsername );
+
 
 
     app::AudioDeviceQuery adq;
@@ -240,7 +249,9 @@ int OuroApp::EntrypointGUI()
     bool bEnableCacheManagementMenu = false;
 
     bool successfulBreakFromLoop = false;
+#if OURO_HAS_NDLS_ONLINE
     bool endlesssAuthExpired = false;
+#endif // OURO_HAS_NDLS_ONLINE
 
     // configuration preflight
     while ( beginInterfaceLayout( CoreGUI::VF_WithStatusBar ) )
@@ -302,8 +313,10 @@ int OuroApp::EntrypointGUI()
                     if ( advancedOptionsBlock.bShow )
                     {
                         ImGui::TextUnformatted( "Advanced Toggles" );
+#if OURO_HAS_NDLS_ONLINE
                         ImGui::Checkbox( " Enable Network Diagnostics", &advancedOptionsBlock.bEnableNetworkLogging );
                         ImGui::Checkbox( " Enable Last Minute Fixes", &advancedOptionsBlock.bEnableLastMinuteQuirkFixes );
+#endif // OURO_HAS_NDLS_ONLINE
                         ImGui::Checkbox( " Cache Management Tools", &bEnableCacheManagementMenu );
                     }
                     else
@@ -480,13 +493,52 @@ int OuroApp::EntrypointGUI()
                 }
                 else
                 {
-                    // ---------------------------------------------------------------------------------------------------------
-                    // check in on our configured access to Endlesss' services
-
                     static bool endlesssWorkUnauthorised = false;
                     {
                         m_mdFrontEnd->titleText( "Endlesss Accesss" );
                         ImGui::Indent( perBlockIndent );
+
+#if !OURO_HAS_NDLS_ONLINE
+
+                        endlesssWorkUnauthorised = true;
+
+                        ImGui::TextColored(
+                            colour::shades::errors.neutral(),
+                            "Endlesss has ceased operations, servers are down." );
+                        ImGui::TextColored(
+                            colour::shades::callout.neutral(),
+                            "All network access will be disabled." );
+
+                        ImGui::Spacing();
+                        ImGui::Spacing();
+
+                        {
+                            ImGui::AlignTextToFramePadding();
+                            ImGui::TextDisabled( "[?]" );
+                            ImGui::CompactTooltip( "Enter a username to identify as for this session, for any views that work best with a known/default user" );
+                            ImGui::SameLine();
+                            ImGui::TextUnformatted( "Identify As" );
+                            ImGui::SameLine();
+
+                            if ( m_noNetImpersonationUser.imgui( "##impersonateusername", getEndlesssPopulation(), ImGui::ux::UserSelector::cDefaultWidthForUserSize ) )
+                            {
+                                m_configNoNet.impersonationUsername = m_noNetImpersonationUser.getUsername();
+
+                                const auto noNetSaveResult = config::save( *this, m_configNoNet );
+                                if ( noNetSaveResult != config::SaveResult::Success )
+                                {
+                                    blog::error::cfg( "Unable to save no-net configuration" );
+                                }
+                            }
+                        }
+
+                        if ( m_networkConfiguration->hasNoAccessSet() )
+                            m_networkConfiguration->initWithoutAuthentication( m_appEventBus, m_configEndlesssAPI );
+                    
+#else // !OURO_HAS_NDLS_ONLINE
+
+                    // ---------------------------------------------------------------------------------------------------------
+                    // check in on our configured access to Endlesss' services
 
                         {
                             ImGui::Checkbox( " Unstable Network Compensation", &m_configPerf.enableUnstableNetworkCompensation );
@@ -728,6 +780,7 @@ int OuroApp::EntrypointGUI()
                             }
                         }
 
+#endif // OURO_HAS_NDLS_ONLINE
 
                         ImGui::Unindent( perBlockIndent );
                         ImGui::Spacing();
@@ -949,6 +1002,7 @@ int OuroApp::EntrypointGUI()
             break;
     }
 
+#if OURO_HAS_NDLS_ONLINE
     // if we passed over Endlesss authentication, create a net config structure that only knows how to talk to public
     // stuff (so we can still pull stems from the CDN on demand, for example)
     if ( m_networkConfiguration->hasNoAccessSet() )
@@ -959,7 +1013,14 @@ int OuroApp::EntrypointGUI()
         else
             m_networkConfiguration->initWithoutAuthentication( m_appEventBus, m_configEndlesssAPI );
     }
+#else
+    {
+        // we should be already configured in the no-endlesss mode, forced to No Auth mode even though we also won't be using the netconfig anymore in this build
+        ABSL_ASSERT( m_networkConfiguration->hasNoAccessSet() == false );
+    }
+#endif // OURO_HAS_NDLS_ONLINE
 
+#if OURO_HAS_NDLS_ONLINE
     if ( advancedOptionsBlock.bShow )
     {
         if ( advancedOptionsBlock.bEnableNetworkLogging )
@@ -967,6 +1028,7 @@ int OuroApp::EntrypointGUI()
         if ( advancedOptionsBlock.bEnableLastMinuteQuirkFixes )
             m_networkConfiguration->enableLastMinuteQuirkFixes();
     }
+#endif // OURO_HAS_NDLS_ONLINE
 
     // save any config data blocks
     {
@@ -1145,7 +1207,7 @@ int OuroApp::EntrypointGUI()
             } );
     }
 
-#if OURO_HAS_NDLS_SHARING
+#if OURO_HAS_NDLS_ONLINE
 
     // run the Clubs data fetch in the background, unbounded; this seems to sometimes take an age and I don't want it
     // slowing down our app startup. anything using this data needs to check if its valid
@@ -1180,7 +1242,7 @@ int OuroApp::EntrypointGUI()
             }
         });
 
-#endif // OURO_HAS_NDLS_SHARING
+#endif // OURO_HAS_NDLS_ONLINE
 
 
     // =================================================================================================================
@@ -1322,7 +1384,7 @@ void OuroApp::event_ExportRiff( const events::ExportRiff* eventData )
 // ---------------------------------------------------------------------------------------------------------------------
 void OuroApp::event_RequestToShareRiff( const events::RequestToShareRiff* eventData )
 {
-#if OURO_HAS_NDLS_SHARING
+#if OURO_HAS_NDLS_ONLINE
 
     activateModalPopup( "Share Riff", [
         this,
@@ -1339,12 +1401,14 @@ void OuroApp::event_RequestToShareRiff( const events::RequestToShareRiff* eventD
         "Sharing to Endlesss Disabled",
         "You shouldn't have been able to do this");
 
-#endif // OURO_HAS_NDLS_SHARING
+#endif // OURO_HAS_NDLS_ONLINE
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 void OuroApp::event_BNSCacheMiss( const events::BNSCacheMiss* eventData )
 {
+#if OURO_HAS_NDLS_ONLINE
+
     // kick a task that uses a few network calls to go from a band### id to a public name; this uses the permalink
     // endpoint (to get the extended ID) and the public riff API with that ID to snag the names
     getTaskExecutor().silent_async( [this, jamID = eventData->m_jamID, netCfg = getNetworkConfiguration()]()
@@ -1395,6 +1459,12 @@ void OuroApp::event_BNSCacheMiss( const events::BNSCacheMiss* eventData )
                 }
             }
         });
+
+#else
+
+    blog::debug::api( FMTX( "ignored name resolution cache miss, {}" ), eventData->m_jamID );
+
+#endif // OURO_HAS_NDLS_ONLINE
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

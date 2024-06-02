@@ -7,7 +7,7 @@
 //  
 //
 
-#define OURO_FRAMEWORK_VERSION    "1.0.1"
+#define OURO_FRAMEWORK_VERSION    "1.1.0"
 #define OURO_FRAMEWORK_CREDIT     "ishani.org 2024"
 #define OURO_FRAMEWORK_URL        "https://ishani.org/shelf/ouroveon/"
 

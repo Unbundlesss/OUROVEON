@@ -315,7 +315,7 @@ void SharedRiffView::State::imgui(
 
     // iteratively resolve jam names, one a frame
     // this process can be restarted if the jam name cache providers send out a message that new data has arrived
-    if ( m_jamNameCacheUpdate && m_sharesData.ok() )
+    if ( !m_fetchInProgress && m_jamNameCacheUpdate && m_sharesData.ok() )
     {
         const auto dataPtr = *m_sharesData;
 
@@ -363,8 +363,16 @@ void SharedRiffView::State::imgui(
         // choose a user and fetch latest data on request
         {
             ImGui::AlignTextToFramePadding();
+#if !OURO_HAS_NDLS_ONLINE
+            ImGui::TextUnformatted( "Offline data for");
+            ImGui::SameLine();
+#endif // !OURO_HAS_NDLS_ONLINE
             ImGui::TextUnformatted( ICON_FA_USER );
             ImGui::SameLine();
+#if !OURO_HAS_NDLS_ONLINE
+            ImGui::TextColored( colour::shades::lime.neutral(), m_user.getUsername().c_str() );
+            ImGui::SameLine(0, 25.0f);
+#else
             m_user.imgui( "username", coreGUI.getEndlesssPopulation(), ImGui::ux::UserSelector::cDefaultWidthForUserSize );
             ImGui::SameLine();
             {
@@ -386,6 +394,7 @@ void SharedRiffView::State::imgui(
                 }
             }
             ImGui::SameLine();
+#endif // OURO_HAS_NDLS_ONLINE
         }
 
         if ( bIsFetchingData )
@@ -427,7 +436,7 @@ void SharedRiffView::State::imgui(
                     else
                         ImGui::TextColored( colour::shades::callout.neutral(), ICON_FA_CIRCLE_EXCLAMATION " showing data for user '%s', re-sync required", dataPtr->m_username.c_str() );
 
-                    // add button that brings any currently playing riff into view inside the table
+#if OURO_HAS_NDLS_ONLINE
                     ImGui::RightAlignSameLine( 100.0f );
                     {
                         if ( ImGui::Button( ICON_FA_FLOPPY_DISK " ALL" ) )
@@ -440,7 +449,11 @@ void SharedRiffView::State::imgui(
                         ImGui::CompactTooltip( "Start exporting ALL the shared riffs" );
                     }
                     ImGui::SameLine(0, 10.0f);
+#else
+                    ImGui::RightAlignSameLine( 30.0f );
+#endif // OURO_HAS_NDLS_ONLINE
                     {
+                        // add button that brings any currently playing riff into view inside the table
                         ImGui::Scoped::Enabled scrollButtonAvailable( m_currentlyPlayingSharedRiff );
                         bScrollToPlaying = ImGui::IconButton( ICON_FA_ARROWS_DOWN_TO_LINE );
                         ImGui::CompactTooltip( "Scroll to currently playing riff" );
@@ -454,7 +467,12 @@ void SharedRiffView::State::imgui(
                     {
                         ImGui::PushStyleVar( ImGuiStyleVar_ItemSpacing, { 4.0f, 0.0f } );
 
-                        if ( ImGui::BeginTable( "##shared_riff_table", 6,
+                        if ( ImGui::BeginTable( "##shared_riff_table",
+#if OURO_HAS_NDLS_ONLINE
+                            6,
+#else
+                            3,
+#endif // OURO_HAS_NDLS_ONLINE
                             ImGuiTableFlags_ScrollY |
                             ImGuiTableFlags_Borders |
                             ImGuiTableFlags_RowBg   |
@@ -462,10 +480,14 @@ void SharedRiffView::State::imgui(
                         {
                             ImGui::TableSetupScrollFreeze( 0, 1 );  // top row always visible
 
+#if OURO_HAS_NDLS_ONLINE
                             ImGui::TableSetupColumn( "Play", ImGuiTableColumnFlags_WidthFixed,  32.0f );
+#endif // OURO_HAS_NDLS_ONLINE
                             ImGui::TableSetupColumn( "Name", ImGuiTableColumnFlags_WidthStretch, 0.5f );
+#if OURO_HAS_NDLS_ONLINE
                             ImGui::TableSetupColumn( "Save", ImGuiTableColumnFlags_WidthFixed,  32.0f );    // export to disk
                             ImGui::TableSetupColumn( "Web",  ImGuiTableColumnFlags_WidthFixed,  32.0f );    // launch web player
+#endif // OURO_HAS_NDLS_ONLINE
                             ImGui::TableSetupColumn( "Find", ImGuiTableColumnFlags_WidthFixed,  32.0f );    // instigate navigation in jam view, if possible
                             ImGui::TableSetupColumn( m_jamNameCacheUpdate ? cJamNameWorkerTitles[loopedSpinnerIndex] : cJamNameWorkerTitles[0],
                                                              ImGuiTableColumnFlags_WidthStretch, 0.5f);
@@ -486,6 +508,7 @@ void SharedRiffView::State::imgui(
 
                                 ImGui::PushID( (int32_t)entry );
 
+#if OURO_HAS_NDLS_ONLINE
                                 ImGui::TableNextColumn();
                                 {
                                     // show some indication that work is in progress for this entry if it's been asked to play
@@ -511,6 +534,7 @@ void SharedRiffView::State::imgui(
                                             ImGui::ScrollToItem( ImGuiScrollFlags_KeepVisibleCenterY );
                                     }
                                 }
+#endif // OURO_HAS_NDLS_ONLINE
                                 ImGui::TableNextColumn();
                                 ImGui::AlignTextToFramePadding();
                                 {
@@ -522,6 +546,7 @@ void SharedRiffView::State::imgui(
                                     }
                                     ImGui::TextUnformatted( dataPtr->m_names[entry] );
                                 }
+#if OURO_HAS_NDLS_ONLINE
                                 ImGui::TableNextColumn();
                                 {
                                     ImGui::Dummy( { 0, 0 } );
@@ -545,6 +570,7 @@ void SharedRiffView::State::imgui(
                                         xpOpenURL( webPlayerURL.c_str() );
                                     }
                                 }
+#endif // OURO_HAS_NDLS_ONLINE
                                 ImGui::TableNextColumn();
                                 {
                                     ImGui::Dummy( { 0, 0 } );

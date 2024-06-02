@@ -11,8 +11,13 @@
 
 #include "app/core.h"
 
+#include "config/nonet.h"
 #include "discord/config.h"
 #include "endlesss/core.services.h"
+
+#if !OURO_HAS_NDLS_ONLINE
+#include "ux/user.selector.h"
+#endif // OURO_HAS_NDLS_ONLINE
 
 namespace rec { struct IRecordable; }
 namespace app {
@@ -93,10 +98,15 @@ protected:
 
     // -----------------------------------------------------------------------------------------------------------------
 
-#if OURO_HAS_NDLS_SHARING
+#if OURO_HAS_NDLS_ONLINE
     endlesss::api::MyClubs::ChannelsList    m_clubsChannels;
     std::atomic_bool                        m_clubsIntegrationEnabled = false;  // if true, we have valid Clubs data fetched
-#endif // OURO_HAS_NDLS_SHARING
+#endif // OURO_HAS_NDLS_ONLINE
+
+#if !OURO_HAS_NDLS_ONLINE
+    config::NoNet                           m_configNoNet;
+    ImGui::ux::UserSelector                 m_noNetImpersonationUser;
+#endif // OURO_HAS_NDLS_ONLINE
 
     // -----------------------------------------------------------------------------------------------------------------
 

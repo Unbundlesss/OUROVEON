@@ -1049,7 +1049,12 @@ protected:
         BOND = 1
     };
 
-    StreamSource                            m_streamMode = StreamSource::EndlesssJam;
+    StreamSource                            m_streamMode = 
+#if OURO_HAS_NDLS_ONLINE
+        StreamSource::EndlesssJam;
+#else
+        StreamSource::BOND;
+#endif // OURO_HAS_NDLS_ONLINE
 
 protected:
 
@@ -1283,7 +1288,14 @@ int BeamApp::EntrypointOuro()
                 ImGui::Scoped::Enabled se( bIsSourceSwitchEnabled );
                 ImGui::TextUnformatted( "Select Stream Source :" );
                 ImGui::Indent( 16.0f );
-                ImGui::RadioButton( " Live Endlesss Jam", (int32_t*) &m_streamMode, static_cast<int32_t>( StreamSource::EndlesssJam ) );
+#if !OURO_HAS_NDLS_ONLINE
+                {
+                    ImGui::Scoped::Disabled sd( true );
+#endif // !OURO_HAS_NDLS_ONLINE
+                    ImGui::RadioButton( " Live Endlesss Jam", (int32_t*) &m_streamMode, static_cast<int32_t>( StreamSource::EndlesssJam ) );
+#if !OURO_HAS_NDLS_ONLINE
+                }
+#endif // !OURO_HAS_NDLS_ONLINE
                 ImGui::RadioButton( " BOND Transmission", (int32_t*) &m_streamMode, static_cast<int32_t>( StreamSource::BOND ) );
                 ImGui::Unindent( 16.0f );
                 ImGui::Spacing();
