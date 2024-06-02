@@ -536,7 +536,7 @@ plug::runtime::CLAP::Instance CLAP::deactivate(
         runtimeInstance->m_knownPlugin.m_version );
 
     onlineInstance.reset();
-    return std::move( runtimeInstance );
+    return runtimeInstance;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

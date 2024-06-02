@@ -73,7 +73,7 @@ CLAP::Instance CLAP::createAndPopulateAsync( tf::Executor& taskExecutor )
     Instance result = base::protected_make_unique<CLAP>();
     result->beginPopulateAsync( taskExecutor );
 
-    return std::move( result );
+    return result;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
