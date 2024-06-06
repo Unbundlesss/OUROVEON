@@ -110,13 +110,19 @@ With BOTH of these files, you can import the whole jam into a new LORE installat
 
 ## Importing A Jam
 
-Got hold of a couple ORX backup files have ya? Let's get them imported into LORE so you can browse that jam.
+If you have some archive package files you want to bring into LORE, read on.
 
 For ease of import, I recommend you put the `.YAML` and `.TAR` files into the `\lore\$database_exports` path discussed above.
 
+Use the **EXPORT** -> *Open Output Folder...* menu item To jump to your local Output folder.
+
 ![export panel](/doc/lore-085/export-output-folder.png)
 
-To jump to your local Output folder where you'll find it.
+If the directory `$database_exports` doesn't exist in there, create it. This is where you need to put your `.YAML` and `.TAR` files.
+
+![export panel](/doc/lore-085/import-dir.png)
+
+Return to LORE.
 
 You'll need to be on the *third* page of the Data Warehouse panel. If you want to know how to change pages, check the [UI layout](/doc/LORE.ui-layout.MD) doc.
 
@@ -125,9 +131,11 @@ You'll need to be on the *third* page of the Data Warehouse panel. If you want t
 
 You use the **Import Data** button to load `.YAML` files into the local database. This loads up all the riff and stem metadata, ready to browse.
 
+![export panel](/doc/lore-085/import-dlg.png)
+
 You use the **Import Stems** button to unpack `.TAR` files full of stem audio into your local cache, meaning you no longer have to ask the Endlesss servers for audio data - it will be loaded automatically from your local cache.
 
-Import the Data and Stems - doesn't matter which order you do so - each one may take a moment, LORE will display a Busy indicator at the bottom-right as it works and pop a toast notification once they are done.
+Import **BOTH** the Data and Stems - doesn't matter which order you do so - each one may take a moment, LORE will display a Busy indicator at the bottom-right as it works and pop a toast notification once they are done.
 
 ![export panel](/doc/lore-085/import-progress.gif)
 
