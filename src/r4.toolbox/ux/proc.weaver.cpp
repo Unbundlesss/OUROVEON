@@ -757,10 +757,10 @@ void Weaver::State::imgui(
 
     if ( ImGui::Begin( ICON_FA_ARROWS_TO_DOT " Weaver###proc_weaver" ) )
     {
-        ImGui::TextColored( colour::shades::callout.light(), "Stem Search Space" );
-
-        ImGui::SeparatorBreak();
+        ImGui::Spacing();
         ImGui::Indent( subgroupInsetSize );
+
+        endlesss::constants::RootScalePairs adjacents = getRootScalePairsForCurrentSearch();
 
         {
             ImGui::PushItemWidth( 80.0f );
@@ -802,8 +802,29 @@ void Weaver::State::imgui(
             }
 
             ImGui::PopItemWidth();
+
+            {
+                ImGui::SameLine( 0, 20.0f );
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextUnformatted( "Harmonic Search Mode :" );
+                ImGui::SameLine();
+                ImGui::TextDisabled( "[?]" );
+                if ( ImGui::IsItemHovered( ImGuiHoveredFlags_DelayNormal ) )
+                {
+                    std::string fullHarmonicTip = "Include closely related keys or other interesting key/modes; currently:\n";
+                    for ( const auto& adj : adjacents.pairs )
+                    {
+                        fullHarmonicTip += "\n";
+                        fullHarmonicTip += endlesss::constants::cRootNames[adj.root];
+                        fullHarmonicTip += " ";
+                        fullHarmonicTip += endlesss::constants::cScaleNames[adj.scale];
+                    }
+                    ImGui::CompactTooltip( fullHarmonicTip );
+                }
+            }
         }
-        ImGui::Spacing();
+
+
         {
             ImGui::AlignTextToFramePadding();
             ImGui::TextUnformatted( "       Sort by" );
@@ -815,27 +836,14 @@ void Weaver::State::imgui(
             if ( ImGui::RadioButton( "Riff Count", &m_searchOrdering, 1 ) )
                 resetSelection();
         }
-
-        endlesss::constants::RootScalePairs adjacents = getRootScalePairsForCurrentSearch();
-
         {
-            ImGui::SameLine( 0, 120.0f );
-            ImGui::AlignTextToFramePadding();
-            ImGui::TextUnformatted( "Harmonic Search Mode :" );
-            ImGui::SameLine();
-            ImGui::TextDisabled( "[?]" );
-            if ( ImGui::IsItemHovered( ImGuiHoveredFlags_DelayNormal ) )
+            ImGui::SameLine( 0, 115.0f );
+            ImGui::PushItemWidth( 280.0f );
+            if ( endlesss::constants::HarmonicSearch::ImGuiCombo( "##harmonic", m_harmonicSearch ) )
             {
-                std::string fullHarmonicTip = "Include closely related keys or other interesting key/modes; currently:\n";
-                for ( const auto& adj : adjacents.pairs )
-                {
-                    fullHarmonicTip += "\n";
-                    fullHarmonicTip += endlesss::constants::cRootNames[adj.root];
-                    fullHarmonicTip += " ";
-                    fullHarmonicTip += endlesss::constants::cScaleNames[adj.scale];
-                }
-                ImGui::CompactTooltip( fullHarmonicTip );
+                resetSelection();
             }
+            ImGui::PopItemWidth();
         }
 
         if ( m_awaitingBpmSearch || m_deferredBPMSearch > 0 )
@@ -860,7 +868,10 @@ void Weaver::State::imgui(
             m_awaitingBpmSearch = false;
             m_deferredBPMSearch = 0;
         }
+
         ImGui::Spacing();
+        ImGui::Spacing();
+
         {
             ImGui::AlignTextToFramePadding();
             ImGui::TextUnformatted( " BPM :");
@@ -893,15 +904,6 @@ void Weaver::State::imgui(
             }
 
             {
-                ImGui::SameLine( 0, 18.0f );
-                ImGui::PushItemWidth( 280.0f );
-                if ( endlesss::constants::HarmonicSearch::ImGuiCombo( "##harmonic", m_harmonicSearch ) )
-                {
-                    resetSelection();
-                }
-                ImGui::PopItemWidth();
-            }
-            {
                 // align with above
                 ImGui::AlignTextToFramePadding();
                 ImGui::TextUnformatted( "      " );
@@ -918,7 +920,7 @@ void Weaver::State::imgui(
                     if ( m_searchLockedBPM > 0 )
                     {
                         bool lockedToBPM = true;
-                        if ( ImGui::Checkbox( fmt::format( FMTX( "Locked BPM to {}" ), m_searchLockedBPM ).c_str(), &lockedToBPM ) )
+                        if ( ImGui::Checkbox( fmt::format( FMTX( "Locked BPM to {:<3}" ), m_searchLockedBPM ).c_str(), &lockedToBPM ) )
                         {
                             m_searchLockedBPM = 0;
                         }
@@ -927,74 +929,31 @@ void Weaver::State::imgui(
                     else
                     {
                         bool lockedToBPM = false;
-                        if ( ImGui::Checkbox( fmt::format( FMTX( "Lock BPM to {}" ), targetLockBPM ).c_str(), &lockedToBPM ) )
+                        if ( ImGui::Checkbox( fmt::format( FMTX( "Lock BPM to {:<3}  " ), targetLockBPM ).c_str(), &lockedToBPM ) )
                         {
                             m_searchLockedBPM = targetLockBPM;
                         }
                     }
                 }
-            }
 
+                {
+                    ImGui::SameLine( 0, 180.0f );
+                    ImGui::Checkbox( " Ignore Tired Presets", &m_ignoreAnnoyingPresets );
+                    ImGui::SameLine();
+                    ImGui::TextDisabled( "[?]" );
+                    ImGui::CompactTooltip( "GO AWAY, EARDROP" );
+                }
+            }
 
             ImGui::Unindent( subgroupInsetSize );
 
             ImGui::Spacing();
+            ImGui::Spacing();
             ImGui::SeparatorBreak();
+            ImGui::Spacing();
             ImGui::Spacing();
 
             ImGui::TextColored( colour::shades::callout.light(), "Generation" );
-            {
-                const float cSeedButtonWidth = 280.0f;
-                ImGui::RightAlignSameLine( cSeedButtonWidth );
-                ImGui::Scoped::Enabled se( currentRiffIsValid );
-                if ( ImGui::Button( ICON_FA_MAGNET " Seed from Currently Playing ", { cSeedButtonWidth, 0.0f }) )
-                {
-                    buildVirtualRiffFromLive( currentRiff );
-                }
-            }
-
-            ImGui::Spacing();
-            {
-                ImGui::Checkbox( " Ignore Tired Presets", &m_ignoreAnnoyingPresets );
-            }
-            {
-
-                std::lock_guard<std::mutex> locked( m_generationUndoRedoMutex );
-                const bool hasUndo = !m_generationUndoBuffer.empty();
-                const bool hasRedo = !m_generationRedoBuffer.empty();
-                {
-                    ImGui::Scoped::Enabled se( hasUndo );
-                    ImGui::SameLine();
-                    if ( ImGui::Button( "Undo" ) )
-                    {
-                        if ( doUndo() )
-                        {
-                            m_generationInProgress = true;
-                            coreGUI.getTaskExecutor().silent_async( [this, &warehouse]
-                                {
-                                    enqeuePlaybackVirtualRiff( warehouse );
-                                    m_generationInProgress = false;
-                                });
-                        }
-                    }
-                }
-                {
-                    ImGui::Scoped::Enabled se( hasRedo );
-                    ImGui::SameLine();
-                    if ( ImGui::Button( "Redo" ) )
-                    {
-                        if ( doRedo() )
-                        {
-                            m_generationInProgress = true;
-                            coreGUI.getTaskExecutor().silent_async( [this, &warehouse]
-                                {
-                                    enqeuePlaybackVirtualRiff( warehouse );
-                                    m_generationInProgress = false;
-                                });
-                        }
-                    }
-                }
-            }
 
             {
                 ImGui::Scoped::Disabled sd( m_generationInProgress.load() );
@@ -1004,7 +963,7 @@ void Weaver::State::imgui(
                 }
 
                 ImGui::SameLine( 0, 6.0f );
-                ImGui::SetNextItemWidth( 200.0f );
+                ImGui::SetNextItemWidth( 138.0f );
                 ImGui::InputText( "##rng_seed", &m_proceduralSeed );
                 ImGui::SameLine( 0, 6.0f );
                 if ( ImGui::Button( ICON_FA_ARROWS_ROTATE ) )
@@ -1012,23 +971,17 @@ void Weaver::State::imgui(
                     math::RNG32 ndrng;
                     regenerateSeedText( ndrng );
                 }
+            }
+            {
+                const float cSeedButtonWidth = 261.0f;
+                ImGui::RightAlignSameLine( cSeedButtonWidth + 2.0f );
+                ImGui::Scoped::Enabled se( currentRiffIsValid );
+                if ( ImGui::Button( ICON_FA_MAGNET " Copy Currently Playing ", { cSeedButtonWidth, 0.0f } ) )
                 {
-                    ImGui::Scoped::Enabled se( BONDConnectionLive );
-
-                    ImGui::SameLine( 0, 6.0f );
-                    ImGui::Checkbox( "AutoBOND", &m_autoSendToBOND );
-
-                    // mask out auto-bond option if we have no connection
-                    m_autoSendToBOND &= BONDConnectionLive;
-                }
-                if ( m_generationInProgress || !m_enqueuedRiffIDs.empty() )
-                {
-                    const float SpinnerSize = ImGui::GetTextLineHeight() * 0.5f;
-                    ImGui::RightAlignSameLine( SpinnerSize * 3.0f );
-                    ImGui::Spinner( "##playback_queued", true, SpinnerSize, 4.0f, 0.0f,
-                        m_generationInProgress ? colour::shades::slate.lightU32() : colour::shades::orange.lightU32() );
+                    buildVirtualRiffFromLive( currentRiff );
                 }
             }
+
 
             ImGui::Spacing();
             ImGui::Spacing();
@@ -1202,6 +1155,76 @@ void Weaver::State::imgui(
                 }
 
                 ImGui::EndTable();
+            }
+
+            ImGui::Spacing();
+            ImGui::Spacing();
+            ImGui::SeparatorBreak();
+            ImGui::Spacing();
+            ImGui::Spacing();
+
+            {
+                const float SpinnerSize = ImGui::GetTextLineHeight() * 0.5f;
+                {
+                    const bool SpinnerActive = m_generationInProgress || !m_enqueuedRiffIDs.empty();
+
+                    ImGui::Spinner( "##playback_queued", SpinnerActive, SpinnerSize, 4.0f, 0.0f,
+                        m_generationInProgress ? colour::shades::slate.lightU32() : colour::shades::orange.lightU32() );
+                    ImGui::SameLine();
+                }
+
+                const ImVec2 undoButtonSize( 100.0f, 24.0f );
+                const float centeringIndent = ((ImGui::GetContentRegionAvail().x - SpinnerSize) * 0.5f) - undoButtonSize.x;
+                {
+
+                    ImGui::Dummy( { centeringIndent, 0.0f } );
+                    ImGui::SameLine( 0, 0 );
+
+                    std::lock_guard<std::mutex> locked( m_generationUndoRedoMutex );
+                    const bool hasUndo = !m_generationUndoBuffer.empty();
+                    const bool hasRedo = !m_generationRedoBuffer.empty();
+                    {
+                        ImGui::Scoped::Enabled se( hasUndo );
+                        if ( ImGui::Button( " " ICON_FA_ARROW_LEFT " Undo ", undoButtonSize ) )
+                        {
+                            if ( doUndo() )
+                            {
+                                m_generationInProgress = true;
+                                coreGUI.getTaskExecutor().silent_async( [this, &warehouse]
+                                    {
+                                        enqeuePlaybackVirtualRiff( warehouse );
+                                        m_generationInProgress = false;
+                                    } );
+                            }
+                        }
+                    }
+                    {
+                        ImGui::Scoped::Enabled se( hasRedo );
+                        ImGui::SameLine();
+                        if ( ImGui::Button( " " ICON_FA_ARROW_RIGHT " Redo ", undoButtonSize ) )
+                        {
+                            if ( doRedo() )
+                            {
+                                m_generationInProgress = true;
+                                coreGUI.getTaskExecutor().silent_async( [this, &warehouse]
+                                    {
+                                        enqeuePlaybackVirtualRiff( warehouse );
+                                        m_generationInProgress = false;
+                                    } );
+                            }
+                        }
+                    }
+                }
+                {
+                    ImGui::Scoped::Enabled se( BONDConnectionLive );
+
+                    ImGui::SameLine( 0, centeringIndent - 110.0f );
+                    ImGui::Checkbox( "AutoBOND", &m_autoSendToBOND );
+                    ImGui::CompactTooltip( "If a BOND connection is live, automatically send every generated riff to the BOND server" );
+
+                    // mask out auto-bond option if we have no connection
+                    m_autoSendToBOND &= BONDConnectionLive;
+                }
             }
         }
 
