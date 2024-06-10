@@ -831,6 +831,41 @@ void CoreGUI::imguiModalBasicErrorPopup( const char* title, std::string_view err
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+void CoreGUI::imguiModalBasicOkCancel( const char* title, std::string_view displayMessage, std::function<void( bool )> onCompletionCallback )
+{
+    const ImVec2 configWindowSize = ImVec2( 600.0f, 150.0f );
+    ImGui::SetNextWindowContentSize( configWindowSize );
+
+    if ( ImGui::BeginPopupModal( title, nullptr, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize ) )
+    {
+        const ImVec2 buttonSize( 240.0f, 32.0f );
+
+        ImGui::TextWrapped( "%s", displayMessage.data() );
+        ImGui::SeparatorBreak();
+
+        const auto panelRegionAvail = ImGui::GetContentRegionAvail();
+        {
+            const float alignButtonsToBase = panelRegionAvail.y - (buttonSize.y + 6.0f);
+            ImGui::Dummy( ImVec2( 0, alignButtonsToBase ) );
+        }
+
+        if ( ImGui::Button( "OK", buttonSize ) )
+        {
+            onCompletionCallback( true );
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine(0, configWindowSize.x - ( buttonSize.x * 2.0f ) );
+        if ( ImGui::Button( "Cancel", buttonSize ) )
+        {
+            onCompletionCallback( false );
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 int CoreGUI::Entrypoint()
 {
     const auto feLoad = config::load( *this, m_configFrontend );

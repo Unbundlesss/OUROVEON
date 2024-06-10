@@ -497,6 +497,12 @@ protected:
     virtual bool addDeveloperMenuItems() { return false; }
 
 
+    // modular modals
+    void imguiModalBasicErrorPopup( const char* title, std::string_view errorMessage );
+    void imguiModalBasicOkCancel( const char* title, std::string_view displayMessage, std::function<void( bool )> onCompletionCallback );
+
+
+
     config::Frontend        m_configFrontend;
     app::FrontendModule     m_mdFrontEnd;       // UI canvas management
 
@@ -614,7 +620,6 @@ private:
     using DeveloperFlagRegistry = absl::flat_hash_map< std::string, bool* >;
 
     void imguiModalAboutBox( const char* title );
-    void imguiModalBasicErrorPopup( const char* title, std::string_view errorMessage );
 
     void checkLayoutConfig();
 
