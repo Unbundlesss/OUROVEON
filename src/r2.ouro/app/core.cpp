@@ -833,7 +833,7 @@ void CoreGUI::imguiModalBasicErrorPopup( const char* title, std::string_view err
 // ---------------------------------------------------------------------------------------------------------------------
 void CoreGUI::imguiModalBasicOkCancel( const char* title, std::string_view displayMessage, std::function<void( bool )> onCompletionCallback )
 {
-    const ImVec2 configWindowSize = ImVec2( 600.0f, 150.0f );
+    const ImVec2 configWindowSize = ImVec2( 600.0f, 220.0f );
     ImGui::SetNextWindowContentSize( configWindowSize );
 
     if ( ImGui::BeginPopupModal( title, nullptr, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize ) )

@@ -3673,7 +3673,7 @@ int LoreApp::EntrypointOuro()
                                     {
                                         imguiModalBasicOkCancel(
                                             title,
-                                            "This will trigger an export for all jams in the Warehouse, which may take some time and cannot be interrupted.\nEnsure you have sufficient free space on your drive!\n\nDo you want to continue?",
+                                            "This will trigger an export for all jams in the Warehouse, which may take some time and cannot be interrupted.\n\nNOTE: This respects any active name filtering, so only what is visible currently in the Warehouse view will be exported.\n\nEnsure you have sufficient free space on your drive!\n\nDo you want to continue?",
                                             [this]( bool bAccepted )
                                             {
                                                 if ( bAccepted )
