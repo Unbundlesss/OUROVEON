@@ -106,11 +106,3 @@ _BEAM_ has so far broadcast over 50 hours of jam sessions without missing a beat
 
 The _BEAM_ live visualisation sync functionality over IPC was used along with the [NESTDROP](https://nestimmersion.ca/nestdrop.php) visualiser and the Unity 3D engine to broadcast [this hour-long jam](https://www.youtube.com/watch?v=cQ2DRpkBmyE)
 
-
-<br>
-<hr>
-<br>
-
-$\textcolor{orange}{\textsf{BUILDING}}$
-
-**OUROVEON** is written in C++20, built using [Premake](premake.github.io). 
