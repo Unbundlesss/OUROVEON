@@ -230,6 +230,8 @@ struct Warehouse
     // erase all unfilled riffs, effectively cutting short any in-progress sync
     void requestJamSyncAbort( const types::JamCouchID& jamCouchID );
 
+    // synchronous query to see if we know of any riffs with the given jam couch ID
+    bool anyReferencesToJamFound( const types::JamCouchID& jamCouchID ) const;
 
 
     // -----------------------------------------------------------------------------------------------------------------

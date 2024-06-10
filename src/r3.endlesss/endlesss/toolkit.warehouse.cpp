@@ -1411,6 +1411,27 @@ void Warehouse::requestJamSyncAbort( const types::JamCouchID& jamCouchID )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+bool Warehouse::anyReferencesToJamFound( const types::JamCouchID& jamCouchID ) const
+{
+    static constexpr char _anyCountOfRiffsFromJam[] = R"(
+            select sum(1) from riffs where OwnerJamCID = ?1;
+        )";
+
+    Warehouse::SqlDB::TransactionGuard txn;
+    {
+        auto query = Warehouse::SqlDB::query<_anyCountOfRiffsFromJam>( jamCouchID.value() );
+
+        uint32_t riffCount;
+        if ( query( riffCount ) )
+        {
+            return riffCount > 0;
+        }
+    }
+
+    return false;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 base::OperationID Warehouse::requestJamDataExport( const types::JamCouchID& jamCouchID, const fs::path exportFolder, std::string_view jamTitle )
 {
     const auto operationID = base::Operations::newID( OV_ExportAction );
