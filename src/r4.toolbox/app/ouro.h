@@ -32,21 +32,11 @@ struct OuroApp : public CoreGUI,
 {
     OuroApp()
         : CoreGUI()
+        , m_jamStemImportSemaphore(1)
     {}
 
     endlesss::toolkit::Warehouse* getWarehouseInstance() { return m_warehouse.get(); }
     const endlesss::toolkit::Warehouse* getWarehouseInstance() const { return m_warehouse.get(); }
-
-protected:
-
-    // from CoreGUI
-    // this inserts the generic ouro app configuration preflight UI; when that closes, we pass to EntrypointOuro
-    virtual int EntrypointGUI() override;
-
-    // inheritants implement this as app entrypoint
-    virtual int EntrypointOuro() = 0;
-
-protected:
 
     // endlesss::services::IRiffFetchService
     int32_t                                 getSampleRate() const override;
@@ -59,6 +49,16 @@ protected:
         const endlesss::types::JamCouchID& jamID,
         std::string& resultJamName,
         uint64_t& resultTimestamp ) const override;
+
+
+protected:
+
+    // from CoreGUI
+    // this inserts the generic ouro app configuration preflight UI; when that closes, we pass to EntrypointOuro
+    virtual int EntrypointGUI() override;
+
+    // inheritants implement this as app entrypoint
+    virtual int EntrypointOuro() = 0;
 
 
 
@@ -134,6 +134,25 @@ protected:
     base::EventListenerID                   m_eventLID_BNSCacheMiss = base::EventListenerID::invalid();
     JamNameRemoteFetchResultQueue           m_jamNameRemoteFetchResultQueue;
     float                                   m_jamNameRemoteFetchUpdateBroadcastTimer = 0;
+
+    tf::Semaphore                           m_jamStemImportSemaphore;
+
+public:
+
+    // add the jam -> name resolution data into a queue that gets processed on the main thread and installed
+    // into the correct places (replicated into the db, cloned into a local lookup)
+    void emplaceJamNameResolutionIntoQueue( endlesss::types::JamCouchID jamID, std::string bandName )
+    {
+        m_jamNameRemoteFetchResultQueue.enqueue(
+            {
+                std::move( jamID ),
+                std::move( bandName )
+            });
+    }
+
+    // create an async task inside the given flow to unpack a given .TAR archive file into the stem cache, returning the operation ID
+    // that will be sent (of variant endlesss::toolkit::Warehouse::OV_ImportAction) upon completion, regardless of success
+    base::OperationID enqueueJamStemArchiveImportAsync( const fs::path& pathToTARFile, tf::Taskflow& taskFlow );
 };
 
 } // namespace app

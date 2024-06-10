@@ -36,6 +36,7 @@
 #include "ux/cache.migrate.h"
 #include "ux/cache.trim.h"
 
+#include "io/tarch.h"
 #include "xp/open.url.h"
 
 using namespace std::chrono_literals;
@@ -135,7 +136,7 @@ int OuroApp::EntrypointGUI()
         }
     });
 
-#if OURO_HAS_NDLS_ONLINE
+
     // network activity display
     const auto sbbNetworkActivity = registerStatusBarBlock( app::CoreGUI::StatusBarAlignment::Right, 300.0f, [this]()
     {
@@ -146,7 +147,7 @@ int OuroApp::EntrypointGUI()
 
         ImGui::TextUnformatted( networkState );
     });
-#endif // OURO_HAS_NDLS_ONLINE
+
 
     // load any saved configs
     config::endlesss::Auth endlesssAuth;
@@ -1437,11 +1438,10 @@ void OuroApp::event_BNSCacheMiss( const events::BNSCacheMiss* eventData )
                             }
 
                             // .. for now, just log out the name we found, this will be processed on the main thread
-                            m_jamNameRemoteFetchResultQueue.enqueue(
-                                {
-                                    std::move( jamID ),
-                                    std::move( bandNameFromExtended.data.name )
-                                } );
+                            emplaceJamNameResolutionIntoQueue(
+                                std::move( jamID ),
+                                std::move( bandNameFromExtended.data.name )
+                            );
                         }
                         else
                         {
@@ -1495,6 +1495,58 @@ void OuroApp::updateJamNameResolutionTasks( float deltaTime )
             m_jamNameRemoteFetchUpdateBroadcastTimer = 0;
         }
     }
+}
+
+base::OperationID OuroApp::enqueueJamStemArchiveImportAsync( const fs::path& pathToTARFile, tf::Taskflow& taskFlow )
+{
+    const fs::path inputTarFile = pathToTARFile;
+    const fs::path outputPath = getStemCache().getCacheRootPath();
+
+    blog::app( FMTX( "stem import task queued - from [{}] to [{}]" ), inputTarFile.string(), outputPath.string() );
+
+    const auto importOperationID = base::Operations::newID( endlesss::toolkit::Warehouse::OV_ImportAction );
+
+    // background task to unpack the stems into the chosen directory from the .TAR
+    tf::Task workerTask = taskFlow.emplace( [this, inputTarFile, outputPath, importOperationID]()
+        {
+            base::EventBusClient m_eventBusClient( m_appEventBus );
+            OperationCompleteOnScopeExit( importOperationID );
+
+            std::size_t filesTouched = 0;
+
+            const auto tarArchiveStatus = io::unarchiveTARIntoDirectory(
+                inputTarFile,
+                outputPath,
+                [&]( const std::size_t bytesProcessed, const std::size_t filesProcessed )
+                {
+                    // ping that we're still working on async tasks
+                    if ( (filesProcessed % 20) == 0 )
+                        m_eventBusClient.Send< ::events::AsyncTaskActivity >();
+
+                    filesTouched++;
+                });
+
+            // deal with issues, tell user we bailed
+            if ( !tarArchiveStatus.ok() )
+            {
+                m_appEventBus->send<::events::AddErrorPopup>(
+                    "Stem Import from TAR Failed",
+                    fmt::format( FMTX("Error reported during stem import:\n{}"), tarArchiveStatus.ToString() )
+                );
+            }
+            else
+            {
+                m_appEventBus->send<::events::AddToastNotification>( ::events::AddToastNotification::Type::Info,
+                    ICON_FA_BOXES_PACKING " Stem Import Success",
+                    fmt::format( FMTX( "Extracted {} stems" ), filesTouched ) );
+            }
+        });
+
+    // limit execution to serial, avoid hammering the file system too hard
+    workerTask.acquire( m_jamStemImportSemaphore );
+    workerTask.release( m_jamStemImportSemaphore );
+
+    return importOperationID;
 }
 
 } // namespace app

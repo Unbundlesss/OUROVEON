@@ -32,6 +32,7 @@
 #include "ux/diskrecorder.h"
 #include "ux/proc.weaver.h"
 #include "ux/jams.browser.h"
+#include "ux/jams.importer.h"
 #include "ux/jam.precache.h"
 #include "ux/jam.validate.h"
 #include "ux/stem.beats.h"
@@ -1526,6 +1527,7 @@ protected:
 
     base::EventListenerID                       m_eventLID_RequestNavigationToRiff  = base::EventListenerID::invalid();
 
+    bool                                        m_bTriggerExportAllJams = false;
 
 
     void beginChangeToViewJam( const endlesss::types::JamCouchID& jamID, const endlesss::types::RiffIdentity* optionalRiffScrollTo = nullptr  )
@@ -1901,59 +1903,6 @@ protected:
         ux::TagLineToolProvider::handleToolExecution( id, eventBusClient, currentRiffPtr );
     }
 
-
-private:
-
-#if OURO_DEBUG
-
-    bool addDeveloperMenuItems() override
-    {
-        if ( ImGui::MenuItem( "Download All Shared Riffs" ) )
-        {
-            getTaskExecutor().silent_async( [this]()
-                {
-                    endlesss::toolkit::Shares shareCache;
-
-                    config::endlesss::PopulationGlobalUsers populationData;
-                    const auto dataLoad = config::load( *this, populationData );
-                    if ( dataLoad == config::LoadResult::Success )
-                    {
-                        for ( const auto& username : populationData.users )
-                        {
-                            getTaskExecutor().run( shareCache.taskFetchLatest(
-                                *m_networkConfiguration,
-                                username,
-                                [this, username]( endlesss::toolkit::Shares::StatusOrData newData )
-                                {
-                                    if ( newData.ok() )
-                                    {
-                                        const auto savePath = fmt::format( FMTX( "E:\\Dev\\Keybase\\Archivissst\\archivissst\\Data\\_per_user_shared\\{}.json" ), username );
-
-                                        std::ofstream is( savePath );
-                                        cereal::JSONOutputArchive archive( is );
-
-                                        (*newData)->serialize( archive );
-
-                                        blog::app( FMTX( "Saved {} shares : {}" ), (*newData)->m_count, username );
-                                    }
-                                    else
-                                    {
-                                        blog::error::app( FMTX( "No shares : {}" ), username );
-                                    }
-                                } )
-                            );
-                        }
-
-                        getTaskExecutor().wait_for_all();
-                    }
-                });
-        }
-
-        return true;
-    }
-
-#endif // OURO_DEBUG
-
 };
 
 
@@ -2131,7 +2080,11 @@ int LoreApp::EntrypointOuro()
                 return true;
             }
 
+#if OURO_HAS_NDLS_ONLINE
             return endlesss::toolkit::Pipeline::defaultNetworkResolver( *m_networkConfiguration, request, result );
+#else
+            return false;
+#endif // OURO_HAS_NDLS_ONLINE
         },
         [&mixPreview, this]( const endlesss::types::RiffIdentity& request, endlesss::live::RiffPtr& loadedRiff, const endlesss::types::RiffPlaybackPermutationOpt& playbackPermutationOpt )
         {
@@ -2173,7 +2126,11 @@ int LoreApp::EntrypointOuro()
                 return true;
             }
 
+#if OURO_HAS_NDLS_ONLINE
             return endlesss::toolkit::Pipeline::defaultNetworkResolver( *m_networkConfiguration, request, result );
+#else
+            return false;
+#endif // OURO_HAS_NDLS_ONLINE
         },
         [this]( const endlesss::types::RiffIdentity& request, endlesss::live::RiffPtr& loadedRiff, const endlesss::types::RiffPlaybackPermutationOpt& )
         {
@@ -3540,14 +3497,29 @@ int LoreApp::EntrypointOuro()
         }
         {
             const fs::path cWarehouseExportPath = m_storagePaths->outputApp / "$database_exports";
+            const fs::path cWarehouseImportPath = m_storagePaths->outputApp / "$database_imports";
+
             const auto checkWarehouseExportDirectoryExists = [&]()
                 {
                     const auto exportPathStatus = filesys::ensureDirectoryExists( cWarehouseExportPath );
                     if ( !exportPathStatus.ok() )
                     {
                         m_appEventBus->send<::events::AddErrorPopup>(
-                            "Enable to create output directory",
-                            "Was unable to create database export directory, cannot save to disk"
+                            "Enable to create database output directory",
+                            cWarehouseExportPath.string()
+                        );
+                        return false;
+                    }
+                    return true;
+                };
+            const auto checkWarehouseImportDirectoryExists = [&]()
+                {
+                    const auto importPathStatus = filesys::ensureDirectoryExists( cWarehouseImportPath );
+                    if ( !importPathStatus.ok() )
+                    {
+                        m_appEventBus->send<::events::AddErrorPopup>(
+                            "Enable to create database input directory",
+                            cWarehouseImportPath.string()
                         );
                         return false;
                     }
@@ -3639,92 +3611,91 @@ int LoreApp::EntrypointOuro()
                     {
                         ImGui::TextColored( colour::shades::callout.neutral(), ICON_FA_GEAR " Import / Export" );
 
-                        ImGui::RightAlignSameLine( ( toolbarButtonSize.x * 2.0f ) + cButtonGapSize + cEdgeInsetSize );
-
-                        if ( ImGui::Button( " " ICON_FA_BOX_OPEN " Import Data", toolbarButtonSize) )
+                        if ( ImGui::GetMergedModFlags() & ImGuiModFlags_Alt )
                         {
-                            // try and make the export directory if it doesn't already exist - because we ask the 
-                            // dialogue box below to default to browsing it and if it isn't there it chooses some other 
-                            // random place. 
-                            checkWarehouseExportDirectoryExists();
+                            ImGui::RightAlignSameLine( ( toolbarButtonSize.x * 2.0f ) + cButtonGapSize + cEdgeInsetSize );
 
-                            auto fileDialog = std::make_unique< ImGuiFileDialog >();
-                            fileDialog->OpenDialog(
-                                "ImpFileDlg",
-                                "Choose exported LORE metadata",
-                                ".yaml",
-                                cWarehouseExportPath.string().c_str(),
-                                1,
-                                nullptr,
-                                ImGuiFileDialogFlags_Modal );
+                            if ( ImGui::Button( " " ICON_FA_BOX_OPEN " Import Data", toolbarButtonSize) )
+                            {
+                                // try and make the import directory if it doesn't already exist - because we ask the 
+                                // dialogue box below to default to browsing it and if it isn't there it chooses some other 
+                                // random place. 
+                                checkWarehouseImportDirectoryExists();
 
-                            std::ignore = activateFileDialog( std::move( fileDialog ), [this]( ImGuiFileDialog& dlg )
-                                {
-                                    // ask warehouse to deal with this
-                                    const base::OperationID importOperationID = m_warehouse->requestJamDataImport( dlg.GetFilePathName() );
-                                });
+                                auto fileDialog = std::make_unique< ImGuiFileDialog >();
+                                fileDialog->OpenDialog(
+                                    "ImpFileDlg",
+                                    "Choose exported LORE metadata",
+                                    ".yaml",
+                                    cWarehouseImportPath.string().c_str(),
+                                    1,
+                                    nullptr,
+                                    ImGuiFileDialogFlags_Modal );
+
+                                std::ignore = activateFileDialog( std::move( fileDialog ), [this]( ImGuiFileDialog& dlg )
+                                    {
+                                        // ask warehouse to deal with this
+                                        const base::OperationID importOperationID = m_warehouse->requestJamDataImport( dlg.GetFilePathName() );
+                                    });
+                            }
+                            ImGui::SameLine( 0, cButtonGapSize );
+                            if ( ImGui::Button( " " ICON_FA_BOX_OPEN " Import Stems", toolbarButtonSize) )
+                            {
+                                // try and make the import directory if it doesn't already exist - because we ask the 
+                                // dialogue box below to default to browsing it and if it isn't there it chooses some other 
+                                // random place. 
+                                checkWarehouseImportDirectoryExists();
+
+                                auto fileDialog = std::make_unique< ImGuiFileDialog >();
+                                fileDialog->OpenDialog(
+                                    "ImpFileDlg",
+                                    "Choose LORE stem archive",
+                                    ".tar",
+                                    cWarehouseImportPath.string().c_str(),
+                                    1,
+                                    nullptr,
+                                    ImGuiFileDialogFlags_Modal );
+
+                                std::ignore = activateFileDialog( std::move( fileDialog ), [this]( ImGuiFileDialog& dlg )
+                                    {
+                                        tf::Taskflow taskflow;
+                                        enqueueJamStemArchiveImportAsync( dlg.GetFilePathName(), taskflow );
+                                        getTaskExecutor().run( std::move( taskflow ) );
+                                    });
+                            }
                         }
-                        ImGui::SameLine( 0, cButtonGapSize );
-                        if ( ImGui::Button( " " ICON_FA_BOX_OPEN " Import Stems", toolbarButtonSize) )
+                        else
                         {
-                            // try and make the export directory if it doesn't already exist - because we ask the 
-                            // dialogue box below to default to browsing it and if it isn't there it chooses some other 
-                            // random place. 
-                            checkWarehouseExportDirectoryExists();
-
-                            auto fileDialog = std::make_unique< ImGuiFileDialog >();
-                            fileDialog->OpenDialog(
-                                "ImpFileDlg",
-                                "Choose LORE stem archive",
-                                ".tar",
-                                cWarehouseExportPath.string().c_str(),
-                                1,
-                                nullptr,
-                                ImGuiFileDialogFlags_Modal );
-
-                            std::ignore = activateFileDialog( std::move( fileDialog ), [this]( ImGuiFileDialog& dlg )
-                                {
-                                    const fs::path inputTarFile = dlg.GetFilePathName();
-                                    const fs::path outputPath = getStemCache().getCacheRootPath();
-
-                                    blog::app( FMTX( "stem import task queued - from [{}] to [{}]" ), inputTarFile.string(), outputPath.string() );
-
-                                    const auto importOperationID = base::Operations::newID( endlesss::toolkit::Warehouse::OV_ImportAction );
-
-                                    // spin up a background task to archive the stems into a .tar archive
-                                    getTaskExecutor().silent_async( [this, inputTarFile, outputPath, importOperationID]()
-                                        {
-                                            base::EventBusClient m_eventBusClient( m_appEventBus );
-                                            OperationCompleteOnScopeExit( importOperationID );
-
-                                            std::size_t filesTouched = 0;
-
-                                            const auto tarArchiveStatus = io::unarchiveTARIntoDirectory(
-                                                inputTarFile,
-                                                outputPath,
-                                                [&]( const std::size_t bytesProcessed, const std::size_t filesProcessed )
+                            ImGui::RightAlignSameLine( (toolbarButtonSize.x * 2.0f) + cButtonGapSize + cEdgeInsetSize );
+                            if ( ImGui::Button( " " ICON_FA_BOXES_PACKING " Export All ", toolbarButtonSize ) )
+                            {
+                                activateModalPopup( "Confirm Export All", [this](const char* title)
+                                    {
+                                        imguiModalBasicOkCancel(
+                                            title,
+                                            "This will trigger an export for all jams in the Warehouse, which may take some time and cannot be interrupted.\nEnsure you have sufficient free space on your drive!\n\nDo you want to continue?",
+                                            [this]( bool bAccepted )
+                                            {
+                                                if ( bAccepted )
                                                 {
-                                                    // ping that we're still working on async tasks
-                                                    m_eventBusClient.Send< ::events::AsyncTaskActivity >();
-                                                    filesTouched++;
-                                                });
+                                                    m_bTriggerExportAllJams = true;
+                                                }
+                                            });
+                                    });
+                            }
+                            ImGui::SameLine( 0, cButtonGapSize );
+                            if ( ImGui::Button( " " ICON_FA_BOX_OPEN " Import ... ", toolbarButtonSize ) )
+                            {
+                                checkWarehouseImportDirectoryExists();
 
-                                            // deal with issues, tell user we bailed
-                                            if ( !tarArchiveStatus.ok() )
-                                            {
-                                                m_appEventBus->send<::events::AddErrorPopup>(
-                                                    "Stem Import from TAR Failed",
-                                                    fmt::format( FMTX("Error reported during stem import:\n{}"), tarArchiveStatus.ToString() )
-                                                );
-                                            }
-                                            else
-                                            {
-                                                m_appEventBus->send<::events::AddToastNotification>( ::events::AddToastNotification::Type::Info,
-                                                    ICON_FA_BOXES_PACKING " Stem Import Success",
-                                                    fmt::format( FMTX( "Extracted {} stems" ), filesTouched ) );
-                                            }
-                                        });
-                                });
+                                activateModalPopup( "Jam Import Manager", [
+                                    this,
+                                    state = ux::createJamImporterState( cWarehouseImportPath, getEventBusClient() )](const char* title)
+                                    {
+                                        ux::modalJamImporterState( title, *state, *this );
+                                    });
+                            }
+
                         }
                     }
                     else
@@ -4048,10 +4019,40 @@ int LoreApp::EntrypointOuro()
                             else
                             if ( warehouseView == WarehouseView::ImportExport )
                             {
+                                // flags used to kick off export tasks below, allowing us to have separate or combined 'do both' buttons
+                                // as well as force them all to trigger if requested
+                                bool bExportData = m_bTriggerExportAllJams;
+                                bool bExportStems = m_bTriggerExportAllJams;
+
                                 // disable tools if we're syncing
                                 ImGui::Scoped::Disabled sd( bIsJamInFlux );
 
-                                if ( ImGui::Button( " " ICON_FA_BOX_ARCHIVE " Data    ") )
+                                if ( ImGui::GetMergedModFlags() & ImGuiModFlags_Alt )
+                                {
+                                    if ( ImGui::Button( " " ICON_FA_BOX_ARCHIVE   " Metadata " ) )
+                                    {
+                                        bExportData = true;
+                                    }
+                                    ImGui::CompactTooltip( "Begin an export process to archive this jam's database records to a file on disk" );
+                                    ImGui::SameLine();
+
+                                    if ( ImGui::Button( " " ICON_FA_BOXES_PACKING " Stems    " ) )
+                                    {
+                                        bExportStems = true;
+                                    }
+                                    ImGui::CompactTooltip( "Begin the process to bundle up all stems from this jam into a .tar archive" );
+                                }
+                                else
+                                {
+                                    if ( ImGui::Button( " " ICON_FA_BOX_ARCHIVE   " Metadata & Stems     " ) )
+                                    {
+                                        bExportData = true;
+                                        bExportStems = true;
+                                    }
+                                    ImGui::CompactTooltip( "Begin the process to bundle up both the data and all stems from this jam into a paired .tar archive + .yaml" );
+                                }
+
+                                if ( bExportData )
                                 {
                                     // make sure it exists, pop an error if that fails
                                     if ( checkWarehouseExportDirectoryExists() )
@@ -4066,10 +4067,7 @@ int LoreApp::EntrypointOuro()
                                         addOperationToJam( iterCurrentJamID, exportOperationID );
                                     }
                                 }
-                                ImGui::CompactTooltip( "Begin an export process to archive this jam's database records to a file on disk" );
-
-                                ImGui::SameLine();
-                                if ( ImGui::Button( " " ICON_FA_BOXES_PACKING " Stems   " ) )
+                                if ( bExportStems )
                                 {
                                     if ( checkWarehouseExportDirectoryExists() )
                                     {
@@ -4118,7 +4116,6 @@ int LoreApp::EntrypointOuro()
                                             });
                                     }
                                 }
-                                ImGui::CompactTooltip( "Begin the process to bundle up all stems from this jam into a .tar archive" );
                             }
                             else
                             if ( warehouseView == WarehouseView::Advanced )
@@ -4185,6 +4182,9 @@ int LoreApp::EntrypointOuro()
         m_uxRiffHistory->imgui( *this );
         m_uxSharedRiffView->imgui( *this, JamNameResolveProvider, *this );
 
+
+        // reset the trigger-all flag that was used above to force all export buttons to fire
+        m_bTriggerExportAllJams = false;
 
         maintainStemCacheAsync();
 
