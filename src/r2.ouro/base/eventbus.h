@@ -74,7 +74,7 @@ struct IEvent
                 return m_appEventBus->registerEventID( events::_evtname::ID, sizeof(::events::_evtname), _maxQueuedEvents );         \
             });
 
-#define APP_EVENT_REGISTER( _evtname )  APP_EVENT_REGISTER_SPECIFIC( _evtname, 512 )
+#define APP_EVENT_REGISTER( _evtname )  APP_EVENT_REGISTER_SPECIFIC( _evtname, 2048 )
 
 #define APP_EVENT_BIND_TO( _eventType )                                                                             \
     m_eventLID_##_eventType = m_eventBusClient.addListener(                                                         \
@@ -123,6 +123,10 @@ struct EventBus
             uint8_t* eventMemoryBlock = nullptr;
             const bool eventMemoryOk = pipe->m_eventMemoryQueue.try_dequeue( eventMemoryBlock );
             ABSL_ASSERT( eventMemoryOk );
+
+            // queue exhausted
+            if ( !eventMemoryOk )
+                return false;
 
             memset( eventMemoryBlock, 0, sizeof( _eventType ) );
             _eventType* eventInstance = new (eventMemoryBlock) _eventType( std::forward<Args>( args )... );
