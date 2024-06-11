@@ -760,7 +760,6 @@ void Weaver::State::imgui(
         ImGui::Spacing();
         ImGui::Indent( subgroupInsetSize );
 
-        endlesss::constants::RootScalePairs adjacents = getRootScalePairsForCurrentSearch();
 
         {
             ImGui::PushItemWidth( 80.0f );
@@ -811,8 +810,9 @@ void Weaver::State::imgui(
                 ImGui::TextDisabled( "[?]" );
                 if ( ImGui::IsItemHovered( ImGuiHoveredFlags_DelayNormal ) )
                 {
+                    const endlesss::constants::RootScalePairs adjacentsHelp = getRootScalePairsForCurrentSearch();
                     std::string fullHarmonicTip = "Include closely related keys or other interesting key/modes; currently:\n";
-                    for ( const auto& adj : adjacents.pairs )
+                    for ( const auto& adj : adjacentsHelp.pairs )
                     {
                         fullHarmonicTip += "\n";
                         fullHarmonicTip += endlesss::constants::cRootNames[adj.root];
@@ -823,7 +823,6 @@ void Weaver::State::imgui(
                 }
             }
         }
-
 
         {
             ImGui::AlignTextToFramePadding();
@@ -848,6 +847,7 @@ void Weaver::State::imgui(
 
         if ( m_awaitingBpmSearch || m_deferredBPMSearch > 0 )
         {
+            const endlesss::constants::RootScalePairs adjacents = getRootScalePairsForCurrentSearch();
             warehouse.filterRiffsByBPM(
                 adjacents,
                 ( m_searchOrdering == 0 ) ? toolkit::Warehouse::BPMCountSort::ByBPM : toolkit::Warehouse::BPMCountSort::ByCount,
@@ -929,6 +929,7 @@ void Weaver::State::imgui(
                     else
                     {
                         bool lockedToBPM = false;
+                        ImGui::Scoped::Disabled sdInner( targetLockBPM <= 0 );
                         if ( ImGui::Checkbox( fmt::format( FMTX( "Lock BPM to {:<3}  " ), targetLockBPM ).c_str(), &lockedToBPM ) )
                         {
                             m_searchLockedBPM = targetLockBPM;
@@ -956,7 +957,7 @@ void Weaver::State::imgui(
             ImGui::TextColored( colour::shades::callout.light(), "Generation" );
 
             {
-                ImGui::Scoped::Disabled sd( m_generationInProgress.load() );
+                ImGui::Scoped::Disabled sd( m_generationInProgress.load() || m_bpmCounts.empty() );
                 if ( ImGui::Button( " Formulate with Seed : " ) )
                 {
                     generateNewRiff( coreGUI, bondClient, warehouse );
@@ -1129,9 +1130,12 @@ void Weaver::State::imgui(
                         ImGui::Scoped::Disabled sd( m_generationInProgress.load() );
 
                         ImGui::TableNextColumn();
-                        if ( ImGui::Button( ICON_FA_ARROWS_SPIN ) )
                         {
-                            generateNewRiff( coreGUI, bondClient, warehouse, chI );
+                            ImGui::Scoped::Disabled sdInner( m_bpmCounts.empty() );
+                            if ( ImGui::Button( ICON_FA_ARROWS_SPIN ) )
+                            {
+                                generateNewRiff( coreGUI, bondClient, warehouse, chI );
+                            }
                         }
                         ImGui::TableNextColumn();
                         if ( ImGui::Button( ICON_FA_XMARK ) )
