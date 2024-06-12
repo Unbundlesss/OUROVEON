@@ -386,7 +386,7 @@ int Core::Run()
     }
 
     // try and load performance tuning; okay if this fails, we'll use defaults
-    const auto perfLoad = config::load( *this, m_configPerf );
+    /* const auto perfLoad = */ config::load( *this, m_configPerf );
 
 
     blog::core( "initial Endlesss setup ..." );

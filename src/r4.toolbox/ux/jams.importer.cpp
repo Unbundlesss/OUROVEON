@@ -396,7 +396,7 @@ void JamImporterState::imgui( app::OuroApp& ouroApplication )
                     }
                     else
                     {
-                        ImGui::TextColored( colour::shades::sea_green.neutral(), 
+                        ImGui::TextColored( colour::shades::sea_green.neutral(), "%s",
                             m_importablesList[jamIdx]->m_jamNameFromYAML.c_str() );
 
                         if ( m_importablesList[jamIdx]->m_import )

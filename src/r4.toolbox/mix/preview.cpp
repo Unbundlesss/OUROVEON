@@ -680,7 +680,7 @@ void Preview::enableAbletonLink( bool bEnabled )
 void Preview::imguiDefault()
 {
     const auto panelVolumeModule = 64.0f;
-    const auto panelNudgeModule = 140.0f;
+//    const auto panelNudgeModule = 140.0f;
 
     const auto panelRegionAvailable = ImGui::GetContentRegionAvail();
     if ( panelRegionAvailable.x < panelVolumeModule )

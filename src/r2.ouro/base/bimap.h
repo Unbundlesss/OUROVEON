@@ -22,7 +22,7 @@ struct BiMap
             return false;
 
         const auto tryValue = m_valueToKey.try_emplace( value, key );
-        ABSL_ASSERT( tryKey.second );
+        ABSL_ASSERT( tryValue.second );
 
         return true;
     }

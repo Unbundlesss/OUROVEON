@@ -210,8 +210,6 @@ void SharedRiffView::State::modalBulkExport( const char* title, app::IRiffExport
     const ImVec2 configWindowSize = ImVec2( 700.0f, 180.0f );
     ImGui::SetNextWindowContentSize( configWindowSize );
 
-    const ImVec4 colourJamDisabled = GImGui->Style.Colors[ImGuiCol_TextDisabled];
-
     ImGui::PushStyleColor( ImGuiCol_PopupBg, ImGui::GetStyleColorVec4( ImGuiCol_ChildBg ) );
 
     if ( ImGui::BeginPopupModal( title, nullptr, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize ) )
@@ -225,7 +223,7 @@ void SharedRiffView::State::modalBulkExport( const char* title, app::IRiffExport
         ImGui::Spacing();
 
         float dispatchProgress = ( 1.0f / (float)dataPtr->m_count ) * (float)m_bulkExportIndex;
-        ImGui::Text( "Bulk Export Progress (%i riffs)", dataPtr->m_count );
+        ImGui::Text( "Bulk Export Progress (%zu riffs)", dataPtr->m_count );
         ImGui::ProgressBar( dispatchProgress );
 
         if ( !m_bulkExportRunning )
@@ -352,9 +350,11 @@ void SharedRiffView::State::imgui(
     // management window
     if ( ImGui::Begin( ICON_FA_SHARE_FROM_SQUARE " Shared Riffs###shared_riffs" ) )
     {
+#if OURO_HAS_NDLS_ONLINE
         // check we have suitable network access to fetch fresh data; doesn't have to be fully authenticated, you'll just
         // miss out on your own private shares in that case, the API fetch code will choose what to do
         const bool bCanSyncNewData = m_networkConfiguration->hasAccess( api::NetConfiguration::Access::Public );
+#endif // OURO_HAS_NDLS_ONLINE
         const bool bIsFetchingData = m_fetchInProgress;
 
         // is the username on screen the one we have data for? if not, note that somehow so the user knows to Fetch Latest for their choice
@@ -370,7 +370,7 @@ void SharedRiffView::State::imgui(
             ImGui::TextUnformatted( ICON_FA_USER );
             ImGui::SameLine();
 #if !OURO_HAS_NDLS_ONLINE
-            ImGui::TextColored( colour::shades::lime.neutral(), m_user.getUsername().c_str() );
+            ImGui::TextColored( colour::shades::lime.neutral(), "%s", m_user.getUsername().c_str() );
             ImGui::SameLine(0, 25.0f);
 #else
             m_user.imgui( "username", coreGUI.getEndlesssPopulation(), ImGui::ux::UserSelector::cDefaultWidthForUserSize );
