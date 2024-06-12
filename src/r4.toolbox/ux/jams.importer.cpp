@@ -286,6 +286,8 @@ void JamImporterState::launchImportTasks( app::OuroApp& ouroApplication )
             item->m_importOperationYAML = ouroApplication.getWarehouseInstance()->requestJamDataImport( item->m_fileYAML );
             item->m_importOperationTAR  = ouroApplication.enqueueJamStemArchiveImportAsync( item->m_fileTAR, taskflow );
 
+            std::this_thread::yield();
+
             // mark this done for import
             item->m_import = false;
         }

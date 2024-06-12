@@ -1521,7 +1521,10 @@ base::OperationID OuroApp::enqueueJamStemArchiveImportAsync( const fs::path& pat
                 {
                     // ping that we're still working on async tasks
                     if ( (filesProcessed % 20) == 0 )
+                    {
                         m_eventBusClient.Send< ::events::AsyncTaskActivity >();
+                        std::this_thread::yield();
+                    }
 
                     filesTouched++;
                 });

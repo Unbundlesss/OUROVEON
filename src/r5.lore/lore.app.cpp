@@ -3576,35 +3576,63 @@ int LoreApp::EntrypointOuro()
                         ImGui::TextColored( colour::shades::callout.neutral(), ICON_FA_GEAR " Contents Management" );
 
                         ImGui::RightAlignSameLine( toolbarButtonSize.x + cEdgeInsetSize );
-                        if ( ImGui::Button( " " ICON_FA_CLIPBOARD " Copy Report", toolbarButtonSize ) )
+
+                        // with ALT/Option down, we switch from a CSV of jam/riff/stems/timestamps to a jam/couch pairing
+                        const bool bUseCopyToListing = ( ImGui::GetMergedModFlags() & ImGuiModFlags_Alt );
                         {
-                            std::string reportResult;
-                            reportResult.reserve( 32 * 1024 );
+                            const char* copyButtonTitle = bUseCopyToListing ?
+                                (" " ICON_FA_CLIPBOARD_LIST " Copy Listing") :
+                                (" " ICON_FA_CLIPBOARD " Copy Report");
 
-                            std::scoped_lock<std::mutex> reportLock( m_warehouseContentsReportMutex );
-                            for ( size_t jamIdx = 0; jamIdx < m_warehouseContentsReport.m_jamCouchIDs.size(); jamIdx++ )
+                            if ( ImGui::Button( copyButtonTitle, toolbarButtonSize ) )
                             {
-                                const std::size_t jI = m_warehouseContentsSortedIndices[jamIdx];
+                                std::string reportResult;
+                                reportResult.reserve( 32 * 1024 );
 
-                                std::string csvFilteredTitle = m_warehouseContentsReportJamTitles[jI];
-                                std::replace( csvFilteredTitle.begin(), csvFilteredTitle.end(), '@', '_' );
+                                // lock the report while we rummage through it
+                                std::scoped_lock<std::mutex> reportLock( m_warehouseContentsReportMutex );
+                                for ( size_t jamIdx = 0; jamIdx < m_warehouseContentsReport.m_jamCouchIDs.size(); jamIdx++ )
+                                {
+                                    const std::size_t jI = m_warehouseContentsSortedIndices[jamIdx];
 
-                                const uint32_t oldestRiffTimestamp = m_warehouse->getOldestRiffUnixTimestampFromJam( m_warehouseContentsReport.m_jamCouchIDs[jI] );
+                                    // still filter if one is active, helps cut out useful listings/reports to just the visible stuff
+                                    const auto& jamNameToFilterAgainst = m_warehouseContentsReportJamTitlesForSort[jI];
+                                    if ( !jamNameFilter.PassFilter( jamNameToFilterAgainst.c_str(), &jamNameToFilterAgainst.back() + 1 ) )
+                                        continue;
 
-                                const auto oldestTimeUnix = spacetime::InSeconds( std::chrono::seconds( static_cast<uint64_t>(oldestRiffTimestamp) ) );
-                                const auto oldestTimeDelta = spacetime::calculateDeltaFromNow( oldestTimeUnix ).asPastTenseString( 3 );
+                                    std::string csvFilteredTitle = m_warehouseContentsReportJamTitles[jI];
+                                    std::replace( csvFilteredTitle.begin(), csvFilteredTitle.end(), '@', '_' );
 
-                                reportResult += fmt::format( FMTX( "{}@ {}@ {}@ {}@ {}\n" ),
-                                    csvFilteredTitle,
-                                    m_warehouseContentsReport.m_populatedRiffs[jI],
-                                    m_warehouseContentsReport.m_populatedStems[jI],
-                                    oldestTimeDelta,
-                                    spacetime::datestampStringFromUnix( oldestRiffTimestamp )
-                                    );
+                                    if ( bUseCopyToListing )
+                                    {
+                                        // jam name @ band ID, for BNS via Google Sheets :D
+                                        reportResult += fmt::format( FMTX( "{}@{}\n" ),
+                                            csvFilteredTitle,
+                                            m_warehouseContentsReport.m_jamCouchIDs[jI].value()
+                                        );
+                                    }
+                                    else
+                                    {
+                                        const uint32_t oldestRiffTimestamp = m_warehouse->getOldestRiffUnixTimestampFromJam( m_warehouseContentsReport.m_jamCouchIDs[jI] );
+
+                                        const auto oldestTimeUnix = spacetime::InSeconds( std::chrono::seconds( static_cast<uint64_t>(oldestRiffTimestamp) ) );
+                                        const auto oldestTimeDelta = spacetime::calculateDeltaFromNow( oldestTimeUnix ).asPastTenseString( 3 );
+
+                                        reportResult += fmt::format( FMTX( "{}@ {}@ {}@ {}@ {}\n" ),
+                                            csvFilteredTitle,
+                                            m_warehouseContentsReport.m_populatedRiffs[jI],
+                                            m_warehouseContentsReport.m_populatedStems[jI],
+                                            oldestTimeDelta,
+                                            spacetime::datestampStringFromUnix( oldestRiffTimestamp )
+                                        );
+                                    }
+                                }
+                                ImGui::SetClipboardText( reportResult.c_str() );
                             }
-                            ImGui::SetClipboardText( reportResult.c_str() );
+                            ImGui::CompactTooltip( bUseCopyToListing ? 
+                                "Produce and copy a list of jam names and couch IDs to the clipboard" :
+                                "Produce and copy a simple jam contents report to the clipboard" );
                         }
-                        ImGui::CompactTooltip( "Produce and copy a simple jam contents report to the clipboard" );
                     }
                     else
                     if ( warehouseView == WarehouseView::ImportExport )
