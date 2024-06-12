@@ -2567,6 +2567,23 @@ void ImGuiTextFilter::Build()
     }
 }
 
+// #HDD custom thing for searching by the start of the string only
+bool ImSnippetMatch( const char* str1, const char* str2 )
+{
+    int d;
+    while ( (d = ImToUpper( *str2 ) - ImToUpper( *str1 )) == 0 && *str1 )
+    {
+        str1++;
+        str2++;
+
+        if ( *str1 == 0 )
+            return true;
+        if ( *str2 == 0 )
+            break;
+    }
+    return false;
+}
+
 bool ImGuiTextFilter::PassFilter(const char* text, const char* text_end) const
 {
     if (Filters.empty())
@@ -2585,6 +2602,16 @@ bool ImGuiTextFilter::PassFilter(const char* text, const char* text_end) const
             // Subtract
             if (ImStristr(text, text_end, f.b + 1, f.e) != NULL)
                 return false;
+        }
+        // #HDD custom thing for searching by the start of the string only
+        else if ( f.b[0] == '^' )
+        {
+            if ( f.b[1] == 0 )
+                return false;
+
+            // simple start-of-string snippet match
+            if ( ImSnippetMatch( f.b + 1, text ) )
+                return true;
         }
         else
         {
