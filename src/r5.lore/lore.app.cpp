@@ -1950,10 +1950,12 @@ int LoreApp::EntrypointOuro()
     };
     warehouseJamBrowser.fnOnSelected = [this]( const endlesss::types::JamCouchID& newJamCID )
     {
+#if OURO_HAS_NDLS_ONLINE
         m_warehouseContentsReportJamInFluxSet.emplace( newJamCID ); // immediately add to the current in-flux set to represent things are in play
         
         const auto updateOperationID = m_warehouse->addOrUpdateJamSnapshot( newJamCID );
         addOperationToJam( newJamCID, updateOperationID );
+#endif // OURO_HAS_NDLS_ONLINE
     };
 
 
@@ -3826,9 +3828,13 @@ int LoreApp::EntrypointOuro()
                 }
                 {
                     ImGui::Scoped::ButtonTextAlignLeft leftAlign;
-                    ImGui::Scoped::Enabled se( bWarehouseHasEndlesssAccess );
 
+#if OURO_HAS_NDLS_ONLINE
+                    ImGui::Scoped::Enabled se( bWarehouseHasEndlesssAccess );
                     if ( ImGui::Button( " " ICON_FA_CIRCLE_PLUS " Add Jam...", toolbarButtonSize ) )
+#else
+                    if ( ImGui::Button( " " ICON_FA_BINOCULARS " Jam Browser...", toolbarButtonSize ) )
+#endif // OURO_HAS_NDLS_ONLINE
                     {
                         // create local copy of the current warehouse jam ID map for use by the popup; avoids
                         // having to worry about warehouse contents shifting underneath / locking mutex in dialog
@@ -4124,7 +4130,11 @@ int LoreApp::EntrypointOuro()
                                                     [&]( const std::size_t bytesProcessed, const std::size_t filesProcessed )
                                                     {
                                                         // ping that we're still working on async tasks
-                                                        m_eventBusClient.Send< ::events::AsyncTaskActivity >();
+                                                        if ( (filesProcessed % 20) == 0 )
+                                                        {
+                                                            m_eventBusClient.Send< ::events::AsyncTaskActivity >();
+                                                            std::this_thread::yield();
+                                                        }
                                                     });
 
                                                 // deal with issues, tell user we bailed
