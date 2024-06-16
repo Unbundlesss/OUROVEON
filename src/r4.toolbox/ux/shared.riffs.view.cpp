@@ -18,6 +18,7 @@
 #include "colour/preset.h"
 
 #include "xp/open.url.h"
+#include "platform_folders.h"
 
 #include "endlesss/core.types.h"
 #include "endlesss/toolkit.shares.h"
@@ -69,6 +70,7 @@ struct SharedRiffView::State
         const char* title,
         app::IRiffExportDispatcher& riffExportDispatcher );
 
+    void manualDataImport( app::CoreGUI& coreGUI );
 
     void onNewDataFetched( toolkit::Shares::StatusOrData newData );
     void onNewDataAssigned();
@@ -278,6 +280,52 @@ void SharedRiffView::State::modalBulkExport( const char* title, app::IRiffExport
     ImGui::PopStyleColor();
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+void SharedRiffView::State::manualDataImport( app::CoreGUI& coreGUI )
+{
+    auto fileDialog = std::make_unique< ImGuiFileDialog >();
+
+    fileDialog->OpenDialog(
+        "SharedLoadDlg",
+        "Choose Shared Riffs To Import...",
+        ".json",
+        sago::getDownloadFolder(),
+        1,
+        nullptr,
+        ImGuiFileDialogFlags_Modal );
+
+    std::ignore = coreGUI.activateFileDialog( std::move( fileDialog ), [this, &coreGUI]( ImGuiFileDialog& dlg )
+        {
+            if ( !dlg.IsOk() )
+                return;
+
+            const fs::path fullPathToReadFrom = dlg.GetFilePathName();
+
+            auto newData = std::make_shared<config::endlesss::SharedRiffsCache>();
+
+            try
+            {
+                std::ifstream is( fullPathToReadFrom );
+                cereal::JSONInputArchive archive( is );
+
+                newData->serialize( archive );
+            }
+            catch ( cereal::Exception& cEx )
+            {
+                blog::error::cfg( "cannot parse [{}] : {}", fullPathToReadFrom.string(), cEx.what() );
+
+                coreGUI.getEventBusClient().Send<::events::AddErrorPopup>(
+                    "Failed To Import Shared Riff JSON",
+                    "That file could not be parsed as a shared riffs snapshot.\nIt is either damaged or the format is unrecognised."
+                );
+                return;
+            }
+
+            m_user.setUsername( newData->m_username );
+            onNewDataFetched( newData );
+        } );
+}
+
 
 // ---------------------------------------------------------------------------------------------------------------------
 void SharedRiffView::State::imgui(
@@ -370,8 +418,13 @@ void SharedRiffView::State::imgui(
             ImGui::TextUnformatted( ICON_FA_USER );
             ImGui::SameLine();
 #if !OURO_HAS_NDLS_ONLINE
-            ImGui::TextColored( colour::shades::lime.neutral(), "%s", m_user.getUsername().c_str() );
+            ImGui::TextColored( colour::shades::lime.neutral(), "%-18s", m_user.getUsername().c_str() );
             ImGui::SameLine(0, 25.0f);
+            if ( ImGui::Button( " Import ... " ) )
+            {
+                manualDataImport( coreGUI );
+            }
+            ImGui::SameLine( 0, 25.0f );
 #else
             m_user.imgui( "username", coreGUI.getEndlesssPopulation(), ImGui::ux::UserSelector::cDefaultWidthForUserSize );
             ImGui::SameLine();
@@ -427,7 +480,11 @@ void SharedRiffView::State::imgui(
 
                 if ( dataPtr->m_count == 0 )
                 {
+#if OURO_HAS_NDLS_ONLINE
                     ImGui::TextDisabled( "no data downloaded; select user and sync" );
+#else
+                    ImGui::TextDisabled( "no data; use the import button to load some" );
+#endif // OURO_HAS_NDLS_ONLINE
                 }
                 else
                 {
@@ -544,7 +601,16 @@ void SharedRiffView::State::imgui(
                                         ImGui::TextUnformatted( ICON_FA_LOCK );
                                         ImGui::SameLine();
                                     }
-                                    ImGui::TextUnformatted( dataPtr->m_names[entry] );
+                                    if ( bIsPlaying )
+                                    {
+                                        ImGui::TextColoredUnformatted( colour::shades::lime.neutral(), dataPtr->m_names[entry] );
+                                        if ( bScrollToPlaying )
+                                            ImGui::ScrollToItem( ImGuiScrollFlags_KeepVisibleCenterY );
+                                    }
+                                    else
+                                    {
+                                        ImGui::TextUnformatted( dataPtr->m_names[entry] );
+                                    }
                                 }
 #if OURO_HAS_NDLS_ONLINE
                                 ImGui::TableNextColumn();
