@@ -114,6 +114,159 @@ inline void sanitiseNameForPath( const std::string_view source, std::string& des
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// stupid compression of the extended latin range back to basic, just dozy replacement
+//
+inline void latinExtendedToBasic( const std::string_view source, std::string& dest )
+{
+    dest.clear();
+    dest.reserve( source.length() );
+
+    const char* w = source.data();
+    const char* sourceEnd = w + source.length();
+
+    // decode the source as a UTF8 stream to preserve any interesting, valid characters
+    while ( w != sourceEnd )
+    {
+        char32_t cp = utf8::next( w, sourceEnd );
+
+        switch ( cp )
+        {
+            case U'\x00C0':
+            case U'\x00C1':
+            case U'\x00C2':
+            case U'\x00C3':
+            case U'\x00C4':
+            case U'\x00C5':
+            case U'\x00C6':
+                cp = U'A';
+                break;
+
+            case U'\x00C7':
+                cp = U'C';
+                break;
+
+            case U'\x00C8':
+            case U'\x00C9':
+            case U'\x00CA':
+            case U'\x00CB':
+                cp = U'E';
+                break;
+
+            case U'\x00CC':
+            case U'\x00CD':
+            case U'\x00CE':
+            case U'\x00CF':
+                cp = U'I';
+                break;
+
+            case U'\x00D0':
+                cp = U'D';
+                break;
+
+            case U'\x00D1':
+                cp = U'N';
+                break;
+
+            case U'\x00D2':
+            case U'\x00D3':
+            case U'\x00D4':
+            case U'\x00D5':
+            case U'\x00D6':
+            case U'\x00D8':
+                cp = U'O';
+                break;
+
+            case U'\x00D7':
+                cp = U'x';
+                break;
+
+            case U'\x00D9':
+            case U'\x00DA':
+            case U'\x00DB':
+            case U'\x00DC':
+                cp = U'U';
+                break;
+
+            case U'\x00DD':
+                cp = U'Y';
+                break;
+            case U'\x00DF':
+                cp = U'S';
+                break;
+
+            // ------------------------------
+
+            case U'\x00E0':
+            case U'\x00E1':
+            case U'\x00E2':
+            case U'\x00E3':
+            case U'\x00E4':
+            case U'\x00E5':
+            case U'\x00E6':
+                cp = U'a';
+                break;
+
+            case U'\x00E7':
+                cp = U'c';
+                break;
+
+            case U'\x00E8':
+            case U'\x00E9':
+            case U'\x00EA':
+            case U'\x00EB':
+                cp = U'e';
+                break;
+
+            case U'\x00EC':
+            case U'\x00ED':
+            case U'\x00EE':
+            case U'\x00EF':
+                cp = U'i';
+                break;
+
+            case U'\x00F0':
+                cp = U'd';
+                break;
+
+            case U'\x00F1':
+                cp = U'n';
+                break;
+
+            case U'\x00F2':
+            case U'\x00F3':
+            case U'\x00F4':
+            case U'\x00F5':
+            case U'\x00F6':
+            case U'\x00F8':
+                cp = U'o';
+                break;
+
+            case U'\x00F7':
+                cp = U'd';
+                break;
+
+            case U'\x00F9':
+            case U'\x00FA':
+            case U'\x00FB':
+            case U'\x00FC':
+                cp = U'u';
+                break;
+
+            case U'\x00FD':
+            case U'\x00FF':
+                cp = U'y';
+                break;
+
+            case U'\x00FE':
+                cp = U'b';
+                break;
+        }
+
+        utf8::append( cp, dest );
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 // https://stackoverflow.com/questions/1094841/reusable-library-to-get-human-readable-version-of-file-size
 //
 inline std::string humaniseByteSize( const char* prefix, const uint64_t bytes )
