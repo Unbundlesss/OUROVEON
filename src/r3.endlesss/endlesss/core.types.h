@@ -667,11 +667,28 @@ struct RiffPlaybackAbstraction
         if ( index >= 8 )
             return false;
 
-        // don't manually change mutes if we are solo'd on a layer
+        // if a solo is happening, change it back over to manual muting
         if ( anySolo() )
-            return false;
+        {
+            // save solo'd index but turn it off
+            const auto wasSolo = m_layerSoloIndex;
+            m_layerSoloIndex = -1;
 
-        m_layerMuted[index] = !m_layerMuted[index];
+            for ( auto i = 0; i < 8; i++ )
+            {
+                // default all to muted, as per the solo
+                m_layerMuted[i] = true;
+
+                // un-mute the original solo and this recently toggled index
+                if ( i == wasSolo || i == index )
+                    m_layerMuted[i] = false;
+            }
+        }
+        else
+        {
+            // not solo, just flip the mute
+            m_layerMuted[index] = !m_layerMuted[index];
+        }
 
         return true;
     }
