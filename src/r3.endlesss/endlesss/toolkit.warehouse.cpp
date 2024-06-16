@@ -40,8 +40,11 @@ namespace toolkit {
 // ---------------------------------------------------------------------------------------------------------------------
 std::string Warehouse::createExportFilenameForJam( const types::JamCouchID& jamCouchID, const std::string_view jamName, const std::string_view fileExtension )
 {
+    std::string basicLatinJamName;
+    base::latinExtendedToBasic( jamName, basicLatinJamName );
+
     std::string sanitisedJamName;
-    base::sanitiseNameForPath( jamName, sanitisedJamName, '_', false );
+    base::sanitiseNameForPath( basicLatinJamName, sanitisedJamName, '_', false );
 
     return fmt::format( FMTX( "orx.{}.{}.{}" ), base::StrToLwrExt( sanitisedJamName ), jamCouchID, fileExtension );
 }
