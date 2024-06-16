@@ -77,7 +77,7 @@ Assuming you are still in `OUROVEON/build`:
 
 ```shell
 cd macos-app
-./assemble.sh LORE "Me"
+./assemble.sh LORE --skip-notary
 ```
 
 You'll get a message about failing notarization and being unable to find a key chain password.  Ignore it for now, you are just going to run it on your own computer. 
