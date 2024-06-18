@@ -1470,6 +1470,12 @@ void OuroApp::event_BNSCacheMiss( const events::BNSCacheMiss* eventData )
 // ---------------------------------------------------------------------------------------------------------------------
 void OuroApp::updateJamNameResolutionTasks( float deltaTime )
 {
+    // as we use some blocking calls to the warehouse here, pause name resolution while modals are active
+    // because if they are also doing heavy write ops to the warehouse - eg. jam import - it can potentially stall 
+    // the main UI thread
+    if ( !m_modalsActive.empty() )
+        return;
+
     // see if we have any outstanding new jam name resolution results
     JamNameRemoteResolution jamNameRemoteResolution;
     if ( m_jamNameRemoteFetchResultQueue.try_dequeue( jamNameRemoteResolution ) )
