@@ -282,29 +282,27 @@ ADD_BLOG( stem,     0xe65ea9,    "STEM" )
         inline ImVec2& operator+=( const ImVec2& rhs ) { this->x += rhs.x; this->y += rhs.y; return *this; }        \
         inline ImVec2& operator-=( const ImVec2& rhs ) { this->x -= rhs.x; this->y -= rhs.y; return *this; }        \
         inline ImVec2& operator*=( const ImVec2& rhs ) { this->x *= rhs.x; this->y *= rhs.y; return *this; }        \
-        inline ImVec2& operator/=( const ImVec2& rhs ) { this->x /= rhs.x; this->y /= rhs.y; return *this; }
+        inline ImVec2& operator/=( const ImVec2& rhs ) { this->x /= rhs.x; this->y /= rhs.y; return *this; }        \
+        template<class Archive>                                                                                     \
+        void serialize( Archive& archive )                                                                          \
+        {                                                                                                           \
+            archive( ::cereal::make_nvp( "x", this->x ), ::cereal::make_nvp( "y", this->y ) );                      \
+        }
 
 // imgui
-#define IM_VEC4_CLASS_EXTRA                                                                                                                             \
-        inline ImVec4(const std::array< float, 4 >& arf)  { x = arf[0]; y = arf[1]; z = arf[2]; w = arf[3]; }                                           \
-        inline friend ImVec4 operator*( const float lhs, const ImVec4& rhs ) { return ImVec4( rhs.x * lhs, rhs.y * lhs, rhs.z * lhs, rhs.w * lhs ); }   \
-        inline ImVec4 operator*( const float rhs ) const { return ImVec4( this->x * rhs, this->y * rhs, this->z * rhs, this->w * rhs ); }               \
-        inline ImVec4 operator+( const ImVec4& rhs ) const { return ImVec4( this->x + rhs.x, this->y + rhs.y, this->z + rhs.z, this->w + rhs.w ); }     \
-        inline ImVec4 operator*( const ImVec4& rhs ) const { return ImVec4( this->x * rhs.x, this->y * rhs.y, this->z * rhs.z, this->w * rhs.w ); }     \
-        inline ImVec4& operator*=( const float rhs ) { this->x *= rhs; this->y *= rhs; this->z *= rhs; this->w *= rhs; return *this; }                  \
-        inline ImVec4& operator+=( const ImVec4& rhs ) { this->x += rhs.x; this->y += rhs.y; this->z += rhs.z; this->w += rhs.w; return *this; }        \
-        inline ImVec4& operator*=( const ImVec4& rhs ) { this->x *= rhs.x; this->y *= rhs.y; this->z *= rhs.z; this->w *= rhs.w; return *this; }        \
-        template<class Archive>                                                                                                                         \
-        void save( Archive& archive ) const                                                                                                             \
-        {                                                                                                                                               \
-            archive( ::cereal::make_nvp( "colour", ::ImGui::ColorConvertFloat4ToU32( *this ) ) );                                                       \
-        }                                                                                                                                               \
-        template<class Archive>                                                                                                                         \
-        void load( Archive& archive )                                                                                                                   \
-        {                                                                                                                                               \
-            uint32_t arch_colour;                                                                                                                       \
-            archive( ::cereal::make_nvp( "colour", arch_colour ) );                                                                                     \
-            *this = ::ImGui::ColorConvertU32ToFloat4( arch_colour );                                                                                    \
+#define IM_VEC4_CLASS_EXTRA                                                                                                                                             \
+        inline ImVec4(const std::array< float, 4 >& arf)  { x = arf[0]; y = arf[1]; z = arf[2]; w = arf[3]; }                                                           \
+        inline friend ImVec4 operator*( const float lhs, const ImVec4& rhs ) { return ImVec4( rhs.x * lhs, rhs.y * lhs, rhs.z * lhs, rhs.w * lhs ); }                   \
+        inline ImVec4 operator*( const float rhs ) const { return ImVec4( this->x * rhs, this->y * rhs, this->z * rhs, this->w * rhs ); }                               \
+        inline ImVec4 operator+( const ImVec4& rhs ) const { return ImVec4( this->x + rhs.x, this->y + rhs.y, this->z + rhs.z, this->w + rhs.w ); }                     \
+        inline ImVec4 operator*( const ImVec4& rhs ) const { return ImVec4( this->x * rhs.x, this->y * rhs.y, this->z * rhs.z, this->w * rhs.w ); }                     \
+        inline ImVec4& operator*=( const float rhs ) { this->x *= rhs; this->y *= rhs; this->z *= rhs; this->w *= rhs; return *this; }                                  \
+        inline ImVec4& operator+=( const ImVec4& rhs ) { this->x += rhs.x; this->y += rhs.y; this->z += rhs.z; this->w += rhs.w; return *this; }                        \
+        inline ImVec4& operator*=( const ImVec4& rhs ) { this->x *= rhs.x; this->y *= rhs.y; this->z *= rhs.z; this->w *= rhs.w; return *this; }                        \
+        template<class Archive>                                                                                                                                         \
+        void serialize( Archive& archive )                                                                                                                              \
+        {                                                                                                                                                               \
+            archive( ::cereal::make_nvp( "x", this->x ), ::cereal::make_nvp( "y", this->y ), ::cereal::make_nvp( "z", this->z ), ::cereal::make_nvp( "w", this->w ) );  \
         }
 
 
