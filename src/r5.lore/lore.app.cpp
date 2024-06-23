@@ -101,6 +101,13 @@ DEFINE_PAGE_MANAGER( TagView, ICON_FA_ANGLES_UP " Jam Tags", "jam_view_tags", _T
 // ---------------------------------------------------------------------------------------------------------------------
 struct JamVisualisation
 {
+    // data routing
+    static constexpr auto StoragePath       = config::IPathProvider::PathFor::SharedConfig;
+    static constexpr auto StorageFilename   = "jamviz.json";
+
+    virtual ~JamVisualisation() {}
+
+
     #define _RIFFCUBE_SIZE(_action)   \
         _action(Nano)                 \
         _action(Small)                \
@@ -203,6 +210,28 @@ struct JamVisualisation
 
             return result;
         }
+
+        template<class Archive>
+        void save( Archive& archive ) const
+        {
+            const std::string username = m_user.getUsername();
+
+            archive( CEREAL_NVP( username )
+                   , CEREAL_NVP( m_colour )
+            );
+        }
+
+        template<class Archive>
+        void load( Archive& archive )
+        {
+            std::string username;
+
+            archive( CEREAL_NVP( username )
+                   , CEREAL_NVP( m_colour )
+            );
+
+            m_user.setUsername( username );
+        }
     };
 
     NameHighlighting        m_userHighlight1    = NameHighlighting( colour::shades::white.neutral()     );  // highlight user riff with top-left indicator (primary)
@@ -224,8 +253,7 @@ struct JamVisualisation
     template<class Archive>
     void serialize( Archive& archive )
     {
-        archive( CEREAL_NVP( m_userHighlight1 )
-               , CEREAL_NVP( m_userHighlight2 )
+        archive( CEREAL_NVP( m_userHighlight2 )
                , CEREAL_NVP( m_riffCubeSize )
                , CEREAL_NVP( m_lineBreakOn )
                , CEREAL_NVP( m_riffGapOn )
@@ -276,6 +304,20 @@ struct JamVisualisation
         const float labelColumnsSize = 100.0f;
         const float subgroupInsetSize = 16.0f;
         const float panelWidth = ImGui::GetContentRegionAvail().x;
+
+        if ( ImGui::Button( " Reset All To Defaults ", ImVec2( panelWidth, 32.0f ) ) )
+        {
+            // save and persist the original username used for highlights
+            const auto saveUsername = m_userHighlight1.m_user.getUsername();
+
+            *this = JamVisualisation{};
+            choiceChanged = true;
+
+            m_userHighlight1.m_user.setUsername( saveUsername );
+        }
+        ImGui::Spacing();
+        ImGui::SeparatorBreak();
+        ImGui::Spacing();
 
         ImGui::PushItemWidth( (panelWidth - labelColumnsSize) * 0.7f );
         {
@@ -1166,6 +1208,38 @@ protected:
                 if ( addRiffGap && 
                      cellX > 0 )    // don't indent if we're already at the start of a row
                 {
+                    const int32_t gapPixelX = cellX * riffCubeSize;
+                    const int32_t gapPixelY = cellY * riffCubeSize;
+
+                    base::U32Buffer& activeBuffer = activeSketch->get();
+
+                    // render something in the gap
+                    const auto gapColour = ImGui::ColorConvertFloat4ToU32_BGRA_Flip( colour::shades::slate.light(0.25f) );
+                    for ( auto gapWriteY = 0U; gapWriteY < riffCubeSize; gapWriteY++ )
+                    {
+                        for ( auto gapWriteX = 0U; gapWriteX < riffCubeSize; gapWriteX++ )
+                        {
+                            auto gapWriteXMirroredX = ( riffCubeSize - 1 ) - gapWriteX;
+                            auto gapWriteXMirroredY = ( riffCubeSize - 1 ) - gapWriteY;
+
+                            const bool edge  = ( gapWriteX == 2 ||
+                                                 gapWriteY == 2 ||
+                                                 gapWriteX == riffCubeSize - 3 ||
+                                                 gapWriteY == riffCubeSize - 3 );
+                            const bool inner = ( gapWriteX >= 2 &&
+                                                 gapWriteY >= 2 &&
+                                                 gapWriteX <= riffCubeSize - 3 &&
+                                                 gapWriteY <= riffCubeSize - 3 );
+
+                            if ( inner && edge )
+                            {
+                                activeBuffer(
+                                    gapPixelX + gapWriteX,
+                                    gapPixelY + gapWriteY ) = gapColour;
+                            }
+                        }
+                    }
+
                     cellX++;
                     if ( cellX >= cellColumns )
                     {
@@ -1978,18 +2052,23 @@ int LoreApp::EntrypointOuro()
 
     const bool bHasValidEndlesssAuth = m_networkConfiguration->hasAccess( endlesss::api::NetConfiguration::Access::Authenticated );
 
-    // default to viewing logged-in user in the jam view highlight
+    // load jam viz data if we have any
+    {
+        config::load( *this, m_jamVisualisation );
+
+        // default to viewing logged-in user in the jam view highlight
 #if OURO_HAS_NDLS_ONLINE
-    if ( bHasValidEndlesssAuth )
-    {
-        m_jamVisualisation.m_userHighlight1.m_user.setUsername( m_networkConfiguration->auth().user_id );
-    }
+        if ( bHasValidEndlesssAuth )
+        {
+            m_jamVisualisation.m_userHighlight1.m_user.setUsername( m_networkConfiguration->auth().user_id );
+        }
 #else
-    {
-        // with no network config, take the "impersonator" username set during startup
-        m_jamVisualisation.m_userHighlight1.m_user.setUsername( m_configNoNet.impersonationUsername );
-    }
+        {
+            // with no network config, take the "impersonator" username set during startup
+            m_jamVisualisation.m_userHighlight1.m_user.setUsername( m_configNoNet.impersonationUsername );
+        }
 #endif // OURO_HAS_NDLS_ONLINE
+    }
 
     if ( m_configPerf.enableVibesRenderer )
     {
@@ -2615,6 +2694,7 @@ int LoreApp::EntrypointOuro()
                         if ( visOptionChanged )
                         {
                             notifyForRenderUpdate();
+                            config::save( *this, m_jamVisualisation );
                         }
                     }
                     else

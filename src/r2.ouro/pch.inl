@@ -7,7 +7,7 @@
 //  
 //
 
-#define OURO_FRAMEWORK_VERSION    "1.1.3"
+#define OURO_FRAMEWORK_VERSION    "1.1.4"
 #define OURO_FRAMEWORK_CREDIT     "ishani.org 2024"
 #define OURO_FRAMEWORK_URL        "https://ishani.org/shelf/ouroveon/"
 
@@ -270,30 +270,42 @@ ADD_BLOG( stem,     0xe65ea9,    "STEM" )
 // ---------------------------------------------------------------------------------------------------------------------
 
 // imgui
-#define IM_VEC2_CLASS_EXTRA                                                                                             \
-        inline ImVec2 operator*( const float rhs ) const { return ImVec2( this->x * rhs, this->y * rhs ); }          \
-        inline ImVec2 operator/( const float rhs ) const { return ImVec2( this->x / rhs, this->y / rhs ); }          \
-        inline ImVec2 operator+( const ImVec2& rhs ) const { return ImVec2( this->x + rhs.x, this->y + rhs.y ); }    \
-        inline ImVec2 operator-( const ImVec2& rhs ) const { return ImVec2( this->x - rhs.x, this->y - rhs.y ); }    \
-        inline ImVec2 operator*( const ImVec2& rhs ) const { return ImVec2( this->x * rhs.x, this->y * rhs.y ); }    \
-        inline ImVec2 operator/( const ImVec2& rhs ) const { return ImVec2( this->x / rhs.x, this->y / rhs.y ); }    \
-        inline ImVec2& operator*=( const float rhs ) { this->x *= rhs; this->y *= rhs; return *this; }               \
-        inline ImVec2& operator/=( const float rhs ) { this->x /= rhs; this->y /= rhs; return *this; }               \
-        inline ImVec2& operator+=( const ImVec2& rhs ) { this->x += rhs.x; this->y += rhs.y; return *this; }         \
-        inline ImVec2& operator-=( const ImVec2& rhs ) { this->x -= rhs.x; this->y -= rhs.y; return *this; }         \
-        inline ImVec2& operator*=( const ImVec2& rhs ) { this->x *= rhs.x; this->y *= rhs.y; return *this; }         \
+#define IM_VEC2_CLASS_EXTRA                                                                                         \
+        inline ImVec2 operator*( const float rhs ) const { return ImVec2( this->x * rhs, this->y * rhs ); }         \
+        inline ImVec2 operator/( const float rhs ) const { return ImVec2( this->x / rhs, this->y / rhs ); }         \
+        inline ImVec2 operator+( const ImVec2& rhs ) const { return ImVec2( this->x + rhs.x, this->y + rhs.y ); }   \
+        inline ImVec2 operator-( const ImVec2& rhs ) const { return ImVec2( this->x - rhs.x, this->y - rhs.y ); }   \
+        inline ImVec2 operator*( const ImVec2& rhs ) const { return ImVec2( this->x * rhs.x, this->y * rhs.y ); }   \
+        inline ImVec2 operator/( const ImVec2& rhs ) const { return ImVec2( this->x / rhs.x, this->y / rhs.y ); }   \
+        inline ImVec2& operator*=( const float rhs ) { this->x *= rhs; this->y *= rhs; return *this; }              \
+        inline ImVec2& operator/=( const float rhs ) { this->x /= rhs; this->y /= rhs; return *this; }              \
+        inline ImVec2& operator+=( const ImVec2& rhs ) { this->x += rhs.x; this->y += rhs.y; return *this; }        \
+        inline ImVec2& operator-=( const ImVec2& rhs ) { this->x -= rhs.x; this->y -= rhs.y; return *this; }        \
+        inline ImVec2& operator*=( const ImVec2& rhs ) { this->x *= rhs.x; this->y *= rhs.y; return *this; }        \
         inline ImVec2& operator/=( const ImVec2& rhs ) { this->x /= rhs.x; this->y /= rhs.y; return *this; }
 
 // imgui
-#define IM_VEC4_CLASS_EXTRA                                                                                                                                 \
-        inline ImVec4(const std::array< float, 4 >& arf)  { x = arf[0]; y = arf[1]; z = arf[2]; w = arf[3]; }                                            \
-        inline friend ImVec4 operator*( const float lhs, const ImVec4& rhs ) { return ImVec4( rhs.x * lhs, rhs.y * lhs, rhs.z * lhs, rhs.w * lhs ); }    \
-        inline ImVec4 operator*( const float rhs ) const { return ImVec4( this->x * rhs, this->y * rhs, this->z * rhs, this->w * rhs ); }                \
-        inline ImVec4 operator+( const ImVec4& rhs ) const { return ImVec4( this->x + rhs.x, this->y + rhs.y, this->z + rhs.z, this->w + rhs.w ); }      \
-        inline ImVec4 operator*( const ImVec4& rhs ) const { return ImVec4( this->x * rhs.x, this->y * rhs.y, this->z * rhs.z, this->w * rhs.w ); }      \
-        inline ImVec4& operator*=( const float rhs ) { this->x *= rhs; this->y *= rhs; this->z *= rhs; this->w *= rhs; return *this; }                   \
-        inline ImVec4& operator+=( const ImVec4& rhs ) { this->x += rhs.x; this->y += rhs.y; this->z += rhs.z; this->w += rhs.w; return *this; }         \
-        inline ImVec4& operator*=( const ImVec4& rhs ) { this->x *= rhs.x; this->y *= rhs.y; this->z *= rhs.z; this->w *= rhs.w; return *this; }
+#define IM_VEC4_CLASS_EXTRA                                                                                                                             \
+        inline ImVec4(const std::array< float, 4 >& arf)  { x = arf[0]; y = arf[1]; z = arf[2]; w = arf[3]; }                                           \
+        inline friend ImVec4 operator*( const float lhs, const ImVec4& rhs ) { return ImVec4( rhs.x * lhs, rhs.y * lhs, rhs.z * lhs, rhs.w * lhs ); }   \
+        inline ImVec4 operator*( const float rhs ) const { return ImVec4( this->x * rhs, this->y * rhs, this->z * rhs, this->w * rhs ); }               \
+        inline ImVec4 operator+( const ImVec4& rhs ) const { return ImVec4( this->x + rhs.x, this->y + rhs.y, this->z + rhs.z, this->w + rhs.w ); }     \
+        inline ImVec4 operator*( const ImVec4& rhs ) const { return ImVec4( this->x * rhs.x, this->y * rhs.y, this->z * rhs.z, this->w * rhs.w ); }     \
+        inline ImVec4& operator*=( const float rhs ) { this->x *= rhs; this->y *= rhs; this->z *= rhs; this->w *= rhs; return *this; }                  \
+        inline ImVec4& operator+=( const ImVec4& rhs ) { this->x += rhs.x; this->y += rhs.y; this->z += rhs.z; this->w += rhs.w; return *this; }        \
+        inline ImVec4& operator*=( const ImVec4& rhs ) { this->x *= rhs.x; this->y *= rhs.y; this->z *= rhs.z; this->w *= rhs.w; return *this; }        \
+        template<class Archive>                                                                                                                         \
+        void save( Archive& archive ) const                                                                                                             \
+        {                                                                                                                                               \
+            archive( ::cereal::make_nvp( "colour", ::ImGui::ColorConvertFloat4ToU32( *this ) ) );                                                       \
+        }                                                                                                                                               \
+        template<class Archive>                                                                                                                         \
+        void load( Archive& archive )                                                                                                                   \
+        {                                                                                                                                               \
+            uint32_t arch_colour;                                                                                                                       \
+            archive( ::cereal::make_nvp( "colour", arch_colour ) );                                                                                     \
+            *this = ::ImGui::ColorConvertU32ToFloat4( arch_colour );                                                                                    \
+        }
 
 
 #include "imgui.h"
