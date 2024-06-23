@@ -504,8 +504,8 @@ int OuroApp::EntrypointGUI()
                         endlesssWorkUnauthorised = true;
 
                         ImGui::TextColored(
-                            colour::shades::errors.neutral(),
-                            "Endlesss has ceased operations, servers are down." );
+                            colour::shades::callout.light(),
+                            "Endlesss has ceased operations, servers are unavailable." );
                         ImGui::TextColored(
                             colour::shades::callout.neutral(),
                             "All network access will be disabled." );
