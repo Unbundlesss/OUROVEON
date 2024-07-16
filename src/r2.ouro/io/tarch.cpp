@@ -308,7 +308,7 @@ absl::Status unarchiveTARIntoDirectory(
         std::size_t bytesRead = fread( &tarHeader, sizeof( THeader ), 1, tarInputFile );
         if ( bytesRead != 1 )
         {
-            return absl::AbortedError( fmt::format( FMTX( "unable to read Tar header, fread returned {}" ), bytesRead ) );
+            return absl::AbortedError( fmt::format( FMTX( "unable to read Tar [{}] header, fread returned {}" ), inputTarFile.string(), bytesRead ) );
         }
 
         // header is entirely zero? marks the end of the file
@@ -320,7 +320,7 @@ absl::Status unarchiveTARIntoDirectory(
         // check for a 'ustar' as a magic identifier
         if ( tarHeader.ustar[0] != 'u' || tarHeader.ustar[1] != 's' || tarHeader.ustar[2] != 't' )
         {
-            return absl::AbortedError( "Tar header mising ustar identifier, aborting" );
+            return absl::AbortedError( fmt::format( FMTX("Tar header mising ustar identifier, aborting [{}]"), inputTarFile.string() ) );
         }
 
         const fs::path outputFilePath = fs::absolute( outputPath / fs::path( tarHeader.name ) );
@@ -342,7 +342,7 @@ absl::Status unarchiveTARIntoDirectory(
             const std::size_t loadBufferRead = fread( loadBuffer.data(), 1, fileSize, tarInputFile );
             if ( loadBufferRead != fileSize )
             {
-                return absl::AbortedError( fmt::format( FMTX( "unable to read file data from tar, fread returned {}" ), loadBufferRead ) );
+                return absl::AbortedError( fmt::format( FMTX( "unable to read file data from tar [{}], fread returned {}" ), inputTarFile.string(), loadBufferRead ) );
             }
 
             const std::size_t paddingBytes = 512 - fileSize % 512;
