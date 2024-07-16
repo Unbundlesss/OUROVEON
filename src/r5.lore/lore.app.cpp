@@ -2138,6 +2138,19 @@ int LoreApp::EntrypointOuro()
             }
         });
 
+#if 0
+    // test tool for importing some carefully formatting JSON that has been snapshotted directly from Couch
+    registerMainMenuEntry( 8, "IMPORT", [this]()
+        {
+            if ( ImGui::MenuItem( "Json On Disk ..." ) )
+            {
+                m_warehouse->syncJsonImportFromDisk(
+                    R"(E:\xxxx\banda##########.json\riffs.json)",
+                    R"(E:\xxxx\banda##########.json\stems.json)" );
+            }
+        });
+#endif
+    
 
 #if OURO_FEATURE_NST24
     // VSTs for audio engine
