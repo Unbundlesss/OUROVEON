@@ -1075,6 +1075,7 @@ int OuroApp::EntrypointGUI()
             APP_EVENT_BIND_TO( ExportRiff );
             APP_EVENT_BIND_TO( RequestToShareRiff );
             APP_EVENT_BIND_TO( BNSCacheMiss );
+            APP_EVENT_BIND_TO( BNSJamNameUpdate );
         }
     }
 
@@ -1465,6 +1466,12 @@ void OuroApp::event_BNSCacheMiss( const events::BNSCacheMiss* eventData )
     blog::debug::api( FMTX( "ignored name resolution cache miss, {}" ), eventData->m_jamID );
 
 #endif // OURO_HAS_NDLS_ONLINE
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void OuroApp::event_BNSJamNameUpdate( const events::BNSJamNameUpdate* eventData )
+{
+    emplaceJamNameResolutionIntoQueue( eventData->m_jamID, eventData->m_bandName );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

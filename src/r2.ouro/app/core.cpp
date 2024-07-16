@@ -272,6 +272,7 @@ int Core::Run()
         // events from the endlesss sdk layer
         APP_EVENT_REGISTER( EnqueueRiffPlayback );
         APP_EVENT_REGISTER( BNSCacheMiss );
+        APP_EVENT_REGISTER( BNSJamNameUpdate );
         APP_EVENT_REGISTER( BNSWasUpdated );
         APP_EVENT_REGISTER( NetworkActivity );
         APP_EVENT_REGISTER( AsyncTaskActivity );

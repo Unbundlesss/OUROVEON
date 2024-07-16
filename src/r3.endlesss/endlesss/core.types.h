@@ -991,6 +991,26 @@ endlesss::types::JamCouchID     m_jamID;
 CREATE_EVENT_END()
 
 // ---------------------------------------------------------------------------------------------------------------------
+// an event to request an async addition of jam/name update (eg. into emplaceJamNameResolutionIntoQueue() in ouro app)
+
+
+CREATE_EVENT_BEGIN( BNSJamNameUpdate )
+
+BNSJamNameUpdate() = delete;
+
+BNSJamNameUpdate( const endlesss::types::JamCouchID jamID, std::string_view bandName )
+    : m_jamID( jamID )
+    , m_bandName( bandName )
+{
+}
+
+endlesss::types::JamCouchID     m_jamID;
+std::string                     m_bandName;
+
+CREATE_EVENT_END()
+
+
+// ---------------------------------------------------------------------------------------------------------------------
 // band name service - new jam name data is available to anyone that cares about such things
 
 CREATE_EVENT_BEGIN( BNSWasUpdated )

@@ -112,13 +112,13 @@ protected:
 
     void event_ExportRiff( const events::ExportRiff* eventData );
     void event_RequestToShareRiff( const events::RequestToShareRiff* eventData );
-
+    
     // riff export config
     config::endlesss::Export                m_configExportOutput;
 
     base::EventListenerID                   m_eventLID_ExportRiff = base::EventListenerID::invalid();
     base::EventListenerID                   m_eventLID_RequestToShareRiff = base::EventListenerID::invalid();
-
+    
 
     // ---------------------------------------------------------------------------------------------------------------------
 
@@ -127,11 +127,14 @@ protected:
 
     // take a band### id and go find a public name for it, via circuitous means
     void event_BNSCacheMiss( const events::BNSCacheMiss* eventData );
+    void event_BNSJamNameUpdate( const events::BNSJamNameUpdate* eventData );
 
     // run on main thread to work with the results of async jam name resolution
     void updateJamNameResolutionTasks( float deltaTime );
 
     base::EventListenerID                   m_eventLID_BNSCacheMiss = base::EventListenerID::invalid();
+    base::EventListenerID                   m_eventLID_BNSJamNameUpdate = base::EventListenerID::invalid();
+
     JamNameRemoteFetchResultQueue           m_jamNameRemoteFetchResultQueue;
     float                                   m_jamNameRemoteFetchUpdateBroadcastTimer = 0;
 
