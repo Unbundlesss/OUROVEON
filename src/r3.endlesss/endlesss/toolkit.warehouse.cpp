@@ -319,8 +319,31 @@ struct GetStemData final : Warehouse::INetworkTask
     bool Work( TaskQueue& currentTasks ) override;
 };
 
+// ---------------------------------------------------------------------------------------------------------------------
+struct OnDiskJsonImport final : Warehouse::ITask
+{
+    static constexpr std::string_view Tag = "DISKJSON";
 
+    OnDiskJsonImport( const endlesss::types::JamCouchID& jamCID, const fs::path& riffsFile, const fs::path& stemsFile )
+        : Warehouse::ITask()
+        , m_jamCID( jamCID )
+        , m_riffsJsonFile( riffsFile )
+        , m_stemsJsonFile( stemsFile )
+    {}
 
+    endlesss::types::JamCouchID m_jamCID;
+    fs::path                    m_riffsJsonFile;
+    fs::path                    m_stemsJsonFile;
+
+    // rebuild after add
+    bool shouldTriggerContentReport() const override { return true; }
+
+    const char* getTag() const override { return Tag.data(); }
+    std::string Describe() const override { return fmt::format( "[{}] importing ...", Tag ); }
+    bool Work( TaskQueue& currentTasks ) override;
+};
+
+// ---------------------------------------------------------------------------------------------------------------------
 struct Warehouse::TaskSchedule
 {
     TaskQueue                           m_taskQueue;
@@ -687,6 +710,7 @@ namespace tags {
         Warehouse::SqlDB::query<createIndex_0>();
         Warehouse::SqlDB::query<createIndex_1>();
         Warehouse::SqlDB::query<createIndex_2>();
+        Warehouse::SqlDB::query<createIndex_3>();
     }
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -1451,6 +1475,12 @@ base::OperationID Warehouse::requestJamDataExport( const types::JamCouchID& jamC
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+void Warehouse::syncJsonImportFromDisk( const types::JamCouchID& jamCouchID, const fs::path& riffsFile, const fs::path& stemsFile )
+{
+    m_taskSchedule->enqueueWorkTask<OnDiskJsonImport>( jamCouchID, riffsFile, stemsFile );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 base::OperationID Warehouse::requestJamDataImport( const fs::path pathToData )
 {
     const auto operationID = base::Operations::newID( OV_ImportAction );
@@ -1488,8 +1518,12 @@ bool Warehouse::fetchSingleRiffByID( const endlesss::types::RiffCouchID& riffID,
     {
         if ( result.riff.stemsOn[stemI] )
         {
-            if ( !sql::stems::getSingleStemByID( result.riff.stems[stemI], result.stems[stemI] ) )
-                return false;
+            // if the stem can't be acquired - which I've seen happen a few times with some OLD jams - we let the process
+            // continue and the riff be resolved, just without this stem being enabled any more. means that if there
+            // are any stems that are recoverable, we can still play those rather than just abort the whole riff resolve
+            const bool bFoundStem = sql::stems::getSingleStemByID( result.riff.stems[stemI], result.stems[stemI] );
+            if ( !bFoundStem )
+                result.riff.stemsOn[stemI] = false;
         }
     }
 
@@ -2491,7 +2525,7 @@ bool JamExportTask::Work( TaskQueue& currentTasks )
         std::string riffEntryLine;
 
         yamlOutput << "# riffs schema" << std::endl;
-        yamlOutput << "# couch ID, user, creation unix time, root index, root name, scale index, scale name, BPS (float), BPS (hex float), BPM (float), BPM (hex float), bar length, 8x [ stem couch ID, stem gain (float), stem gain (hex float), stem enabled ], app version" << std::endl;
+        yamlOutput << "# couch ID, user, creation unix time, root index, root name, scale index, scale name, BPS (float), BPS (hex float), BPM (float), BPM (hex float), bar length, app version, 8x [ stem couch ID, stem gain (float), stem gain (hex float), stem enabled ], magnitude" << std::endl;
         yamlOutput << "riffs:" << std::endl;
         while ( query( riffCID ) )
         {
@@ -2835,6 +2869,9 @@ bool JamImportTask::Work( TaskQueue& currentTasks )
         );
     }
 
+    // toss the imported jam name into the name stash
+    m_eventBusClient.Send<::events::BNSJamNameUpdate>( endlesss::types::JamCouchID( headerJamCouchID.value() ), headerJamName.value() );
+
     m_eventBusClient.Send<::events::AddToastNotification>( ::events::AddToastNotification::Type::Info,
         ICON_FA_BOX " Jam Import Success",
         fmt::format( FMTX( "Imported data into [{}]" ), headerJamName.value() ) );
@@ -2842,6 +2879,170 @@ bool JamImportTask::Work( TaskQueue& currentTasks )
     return true;
 
 #undef PARSE_AND_CHECK
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+bool OnDiskJsonImport::Work( TaskQueue& currentTasks )
+{
+    using RiffStream = endlesss::api::ResultRowHeader<endlesss::api::ResultDocsHeader<endlesss::api::ResultRiffDocument, endlesss::types::RiffCouchID>>;
+    using StemStream = endlesss::api::ResultRowHeader<endlesss::api::ResultDocsHeader<endlesss::api::ResultStemDocument, endlesss::types::StemCouchID>>;
+
+    RiffStream riffStream;
+    try
+    {
+        std::ifstream is( m_riffsJsonFile );
+        cereal::JSONInputArchive archive( is );
+
+        riffStream.serialize( archive );
+    }
+    catch ( cereal::Exception& cEx )
+    {
+        blog::error::cfg( "cannot parse [{}] : {}", m_riffsJsonFile.string(), cEx.what() );
+    }
+
+    StemStream stemStream;
+    try
+    {
+        std::ifstream is( m_stemsJsonFile );
+        cereal::JSONInputArchive archive( is );
+
+        stemStream.serialize( archive );
+    }
+    catch ( cereal::Exception& cEx )
+    {
+        blog::error::cfg( "cannot parse [{}] : {}", m_stemsJsonFile.string(), cEx.what() );
+    }
+
+    static constexpr char insertOrIgnore_RiffSkeleton[] = R"(
+        INSERT OR IGNORE INTO riffs( riffCID, OwnerJamCID ) VALUES( ?1, ?2 );
+    )";
+
+    static constexpr char insertRiffDetails[] = R"(
+        UPDATE riffs SET CreationTime=?2,
+                         Root=?3,
+                         Scale=?4,
+                         BPS=?5,
+                         BPMrnd=?6,
+                         BarLength=?7,
+                         AppVersion=?8,
+                         Magnitude=?9,
+                         UserName=?10,
+                         StemCID_1=?11,
+                         StemCID_2=?12,
+                         StemCID_3=?13,
+                         StemCID_4=?14,
+                         StemCID_5=?15,
+                         StemCID_6=?16,
+                         StemCID_7=?17,
+                         StemCID_8=?18,
+                         GainsJSON=?19
+                         WHERE riffCID=?1
+    )";
+
+    static constexpr char insertNewStemSkeleton[] = R"(
+        INSERT OR IGNORE INTO stems( stemCID, OwnerJamCID ) VALUES( ?1, ?2 );
+    )";
+
+    Warehouse::SqlDB::TransactionGuard txn;
+    for ( const auto& netRiffData : riffStream.rows )
+    {
+        types::Riff riffData{ m_jamCID, netRiffData.doc };
+
+        Warehouse::SqlDB::query<insertOrIgnore_RiffSkeleton>( riffData.couchID.value(), m_jamCID.value() );
+
+
+        auto gainsJson = fmt::format( R"([ {} ])", fmt::join( riffData.gains, ", " ) );
+
+        for ( auto stemI = 0; stemI < 8; stemI++ )
+        {
+            const auto& stemCID = riffData.stems[stemI];
+            if ( stemCID.empty() )
+                continue;
+
+            Warehouse::SqlDB::query<insertNewStemSkeleton>( stemCID.value(), m_jamCID.value() );
+        }
+
+        Warehouse::SqlDB::query<insertRiffDetails>(
+            riffData.couchID.value(),
+            riffData.creationTimeUnix,
+            riffData.root,
+            riffData.scale,
+            riffData.BPS,
+            riffData.BPMrnd,
+            riffData.barLength,
+            riffData.appVersion,
+            riffData.magnitude,
+            riffData.user,
+            riffData.stems[0].value(),
+            riffData.stems[1].value(),
+            riffData.stems[2].value(),
+            riffData.stems[3].value(),
+            riffData.stems[4].value(),
+            riffData.stems[5].value(),
+            riffData.stems[6].value(),
+            riffData.stems[7].value(),
+            gainsJson
+        );
+    }
+
+    static constexpr char updateStemDetails[] = R"(
+        UPDATE stems SET CreationTime=?2,
+                         FileEndpoint=?3,
+                         FileBucket=?4,
+                         FileKey=?5,
+                         FileMIME=?6,
+                         FileLength=?7,
+                         BPS=?8,
+                         BPMrnd=?9,
+                         Instrument=?10,
+                         Length16s=?11,
+                         OriginalPitch=?12,
+                         BarLength=?13,
+                         PresetName=?14,
+                         CreatorUserName=?15,
+                         SampleRate=?16,
+                         PrimaryColour=?17
+                         WHERE stemCID=?1
+    )";
+
+    for ( const auto& stemData : stemStream.rows )
+    {
+        const auto unixTime = (uint32_t)(stemData.doc.created / 1000); // from unix nano
+
+        int32_t instrumentMask = 0;
+        if ( stemData.doc.isDrum )
+            instrumentMask |= 1 << 1;
+        if ( stemData.doc.isNote )
+            instrumentMask |= 1 << 2;
+        if ( stemData.doc.isBass )
+            instrumentMask |= 1 << 3;
+        if ( stemData.doc.isMic )
+            instrumentMask |= 1 << 4;
+
+        const endlesss::api::IStemAudioFormat& audioFormat = stemData.doc.cdn_attachments.getAudioFormat();
+
+        Warehouse::SqlDB::query<updateStemDetails>(
+            stemData.id.value(),
+            unixTime,
+            audioFormat.getEndpoint().data(),
+            audioFormat.getBucket().data(),
+            audioFormat.getKey().data(),
+            audioFormat.getMIME().data(),
+            audioFormat.getLength(),
+            stemData.doc.bps,
+            types::BPStoRoundedBPM( stemData.doc.bps ),
+            instrumentMask,
+            stemData.doc.length16ths,
+            stemData.doc.originalPitch,
+            stemData.doc.barLength,
+            stemData.doc.presetName,
+            stemData.doc.creatorUserName,
+            (int32_t)stemData.doc.sampleRate,
+            stemData.doc.primaryColour
+        );
+    }
+
+    return true;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

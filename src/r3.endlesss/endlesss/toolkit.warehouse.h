@@ -250,6 +250,8 @@ struct Warehouse
         const std::string_view fileExtension );
 
 
+    // written as a specific tool to import some obscure hand-saved backups. not really for public use, only in debug builds
+    void syncJsonImportFromDisk( const types::JamCouchID& jamCouchID, const fs::path& riffsFile, const fs::path& stemsFile );
 
     // -----------------------------------------------------------------------------------------------------------------
     // Riffs
