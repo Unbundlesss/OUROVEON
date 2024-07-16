@@ -120,7 +120,11 @@ void CacheTrimState::imgui()
                     }
                     bool bHitEnd = i == fs::end( m_iterator );
                     if ( bHitEnd )
+                    {
+                        blog::cache( FMTX( "finished scan : {} files checked" ), m_filesTouched );
+
                         m_runningSearch = false;
+                    }
                 }
                 catch ( std::exception& cEx )
                 {
