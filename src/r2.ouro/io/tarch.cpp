@@ -358,6 +358,11 @@ absl::Status unarchiveTARIntoDirectory(
                     stemOutputFile = nullptr;
                     };
 
+                if ( stemOutputFile == nullptr )
+                {
+                    return absl::AbortedError( fmt::format( FMTX( "failed to create output stem file [{}]" ), outputFilePath.string() ) );
+                }
+
                 fwrite( loadBuffer.data(), fileSize, 1, stemOutputFile );
             }
 
