@@ -126,7 +126,8 @@ workspace ("ouroveon_" .. _ACTION)
 
             "OURO_HAS_ISPC=1",
             "OURO_HAS_CLAP=0",          -- enable CLAP plugin loading
-            "OURO_HAS_NDLS_ONLINE=0",   -- enable connection to the Endlesss live servers. or don't.
+            "OURO_HAS_NDLS_ONLINE=1",   -- enable connection to the Endlesss live servers. or don't.
+            "OURO_HAS_NDLS_SHARING=0",  -- enable sharing-to-Endlesss-feed
 
             -- for DPP; needs adjusting at the highest level before winsock is included
             "FD_SETSIZE=1024"
@@ -155,7 +156,8 @@ workspace ("ouroveon_" .. _ACTION)
 
             "OURO_HAS_ISPC=0",
             "OURO_HAS_CLAP=0",
-            "OURO_HAS_NDLS_ONLINE=0",
+            "OURO_HAS_NDLS_ONLINE=1",
+            "OURO_HAS_NDLS_SHARING=0",
         }
         buildoptions
         {
@@ -177,7 +179,8 @@ workspace ("ouroveon_" .. _ACTION)
 
             "OURO_HAS_ISPC=0",
             "OURO_HAS_CLAP=0",
-            "OURO_HAS_NDLS_ONLINE=0",
+            "OURO_HAS_NDLS_ONLINE=1",
+            "OURO_HAS_NDLS_SHARING=0",
         }
         buildoptions
         {

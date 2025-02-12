@@ -20,14 +20,12 @@ namespace endlesss {
 // ---------------------------------------------------------------------------------------------------------------------
 struct SyncOptions
 {
-    bool            sync_collectibles = false;  // go fetch the collectible jam data from (buggy) web endpoints?
     bool            sync_state        = true;   // fetch riff counts for all private jams (may take a while)
 
     template<class Archive>
     void serialize( Archive& archive )
     {
-        archive( CEREAL_NVP( sync_collectibles )
-               , CEREAL_NVP( sync_state )
+        archive( CEREAL_NVP( sync_state )
         );
     }
 };

@@ -176,62 +176,6 @@ void Jams::asyncCacheRebuild(
             return;
         }
 
-        if ( syncOptions.sync_collectibles )
-        {
-            // fetch all known pages of collectibles
-            std::vector< api::CurrentCollectibleJams::Data > collectedCollectibles;
-            for ( int32_t page = 0; page < 100; page++ )    // just putting some kind of limit on this nonsense, don't know if there's a way to get total pages
-            {
-                asyncCallback( AsyncFetchState::Working, fmt::format( FMTX( "Fetching collectibles, page {} ..." ), page ) );
-
-                // if the fetch works, bolt the new list onto the existing pile
-                api::CurrentCollectibleJams collectibles;
-                bool fetchOk = collectibles.fetch( netConfig, page );
-                if ( fetchOk && collectibles.ok && !collectibles.data.empty() )
-                {
-                    collectedCollectibles.insert( collectedCollectibles.end(), collectibles.data.begin(), collectibles.data.end() );
-                }
-                else
-                {
-                    break;
-                }
-            }
-            // convert to our cached collectibles type
-            {
-                m_configEndlesssCollectibles.jams.clear();
-                for ( const api::CurrentCollectibleJams::Data& cdata : collectedCollectibles )
-                {
-                    if ( cdata.name.empty() )
-                        continue;
-
-                    config::endlesss::CollectibleJamManifest::Jam cjam;
-
-                    cjam.jamId    = cdata.jamId;
-                    cjam.name     = cdata.name;
-                    cjam.bio      = cdata.bio;
-                    cjam.bandId   = cdata.legacy_id;
-                    cjam.owner    = cdata.owner;
-                    cjam.members  = cdata.members;
-                    cjam.rifftime = cdata.rifff.created;
-
-                    asyncCallback( AsyncFetchState::Working, fmt::format( FMTX( "Analysing Collectibles ({})" ), busyAscii[busyCounter] ) );
-                    busyCounter = (busyCounter + 1) % 4;
-
-                    if ( syncOptions.sync_state )
-                    {
-                        api::JamRiffCount riffCount;
-                        if ( riffCount.fetch( netConfig, endlesss::types::JamCouchID{ cjam.bandId } ) )
-                        {
-                            cjam.riffCount = riffCount.total_rows;
-                        }
-                    }
-
-                    m_configEndlesssCollectibles.jams.emplace_back( cjam );
-                }
-                blog::cache( "extracted {} collectible jams", m_configEndlesssCollectibles.jams.size() );
-            }
-        }
-
         asyncCallback( AsyncFetchState::Working, "Updating jam metadata ..." );
 
 

@@ -68,8 +68,8 @@ int OuroApp::EntrypointGUI()
 {
     static constexpr std::array< const char*, 4 > cSampleRateLabels { "44100", "48000", "88200", "96000" };
     static constexpr std::array< uint32_t,    4 > cSampleRateValues {  44100 ,  48000 ,  88200 ,  96000  };
-    static constexpr std::array< const char*, 6 > cBufferSizeLabels {  "Auto",    "64",   "256",   "512",  "1024",  "2048" };
-    static constexpr std::array< uint32_t,    6 > cBufferSizeValues {      0 ,     64 ,    256 ,    512 ,   1024 ,   2048  };
+    static constexpr std::array< const char*, 7 > cBufferSizeLabels {  "Auto",    "32",    "64",   "256",   "512",  "1024",  "2048" };
+    static constexpr std::array< uint32_t,    7 > cBufferSizeValues {      0 ,     32 ,     64 ,    256 ,    512 ,   1024 ,   2048  };
     static constexpr std::array< const char*, 6 > cVibeRenderLabels {   "512",  "1024",  "2048",  "4096" };
     static constexpr std::array< uint32_t,    6 > cVibeRenderValues {    512 ,   1024 ,   2048 ,   4096  };
 
@@ -155,9 +155,11 @@ int OuroApp::EntrypointGUI()
 
     // #HDD check and do something with config load results?
 
+#if !OURO_HAS_NDLS_ONLINE
     // "no-network" config bits, doesn't matter if it doesn't exist
     if ( config::load( *this, m_configNoNet ) == config::LoadResult::Success )
         m_noNetImpersonationUser.setUsername( m_configNoNet.impersonationUsername );
+#endif // !OURO_HAS_NDLS_ONLINE
 
 
 
@@ -762,13 +764,6 @@ int OuroApp::EntrypointGUI()
                                     ImGui::AlignTextToFramePadding();
                                     ImGui::TextDisabled( "[?]" );
                                     ImGui::SameLine();
-                                    ImGui::CompactTooltip( "Query and store all the 'collectible' jams\nDue to API issues, this may take a few minutes" );
-                                    syncOptionsChanged |= ImGui::Checkbox( " Fetch Collectibles", &endlesssAuth.sync_options.sync_collectibles );
-                                }
-                                {
-                                    ImGui::AlignTextToFramePadding();
-                                    ImGui::TextDisabled( "[?]" );
-                                    ImGui::SameLine();
                                     ImGui::CompactTooltip( "For every jam we know about, query basic data like riff counts\nThis can take a little while but provides the most complete\nview of the jam metadata" );
                                     syncOptionsChanged |= ImGui::Checkbox( " Fetch Jam State", &endlesssAuth.sync_options.sync_state );
                                 }
@@ -1209,43 +1204,6 @@ int OuroApp::EntrypointGUI()
             } );
     }
 
-#if OURO_HAS_NDLS_ONLINE
-
-    // run the Clubs data fetch in the background, unbounded; this seems to sometimes take an age and I don't want it
-    // slowing down our app startup. anything using this data needs to check if its valid
-    m_taskExecutor.silent_async( "clubs_sync", [this]()
-        {
-            // assume we have no data by default
-            m_clubsIntegrationEnabled = false;
-
-            // pull the current Clubs membership; this call is fairly quick so we can do it each time we boot
-            {
-                endlesss::api::MyClubs myClubs;
-                const bool clubsDataFetched = myClubs.fetch( *m_networkConfiguration );
-                if ( clubsDataFetched && myClubs.ok )
-                {
-                    // create list of each channel in each club, associated with their invite IDs
-                    for ( const auto& club : myClubs.data.clubs )
-                    {
-                        for ( const auto& channel : club.jams )
-                        {
-                            m_clubsChannels.emplace_back( fmt::format( FMTX( "{} : {}" ), club.profile.name, channel.name ), channel.listenId, club.id );
-                        }
-                    }
-                    blog::api( FMTX( "Loaded {} known Clubs channels" ), m_clubsChannels.size() );
-
-                    // mark the data as good to go
-                    m_clubsIntegrationEnabled = true;
-                }
-                else
-                {
-                    blog::error::api( FMTX( "Failed to fetch Clubs membership data" ) );
-                }
-            }
-        });
-
-#endif // OURO_HAS_NDLS_ONLINE
-
 
     // =================================================================================================================
     // all done, pass control over to next level
@@ -1393,7 +1351,7 @@ void OuroApp::event_RequestToShareRiff( const events::RequestToShareRiff* eventD
         netCfg = getNetworkConfiguration(),
         state = ux::createModelRiffFeedShareState( eventData->m_identity ) ](const char* title)
     {
-        ux::modalRiffFeedShare( title, *state, m_clubsChannels, netCfg, getTaskExecutor() );
+        ux::modalRiffFeedShare( title, *state, netCfg, getTaskExecutor() );
     });
 
 #else 

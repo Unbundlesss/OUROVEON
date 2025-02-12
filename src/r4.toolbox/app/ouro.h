@@ -98,11 +98,6 @@ protected:
 
     // -----------------------------------------------------------------------------------------------------------------
 
-#if OURO_HAS_NDLS_ONLINE
-    endlesss::api::MyClubs::ChannelsList    m_clubsChannels;
-    std::atomic_bool                        m_clubsIntegrationEnabled = false;  // if true, we have valid Clubs data fetched
-#endif // OURO_HAS_NDLS_ONLINE
-
 #if !OURO_HAS_NDLS_ONLINE
     config::NoNet                           m_configNoNet;
     ImGui::ux::UserSelector                 m_noNetImpersonationUser;

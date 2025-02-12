@@ -814,18 +814,6 @@ bool RiffStructureValidation::fetch( const NetConfiguration& ncfg, const std::st
     return deserializeJson< RiffStructureValidation >( ncfg, res, *this, fmt::format( "{}( {} )", __FUNCTION__, jamLongID ), "public_riff_structure" );
 }
 
-// ---------------------------------------------------------------------------------------------------------------------
-bool MyClubs::fetch( const NetConfiguration& ncfg )
-{
-    auto client = createEndlesssHttpClient( ncfg, UserAgent::WebWithAuth );
-
-    auto res = ncfg.attempt( [&]() -> httplib::Result {
-        return client->Get( "/clubs/my-clubs" );
-        } );
-
-    return deserializeJson< MyClubs >( ncfg, res, *this, fmt::format( "{}", __FUNCTION__ ), "my_clubs" );
-}
-
 
 // ---------------------------------------------------------------------------------------------------------------------
 namespace push {

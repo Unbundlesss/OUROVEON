@@ -54,12 +54,10 @@ struct RiffFeedShareState
     enum ShareMode : int32_t
     {
         ToFeed,
-        ToClubs,
     };
 
 
     void imgui(
-        const endlesss::api::MyClubs::ChannelsList& clubsChans,
         const endlesss::api::NetConfiguration::Shared& netCfg,
         tf::Executor& taskExecutor );
 
@@ -75,23 +73,15 @@ struct RiffFeedShareState
     endlesss::types::RiffIdentity   m_riffIdentity;
     char                            m_shareName[cMaximumShareNameLength];
     bool                            m_sharePrivate = true;
-
-    // ToClubs
-    static inline std::size_t       m_clubsChannelIndex = 0;    // static across modals; the club channels list never changes size anyway
 };
 
 
 // ---------------------------------------------------------------------------------------------------------------------
 void RiffFeedShareState::imgui(
-    const endlesss::api::MyClubs::ChannelsList& clubsChans,
     const endlesss::api::NetConfiguration::Shared& netCfg,
     tf::Executor& taskExecutor )
 {
     const ImVec2 buttonSize( 240.0f, 32.0f );
-
-    // JIC, reset this index if its beyond the incoming list size
-    if ( m_clubsChannelIndex >= clubsChans.size() )
-        m_clubsChannelIndex = 0;
 
     const auto ImGuiShareModeOptions = [&]( std::string_view description )
         {
@@ -100,11 +90,6 @@ void RiffFeedShareState::imgui(
             ImGui::TextUnformatted( "Share riff to" );
             ImGui::SameLine();
             ImGui::RadioButton( "Feed ", &m_shareMode, (int32_t)ToFeed );
-            ImGui::SameLine();
-            {
-                ImGui::Scoped::Disabled de( clubsChans.empty() );
-                ImGui::RadioButton( "Clubs", &m_shareMode, (int32_t)ToClubs );
-            }
 
             ImGui::Spacing();
             ImGui::Spacing();
@@ -226,65 +211,6 @@ void RiffFeedShareState::imgui(
             break;
         }
     }
-    else if ( m_shareMode == ToClubs )
-    {
-        switch ( m_state )
-        {
-            case State::Intro:
-            {
-                ImGuiShareModeOptions( "Share the selected riff to a chosen Clubs channel" );
-
-                ImGui::SetNextItemWidth( -FLT_MIN );
-                if ( ImGui::BeginCombo( "##club_channel", clubsChans[m_clubsChannelIndex].m_name.c_str() ) )
-                {
-                    for ( std::size_t optI = 0; optI < clubsChans.size(); optI++ )
-                    {
-                        const bool selected = optI == m_clubsChannelIndex;
-                        if ( ImGui::Selectable( clubsChans[optI].m_name.c_str(), selected ) )
-                        {
-                            m_clubsChannelIndex = optI;
-                        }
-                        if ( selected )
-                            ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
-                }
-                ImGui::Spacing();
-
-                if ( ImGui::Button( "Share Riff", buttonSize ) )
-                {
-                    m_state = State::Working;
-                    m_workFutureStatus = taskExecutor.async( [&]()
-                        {
-                            // let the 'working' status be on screen briefly so it's clear what's happening
-                            std::this_thread::sleep_for( 1s );
-
-                            endlesss::api::push::RiffCopy riffCopyRequest;
-                            riffCopyRequest.m_jamFullID_CopyTo   = clubsChans[m_clubsChannelIndex].m_listenId;
-                            riffCopyRequest.m_jamCouchID = m_riffIdentity.getJamID();
-                            riffCopyRequest.m_riffCouchID = m_riffIdentity.getRiffID();
-
-                            return riffCopyRequest.action( *netCfg, m_shareUUIDResult );
-                        });
-                }
-            }
-            break;
-
-            case State::Working:
-            {
-                ImGuiHandleStandardWorking();
-            }
-            break;
-
-            case State::Results:
-            {
-                // offer to open the club in question directly, assuming you're signed in
-                const auto clubURL = fmt::format( FMTX( "https://endlesss.fm/clubs/?club={}" ), clubsChans[m_clubsChannelIndex].m_owningClubId );
-                ImGuiHandleStandardResult( clubURL );
-            }
-            break;
-        }
-    }
 
     if ( ImGui::BottomRightAlignedButton( "Close", buttonSize ) )
     {
@@ -303,7 +229,6 @@ std::shared_ptr< RiffFeedShareState > createModelRiffFeedShareState( const endle
 void modalRiffFeedShare(
     const char* title,
     RiffFeedShareState& riffFeedShareState,
-    const endlesss::api::MyClubs::ChannelsList& clubsChans,
     const endlesss::api::NetConfiguration::Shared& netCfg,
     tf::Executor& taskExecutor )
 {
@@ -314,7 +239,7 @@ void modalRiffFeedShare(
 
     if ( ImGui::BeginPopupModal( title, nullptr, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize ) )
     {
-        riffFeedShareState.imgui( clubsChans, netCfg, taskExecutor );
+        riffFeedShareState.imgui( netCfg, taskExecutor );
 
         ImGui::EndPopup();
     }
