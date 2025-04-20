@@ -98,8 +98,7 @@ void PaUtil_DebugPrint( const char *format, ... )
         OutputDebugStringA(buf);
         va_end(ap);
     }
-#endif
-
+#else
     // Output to User-Callback
     if (userCB != NULL)
     {
@@ -120,4 +119,5 @@ void PaUtil_DebugPrint( const char *format, ... )
         va_end(ap);
         fflush(stderr);
     }
+#endif
 }

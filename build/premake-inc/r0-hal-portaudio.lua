@@ -15,9 +15,18 @@ ModuleRefInclude["portaudio"] = function()
         Root_PORTAUDIO() .. "include",
     }
 
+    filter "configurations:Debug"
+    defines 
+    { 
+        "PA_ENABLE_DEBUG_OUTPUT",
+    }
+    filter {}
+
     filter "system:Windows"
     defines 
     {
+        "PA_ENABLE_MSVC_DEBUG_OUTPUT",
+        
         "PA_USE_ASIO",
         "PA_USE_DS",
         "PA_USE_WASAPI",
@@ -99,6 +108,7 @@ project "r0-portaudio"
     files 
     { 
         Root_PORTAUDIO() .. "src/os/unix/**.*",
+        Root_PORTAUDIO() .. "src/hostapi/sndio/*.c",
         Root_PORTAUDIO() .. "src/hostapi/jack/*.c",
         Root_PORTAUDIO() .. "src/hostapi/alsa/*.c",
         Root_PORTAUDIO() .. "**.h",

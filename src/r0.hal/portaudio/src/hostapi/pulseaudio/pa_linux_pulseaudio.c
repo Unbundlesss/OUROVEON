@@ -51,14 +51,13 @@
 */
 
 
-#include <string.h>     /* strlen() */
-
 #include "pa_linux_pulseaudio_cb_internal.h"
 #include "pa_linux_pulseaudio_block_internal.h"
 
 /* PulseAudio headers */
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 #include <pulse/pulseaudio.h>
 
 /* This is used to identify process name for PulseAudio. */
@@ -67,29 +66,29 @@ extern char *__progname;
 /* PulseAudio specific functions */
 int PaPulseAudio_CheckConnection( PaPulseAudio_HostApiRepresentation * ptr )
 {
-    pa_context_state_t state;
-
-
-    /* Sanity check if ptr if NULL don't go anywhere or
-     * it will SIGSEGV
+    /*
+     * This is bit hackish as -1 is considered as an error
+     * but PA_ERR_* are positive and PA_OK is zero.
+     * That is why return -1 for we are waiting something
+     * to happen is 'correct'
      */
-    if( !ptr )
+    int retCode = -1;
+
+    if ( ptr == NULL )
     {
-        PA_PULSEAUDIO_SET_LAST_HOST_ERROR( 0,
-                                           "PaPulseAudio_CheckConnection: Host API is NULL! Can't do anything about it" );
-        return -1;
+        return retCode;
     }
 
-    if( !ptr->context || !ptr->mainloop )
-    {
-        PA_PULSEAUDIO_SET_LAST_HOST_ERROR( 0,
-                                           "PaPulseAudio_CheckConnection: PulseAudio context or mainloop are NULL" );
-        return -1;
-    }
+    pa_context_state_t state = pa_context_get_state( ptr->context );
 
-    state = pa_context_get_state(ptr->context);
-
-    if( !PA_CONTEXT_IS_GOOD(state) )
+    /* Check if context is good. If it is then check state
+     * otherwise report error
+     *
+     * Only with PA_CONTEXT_READY which means
+     * application is connected and ready report
+     * success
+     */
+    if( PA_CONTEXT_IS_GOOD(state) )
     {
         switch( state )
         {
@@ -97,20 +96,45 @@ int PaPulseAudio_CheckConnection( PaPulseAudio_HostApiRepresentation * ptr )
              * https://freedesktop.org/software/pulseaudio/doxygen/def_8h.html
              */
 
+            case PA_CONTEXT_READY:
+                retCode = PA_OK;
+            break;
+
+            case PA_CONTEXT_CONNECTING:
+            case PA_CONTEXT_AUTHORIZING:
+            case PA_CONTEXT_SETTING_NAME:
+                /* These are just here if they are needed in future */
+            break;
+        }
+    }
+    else
+    {
+        retCode = PA_ERR_ACCESS;
+
+        switch( state )
+        {
+            /* These can be found from
+             * https://freedesktop.org/software/pulseaudio/doxygen/def_8h.html
+             */
+
             case PA_CONTEXT_UNCONNECTED:
-               PA_PULSEAUDIO_SET_LAST_HOST_ERROR( 0,
-                                                  "PaPulseAudio_CheckConnection: The context hasn't been connected yet (PA_CONTEXT_UNCONNECTED)" );
+                PA_DEBUG( ("Portaudio %s: Can't connect to server. (PA_CONTEXT_UNCONNECTED)",
+                           __FUNCTION__) );
+            break;
+
+            case PA_CONTEXT_TERMINATED:
+                PA_DEBUG( ("Portaudio %s: Connection terminated to Pulseaudio server. (PA_CONTEXT_TERMINATED)",
+                           __FUNCTION__) );
             break;
 
             case PA_CONTEXT_FAILED:
-               PA_PULSEAUDIO_SET_LAST_HOST_ERROR( 0,
-                                                  "PaPulseAudio_CheckConnection: The connection failed or was disconnected. (PA_CONTEXT_FAILED)" );
+                PA_DEBUG( ("Portaudio %s: Connection failed or was disconnected from Pulseaudio server. (PA_CONTEXT_FAILED)",
+                           __FUNCTION__) );
             break;
         }
-
-        return -1;
     }
-    return 0;
+
+    return retCode;
 }
 
 /* Create HostAPI presensentation */
@@ -447,7 +471,10 @@ void PaPulseAudio_SourceListCb( pa_context * c,
 void PaPulseAudio_StreamStateCb( pa_stream * s,
                                  void *userdata )
 {
+    PaPulseAudio_Stream *stream = (PaPulseAudio_Stream *) userdata;
     const pa_buffer_attr *pulseaudioBufferAttr = NULL;
+    pa_stream_state_t state = PA_STREAM_UNCONNECTED;
+
     /* If you need debug pring enable these
      * char cmt[PA_CHANNEL_MAP_SNPRINT_MAX], sst[PA_SAMPLE_SPEC_SNPRINT_MAX];
      */
@@ -461,11 +488,10 @@ void PaPulseAudio_StreamStateCb( pa_stream * s,
         return;
     }
 
-    switch( pa_stream_get_state(s) )
-    {
-        case PA_STREAM_TERMINATED:
-            break;
+    state = pa_stream_get_state(s);
 
+    switch( state )
+    {
         case PA_STREAM_CREATING:
             break;
 
@@ -475,8 +501,6 @@ void PaPulseAudio_StreamStateCb( pa_stream * s,
                 PA_DEBUG( ("Portaudio %s: Can get buffer attr: '%s'\n",
                            __FUNCTION__,
                            pa_strerror(pa_context_errno(pa_stream_get_context(s) ) )) );
-                PA_PULSEAUDIO_SET_LAST_HOST_ERROR( 0,
-                                           "PaPulseAudio_StreamStateCb: Can't get Stream pa_buffer_attr" );
             }
             else
             {
@@ -487,9 +511,15 @@ void PaPulseAudio_StreamStateCb( pa_stream * s,
             }
             break;
 
+        case PA_STREAM_TERMINATED:
+            PA_DEBUG( ("Portaudio %s: PA_STREAM_TERMINATED '%s'\n",
+                      __FUNCTION__,
+                      pa_strerror( pa_context_errno( pa_stream_get_context( s ) ) )) );
+            break;
+
         case PA_STREAM_FAILED:
         default:
-            PA_DEBUG( ("Portaudio %s: FAILED '%s'\n",
+            PA_DEBUG( ("Portaudio %s: PA_STREAM_FAILED '%s'\n",
                       __FUNCTION__,
                       pa_strerror( pa_context_errno( pa_stream_get_context( s ) ) )) );
 
@@ -511,17 +541,17 @@ void PaPulseAudio_StreamUnderflowCb( pa_stream *s,
     /* If this is null we have big problems and we probably are out of memory */
     if( !s )
     {
-        PA_PULSEAUDIO_SET_LAST_HOST_ERROR( 0,
-                                           "PaPulseAudio_StreamUnderflowCb: Invalid stream" );
+        PA_DEBUG( ("Portaudio %s: Invalid stream",
+                   __FUNCTION__) );
         return;
     }
 
     stream->outputUnderflows++;
     pulseaudioOutputSampleSpec = (pa_buffer_attr *)pa_stream_get_buffer_attr(s);
-    PA_DEBUG( ("Portaudio %s: PulseAudio '%s' with delay: %ld stream has underflowed\n", __FUNCTION__, pa_stream_get_device_name(s), pulseaudioOutputSampleSpec->tlength) );
-
-    PA_PULSEAUDIO_SET_LAST_HOST_ERROR( 0,
-                                       "PaPulseAudio_StreamUnderflowCb: Pulseaudio stream underflow");
+    PA_DEBUG( ("Portaudio %s: PulseAudio '%s' with delay: %ld stream has underflowed\n",
+               __FUNCTION__,
+               pa_stream_get_device_name(s),
+               pulseaudioOutputSampleSpec->tlength) );
 
     pa_threaded_mainloop_signal( stream->mainloop,
                                  0 );
@@ -577,7 +607,9 @@ PaError PaPulseAudio_Initialize( PaUtilHostApiRepresentation ** hostApi,
 
     if( ret < 0 )
     {
-        PA_PULSEAUDIO_SET_LAST_HOST_ERROR( 0,
+        PA_DEBUG( ("Portaudio %s: Can't connect to server",
+                   __FUNCTION__) );
+        PA_PULSEAUDIO_SET_LAST_HOST_ERROR( ret,
                                            "PulseAudio_Initialize: Can't connect to server");
         result = paUnanticipatedHostError;
         goto error;
@@ -590,24 +622,16 @@ PaError PaPulseAudio_Initialize( PaUtilHostApiRepresentation ** hostApi,
     {
         pa_threaded_mainloop_wait( pulseaudioHostApi->mainloop );
 
-        switch( pa_context_get_state( pulseaudioHostApi->context ) )
+        result = PaPulseAudio_CheckConnection( pulseaudioHostApi );
+
+        if( result > PA_OK )
         {
-            case PA_CONTEXT_READY:
-                ret = 1;
-                break;
-            case PA_CONTEXT_TERMINATED:
-                PA_DEBUG( "PaPulseAudio_Initialize: Pulseaudio server terminated stream" );
-                goto error;
-                break;
-            case PA_CONTEXT_FAILED:
-                PA_DEBUG( "PaPulseAudio_Initialize: Pulseaudio server failed to initialize" );
-                goto error;
-                break;
-            case PA_CONTEXT_UNCONNECTED:
-            case PA_CONTEXT_CONNECTING:
-            case PA_CONTEXT_AUTHORIZING:
-            case PA_CONTEXT_SETTING_NAME:
-                break;
+            goto error;
+        }
+
+        if( result == PA_OK )
+        {
+            ret = 1;
         }
     }
 
@@ -625,12 +649,14 @@ PaError PaPulseAudio_Initialize( PaUtilHostApiRepresentation ** hostApi,
                                 PaPulseAudio_ServerInfoCb,
                                 pulseaudioHostApi );
 
-    while( pa_operation_get_state( pulseaudioOperation ) == PA_OPERATION_RUNNING )
-    {
-        pa_threaded_mainloop_wait( pulseaudioHostApi->mainloop );
-    }
+    PaPulseAudio_UnLock( pulseaudioHostApi->mainloop );
+    lockTaken = 0;
 
-    pa_operation_unref( pulseaudioOperation );
+    PaPulseAudio_ReleaseOperation( pulseaudioHostApi,
+                                   &pulseaudioOperation );
+
+    PaPulseAudio_Lock( pulseaudioHostApi->mainloop );
+    lockTaken = 1;
 
     /* Add the "Default" sink at index 0 */
     if( _PaPulseAudio_AddAudioDevice( pulseaudioHostApi,
@@ -676,12 +702,14 @@ PaError PaPulseAudio_Initialize( PaUtilHostApiRepresentation ** hostApi,
                                        PaPulseAudio_SinkListCb,
                                        pulseaudioHostApi );
 
-    while( pa_operation_get_state( pulseaudioOperation ) == PA_OPERATION_RUNNING )
-    {
-        pa_threaded_mainloop_wait( pulseaudioHostApi->mainloop );
-    }
+    PaPulseAudio_UnLock( pulseaudioHostApi->mainloop );
+    lockTaken = 0;
 
-    pa_operation_unref( pulseaudioOperation );
+    PaPulseAudio_ReleaseOperation( pulseaudioHostApi,
+                                   &pulseaudioOperation );
+
+    PaPulseAudio_Lock( pulseaudioHostApi->mainloop );
+    lockTaken = 1;
 
     /* List PulseAudio sources. If found callback: PaPulseAudio_SourceListCb */
     pulseaudioOperation =
@@ -689,12 +717,14 @@ PaError PaPulseAudio_Initialize( PaUtilHostApiRepresentation ** hostApi,
                                          PaPulseAudio_SourceListCb,
                                          pulseaudioHostApi );
 
-    while( pa_operation_get_state( pulseaudioOperation ) == PA_OPERATION_RUNNING )
-    {
-        pa_threaded_mainloop_wait( pulseaudioHostApi->mainloop );
-    }
+    PaPulseAudio_UnLock( pulseaudioHostApi->mainloop );
+    lockTaken = 0;
 
-    pa_operation_unref( pulseaudioOperation );
+    PaPulseAudio_ReleaseOperation( pulseaudioHostApi,
+                                   &pulseaudioOperation );
+
+    PaPulseAudio_Lock( pulseaudioHostApi->mainloop );
+    lockTaken = 1;
 
     (*hostApi)->info.deviceCount = pulseaudioHostApi->deviceCount;
 
@@ -1224,6 +1254,10 @@ PaError OpenStream( struct PaUtilHostApiRepresentation *hostApi,
             pa_stream_set_started_callback( stream->outputStream,
                                             PaPulseAudio_StreamStartedCb,
                                             stream );
+            pa_stream_set_underflow_callback( stream->outputStream,
+                                              PaPulseAudio_StreamUnderflowCb,
+                                              stream);
+
         }
 
         else
@@ -1432,11 +1466,8 @@ PaError PaPulseAudio_RenameSource( PaStream *s, const char *streamName )
     op = pa_stream_set_name( stream->inputStream, streamName, RenameStreamCb, stream );
     PaPulseAudio_UnLock( stream->mainloop );
 
-    /* Wait for completion. */
-    while (pa_operation_get_state( op ) == PA_OPERATION_RUNNING)
-    {
-        pa_threaded_mainloop_wait( stream->mainloop );
-    }
+    PaPulseAudio_ReleaseOperation( stream->hostapi,
+                                   &op );
 
     return result;
 }
@@ -1469,10 +1500,8 @@ PaError PaPulseAudio_RenameSink( PaStream *s, const char *streamName )
     PaPulseAudio_UnLock( stream->mainloop );
 
     /* Wait for completion. */
-    while (pa_operation_get_state( op ) == PA_OPERATION_RUNNING)
-    {
-        pa_threaded_mainloop_wait( stream->mainloop );
-    }
+    PaPulseAudio_ReleaseOperation( stream->hostapi,
+                                   &op );
 
     return result;
 }
