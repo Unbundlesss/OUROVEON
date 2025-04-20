@@ -99,7 +99,7 @@ struct Grid
         return m_data[(y * Constants::PadCountX) + x];
     }
 
-    std::array< _GridType, Constants::PadCountTotal >  m_data;
+    std::array< _GridType, Constants::PadCountTotal > m_data{};
 };
 
 using GridLaunchRiff = Grid<LaunchRiff>;
