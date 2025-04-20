@@ -165,6 +165,7 @@ struct Core : CoreStart,
     ouro_nodiscard constexpr const fs::path& getSharedDataPath() const   { return m_sharedDataPath;   }
     ouro_nodiscard constexpr const fs::path& getAppConfigPath() const    { return m_appConfigPath;    }
 
+    ouro_nodiscard virtual const StoragePaths* getStoragePaths() const { return nullptr; }
 
     static void waitForConsoleKey();
 

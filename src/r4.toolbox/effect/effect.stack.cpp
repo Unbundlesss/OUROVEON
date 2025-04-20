@@ -68,16 +68,18 @@ void EffectStack::load( const fs::path& appStashPath )
 
                 // load VSTs and block until they have fully booted, as we need them alive to deserialize into
                 auto* nstInst = addNST( sessionData.vstPaths[vI].c_str(), preservedID, true );
-
-                blog::cfg( "Loading plugin session [{}] ...", nstInst->getProductName() );
-
-                // restore settings if they were stashed
-                if ( !sessionData.vstStateData[vI].empty() )
+                if ( nstInst != nullptr )
                 {
-                    nstInst->deserialize( sessionData.vstStateData[vI] );
-                }
+                    blog::cfg( "Loading plugin session [{}] ...", nstInst->getProductName() );
 
-                nstInst->requestActivationChange( sessionData.vstActive[vI] );
+                    // restore settings if they were stashed
+                    if ( !sessionData.vstStateData[vI].empty() )
+                    {
+                        nstInst->deserialize( sessionData.vstStateData[vI] );
+                    }
+
+                    nstInst->requestActivationChange( sessionData.vstActive[vI] );
+                }
             }
 
             if ( !sessionData.lastBrowsedPath.empty() )
@@ -146,6 +148,10 @@ nst::Instance* EffectStack::addNST( const char* vstFilename, const int64_t vstLo
         {
             std::this_thread::sleep_for( nstThreadBootWait );
             retries--;
+
+            // bail on load failure
+            if ( nstInst->failedToLoad() )
+                retries = 0;
         }
 
         if ( retries <= 0 )

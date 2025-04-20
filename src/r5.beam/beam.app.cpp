@@ -185,39 +185,17 @@ struct MixEngine final : public app::module::MixerInterface,
     };
     struct EngineCommandData : public base::BasicCommandType<EngineCommand> { using BasicCommandType::BasicCommandType; };
 
-    // bundles a riff request - both the riff data and any layer permutations
-    struct RiffAndPermutation
-    {
-        RiffAndPermutation() = default;
 
-        RiffAndPermutation( endlesss::live::RiffPtr riff )
-            : m_riffPtr( std::move( riff ) )
-        {}
-
-        RiffAndPermutation( endlesss::live::RiffPtr riff, const endlesss::types::RiffPlaybackPermutationOpt& permOpt )
-            : m_riffPtr( std::move( riff ) )
-        {
-            if ( permOpt.has_value() )
-            {
-                m_permutation = permOpt.value();
-            }
-        }
-
-        bool isNotEmpty() const { return m_riffPtr != nullptr; }
-        bool isEmpty() const { return m_riffPtr == nullptr; }
-
-        endlesss::live::RiffPtr                     m_riffPtr;
-        endlesss::types::RiffPlaybackPermutation    m_permutation;
-    };
 
     using CommandQueue  = mcc::ReaderWriterQueue<EngineCommandData>;
-    using RiffQueue     = mcc::ReaderWriterQueue<RiffAndPermutation>;
+    using RiffQueue     = mcc::ReaderWriterQueue<endlesss::live::RiffAndPermutation>;
 
 
     uint64_t                    m_samplePosition;
 
 
-    RiffAndPermutation          m_riffCurrent;
+    endlesss::live::RiffAndPermutation
+                                m_riffCurrent;
     uint32_t                    m_riffLengthInSamples;
 
     endlesss::live::RiffProgression
@@ -226,7 +204,8 @@ struct MixEngine final : public app::module::MixerInterface,
     RiffQueue                   m_riffQueue;
     CommandQueue                m_commandQueue;
 
-    RiffAndPermutation          m_riffNext;
+    endlesss::live::RiffAndPermutation
+                                m_riffNext;
     float                       m_transitionValue;
 
     float                       m_stemBeatRate;
@@ -606,7 +585,7 @@ void MixEngine::update(
                 case EngineCommand::ClearAllScheduledTransitions:
                 {
                     // purge the queue
-                    RiffAndPermutation dumpRiff;
+                    endlesss::live::RiffAndPermutation dumpRiff;
                     while ( m_riffQueue.try_dequeue( dumpRiff ) )
                     { }
                 }

@@ -11,15 +11,19 @@
 #include "app/module.h"
 #include "app/module.midi.msg.h"
 
-#include "base/id.hash.h"
+#include "base/id.couch.h"
 #include "base/text.h"
 
 namespace app {
+
+struct CoreGUI;
+
 namespace module {
 
 // ---------------------------------------------------------------------------------------------------------------------
 struct _midi_device_id {};
-using MidiDeviceID = base::id::HashWrapper<_midi_device_id>;
+using MidiDeviceID = base::id::StringWrapper<_midi_device_id>;
+
 
 // represent a MIDI device by name; this is then translated to a low-level device index at the point of Open'ing -- 
 // which can fail if the device already got unplugged
@@ -28,7 +32,7 @@ struct MidiDevice
     MidiDevice() = delete;
     MidiDevice( const std::string& name )
         : m_name( name )
-        , m_uid( absl::Hash< std::string >{}(name) )
+        , m_uid( name )
     {}
 
     constexpr bool operator == ( const MidiDevice& rhs ) const { return rhs.m_uid == m_uid; }
@@ -41,6 +45,7 @@ private:
     std::string     m_name;
     MidiDeviceID    m_uid;
 };
+
 
 // ---------------------------------------------------------------------------------------------------------------------
 struct Midi : public Module
@@ -55,14 +60,10 @@ struct Midi : public Module
     void destroy() override;
     virtual std::string getModuleName() const override { return "Midi"; };
 
-    // create a temporary MidiIn interface and assemble a list of usable input devices
-    static std::vector< MidiDevice > fetchListOfInputDevices();
-
 
     struct InputControl
     {
         virtual ~InputControl() {}
-        virtual bool getInputPorts( std::vector<std::string>& names ) = 0;
         virtual bool openInputPort( uint32_t index ) = 0;
         virtual bool getOpenPortIndex( uint32_t& result ) = 0;
         virtual bool closeInputPort() = 0;
@@ -71,11 +72,8 @@ struct Midi : public Module
     InputControl* getInputControl();
 
 
-    // client code should call this from the main thread (or a single, consistent thread at least) to 
-    // iterate and drain the current queue of decoded MIDI messages received from the back-end
-    //
-    // if MIDI isn't booted or there's just nothing to do, this call does nothing
-    void processMessages( const std::function< void( const app::midi::Message& ) >& processor );
+
+    void imgui( app::CoreGUI& coreGUI );
 
 protected:
 
@@ -87,6 +85,8 @@ using MidiModule = std::unique_ptr<module::Midi>;
 
 } // namespace module
 } // namespace app
+
+Gen_StringWrapperFormatter( app::module::MidiDeviceID )
 
 // ---------------------------------------------------------------------------------------------------------------------
 CREATE_EVENT_BEGIN( MidiEvent )

@@ -506,6 +506,12 @@ void Instance::Data::runOnPluginThread()
             return;
         }
     }
+    else
+    {
+        blog::error::plug( "VST plugin file not found [{}]", m_path );
+        m_nstFailedToLoad = true;
+        return;
+    }
 
     auto* vstFI = m_nstEntrypoint( NstOpcodeCallback );
     vstFI->data_user = this;

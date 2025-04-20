@@ -942,22 +942,25 @@ void AudioDeviceQuery::findSuitable( const config::Audio& audioConfig )
     outputParameters.sampleFormat              = paFloat32;
 
     const PaDeviceInfo* paDeviceInfo;
+    const PaHostApiInfo* paApiInfo;
     for ( auto paDi = 0; paDi < paDeviceCount; paDi++ )
     {
         paDeviceInfo = Pa_GetDeviceInfo( paDi );
+        paApiInfo = Pa_GetHostApiInfo( paDeviceInfo->hostApi );
+
         outputParameters.device                    = paDi;
         outputParameters.suggestedLatency          = audioConfig.lowLatency ? paDeviceInfo->defaultLowOutputLatency :
                                                                               paDeviceInfo->defaultHighOutputLatency;
 
         if ( Pa_IsFormatSupported( nullptr, &outputParameters, audioConfig.sampleRate ) == paFormatIsSupported  )
         {
-            const auto paDeviceName = std::string( paDeviceInfo->name );
+            const auto paDeviceNameVerbose = fmt::format( FMTX( "[{:>22}] {}" ), paApiInfo->name, paDeviceInfo->name );
 
-            if ( uniqueDeviceNames.contains( paDeviceName ) == false )
+            if ( uniqueDeviceNames.contains( paDeviceNameVerbose ) == false )
             {
-                uniqueDeviceNames.emplace( paDeviceName );
+                uniqueDeviceNames.emplace( paDeviceNameVerbose );
 
-                m_deviceNames.emplace_back( std::move( paDeviceName ) );
+                m_deviceNames.emplace_back( std::move( paDeviceNameVerbose ) );
                 m_deviceLatencies.push_back( outputParameters.suggestedLatency );
                 m_devicePaIndex.push_back( paDi );
             }
@@ -980,22 +983,29 @@ int32_t AudioDeviceQuery::generateStreamParametersFromDeviceConfig( const config
         return -1;
 
     const PaDeviceInfo* paDeviceInfo;
+    const PaHostApiInfo* paApiInfo;
     for ( auto paDi = 0; paDi < paDeviceCount; paDi++ )
     {
         paDeviceInfo = Pa_GetDeviceInfo( paDi );
+        paApiInfo = Pa_GetHostApiInfo( paDeviceInfo->hostApi );
 
-        streamParams.device                    = paDi;
-        streamParams.suggestedLatency          = audioConfig.lowLatency ? paDeviceInfo->defaultLowOutputLatency :
-                                                                          paDeviceInfo->defaultHighOutputLatency;
+        const auto paDeviceNameVerbose = fmt::format( FMTX( "[{:>22}] {}" ), paApiInfo->name, paDeviceInfo->name );
 
-        if ( Pa_IsFormatSupported( nullptr, &streamParams, audioConfig.sampleRate ) == paFormatIsSupported )
+        if ( paDeviceNameVerbose == audioConfig.lastDevice )
         {
-            const auto paDeviceName = std::string( paDeviceInfo->name );
-            if ( paDeviceName == audioConfig.lastDevice )
+            streamParams.device                    = paDi;
+            streamParams.suggestedLatency          = audioConfig.lowLatency ? paDeviceInfo->defaultLowOutputLatency :
+                                                                              paDeviceInfo->defaultHighOutputLatency;
+
+            if ( Pa_IsFormatSupported( nullptr, &streamParams, audioConfig.sampleRate ) == paFormatIsSupported )
             {
-                blog::core( "Selecting device #{} [{}]", paDi, paDeviceName );
+                blog::core( "Selecting device #{} [{}]", paDi, paDeviceNameVerbose );
 
                 return paDi;
+            }
+            else
+            {
+                return -1;
             }
         }
     }

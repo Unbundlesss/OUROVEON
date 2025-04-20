@@ -40,6 +40,7 @@
 #include "ux/shared.riffs.view.h"
 #include "ux/riff.tagline.h"
 #include "ux/riff.history.h"
+#include "ux/riff.launcher.h"
 #include "ux/user.selector.h"
 
 #include "vx/vibes.h"
@@ -65,7 +66,7 @@
 
 
 #define OUROVEON_LORE           "LORE"
-#define OUROVEON_LORE_VERSION   OURO_FRAMEWORK_VERSION "-beta"
+#define OUROVEON_LORE_VERSION   OURO_FRAMEWORK_VERSION "-rel"
 
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -516,6 +517,7 @@ protected:
     std::unique_ptr< ux::SharedRiffView >   m_uxSharedRiffView;
     std::unique_ptr< ux::TagLine >          m_uxTagLine;
     std::unique_ptr< ux::RiffHistory >      m_uxRiffHistory;
+    std::unique_ptr< ux::RiffLauncher >     m_uxRiffLauncher;
     std::unique_ptr< ux::Weaver >           m_uxProcWeaver;
 
 
@@ -631,7 +633,15 @@ protected:
         const events::EnqueueRiffPlayback* enqueueRiffPlaybackEvent = dynamic_cast<const events::EnqueueRiffPlayback*>(&eventRef);
         ABSL_ASSERT( enqueueRiffPlaybackEvent != nullptr );
 
-        requestRiffPlayback( enqueueRiffPlaybackEvent->m_identity, m_riffPlaybackAbstraction.asPermutation() );
+        if ( enqueueRiffPlaybackEvent->m_optionalPermutation.has_value() )
+        {
+            requestRiffPlayback( enqueueRiffPlaybackEvent->m_identity, enqueueRiffPlaybackEvent->m_optionalPermutation.value() );
+            m_riffPlaybackAbstraction.approximateFromPermutation( enqueueRiffPlaybackEvent->m_optionalPermutation.value() );
+        }
+        else
+        {
+            requestRiffPlayback( enqueueRiffPlaybackEvent->m_identity, m_riffPlaybackAbstraction.asPermutation() );
+        }
     }
 
     base::OperationID requestRiffPlayback( const endlesss::types::RiffIdentity& riffIdent, const endlesss::types::RiffPlaybackPermutation& playback )
@@ -2083,6 +2093,7 @@ int LoreApp::EntrypointOuro()
 
     m_uxSharedRiffView  = std::make_unique<ux::SharedRiffView>( m_networkConfiguration, getEventBusClient() );
     m_uxRiffHistory     = std::make_unique<ux::RiffHistory>( getEventBusClient() );
+    m_uxRiffLauncher    = std::make_unique<ux::RiffLauncher>( getEventBusClient() );
     m_uxTagLine         = std::make_unique<ux::TagLine>( getEventBusClient() );
     m_uxProcWeaver      = std::make_unique<ux::Weaver>( *this, getEventBusClient() );
 
@@ -2258,6 +2269,7 @@ int LoreApp::EntrypointOuro()
         // for rendering state from the current riff;
         // take a shared ptr copy here, just in case the riff is swapped out mid-tick
         endlesss::live::RiffPtr currentRiffPtr = m_nowPlayingRiff;
+        const endlesss::live::RiffAndPermutation currentRiffAndPerm( currentRiffPtr, m_riffPlaybackAbstraction.asPermutation() );
         const auto currentRiff = currentRiffPtr.get();
 
         // optionally pop the stem debug analysis
@@ -2364,8 +2376,6 @@ int LoreApp::EntrypointOuro()
 
         if ( m_vibes )
             m_vibes->doImGui( m_endlesssExchange, this );
-
-        m_mdMidi->processMessages( []( const app::midi::Message& ){ } );
 
         m_discordBotUI->imgui( *this );
         m_uxProcWeaver->imgui( *this, currentRiffPtr, m_rpClient, *m_warehouse );
@@ -4311,6 +4321,7 @@ int LoreApp::EntrypointOuro()
         } // warehouse imgui 
 
         m_uxRiffHistory->imgui( *this );
+        m_uxRiffLauncher->imgui( *this, currentRiffAndPerm );
         m_uxSharedRiffView->imgui( *this, JamNameResolveProvider, *this );
 
 

@@ -44,6 +44,15 @@ struct OuroApp : public CoreGUI,
     endlesss::cache::Stems&                 getStemCache() override { return m_stemCache; }
     tf::Executor&                           getTaskExecutor() override { return m_taskExecutor; }
 
+
+    const StoragePaths* getStoragePaths() const override
+    { 
+        if ( m_storagePaths.has_value() )
+            return &(m_storagePaths.value());
+
+        return nullptr;
+    }
+
     // endlesss::services::IJamNameCacheServices
     LookupResult lookupJamNameAndTime(
         const endlesss::types::JamCouchID& jamID,

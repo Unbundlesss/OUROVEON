@@ -669,6 +669,19 @@ void TickPulses()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+AutoIndent::AutoIndent( float indentSize )
+    : m_indentSize( indentSize )
+{
+    ImGui::Indent( m_indentSize );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+AutoIndent::~AutoIndent()
+{
+    ImGui::Unindent( m_indentSize );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 ButtonTextAlignLeft::ButtonTextAlignLeft()
 {
     ImGuiStyle& style = ImGui::GetStyle();

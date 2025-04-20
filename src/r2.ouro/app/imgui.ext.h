@@ -203,6 +203,17 @@ namespace Scoped {
 void TickPulses();
 
 // ---------------------------------------------------------------------------------------------------------------------
+struct AutoIndent
+{
+    AutoIndent( float indentSize );
+    ~AutoIndent();
+
+private:
+    float   m_indentSize;
+};
+
+
+// ---------------------------------------------------------------------------------------------------------------------
 struct ButtonTextAlignLeft
 {
     ButtonTextAlignLeft();

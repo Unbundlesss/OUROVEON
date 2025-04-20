@@ -48,6 +48,7 @@ using RiffOperationQueue = mcc::ReaderWriterQueue< RiffPtrOperation >;
 
 #define _PCR(_action)       \
         _action(Instant)    \
+        _action(Faster)     \
         _action(Fast)       \
         _action(Slow)       \
         _action(Glacial)

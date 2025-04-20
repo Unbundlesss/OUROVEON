@@ -122,10 +122,11 @@ void RiffMixerBase::updatePermutations( const uint32_t samplesToWrite, const dou
         const double elapsedRealTime = (double)samplesToWrite * m_audioSampleRateRecp;
 
 
-        double changeRate = 30.0f;
+        double changeRate = 60.0f;
         switch ( m_permutationChangeRate )
         {
             default: break;
+            case PermutationChangeRate::Faster:  changeRate = 90.0; break;
             case PermutationChangeRate::Fast:    changeRate = 20.0; break;
             case PermutationChangeRate::Slow:    changeRate = 1.0;  break;
             case PermutationChangeRate::Glacial: changeRate = 0.5;  break;

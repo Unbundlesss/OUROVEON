@@ -743,6 +743,23 @@ struct RiffPlaybackAbstraction
         return result;
     }
 
+    constexpr void approximateFromPermutation( const RiffPlaybackPermutation& permute )
+    {
+        for ( size_t i = 0; i < 8; i++ )
+        {
+            m_layerMuted[i] = (permute.m_layerGainMultiplier[i] <= 0.01f);
+        }
+        m_layerSoloIndex = -1;
+    }
+
+    template<class Archive>
+    inline void serialize( Archive& archive )
+    {
+        archive( CEREAL_NVP( m_layerMuted )
+               , CEREAL_NVP( m_layerSoloIndex )
+        );
+    }
+
 private:
     std::array<bool, 8>     m_layerMuted;
     int32_t                 m_layerSoloIndex    = -1;
@@ -790,6 +807,7 @@ struct RiffTag
         );
     }
 };
+
 
 // ---------------------------------------------------------------------------------------------------------------------
 // custom riff description, forming a 'virual' riff out of existing stem IDs and whatever manual definition we want;
@@ -892,25 +910,41 @@ CREATE_EVENT_BEGIN( EnqueueRiffPlayback )
 
 EnqueueRiffPlayback() = delete;
 
-EnqueueRiffPlayback( const endlesss::types::RiffIdentity& identity )
+EnqueueRiffPlayback(
+    const endlesss::types::RiffIdentity& identity,
+    endlesss::types::RiffPlaybackPermutation* optionalPermutation = nullptr )
     : m_identity( identity )
 {
     ABSL_ASSERT( m_identity.hasData() );
+    if ( optionalPermutation != nullptr )
+        m_optionalPermutation = *optionalPermutation;
 }
 
-EnqueueRiffPlayback( const endlesss::types::JamCouchID& jam, const endlesss::types::RiffCouchID& riff )
+EnqueueRiffPlayback(
+    const endlesss::types::JamCouchID& jam,
+    const endlesss::types::RiffCouchID& riff,
+    endlesss::types::RiffPlaybackPermutation* optionalPermutation = nullptr )
     : m_identity( jam, riff )
 {
     ABSL_ASSERT( m_identity.hasData() );
+    if ( optionalPermutation != nullptr )
+        m_optionalPermutation = *optionalPermutation;
 }
 
-EnqueueRiffPlayback( const endlesss::types::JamCouchID& jam, const endlesss::types::RiffCouchID& riff, endlesss::types::IdentityCustomNaming&& customNaming )
+EnqueueRiffPlayback(
+    const endlesss::types::JamCouchID& jam,
+    const endlesss::types::RiffCouchID& riff,
+    endlesss::types::IdentityCustomNaming&& customNaming,
+    endlesss::types::RiffPlaybackPermutation* optionalPermutation = nullptr )
     : m_identity( jam, riff, std::move( customNaming ) )
 {
     ABSL_ASSERT( m_identity.hasData() );
+    if ( optionalPermutation != nullptr )
+        m_optionalPermutation = *optionalPermutation;
 }
 
 endlesss::types::RiffIdentity   m_identity;
+std::optional< endlesss::types::RiffPlaybackPermutation > m_optionalPermutation;
 
 CREATE_EVENT_END()
 

@@ -10,6 +10,8 @@
 #include "pch.h"
 #include "app/core.h"
 #include "app/module.midi.h"
+#include "app/module.frontend.fonts.h"
+#include "app/imgui.ext.h"
 
 #include "RtMidi.h"
 
@@ -25,36 +27,59 @@ struct Midi::State : public Midi::InputControl
     State( base::EventBusClient&& eventBusClient )
         : m_eventBusClient( std::move(eventBusClient) )
     {
-        m_midiIn          = std::make_unique<RtMidiIn>();
+        Init();
+    }
 
-        blog::core( "initialised RtMidi " RTMIDI_VERSION " ({})", m_midiIn->getApiName( m_midiIn->getCurrentApi() ) );
+    ~State()
+    {
+        Term();
+    }
 
-        m_inputPortCount  = m_midiIn->getPortCount();
+    void Init()
+    {
+        m_midiIn = std::make_unique<RtMidiIn>();
+
+        blog::core( "initialising RtMidi " RTMIDI_VERSION " ({}) ...", m_midiIn->getApiName( m_midiIn->getCurrentApi() ) );
+
+        m_inputPortCount = m_midiIn->getPortCount();
 
         m_inputPortNames.reserve( m_inputPortCount );
         for ( uint32_t i = 0; i < m_inputPortCount; i++ )
         {
             const auto portName = m_midiIn->getPortName( i );
-            m_inputPortNames.push_back( portName );
+            m_inputPortNames.emplace_back( portName );
             blog::core( " -> [{}] {}", i, portName );
         }
 
         m_midiIn->setCallback( &onMidiData, this );
     }
 
-    ~State()
+    void Term()
     {
+        blog::core( "shutting down RtMidi ..." );
+
         try
         {
             m_midiIn->cancelCallback();
 
             if ( m_midiIn->isPortOpen() )
                 m_midiIn->closePort();
+
+            m_inputPortCount = 0;
+            m_inputPortNames.clear();
+
+            m_midiIn = nullptr;
         }
         catch ( RtMidiError& error )
         {
             blog::error::core( "RtMidi error during shutdown ({})", error.getMessage() );
         }
+    }
+
+    void Restart()
+    {
+        Term();
+        Init();
     }
 
     // decode midi message and enqueue anything we understand into our threadsafe pile of messages
@@ -68,15 +93,17 @@ struct Midi::State : public Midi::InputControl
             const uint8_t controlMessage = message->at( 0 );
             const uint8_t channelNumber  = ( controlMessage & 0x0F );
             const uint8_t channelMessage = ( controlMessage & 0xF0 );
+
+            const MidiDeviceID& activeDeviceUID = state->m_inputPortNames[state->m_inputPortOpenedIndex].getUID();
            
             if ( channelMessage == midi::NoteOn::u7Type )
             {
                 const uint8_t u7OnKey = message->at( 1 ) & 0x7F;
                 const uint8_t u7OnVel = message->at( 2 ) & 0x7F;
 
-                blog::core( "midi::NoteOn  (#{}) [{}] [{}]", channelNumber, u7OnKey, u7OnVel );
+                blog::core( "midi::NoteOn  [ {:>18} ] (#{}) [{}] [{}]", activeDeviceUID, channelNumber, u7OnKey, u7OnVel );
 
-                const ::events::MidiEvent midiMsg( { timeStamp, midi::Message::Type::NoteOn, u7OnKey, u7OnVel }, app::module::MidiDeviceID(0) );
+                const ::events::MidiEvent midiMsg( { timeStamp, midi::Message::Type::NoteOn, u7OnKey, u7OnVel }, activeDeviceUID );
                 state->m_eventBusClient.Send< ::events::MidiEvent >( midiMsg );
             }
             else
@@ -85,9 +112,10 @@ struct Midi::State : public Midi::InputControl
                 const uint8_t u7OffKey = message->at( 1 ) & 0x7F;
                 const uint8_t u7OffVel = message->at( 2 ) & 0x7F;
 
-                blog::core( "midi::NoteOff (#{}) [{}] [{}]", channelNumber, u7OffKey, u7OffVel );
+                blog::core( "midi::NoteOff [ {:>18} ] (#{}) [{}] [{}]", activeDeviceUID, channelNumber, u7OffKey, u7OffVel );
 
-                state->m_midiMessageQueue.emplace( timeStamp, midi::Message::Type::NoteOff, u7OffKey, u7OffVel );
+                const ::events::MidiEvent midiMsg( { timeStamp, midi::Message::Type::NoteOff, u7OffKey, u7OffVel }, activeDeviceUID );
+                state->m_eventBusClient.Send< ::events::MidiEvent >( midiMsg );
             }
             else
             if ( channelMessage == midi::ControlChange::u7Type )
@@ -95,17 +123,10 @@ struct Midi::State : public Midi::InputControl
                 const uint8_t u7CtrlNum = message->at( 1 ) & 0x7F;
                 const uint8_t u7CtrlVal = message->at( 2 ) & 0x7F;
 
-                blog::core( "midi::ControlChange(#{}) [{}] = {}", channelNumber, u7CtrlNum, u7CtrlVal );
-
-                state->m_midiMessageQueue.emplace( timeStamp, midi::Message::Type::ControlChange, u7CtrlNum, u7CtrlVal );
+                //blog::core( "midi::ControlChange(#{}) [{}] = {}", channelNumber, u7CtrlNum, u7CtrlVal );
+                //state->m_midiMessageQueue.emplace( timeStamp, midi::Message::Type::ControlChange, u7CtrlNum, u7CtrlVal );
             }
         }
-    }
-
-    bool getInputPorts( std::vector<std::string>& names ) override
-    {
-        names.assign( m_inputPortNames.begin(), m_inputPortNames.end() );
-        return true;
     }
 
     bool openInputPort( const uint32_t index ) override
@@ -156,28 +177,52 @@ struct Midi::State : public Midi::InputControl
         return true;
     }
 
-    void processMessages( const std::function< void( const app::midi::Message& ) >& processor )
-    {
-        if ( !m_midiIn->isPortOpen() )
-            return;
 
-        app::midi::Message msg;
-        while ( m_midiMessageQueue.try_dequeue( msg ) )
-        {
-            processor( msg );
-        }
-    }
+    void imgui( app::CoreGUI& coreGUI );
 
 
     std::unique_ptr< RtMidiIn >     m_midiIn;
     uint32_t                        m_inputPortCount = 0;
-    std::vector< std::string >      m_inputPortNames;
+    std::vector< MidiDevice >       m_inputPortNames;
     uint32_t                        m_inputPortOpenedIndex = 0;
 
     base::EventBusClient            m_eventBusClient;
-
-    MidiMessageQueue                m_midiMessageQueue;
 };
+
+// ---------------------------------------------------------------------------------------------------------------------
+void Midi::State::imgui( app::CoreGUI& coreGUI )
+{
+    if ( ImGui::Begin( ICON_FA_PLUG " MIDI Devices###midimodule_main" ) )
+    {
+        if ( ImGui::Button( " Refresh " ) )
+        {
+            Restart();
+        }
+        if ( m_inputPortCount > 0 )
+        {
+            ImGui::Spacing();
+            ImGui::TextUnformatted( "Known Devices :" );
+            ImGui::Scoped::AutoIndent autoIndent( 12.0f );
+
+            const bool anyPortsOpen = m_midiIn->isPortOpen();
+
+            for ( uint32_t portIndex = 0U; portIndex < m_inputPortCount; portIndex++ )
+            {
+                const bool isActive = anyPortsOpen && (portIndex == m_inputPortOpenedIndex);
+                if ( ImGui::RadioButton( m_inputPortNames[portIndex].getName().c_str(), isActive ) )
+                {
+                    closeInputPort();
+                    const bool wasOpened = openInputPort( portIndex );
+
+                    blog::core( "activating midi device [{}] = {}",
+                        m_inputPortNames[portIndex].getName(),
+                        wasOpened ? "successful" : "failed" );
+                }
+            }
+        }
+    }
+    ImGui::End();
+}
 
 // ---------------------------------------------------------------------------------------------------------------------
 Midi::Midi()
@@ -209,25 +254,6 @@ void Midi::destroy()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-std::vector< app::module::MidiDevice > Midi::fetchListOfInputDevices()
-{
-    std::vector< app::module::MidiDevice > inputDevices; 
-
-    auto midiIn = std::make_unique<RtMidiIn>();
-
-    const auto inputPortCount = midiIn->getPortCount();
-
-    inputDevices.reserve( inputPortCount );
-    for ( auto pI = 0U; pI < inputPortCount; pI++ )
-    {
-        const auto portName = midiIn->getPortName( pI );
-        inputDevices.emplace_back( portName );
-    }
-
-    return inputDevices;
-}
-
-// ---------------------------------------------------------------------------------------------------------------------
 Midi::InputControl* Midi::getInputControl()
 {
     if ( m_state != nullptr )
@@ -238,11 +264,11 @@ Midi::InputControl* Midi::getInputControl()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-void Midi::processMessages( const std::function< void( const app::midi::Message& ) >& processor )
+void Midi::imgui( app::CoreGUI& coreGUI )
 {
     if ( m_state != nullptr )
     {
-        return m_state->processMessages( processor );
+        return m_state->imgui( coreGUI );
     }
 }
 

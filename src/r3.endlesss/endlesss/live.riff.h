@@ -177,5 +177,32 @@ protected:
 
 using RiffPtr = std::shared_ptr<Riff>;
 
+// ---------------------------------------------------------------------------------------------------------------------
+// bundles a riff request - both the riff data and any (optional) layer permutations
+struct RiffAndPermutation
+{
+    RiffAndPermutation() = default;
+
+    RiffAndPermutation( endlesss::live::RiffPtr riff )
+        : m_riffPtr( std::move( riff ) )
+    {
+    }
+
+    RiffAndPermutation( endlesss::live::RiffPtr riff, const endlesss::types::RiffPlaybackPermutationOpt& permOpt )
+        : m_riffPtr( std::move( riff ) )
+    {
+        if ( permOpt.has_value() )
+        {
+            m_permutation = permOpt.value();
+        }
+    }
+
+    bool isNotEmpty() const { return m_riffPtr != nullptr; }
+    bool isEmpty() const { return m_riffPtr == nullptr; }
+
+    endlesss::live::RiffPtr                     m_riffPtr;
+    endlesss::types::RiffPlaybackPermutation    m_permutation;
+};
+
 } // namespace live
 } // namespace endlesss

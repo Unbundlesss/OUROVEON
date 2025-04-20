@@ -1153,6 +1153,7 @@ bool CoreGUI::beginInterfaceLayout( const ViewportFlags viewportFlags )
             ImGuiPerformanceTracker();
 
         m_mdAudio->imgui( *this );
+        m_mdMidi->imgui( *this );
     }
 
     // run active modal dialog callbacks

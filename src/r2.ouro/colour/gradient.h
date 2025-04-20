@@ -89,7 +89,7 @@ struct col3
 
 namespace map
 {
-    col3 plasma( const float  t )
+    inline col3 plasma( const float  t )
     {
         static constexpr col3 c0( 0.05873234392399702f, 0.02333670892565664f, 0.5433401826748754f );
         static constexpr col3 c1( 2.176514634195958f, 0.2383834171260182f, 0.7539604599784036f );
@@ -102,7 +102,7 @@ namespace map
         return c0 + t * (c1 + t * (c2 + t * (c3 + t * (c4 + t * (c5 + t * c6)))));
     }
 
-    col3 inferno( const float  t )
+    inline col3 inferno( const float  t )
     {
         static constexpr col3 c0( 0.0002189403691192265f, 0.001651004631001012f, -0.01948089843709184f );
         static constexpr col3 c1( 0.1065134194856116f, 0.5639564367884091f, 3.932712388889277f );
@@ -118,7 +118,7 @@ namespace map
     // from https://www.shadertoy.com/view/Nd3fR2
 
     // makes cividis colormap with polynimal 6
-    col3 cividis( const float t )
+    inline col3 cividis( const float t )
     {
         static constexpr col3 c0(   -0.008598f,    0.136152f,    0.291357f );
         static constexpr col3 c1(   -0.415049f,    0.639599f,    3.028812f );
@@ -132,7 +132,7 @@ namespace map
     }
 
     // makes coolwarm colormap with polynimal 6
-    col3 coolwarm( const float t )
+    inline col3 coolwarm( const float t )
     {
         static constexpr col3 c0(    0.227376f,    0.286898f,    0.752999f );
         static constexpr col3 c1(    1.204846f,    2.314886f,    1.563499f );
@@ -146,7 +146,7 @@ namespace map
     }
 
     // makes Spectral_r colormap with polynimal 6
-    col3 Spectral_r( const float t )
+    inline col3 Spectral_r( const float t )
     {
         static constexpr col3 c0(    0.426208f,    0.275203f,    0.563277f );
         static constexpr col3 c1(   -5.321958f,    3.761848f,    5.477444f );
@@ -160,7 +160,7 @@ namespace map
     }
 
     // makes YlGnBu_r colormap with polynimal 6
-    col3 YlGnBu_r( const float t )
+    inline col3 YlGnBu_r( const float t )
     {
         static constexpr col3 c0(    0.016999f,    0.127718f,    0.329492f );
         static constexpr col3 c1(    1.571728f,    0.025897f,    2.853610f );
@@ -174,7 +174,7 @@ namespace map
     }
 
     // makes RdYlBu_r colormap with polynimal 6
-    col3 RdYlBu_r( const float t )
+    inline col3 RdYlBu_r( const float t )
     {
         static constexpr col3 c0(    0.207621f,    0.196195f,    0.618832f );
         static constexpr col3 c1(   -0.088125f,    3.196170f,   -0.353302f );
@@ -187,7 +187,7 @@ namespace map
         return (c0 + t * (c1 + t * (c2 + t * (c3 + t * (c4 + t * (c5 + t * c6))))));
     }
 
-    col3 trans( const float t )
+    inline col3 trans( const float t )
     {
         static constexpr col3 c0(  0.428f, 0.598f, 1.258f );
         static constexpr col3 c1(  0.418f, 0.308f, 0.418f );

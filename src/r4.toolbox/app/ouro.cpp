@@ -1074,10 +1074,12 @@ int OuroApp::EntrypointGUI()
         }
     }
 
+    // audio init must run on the main thread, saves any COM issues when spinning up ASIO drivers on a new thread
+    const auto audioInitStatus = m_mdAudio->initOutput( audioConfig, audioSpectrumConfig );
+
     // kick post-configuration session tasks, run off main thread so we don't stall the whole UI
-    auto sessionStartFuture = m_taskExecutor.async( "init_session", [this, &audioConfig, &audioSpectrumConfig]() -> absl::Status
+    auto sessionStartFuture = m_taskExecutor.async( "init_session", [this, audioInitStatus, &audioConfig, &audioSpectrumConfig]() -> absl::Status
         {
-            const auto audioInitStatus = m_mdAudio->initOutput( audioConfig, audioSpectrumConfig );
             if ( !audioInitStatus.ok() )
             {
                 return audioInitStatus;
