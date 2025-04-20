@@ -1116,6 +1116,8 @@ static void midiInputCallback( const MIDIPacketList *list, void *procRef, void *
                 std::cerr << "\nMidiInCore: message queue limit reached!!\n\n";
             }
             message.bytes.clear();
+            // All subsequent messages within same MIDI packet will have time delta 0
+            message.timeStamp = 0.0;
           }
           iByte += size;
         }
@@ -1196,7 +1198,7 @@ void MidiInCore :: openPort( unsigned int portNumber, const std::string &portNam
   }
 
   CFRunLoopRunInMode( kCFRunLoopDefaultMode, 0, false );
-  unsigned int nSrc = MIDIGetNumberOfSources();
+  auto nSrc = MIDIGetNumberOfSources();
   if ( nSrc < 1 ) {
     errorString_ = "MidiInCore::openPort: no MIDI input sources found!";
     error( RtMidiError::NO_DEVICES_FOUND, errorString_ );
@@ -1307,7 +1309,7 @@ void MidiInCore :: setPortName ( const std::string& )
 unsigned int MidiInCore :: getPortCount()
 {
   CFRunLoopRunInMode( kCFRunLoopDefaultMode, 0, false );
-  return MIDIGetNumberOfSources();
+  return static_cast<unsigned int> (MIDIGetNumberOfSources());
 }
 
 // This function was submitted by Douglas Casey Tucker and apparently
@@ -1322,6 +1324,7 @@ CFStringRef CreateEndpointName( MIDIEndpointRef endpoint, bool isExternal )
   MIDIObjectGetStringProperty( endpoint, kMIDIPropertyName, &str );
   if ( str != NULL ) {
     CFStringAppend( result, str );
+    CFRelease(str);
   }
 
   // some MIDI devices have a leading space in endpoint name. trim
@@ -1376,6 +1379,7 @@ CFStringRef CreateEndpointName( MIDIEndpointRef endpoint, bool isExternal )
           CFStringInsert( result, 0, CFSTR(" ") );
 
         CFStringInsert( result, 0, str );
+        CFRelease(str);
       }
     }
   }
@@ -1393,7 +1397,7 @@ static CFStringRef CreateConnectedEndpointName( MIDIEndpointRef endpoint )
 
   // Does the endpoint have connections?
   CFDataRef connections = NULL;
-  int nConnected = 0;
+  size_t nConnected = 0;
   bool anyStrings = false;
   err = MIDIObjectGetDataProperty( endpoint, kMIDIPropertyConnectionUniqueID, &connections );
   if ( connections != NULL ) {
@@ -1524,7 +1528,7 @@ void MidiOutCore :: initialize( const std::string& clientName )
 unsigned int MidiOutCore :: getPortCount()
 {
   CFRunLoopRunInMode( kCFRunLoopDefaultMode, 0, false );
-  return MIDIGetNumberOfDestinations();
+  return static_cast<unsigned int> (MIDIGetNumberOfDestinations());
 }
 
 std::string MidiOutCore :: getPortName( unsigned int portNumber )
@@ -1560,7 +1564,7 @@ void MidiOutCore :: openPort( unsigned int portNumber, const std::string &portNa
   }
 
   CFRunLoopRunInMode( kCFRunLoopDefaultMode, 0, false );
-  unsigned int nDest = MIDIGetNumberOfDestinations();
+  auto nDest = MIDIGetNumberOfDestinations();
   if (nDest < 1) {
     errorString_ = "MidiOutCore::openPort: no MIDI output destinations found!";
     error( RtMidiError::NO_DEVICES_FOUND, errorString_ );
@@ -1667,12 +1671,6 @@ void MidiOutCore :: sendMessage( const unsigned char *message, size_t size )
   unsigned int nBytes = static_cast<unsigned int> (size);
   if ( nBytes == 0 ) {
     errorString_ = "MidiOutCore::sendMessage: no data in message argument!";
-    error( RtMidiError::WARNING, errorString_ );
-    return;
-  }
-
-  if ( message[0] != 0xF0 && nBytes > 3 ) {
-    errorString_ = "MidiOutCore::sendMessage: message format problem ... not sysex but > 3 bytes?";
     error( RtMidiError::WARNING, errorString_ );
     return;
   }
@@ -2087,7 +2085,9 @@ unsigned int portInfo( snd_seq_t *seq, snd_seq_port_info_t *pinfo, unsigned int 
            ( ( atyp & SND_SEQ_PORT_TYPE_APPLICATION ) == 0 ) ) continue;
 
       unsigned int caps = snd_seq_port_info_get_capability( pinfo );
-      if ( ( caps & type ) != type ) continue;
+      if ( ( ( caps & type ) != type ) ||
+           ( ( caps & SND_SEQ_PORT_CAP_NO_EXPORT ) != 0 ) ) continue;
+
       if ( count == portNumber ) return 1;
       ++count;
     }
@@ -3142,7 +3142,7 @@ void MidiOutWinMM :: sendMessage( const unsigned char *message, size_t size )
 
   MMRESULT result;
   WinMidiData *data = static_cast<WinMidiData *> (apiData_);
-  if ( message[0] == 0xF0 ) { // Sysex message
+  if ( nBytes > 3 ) { // Sysex message
 
     // Allocate buffer for sysex data.
     char *buffer = (char *) malloc( nBytes );
@@ -3182,13 +3182,6 @@ void MidiOutWinMM :: sendMessage( const unsigned char *message, size_t size )
     free( buffer );
   }
   else { // Channel or system message.
-
-    // Make sure the message size isn't too big.
-    if ( nBytes > 3 ) {
-      errorString_ = "MidiOutWinMM::sendMessage: message size is greater than 3 bytes (and not sysex)!";
-      error( RtMidiError::WARNING, errorString_ );
-      return;
-    }
 
     // Pack MIDI bytes into double word.
     DWORD packet;
@@ -4964,15 +4957,26 @@ static void androidOpenDevice(jobject deviceInfo, void* target, bool isOutput) {
     auto context = androidGetContext(env);
     auto midiMgr = androidGetMidiManager(env, context);
 
+    auto looperClass = env->FindClass("android/os/Looper");
+    auto getMyLooperMethod = env->GetStaticMethodID(looperClass, "myLooper", "()Landroid/os/Looper;");
+    auto looperObj = env->CallStaticObjectMethod(looperClass, getMyLooperMethod);
+    auto getLooperPrepareMethod = env->GetStaticMethodID(looperClass, "prepare", "()V");
+    auto getLooperQuitMethod = env->GetMethodID(looperClass, "quit", "()V");
+
+    if (!looperObj)
+        env->CallStaticVoidMethod(looperClass, getLooperPrepareMethod);
+
     // openDevice(MidiDeviceInfo deviceInfo, OnDeviceOpenedListener listener, Handler handler)
     auto midiMgrClass = env->GetObjectClass(midiMgr);
     auto openDevicesMethod = env->GetMethodID(midiMgrClass, "openDevice", "(Landroid/media/midi/MidiDeviceInfo;Landroid/media/midi/MidiManager$OnDeviceOpenedListener;Landroid/os/Handler;)V");
 
     auto handlerClass = env->FindClass("android/os/Handler");
-    auto handlerCtor = env->GetMethodID(handlerClass, "<init>", "()V");
-    auto handler = env->NewObject(handlerClass, handlerCtor);
+    auto getMainLooperMethod = env->GetStaticMethodID(looperClass, "getMainLooper", "()Landroid/os/Looper;");
+    auto mainLooperObj = env->CallStaticObjectMethod(looperClass, getMainLooperMethod);
+    auto handlerCtor = env->GetMethodID(handlerClass, "<init>", "(Landroid/os/Looper;)V");
+    auto handler = env->NewObject(handlerClass, handlerCtor, mainLooperObj);
 
-    auto listenerClass = env->FindClass("com/yellowlab/rtmidi/MidiDeviceOpenedListener");
+    jclass listenerClass = env->FindClass("com/yellowlab/rtmidi/MidiDeviceOpenedListener");
     if (!listenerClass) {
       LOGE("Midi listener class not found com.yellowlab.rtmidi.MidiDeviceOpenedListener. Did you forget to add it to your APK?");
       return;
@@ -5066,7 +5070,7 @@ unsigned int MidiInAndroid :: getPortCount() {
   return androidMidiDevices.size();
 }
 
-std::string MidiInAndroid :: getPortName(unsigned int portNumber) { 
+std::string MidiInAndroid :: getPortName(unsigned int portNumber) {
   auto env = androidGetThreadEnv();
   return androidPortName(env, portNumber);
 }
