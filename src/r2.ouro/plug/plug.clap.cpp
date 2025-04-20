@@ -371,12 +371,13 @@ void CLAP::showUI( app::CoreGUI& coreGUI )
                 uint32_t width = 0, height = 0;
                 m_pluginGui->get_size( m_pluginInstance, &width, &height );
 
+                glfwWindowHint( GLFW_CLIENT_API, GLFW_NO_API ); // disable creating any GL context for this window
                 m_guiWindow = glfwCreateWindow(
                     width,
                     height,
                     m_guiWindowTitle.c_str(),
                     nullptr,
-                    coreGUI.getFrontend()->getGLFWWindow()
+                    nullptr
                 );
 
                 // set resizability based on plugin choice
