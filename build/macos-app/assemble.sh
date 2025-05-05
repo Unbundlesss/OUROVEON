@@ -19,16 +19,18 @@ cp -a $1.Info.plist $local_appdir/Contents/Info.plist
 
 cp -a ../../brand/AppIcon_$1.icns ./$local_appdir/Contents/Resources/$1.icns
 
-codesign -f -s $2 -v --timestamp --deep --options runtime $local_appdir
+if [ "$2" != "--skip-notary" ]; then
+  codesign -f -s $2 -v --timestamp --deep --options runtime $local_appdir
+  current_time=$(date "+%Y%m%d-%H%M%S")
+  submission_file=$current_time.$1.zip
 
-current_time=$(date "+%Y%m%d-%H%M%S")
-submission_file=$current_time.$1.zip
+  /usr/bin/ditto -c -k --keepParent "$local_appdir" "$submission_file"
 
-/usr/bin/ditto -c -k --keepParent "$local_appdir" "$submission_file"
+  # store-credentials 
+  # https://developer.apple.com/documentation/security/notarizing_macos_software_before_distribution/customizing_the_notarization_workflow
+  xcrun notarytool submit "$submission_file" --keychain-profile "AC_PASS" --wait
 
-
-# store-credentials 
-# https://developer.apple.com/documentation/security/notarizing_macos_software_before_distribution/customizing_the_notarization_workflow
-xcrun notarytool submit "$submission_file" --keychain-profile "AC_PASS" --wait
-
-xcrun stapler staple -v "$local_appdir"
+  xcrun stapler staple -v "$local_appdir"
+else
+  codesign -f -s "ME" -v --timestamp --deep --options runtime $local_appdir
+fi
